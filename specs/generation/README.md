@@ -127,3 +127,12 @@ done `running--`; a call arriving in between took the free slot and the waiter t
 Measured in TypeScript before fixing: `limiter.race.test.ts`, seed 1, expected peak 1, got 2. Fixed: `release` hands its slot straight to
 the next waiter. `Windows.smt2` (z3) checks the marker window constants: note 48 h, server 24 h, job up to 1 h => no moment where the server
 still holds a reply but the note expired (unsat); with note = server window there is one (sat: clock 25 h, job touched at 1 h).
+
+### Overlapping sends (GenerationSlot.dfy)
+
+Found reading `sendChatMain`: `sendChat` refuses a second call while one runs (it returns false), but the second `sendChatMain`
+had already replaced the global generation key and counter, overwritten the Stop button's abort controller and the resume note,
+and its tail then cleared the key, the note and `doingChat` of the first. A double tap, or the resume effect firing while the
+owner sends, left the running reply without its idempotency key and its resume note, and a Stop that aborted nothing. Now
+`beginGeneration` claims one slot first and a loser returns without touching anything (`GenerationSlot.dfy`: 7 verified; unit tests in
+`generationKey.test.ts`). Not measured on the phone: this is a race read from the code, proved on a model, covered by unit tests.

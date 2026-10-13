@@ -2,7 +2,7 @@
     import { NO_REPLY_NOTE, shouldRetryEmptyReply, visibleReply } from "src/ts/process/emptyReply";
     import { jevCheck } from "src/ts/process/jevGuard";
     import { untrack } from "svelte";
-    import { setGenerationKey } from "src/ts/process/generationKey";
+    import { beginGeneration, endGeneration, isGenerationActive } from "src/ts/process/generationKey";
     import { clearPending, markPending, resumeGeneration } from "src/ts/process/pendingGeneration";
     import { planResumeWithRestore } from "src/ts/process/pendingGenerationCore";
 
@@ -309,11 +309,24 @@
     let abortController:null|AbortController = null
 
     async function sendChatMain(continued:boolean = false, guardRetry = 0, emptyRetry = 0, resumeKey?:string) {
+        const generationKey = resumeKey ?? crypto.randomUUID()
+        if(!beginGeneration(generationKey)){
+            // A reply is already being generated: leave its key, resume note, busy flag and Stop button alone.
+            return
+        }
+        try {
+            await sendChatMainRun(continued, guardRetry, emptyRetry, generationKey)
+        }
+        finally {
+            endGeneration(generationKey)
+        }
+    }
+
+    async function sendChatMainRun(continued:boolean, guardRetry:number, emptyRetry:number, generationKey:string) {
 
         let previousLength = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length
         messageInput = ''
         abortController = new AbortController()
-        const generationKey = resumeKey ?? crypto.randomUUID()
         const pendingChar = DBState.db.characters[$selectedCharID]
         if(!continued && pendingChar?.type === 'character'){
             // A refresh mid-reply loses it; this note lets the next load generate it again.
@@ -323,7 +336,6 @@
                 userMessage: sent?.role === 'user' && (sent.data?.length ?? 0) < 20000 ? safeStructuredClone(sent) as any : undefined,
             })
         }
-        setGenerationKey(generationKey)
         try {
             await sendChat(-1, {
                 signal:abortController.signal,
@@ -354,19 +366,20 @@
                         document.addEventListener('visibilitychange', onVisible)
                     })
                 }
+                endGeneration(generationKey)
                 return await sendChatMain(false, guardRetry, emptyRetry + 1)
             }
             if(chat && chat.message.length > previousLength && last?.role === 'char' && visibleReply(last.data) === ''){
                 last.data = NO_REPLY_NOTE
             }
         }
-        setGenerationKey(null)
         // The note is the only thing that brings a killed page back to this reply: keep it until the chat holding the
         // reply is saved, or a kill in that gap leaves a saved half-reply with no note to finish it.
         await flushSave()
         clearPending()
         lastCharId = $selectedCharID
         $doingChat = false
+        endGeneration(generationKey)
         if(DBState.db.playMessage){
             const audio = new Audio(sendSound);
             audio.play().catch(() => {});
@@ -402,6 +415,10 @@
         }
         const char = DBState.db.characters[$selectedCharID]
         if(char?.type !== 'character' || char.chaId !== pending.chaId){
+            return
+        }
+        if(isGenerationActive()){
+            // A reply is being generated right now: trimming the chat under it would corrupt it. The note stays for the next load.
             return
         }
         resumeGeneration.set(null)
