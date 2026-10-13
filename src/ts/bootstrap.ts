@@ -29,6 +29,7 @@ import { startObserveDom } from "./observer.svelte";
 import { updateGuisize } from "./gui/guisize";
 import { changeChar, updateLorebooks } from "./characters";
 import { clearPending, readPending, resumeGeneration } from "./process/pendingGeneration";
+import { clearSwReload, takeSwReload } from "./swGuard";
 import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import type { AccountStorage } from "./storage/accountStorage";
@@ -295,8 +296,15 @@ async function registerSw() {
     await sleep(100);
     const da = await fetch('/sw/init');
     if (!(da.status >= 200 && da.status < 300)) {
-        location.reload();
+        // Once per session: a worker that still does not answer after the reload never will here (iOS with a
+        // self-signed cert), and reloading again would be a loop that never leaves the loading screen.
+        if (takeSwReload(sessionStorage)) {
+            location.reload();
+            await new Promise(() => {})
+        }
+        throw new Error('The service worker does not answer on this device; running without it')
     }
+    clearSwReload(sessionStorage)
 }
 
 /**
