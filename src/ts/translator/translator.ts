@@ -1,5 +1,5 @@
 import { createLimiter, splitThoughts } from "./limiter";
-import { looksVietnamese, translateForeignRuns } from "./vietnamese";
+import { looksVietnamese, repairTranslation, translateForeignRuns } from "./vietnamese";
 import { isUsableTranslation } from "./cacheValue";
 import { get } from "svelte/store"
 import { parseChatML } from "../parser/chatML";
@@ -533,8 +533,21 @@ function noteTranslation(kind: 'hit' | 'skip' | 'miss', text: string) {
     }, 4000)
 }
 
-async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string}):Promise<string>{
+async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string,noRepair?:boolean}):Promise<string>{
     const original = text
+    // Korean/Japanese/Chinese passages left in a Vietnamese translation (cached by an older build, or kept by the model) are translated once.
+    const repair = async (translated:string):Promise<string> => {
+        if(arg.to !== 'vi' || arg.noRepair){
+            return translated
+        }
+        return repairTranslation(translated, {
+            alreadyTried: async () => (await LLMCacheStorage.getItem(original + '\u0000foreign-tried')) === '1',
+            markTried: async () => { await LLMCacheStorage.setItem(original + '\u0000foreign-tried', '1') },
+            save: async (fixed) => { await LLMCacheStorage.setItem(original, fixed) },
+            translateBatch: (listing) => translateLLM(listing, { ...arg, regenerate: false, noRepair: true }),
+            translateOne: (run) => translateLLM(run, { ...arg, regenerate: false, noRepair: true }),
+        })
+    }
     // The model's reasoning is not worth translating (it is folded away): translate only the reply and put it back.
     const { thoughts, body } = splitThoughts(text)
     text = body
@@ -542,14 +555,14 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
         const cacheMatch = await LLMCacheStorage.getItem(original)
         if(isUsableTranslation(cacheMatch)){
             noteTranslation('hit', original)
-            return cacheMatch
+            return await repair(cacheMatch)
         }
         if(arg.to === 'vi' && looksVietnamese(body)){
             // Already Vietnamese: no call for the message as a whole, but Korean/Japanese/Chinese passages inside it still need one.
             const fixed = await translateForeignRuns(
                 body,
-                (listing) => translateLLM(listing, { ...arg, regenerate: false }),
-                (run) => translateLLM(run, { ...arg, regenerate: false }),
+                (listing) => translateLLM(listing, { ...arg, regenerate: false, noRepair: true }),
+                (run) => translateLLM(run, { ...arg, regenerate: false, noRepair: true }),
             )
             if(fixed === body){
                 noteTranslation('skip', original)
@@ -631,7 +644,7 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
     }
     const translated = thoughts + result
     await LLMCacheStorage.setItem(original, translated)
-    return translated
+    return await repair(translated)
 }
 
 export async function getLLMCache(text:string):Promise<string | null>{

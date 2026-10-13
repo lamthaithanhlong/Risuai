@@ -129,3 +129,30 @@ export async function translateForeignRuns(
     }
     return applyForeignRuns(body, runs, results)
 }
+
+/**
+ * A translation that still holds Korean/Japanese/Chinese passages (the model left a quoted line as it was, or an older build
+ * cached one) gets those passages translated once. `tried` is remembered so a model that keeps refusing is not asked again on
+ * every open of the chat.
+ */
+export async function repairTranslation(
+    translated: string,
+    hooks: {
+        alreadyTried(): Promise<boolean>
+        markTried(): Promise<void>
+        save(text: string): Promise<void>
+        translateBatch(listing: string): Promise<string>
+        translateOne(run: string): Promise<string>
+    },
+): Promise<string> {
+    if (findForeignRuns(translated).length === 0 || await hooks.alreadyTried()) {
+        return translated
+    }
+    const fixed = await translateForeignRuns(translated, hooks.translateBatch, hooks.translateOne)
+    await hooks.markTried()
+    if (fixed === translated) {
+        return translated
+    }
+    await hooks.save(fixed)
+    return fixed
+}

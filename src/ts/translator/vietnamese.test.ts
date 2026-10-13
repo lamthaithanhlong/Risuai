@@ -78,3 +78,51 @@ describe('Korean inside a Vietnamese message', () => {
         expect(calls).toBe(0)
     })
 })
+
+describe('repairTranslation (a cached or fresh translation that still has Korean)', () => {
+    const mk = (tried = false) => {
+        const calls = { batch: 0, one: 0, saved: [] as string[], marked: 0 }
+        return {
+            calls,
+            hooks: {
+                alreadyTried: async () => tried,
+                markTried: async () => { calls.marked++ },
+                save: async (t: string) => { calls.saved.push(t) },
+                translateBatch: async () => { calls.batch++; return '[[1]] Tại sao cánh cửa này mở ra' },
+                translateOne: async () => { calls.one++; return '' },
+            },
+        }
+    }
+
+    test('a translation with a Korean line is repaired, saved, and marked', async () => {
+        const { repairTranslation } = await import('./vietnamese')
+        const m = mk()
+        const out = await repairTranslation('Ông ta nói: “이 문이 왜 열리냐고” rồi đi.', m.hooks)
+        expect(out).toBe('Ông ta nói: “Tại sao cánh cửa này mở ra” rồi đi.')
+        expect(m.calls).toMatchObject({ batch: 1, marked: 1, saved: [out] })
+    })
+
+    test('clean Vietnamese costs nothing', async () => {
+        const { repairTranslation } = await import('./vietnamese')
+        const m = mk()
+        expect(await repairTranslation('Hoàn toàn tiếng Việt.', m.hooks)).toBe('Hoàn toàn tiếng Việt.')
+        expect(m.calls).toMatchObject({ batch: 0, one: 0, marked: 0 })
+    })
+
+    test('a message already tried is not asked again', async () => {
+        const { repairTranslation } = await import('./vietnamese')
+        const m = mk(true)
+        expect(await repairTranslation('còn 한글 đây', m.hooks)).toBe('còn 한글 đây')
+        expect(m.calls.batch).toBe(0)
+    })
+
+    test('a model that keeps the Korean leaves the text alone but is not asked again next time', async () => {
+        const { repairTranslation } = await import('./vietnamese')
+        const m = mk()
+        m.hooks.translateBatch = async () => '[[1]] 이 문이'
+        const out = await repairTranslation('còn 이 문이 đây', m.hooks)
+        expect(out).toBe('còn 이 문이 đây')
+        expect(m.calls.marked).toBe(1)
+        expect(m.calls.saved).toEqual([])
+    })
+})
