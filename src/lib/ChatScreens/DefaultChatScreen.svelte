@@ -4,7 +4,7 @@
     import { untrack } from "svelte";
     import { setGenerationKey } from "src/ts/process/generationKey";
     import { clearPending, markPending, resumeGeneration } from "src/ts/process/pendingGeneration";
-    import { planResume } from "src/ts/process/pendingGenerationCore";
+    import { planResumeWithRestore } from "src/ts/process/pendingGenerationCore";
 
     import Suggestion from './Suggestion.svelte';
     import { CameraIcon, DatabaseIcon, DicesIcon, GlobeIcon, ImagePlusIcon, LanguagesIcon, Laugh, MenuIcon, MicOffIcon, PackageIcon, Plus, RefreshCcwIcon, ReplyIcon, Send, StepForwardIcon, XIcon, BrainIcon, ArrowDown, SparkleIcon } from "@lucide/svelte";
@@ -25,7 +25,7 @@
     import { stopTTS } from "src/ts/process/tts";
     import MainMenu from '../UI/MainMenu.svelte';
     import AssetInput from './AssetInput.svelte';
-    import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile } from 'src/ts/globalApi.svelte';
+    import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile, flushSave } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
     import { v4 } from 'uuid';
     import { PreUnreroll, Prereroll } from 'src/ts/process/prereroll';
@@ -317,7 +317,11 @@
         const pendingChar = DBState.db.characters[$selectedCharID]
         if(!continued && pendingChar?.type === 'character'){
             // A refresh mid-reply loses it; this note lets the next load generate it again.
-            markPending({ chaId: pendingChar.chaId, chatPage: pendingChar.chatPage, previousLength, jobKey: generationKey })
+            const sent = pendingChar.chats[pendingChar.chatPage].message[previousLength - 1]
+            markPending({
+                chaId: pendingChar.chaId, chatPage: pendingChar.chatPage, previousLength, jobKey: generationKey,
+                userMessage: sent?.role === 'user' && (sent.data?.length ?? 0) < 20000 ? safeStructuredClone(sent) as any : undefined,
+            })
         }
         setGenerationKey(generationKey)
         try {
@@ -357,6 +361,9 @@
             }
         }
         setGenerationKey(null)
+        // The note is the only thing that brings a killed page back to this reply: keep it until the chat holding the
+        // reply is saved, or a kill in that gap leaves a saved half-reply with no note to finish it.
+        await flushSave()
         clearPending()
         lastCharId = $selectedCharID
         $doingChat = false
@@ -400,14 +407,17 @@
         resumeGeneration.set(null)
         untrack(() => {
             const chat = char.chats[pending.chatPage]
-            const keep = chat && char.chatPage === pending.chatPage
-                ? planResume(pending, chat.message.map((m) => m.role))
+            const plan = chat && char.chatPage === pending.chatPage
+                ? planResumeWithRestore(pending, chat.message.map((m) => m.role))
                 : null
-            if(keep === null){
+            if(plan === null){
                 clearPending()
                 return
             }
-            chat.message = chat.message.slice(0, keep)
+            // Killed before the autosave caught up: the saved chat lacks the user's message, the note has it.
+            chat.message = plan.restore
+                ? [...chat.message, safeStructuredClone(plan.restore) as any]
+                : chat.message.slice(0, plan.keep)
             chat.isStreaming = false
             sendChatMain(false, 0, 0, pending.jobKey)
         })

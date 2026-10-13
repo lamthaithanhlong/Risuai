@@ -9,6 +9,11 @@ const { DatabaseSync } = require('node:sqlite');
 
 const REUSABLE_STATUSES = ['running', 'done'];
 
+// A finished reply is kept this long for a page that was killed and reopened (Safari swiped away mid-reply).
+// The page's own note must outlast it: src/ts/process/pendingGenerationCore.ts PENDING_MAX_AGE_MS.
+const JOB_REUSE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const JOB_KEEP_MS = 48 * 60 * 60 * 1000;
+
 function openJobStore(file) {
     const db = new DatabaseSync(file);
     db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
@@ -113,4 +118,4 @@ function openJobStore(file) {
     };
 }
 
-module.exports = { openJobStore };
+module.exports = { openJobStore, JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS };

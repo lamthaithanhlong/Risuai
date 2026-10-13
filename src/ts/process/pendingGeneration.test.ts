@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { PENDING_MAX_AGE_MS, isFresh, planResume, type PendingGeneration } from './pendingGenerationCore'
-
+import { createRequire } from 'node:module'
+import { PENDING_MAX_AGE_MS, isFresh, planResume, planResumeWithRestore, type PendingGeneration } from './pendingGenerationCore'
 const base: PendingGeneration = { chaId: 'c1', chatPage: 0, previousLength: 3, at: 1_000 }
 
 describe('planResume', () => {
@@ -36,5 +36,40 @@ describe('isFresh', () => {
 
     test('a note from the future (clock change) does not', () => {
         expect(isFresh(base, base.at - 1)).toBe(false)
+    })
+})
+
+describe('planResumeWithRestore (the page was killed before the autosave caught up)', () => {
+    const sent = { role: 'user', data: 'xin chào' }
+    const withText: PendingGeneration = { ...base, userMessage: sent }
+
+    test('the saved chat has everything: same plan as planResume, nothing restored', () => {
+        expect(planResumeWithRestore(withText, ['char', 'user', 'user', 'char'])).toEqual({ keep: 3 })
+    })
+
+    test('the saved chat is exactly the user message short: put it back and answer it', () => {
+        expect(planResumeWithRestore(withText, ['char', 'user'])).toEqual({ keep: 3, restore: sent })
+    })
+
+    test('without the text in the note there is nothing to put back', () => {
+        expect(planResumeWithRestore(base, ['char', 'user'])).toBeNull()
+    })
+
+    test('a chat that lost more than the one message is not touched', () => {
+        expect(planResumeWithRestore(withText, ['char'])).toBeNull()
+    })
+
+    test('a note whose message is not the user\'s is not restored', () => {
+        expect(planResumeWithRestore({ ...base, userMessage: { role: 'char', data: 'x' } }, ['char', 'user'])).toBeNull()
+    })
+})
+
+// TLA+ GenQueueKill: NoteNeverHidesAFinishedReply holds only while the page's note outlasts the server's window (W >= R).
+describe('windows agree with the server', () => {
+    test('the note outlasts the time the server keeps a finished reply', () => {
+        const require = createRequire(import.meta.url)
+        const { JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS } = require('../../../server/node/jobStore.cjs')
+        expect(PENDING_MAX_AGE_MS).toBeGreaterThanOrEqual(JOB_REUSE_MAX_AGE_MS)
+        expect(JOB_KEEP_MS).toBeGreaterThanOrEqual(JOB_REUSE_MAX_AGE_MS)
     })
 })

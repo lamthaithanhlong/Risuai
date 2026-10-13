@@ -1,4 +1,5 @@
 import { readJobEvents } from "./network/proxyJobHttp";
+import { createSaveTracker } from "./storage/saveTracker";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
 import {
@@ -284,6 +285,16 @@ export let saving = $state({
     state: false
 })
 
+const saveTracker = createSaveTracker()
+
+/**
+ * Resolves once everything changed up to now has been written (or after timeoutMs, so a stuck save cannot hold the
+ * caller). A reply is only "done" for the resume note once it is in the saved chat, not just on screen.
+ */
+export function flushSave(timeoutMs = 8000): Promise<void> {
+    return saveTracker.flush(timeoutMs)
+}
+
 /**
  * Saves the current state of the database.
  * 
@@ -342,6 +353,7 @@ export async function saveDb() {
         })
 
         function saveTimeoutExecute() {
+            saveTracker.noteChange()
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
             }
@@ -417,6 +429,7 @@ export async function saveDb() {
 
         saving.state = true
         changed = false
+        const seqAtStart = saveTracker.current()
         try {
 
             if (requiresFullEncoderReload.state) {
@@ -472,6 +485,7 @@ export async function saveDb() {
                 await getDbBackups()
             }
             savetrys = 0
+            saveTracker.markSaved(seqAtStart)
             await saveDbKei()
             await sleep(500)
         } catch (error) {

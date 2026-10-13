@@ -125,3 +125,27 @@ describe('jobStore restart and cleanup', () => {
         s.close()
     })
 })
+
+describe('reuse window (the page may come back hours later)', () => {
+    const require = createRequire(import.meta.url)
+    const { JOB_REUSE_MAX_AGE_MS } = require('../../../server/node/jobStore.cjs')
+    const open = () => {
+        const dir = mkdtempSync(join(tmpdir(), 'jobwin-'))
+        const s = require('../../../server/node/jobStore.cjs').openJobStore(join(dir, 'j.sqlite')) as Store
+        return { s, dir }
+    }
+
+    test('a finished reply is handed back 23 hours later, not 25', () => {
+        const { s, dir } = open()
+        try {
+            const t0 = 1_000_000
+            s.createJob('j1', 'K', t0)
+            s.append('j1', { type: 'chunk' }, t0)
+            s.finish('j1', 'done', t0)
+            expect(s.findReusable('K', JOB_REUSE_MAX_AGE_MS, t0 + 23 * 3600_000)?.id).toBe('j1')
+            expect(s.findReusable('K', JOB_REUSE_MAX_AGE_MS, t0 + 25 * 3600_000)).toBeNull()
+        } finally {
+            s.close(); rmSync(dir, { recursive: true, force: true })
+        }
+    })
+})

@@ -9,10 +9,20 @@ export interface PendingGeneration {
     previousLength: number
     /** The generation's key: after a refresh it re-attaches to the server job that has the reply. */
     jobKey?: string
+    /**
+     * The user's message the reply answers. The chat is autosaved on a debounce, so a page killed in the first
+     * second after "send" comes back without it; with the text here the message can be put back and answered.
+     */
+    userMessage?: { role: string, data: string, [key: string]: unknown }
     at: number
 }
 
-export const PENDING_MAX_AGE_MS = 10 * 60 * 1000
+/**
+ * How long the note is trusted. The server decides how long it keeps a finished job (JOB_REUSE_MAX_AGE_MS in
+ * server/node/jobStore.cjs); this must outlast it, or a reply the server still holds is dropped here as "stale".
+ * Past the server's window the same key just asks the model again.
+ */
+export const PENDING_MAX_AGE_MS = 48 * 60 * 60 * 1000
 
 export function isFresh(p: PendingGeneration, now: number): boolean {
     return now - p.at >= 0 && now - p.at <= PENDING_MAX_AGE_MS
@@ -28,4 +38,23 @@ export function planResume(p: PendingGeneration, roles: string[]): number | null
         return null
     }
     return roles[p.previousLength - 1] === 'user' ? p.previousLength : null
+}
+
+export interface ResumePlan {
+    /** Messages to keep before generating again. */
+    keep: number
+    /** The user's message to put back first, when the saved chat is exactly one message short. */
+    restore?: PendingGeneration['userMessage']
+}
+
+/** planResume, plus the case where the user's own message never reached the saved chat but the note carries it. */
+export function planResumeWithRestore(p: PendingGeneration, roles: string[]): ResumePlan | null {
+    const keep = planResume(p, roles)
+    if (keep !== null) {
+        return { keep }
+    }
+    if (p.userMessage?.role === 'user' && p.previousLength >= 1 && roles.length === p.previousLength - 1) {
+        return { keep: p.previousLength, restore: p.userMessage }
+    }
+    return null
 }

@@ -69,8 +69,7 @@ const proxyStreamJobs = new Map();
 
 // Durable log of every stream job's events (see jobStore.cjs): lets a phone that dropped or refreshed pick up the
 // reply from where it stopped. If SQLite cannot be opened the jobs still run, just without that.
-const PROXY_JOB_REUSE_MAX_AGE_MS = 30 * 60 * 1000;
-const PROXY_JOB_KEEP_MS = 6 * 60 * 60 * 1000;
+const { JOB_REUSE_MAX_AGE_MS: PROXY_JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS: PROXY_JOB_KEEP_MS } = require('./jobStore.cjs');
 let jobStore = null;
 try {
     const jobsDbPath = process.env.RISU_JOBS_DB || path.join(require('os').homedir(), '.risu-lan', 'jobs.sqlite');
