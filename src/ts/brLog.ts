@@ -21,10 +21,14 @@ export function brPhase(name: string): void {
 /** Runs fn, logging how long it took when it took at least minMs. */
 export async function brTimed<T>(name: string, fn: () => Promise<T>, minMs = 300): Promise<T> {
     const start = performance.now()
+    const outer = (globalThis as Hooks).__brPhase
     brPhase(name)
     try {
         return await fn()
     } finally {
+        if (outer !== undefined) {
+            brPhase(outer)       // back to the enclosing phase, so a later freeze is not blamed on a step that already ended
+        }
         const ms = performance.now() - start
         if (ms >= minMs) {
             brLog(`${name}: ${ms.toFixed(0)}ms`)

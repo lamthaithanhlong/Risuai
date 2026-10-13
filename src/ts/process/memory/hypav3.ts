@@ -1,5 +1,7 @@
 import { withRetry } from "../retry";
-import { type memoryVector, HypaProcesser, similarity } from "./hypamemory";
+import { type memoryVector, HypaProcesser, localModels, similarity } from "./hypamemory";
+import { shouldSkipLocalEmbedding } from "./embeddingGuard";
+import { alertToast } from "src/ts/alert";
 import { isContextModel, getContextProvider } from "./contextualEmbedding";
 import { TaskRateLimiter } from "./taskRateLimiter";
 import {
@@ -21,7 +23,24 @@ import { chatCompletion, unloadEngine } from "../webllm";
 import { hypaV3ProgressStore } from "src/ts/stores.svelte";
 import { type ChatTokenizer } from "src/ts/tokenizer";
 import { inlayTokenRegex } from "src/ts/util/inlayTokens";
-import { brPhase, brTimed } from "../../brLog";
+import { brLog, brPhase, brTimed } from "../../brLog";
+
+let warnedLocalEmbeddingSkipped = false
+
+/** True when this device should not load a local embedding model (see embeddingGuard.ts). */
+function skipLocalEmbedding(): boolean {
+    const model = getDatabase().hypaModel || "MiniLM";
+    const local = Object.keys(localModels.models).includes(model);
+    const skip = shouldSkipLocalEmbedding(local, navigator.userAgent, (navigator as { deviceMemory?: number }).deviceMemory);
+    if (skip && !warnedLocalEmbeddingSkipped) {
+        warnedLocalEmbeddingSkipped = true;
+        console.warn(logPrefix, `Local embedding model ${model} skipped on this device (memory); similar memories are off. Pick a remote embedding model to use them here.`);
+        brLog(`hypaV3: local embedding ${model} skipped on this device`);
+        alertToast(`[HypaV3] Local embedding model "${model}" is off on this device (it crashes the tab). Choose a remote embedding model to bring similar memories back.`);
+    }
+    return skip;
+}
+
 
 export interface HypaV3Preset {
     name: string;
@@ -184,6 +203,7 @@ async function hypaMemoryV3MainExp(
     tokenizer: ChatTokenizer
 ): Promise<HypaV3Result> {
     const db = getDatabase();
+    brPhase('hypaV3 settings');
     const settings = getCurrentHypaV3Preset().settings;
 
     // Validate settings
@@ -199,6 +219,7 @@ async function hypaMemoryV3MainExp(
     currentTokens -= db.maxResponse;
 
     // Load existing hypa data if available
+    brPhase('hypaV3 load data');
     const data: HypaV3Data = room.hypaV3Data
         ? toHypaV3Data(room.hypaV3Data)
         : {
@@ -207,8 +228,10 @@ async function hypaMemoryV3MainExp(
 
     // Clean orphaned summaries
     if (!settings.preserveOrphanedMemory) {
+        brPhase('hypaV3 clean orphans');
         cleanOrphanedSummary(chats, data);
     }
+    brPhase('hypaV3 token correction');
 
     // Determine starting index
     let startIdx = 0;
@@ -596,7 +619,7 @@ async function hypaMemoryV3MainExp(
     const selectedSimilarSummaries: Summary[] = [];
 
     brPhase('hypaV3 similar');
-    if (settings.similarMemoryRatio > 0) {
+    if (settings.similarMemoryRatio > 0 && !skipLocalEmbedding()) {
         // Utilize unused token space from recent selection
         if (randomMemoryRatio <= 0) {
             const unusedRecentTokens =
@@ -1314,7 +1337,7 @@ async function hypaMemoryV3Main(
     let consumedSimilarMemoryTokens = 0;
     const selectedSimilarSummaries: Summary[] = [];
 
-    if (settings.similarMemoryRatio > 0) {
+    if (settings.similarMemoryRatio > 0 && !skipLocalEmbedding()) {
         // Utilize unused token space from recent selection
         if (randomMemoryRatio <= 0) {
             const unusedRecentTokens =

@@ -1,0 +1,72 @@
+# Offline Semgrep rules for the phone-queue branch (no registry download). Run:
+#   semgrep scan --config specs/review/semgrep-rules.yml --metrics=off server/node src/ts
+rules:
+  - id: log-user-input-unsanitized
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Request data goes into a log line. A CR/LF in it forges extra log lines. Strip control characters first.
+    patterns:
+      - pattern-either:
+          - pattern: console.log(..., $REQ.query.$X, ...)
+          - pattern: console.log(..., $REQ.body.$X, ...)
+          - pattern: console.log(`...${$REQ.query.$X}...`)
+          - pattern: console.log(`...${String($REQ.query.$X)}...`)
+          - pattern: console.log(`...${String($REQ.query.$X || '')}...`)
+          - pattern: console.log(`...${String($REQ.query.$X || '').slice(...)}...`)
+    paths:
+      include: ["server/node/*.cjs"]
+
+  - id: redirect-to-host-header
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A redirect target built from the Host header (or something derived from it) is an open redirect: the client chooses where it goes.
+    pattern-either:
+      - pattern: lanRedirectTarget($HOST, ...)
+      - pattern: res.redirect($CODE, $URL)
+    paths:
+      include: ["server/node/*.cjs"]
+
+  - id: promise-that-never-settles
+    languages: [javascript, typescript]
+    severity: INFO
+    message: A promise that never settles parks the caller for good; make sure that is intended (here: waiting for a reload).
+    pattern: new Promise(() => {})
+
+  - id: unauthenticated-route
+    languages: [javascript]
+    severity: INFO
+    message: Route with no auth middleware or checkAuth call in the same file region. Confirm it exposes nothing and is bounded.
+    pattern-either:
+      - pattern: app.get('/__client-log', ...)
+      - pattern: app.get('/', ...)
+    paths:
+      include: ["server/node/*.cjs"]
+
+  - id: empty-catch-swallows-error
+    languages: [javascript, typescript]
+    severity: INFO
+    message: An empty catch hides failures. Fine for best-effort telemetry, wrong for anything that changes state.
+    pattern: |
+      try { ... } catch { }
+    paths:
+      include: ["src/ts/**", "server/node/*.cjs"]
+
+  - id: quadratic-rescan-in-loop
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      slice/substring/indexOf of the whole remaining text inside a loop that advances by one: O(n^2). Found and fixed once in wrapThoughts.
+    pattern-either:
+      - pattern: |
+          while ($I < $S.length) {
+            ...
+            $S.slice($I, ...)
+            ...
+          }
+      - pattern: |
+          for (...) { ... $S.slice($J + $N) ... }
+    paths:
+      include: ["src/ts/**"]
+      exclude: ["**/*.test.ts"]

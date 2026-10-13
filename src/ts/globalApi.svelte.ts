@@ -49,6 +49,7 @@ import { isTauri, isNodeServer } from "./platform";
 import { isLocalNetworkUrl, shouldRouteViaServer } from "./network/localNetwork";
 import { decodeProxyJobWsChunk, formatProxyStreamErrorMessage, parseProxyJobWsEvent } from "./network/proxyJobWs";
 import { getNodeServerProxyAuth } from "./storage/nodeStorage";
+import { brTimed } from "./brLog";
 
 export const forageStorage = new AutoStorage()
 
@@ -464,8 +465,8 @@ export async function saveDb() {
                 continue
             }
 
-            await encoder.set(db, toSave)
-            const encoded = encoder.encode()
+            await brTimed('save: encoder.set', () => encoder.set(db, toSave), 400)
+            const encoded = await brTimed('save: encoder.encode', async () => encoder.encode(), 400)
             if (!encoded) {
                 await sleep(1000)
                 continue
