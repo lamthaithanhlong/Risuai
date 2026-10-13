@@ -31,3 +31,42 @@ export async function brTimed<T>(name: string, fn: () => Promise<T>, minMs = 300
         }
     }
 }
+
+const acc = new Map<string, { calls: number, ms: number, max: number }>()
+
+function note(name: string, ms: number) {
+    const a = acc.get(name) ?? { calls: 0, ms: 0, max: 0 }
+    a.calls++
+    a.ms += ms
+    a.max = Math.max(a.max, ms)
+    acc.set(name, a)
+}
+
+/** Like brTimed, but adds to a running total reported by brReportAcc (for a step that runs once per message). */
+export async function brTimedAcc<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const start = performance.now()
+    brPhase(name)
+    try {
+        return await fn()
+    } finally {
+        note(name, performance.now() - start)
+    }
+}
+
+export function brSync<T>(name: string, fn: () => T): T {
+    const start = performance.now()
+    brPhase(name)
+    try {
+        return fn()
+    } finally {
+        note(name, performance.now() - start)
+    }
+}
+
+/** One log line per accumulated step (calls, total ms, slowest call), then the totals start again. */
+export function brReportAcc(): void {
+    for (const [name, a] of acc) {
+        brLog(`${name}: ${a.calls} calls, ${a.ms.toFixed(0)}ms total, slowest ${a.max.toFixed(0)}ms`)
+    }
+    acc.clear()
+}

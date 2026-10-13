@@ -35,7 +35,7 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
-import { brLog, brPhase, brTimed } from "../brLog";
+import { brLog, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
 function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
@@ -504,7 +504,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
     }
 
-    const lorepmt = await loadLoreBookV3Prompt()
+    const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt(), 0)
 
     const positionRegex = /{{position::(.+?)}}/g
     const replaceposition = (text:string):{text:string, replaced:boolean} => {
@@ -894,7 +894,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     
     console.log('Prepared messages for token calculation:', ms)
 
-    const triggerResult = await runTrigger(currentChar, 'start', {chat: currentChat})
+    const triggerResult = await brTimed('trigger start', () => runTrigger(currentChar, 'start', {chat: currentChat}), 0)
     if(triggerResult){
         currentChat = triggerResult.chat
         setCurrentChat(currentChat)
@@ -908,9 +908,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
     let index = 0
     for(const msg of ms){
-        let formatedChat = (await processScriptFull(nowChatroom,risuChatParser(msg.data, {chara: currentChar, role: msg.role}), 'editprocess', index, {
+        const parsedForProcess = brSync('risuChatParser (per message)', () => risuChatParser(msg.data, {chara: currentChar, role: msg.role}))
+        let formatedChat = (await brTimedAcc('regex editprocess (per message)', () => processScriptFull(nowChatroom, parsedForProcess, 'editprocess', index, {
             chatRole: msg.role,
-        })).data
+        }))).data
         let name = ''
         if(msg.role === 'char'){
             if(msg.saying){
@@ -1501,7 +1502,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         })
     }
 
-    formated = await runLuaEditTrigger(currentChar, 'editRequest', formated)
+    formated = await brTimed('lua editRequest', () => runLuaEditTrigger(currentChar, 'editRequest', formated), 0)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1562,7 +1563,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         return true
     }
 
-    const req = await requestChatData({
+    brReportAcc()
+    const req = await brTimed('requestChatData', () => requestChatData({
         formated: formated,
         biasString: biases,
         currentChar: currentChar,
@@ -1575,7 +1577,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
-    }, 'model', abortSignal)
+    }, 'model', abortSignal), 0)
 
     console.log(req)
     if(req.model){
