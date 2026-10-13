@@ -68,3 +68,17 @@ describe('shouldTrackChatContent', () => {
         expect(shouldTrackChatContent(undefined)).toBe(true)
     })
 })
+
+describe('shouldWriteBackup', () => {
+    test('the first save writes a copy, the next ones within 5 minutes do not', async () => {
+        const { shouldWriteBackup, BACKUP_MIN_GAP_MS } = await import('./saveTracker')
+        expect(shouldWriteBackup(0, 1_000_000)).toBe(true)
+        expect(shouldWriteBackup(1_000_000, 1_000_000 + 3_000)).toBe(false)
+        expect(shouldWriteBackup(1_000_000, 1_000_000 + BACKUP_MIN_GAP_MS - 1)).toBe(false)
+        expect(shouldWriteBackup(1_000_000, 1_000_000 + BACKUP_MIN_GAP_MS)).toBe(true)
+    })
+    test('a clock that went backwards does not stop backups for ever', async () => {
+        const { shouldWriteBackup } = await import('./saveTracker')
+        expect(shouldWriteBackup(2_000_000, 1_000_000)).toBe(true)
+    })
+})

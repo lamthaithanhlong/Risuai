@@ -1,5 +1,5 @@
 import { readJobEvents } from "./network/proxyJobHttp";
-import { createSaveTracker, shouldTrackChatContent } from "./storage/saveTracker";
+import { createSaveTracker, shouldTrackChatContent, shouldWriteBackup } from "./storage/saveTracker";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
 import {
@@ -422,6 +422,7 @@ export async function saveDb() {
     })
 
     let savetrys = 0
+    let lastBackupAt = 0
     let lastDbData = new Uint8Array(0)
     await sleep(1000)
     while (true) {
@@ -470,21 +471,25 @@ export async function saveDb() {
                 continue
             }
             const dbData = new Uint8Array(encoded)
+            let wroteBackup = false
             if (isTauri) {
                 await writeFile('database/database.bin', dbData, { baseDir: BaseDirectory.AppData });
                 await writeFile(`database/dbbackup-${(Date.now() / 100).toFixed()}.bin`, dbData, { baseDir: BaseDirectory.AppData });
+                wroteBackup = true
             }
             else {
 
                 await forageStorage.setItem('database/database.bin', dbData)
-                if (!forageStorage.isAccount) {
+                if (!forageStorage.isAccount && shouldWriteBackup(lastBackupAt, Date.now())) {
                     await forageStorage.setItem(`database/dbbackup-${(Date.now() / 100).toFixed()}.bin`, dbData)
+                    lastBackupAt = Date.now()
+                    wroteBackup = true
                 }
                 if (forageStorage.isAccount) {
                     await sleep(3000)
                 }
             }
-            if (!forageStorage.isAccount) {
+            if (!forageStorage.isAccount && wroteBackup) {
                 await getDbBackups()
             }
             savetrys = 0

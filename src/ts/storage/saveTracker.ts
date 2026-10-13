@@ -24,6 +24,17 @@ export function shouldTrackChatContent(chat: { isStreaming?: boolean } | undefin
     return !chat?.isStreaming
 }
 
+export const BACKUP_MIN_GAP_MS = 5 * 60 * 1000
+
+/**
+ * Every autosave also uploaded a timestamped copy of the whole database and then listed and pruned the old copies:
+ * two ~1.7 MB uploads plus two more requests per save, and saves come every 2-4 s while messages translate. A copy at most
+ * every few minutes still gives 20 restore points (now spread over ~100 minutes instead of ~1 minute).
+ */
+export function shouldWriteBackup(lastBackupAt: number, now: number, gapMs: number = BACKUP_MIN_GAP_MS): boolean {
+    return lastBackupAt === 0 || now < lastBackupAt || now - lastBackupAt >= gapMs
+}
+
 export function createSaveTracker(): SaveTracker {
     let changed = 0
     let saved = 0
