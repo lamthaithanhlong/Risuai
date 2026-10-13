@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+<declaration>// Reader of a durable stream job on a phone that locks its screen (src/ts/network/proxyJobHttp.ts).
+// Time unit: seconds.
+const int G = 120;        // giveUpAfterMs
+const int PING = 15;      // the server pings the events stream every 15 s
+const int BACKOFF = 5;    // longest wait between reconnects
+const int T = 50;         // the model finishes the reply T s after the job starts (grok thinks 10-56 s)
+const int N = 30;         // attempts allowed by the fixed rule
+const bool FIX = true;   // false: give up when now - lastProgress &gt; G (wall clock). true: give up after N failed attempts
+
+int[0,600] lockFor = 0;
+int[0,100] n = 0;
+bool jobDone = false;
+clock x;                  // time since the last event or ping was received (lastProgress)
+clock c;                  // how long the screen has been locked
+clock b;                  // backoff timer
+clock j;                  // age of the job
+broadcast chan lock, unlock;
+urgent broadcast chan done;   // the done event reaches a connected reader at once
+</declaration>
+
+<template>
+<name>Phone</name>
+<location id="p0"><name>Online</name></location>
+<location id="p1"><name>Locked</name><label kind="invariant">c &lt;= lockFor</label></location>
+<location id="p2"><name>Back</name></location>
+<init ref="p0"/>
+<transition>
+  <source ref="p0"/><target ref="p1"/>
+  <label kind="select">k : int[0,3]</label>
+  <label kind="assignment">lockFor = (k == 0 ? 10 : (k == 1 ? 100 : (k == 2 ? 200 : 400))), c = 0</label>
+  <label kind="synchronisation">lock!</label>
+</transition>
+<transition>
+  <source ref="p1"/><target ref="p2"/>
+  <label kind="guard">c == lockFor</label>
+  <label kind="synchronisation">unlock!</label>
+</transition>
+</template>
+
+<template>
+<name>Job</name>
+<location id="j0"><name>Running</name><label kind="invariant">j &lt;= T</label></location>
+<location id="j1"><name>Done</name></location>
+<location id="j2"><name>Announce</name><committed/></location>
+<init ref="j0"/>
+<transition>
+  <source ref="j0"/><target ref="j2"/>
+  <label kind="guard">j == T</label>
+  <label kind="assignment">jobDone = true</label>
+</transition>
+<transition>
+  <source ref="j2"/><target ref="j1"/>
+  <label kind="synchronisation">done!</label>
+</transition>
+</template>
+
+<template>
+<name>Reader</name>
+<location id="r0"><name>Reading</name><label kind="invariant">x &lt;= PING</label></location>
+<location id="r1"><name>Frozen</name></location>
+<location id="r2"><name>Failed</name><committed/></location>
+<location id="r3"><name>Backoff</name><label kind="invariant">b &lt;= BACKOFF</label></location>
+<location id="r4"><name>GaveUp</name></location>
+<location id="r5"><name>Finished</name></location>
+<location id="r6"><name>Check</name><committed/></location>
+<init ref="r0"/>
+<transition>   <!-- a ping arrives -->
+  <source ref="r0"/><target ref="r0"/>
+  <label kind="guard">x == PING</label>
+  <label kind="assignment">x = 0</label>
+</transition>
+<transition>   <!-- the done event arrives while connected -->
+  <source ref="r0"/><target ref="r5"/>
+  <label kind="synchronisation">done?</label>
+</transition>
+<transition>   <!-- the screen locks: the page is frozen, the connection dies -->
+  <source ref="r0"/><target ref="r1"/>
+  <label kind="synchronisation">lock?</label>
+</transition>
+<transition>   <!-- the screen unlocks: the dead connection is noticed -->
+  <source ref="r1"/><target ref="r2"/>
+  <label kind="synchronisation">unlock?</label>
+</transition>
+<transition>   <!-- give up: too long since the last progress (wall clock) -->
+  <source ref="r2"/><target ref="r4"/>
+  <label kind="guard">!FIX &amp;&amp; x &gt; G</label>
+</transition>
+<transition>   <!-- give up: too many failed attempts -->
+  <source ref="r2"/><target ref="r4"/>
+  <label kind="guard">FIX &amp;&amp; n &gt;= N</label>
+</transition>
+<transition>   <!-- try again after a backoff (wall clock rule) -->
+  <source ref="r2"/><target ref="r3"/>
+  <label kind="guard">!FIX &amp;&amp; x &lt;= G</label>
+  <label kind="assignment">b = 0, n = n + 1</label>
+</transition>
+<transition>   <!-- try again after a backoff (attempt counting rule) -->
+  <source ref="r2"/><target ref="r3"/>
+  <label kind="guard">FIX &amp;&amp; n &lt; N</label>
+  <label kind="assignment">b = 0, n = n + 1</label>
+</transition>
+<transition>   <!-- reconnected (the network is back once the screen is on) -->
+  <source ref="r3"/><target ref="r6"/>
+  <label kind="guard">b == BACKOFF</label>
+</transition>
+<transition>   <!-- the job finished while we were away: its whole log is replayed -->
+  <source ref="r6"/><target ref="r5"/>
+  <label kind="guard">jobDone</label>
+</transition>
+<transition>   <!-- still running: keep following it -->
+  <source ref="r6"/><target ref="r0"/>
+  <label kind="guard">!jobDone</label>
+  <label kind="assignment">x = 0</label>
+</transition>
+</template>
+
+<system>
+phone = Phone();
+job = Job();
+reader = Reader();
+system phone, job, reader;
+</system>
+</nta>
