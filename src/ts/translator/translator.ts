@@ -21,7 +21,7 @@ import { getNodetextToSentence, sleep } from "../util"
 import { processScriptFull } from "../process/scripts"
 import localforage from "localforage"
 import sendSound from '../../etc/send.mp3'
-import { brTimed } from "../brLog";
+import { brLog, brTimed } from "../brLog";
 
 let cache={
     origin: [''],
@@ -515,6 +515,24 @@ function needSuperChunkedTranslate(){
 // Opening a chat asks for ~30 translations at once; three at a time, newest first, is what a phone and the API can take.
 const translateLimiter = createLimiter(3)
 
+// What opening a chat asks of the translator, for the access log (RISU_ACCESS_LOG): how many messages came from the cache, how many
+// were skipped as already Vietnamese, and how many needed a model call. A cache that misses on every open would be slow whatever the code.
+const translateCounts = { hit: 0, skip: 0, miss: 0 }
+let translateSummaryTimer: ReturnType<typeof setTimeout> | null = null
+function noteTranslation(kind: 'hit' | 'skip' | 'miss', text: string) {
+    translateCounts[kind]++
+    if(kind === 'miss'){
+        brLog(`translate miss: ${text.length} chars: ${JSON.stringify(text.slice(0, 40))}`)
+    }
+    if(translateSummaryTimer){
+        clearTimeout(translateSummaryTimer)
+    }
+    translateSummaryTimer = setTimeout(() => {
+        translateSummaryTimer = null
+        brLog(`translate summary: ${translateCounts.hit} from cache, ${translateCounts.skip} already Vietnamese, ${translateCounts.miss} model calls`)
+    }, 4000)
+}
+
 async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string}):Promise<string>{
     const original = text
     // The model's reasoning is not worth translating (it is folded away): translate only the reply and put it back.
@@ -523,6 +541,7 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
     if(!arg.regenerate){
         const cacheMatch = await LLMCacheStorage.getItem(original)
         if(isUsableTranslation(cacheMatch)){
+            noteTranslation('hit', original)
             return cacheMatch
         }
         if(arg.to === 'vi' && looksVietnamese(body)){
@@ -533,6 +552,7 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
                 (run) => translateLLM(run, { ...arg, regenerate: false }),
             )
             if(fixed === body){
+                noteTranslation('skip', original)
                 return original
             }
             const mixed = thoughts + fixed
@@ -585,13 +605,14 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
             }
         ]
     }
-    const rq = await translateLimiter(() => requestChatData({
+    noteTranslation('miss', original)
+    const rq = await translateLimiter(() => brTimed(`translate request ${text.length} chars`, () => requestChatData({
         formated,
         bias: {},
         useStreaming: false,
         noMultiGen: true,
         maxTokens: preset.maxResponse,
-    }, 'translate'))
+    }, 'translate'), 0))
 
     if(rq.type === 'fail'){
         alertError(rq.result)
