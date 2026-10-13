@@ -35,10 +35,11 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
-import { brLog, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
+import { brLog, brMem, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
 function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
+    brMem('reply done')
     brLog(`stages ms: prompt ${t.stage1Duration}, memory ${t.stage2Duration}, request ${t.stage3Duration}, after ${t.stage4Duration}`)
 }
 
@@ -1111,6 +1112,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         else if(DBState.db.hypaV3){
             console.log("Current chat's hypaV3 Data: ", currentChat.hypaV3Data)
+            brMem('before memory phase')
             resetTokenizerStats()
             const sp = await brTimed('hypaV3 memory', () => hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer), 0)
             brLog(`tokenizer during memory: ${tokenizerStats.calls} calls (${tokenizerStats.hits} cached), ${tokenizerStats.chars} chars, ${tokenizerStats.ms.toFixed(0)}ms, caching ${DBState.db.useTokenizerCaching ? 'on' : 'off'}`)
@@ -1564,6 +1566,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     brReportAcc()
+    brMem('before request')
     const req = await brTimed('requestChatData', () => requestChatData({
         formated: formated,
         biasString: biases,

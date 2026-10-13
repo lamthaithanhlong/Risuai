@@ -70,3 +70,19 @@ export function brReportAcc(): void {
     }
     acc.clear()
 }
+
+/**
+ * What the page is holding, for a phone that has no memory API (Safari has no performance.memory): DOM nodes, images, and the JS
+ * heap where the engine reports it (Chrome only). With RISU_ACCESS_LOG on, these lines show whether memory climbs from one
+ * step to the next before the OS kills the tab.
+ */
+export function brMem(tag: string): void {
+    if (!(globalThis as Hooks).__brLog) {
+        return
+    }
+    try {
+        const doc = globalThis.document
+        const heap = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+        brLog(`mem ${tag}: ${doc.getElementsByTagName('*').length} DOM nodes, ${doc.images.length} images${heap ? `, JS heap ${(heap.usedJSHeapSize / 1048576).toFixed(0)} MB` : ''}`)
+    } catch {}
+}
