@@ -112,6 +112,7 @@ export const languageSettingsItems: SettingItem[] = [
                 { value: 'id', label: 'Indonesian' },
                 { value: 'ms', label: 'Malaysian' },
                 { value: 'uk', label: 'Ukranian' },
+                { value: 'vi', label: 'Vietnamese' },
             ],
         },
     },
@@ -159,6 +160,15 @@ export const languageSettingsItems: SettingItem[] = [
         bindPath: 'deeplOptions.freeApi',
         classes: 'mt-2',
         condition: (ctx) => !!ctx.db.translator && ctx.db.translatorType === 'deepl',
+    },
+
+    {
+        id: 'lang.translatorRequestModel',
+        type: 'text',
+        labelKey: 'translatorRequestModel',
+        bindPath: 'translatorRequestModel',
+        classes: 'mt-4',
+        condition: (ctx) => !!ctx.db.translator && ctx.db.translatorType === 'llm',
     },
 
     {

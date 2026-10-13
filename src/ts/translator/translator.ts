@@ -1,3 +1,6 @@
+import { createLimiter, splitThoughts } from "./limiter";
+import { looksVietnamese } from "./vietnamese";
+import { isUsableTranslation } from "./cacheValue";
 import { get } from "svelte/store"
 import { parseChatML } from "../parser/chatML";
 import { getDatabase, type character, type customscript, type groupChat } from "../storage/database.svelte"
@@ -504,12 +507,25 @@ function needSuperChunkedTranslate(){
     return getDatabase().translatorType === 'deeplX'
 }
 
+// Opening a chat asks for ~30 translations at once; three at a time, newest first, is what a phone and the API can take.
+const translateLimiter = createLimiter(3)
+
 async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string}):Promise<string>{
+    const original = text
+    // The model's reasoning is not worth translating (it is folded away): translate only the reply and put it back.
+    const { thoughts, body } = splitThoughts(text)
+    text = body
     if(!arg.regenerate){
-        const cacheMatch = await LLMCacheStorage.getItem(text)
-        if(cacheMatch !== null){
-            return cacheMatch as string
+        const cacheMatch = await LLMCacheStorage.getItem(original)
+        if(isUsableTranslation(cacheMatch)){
+            return cacheMatch
         }
+        if(arg.to === 'vi' && looksVietnamese(body)){
+            return original
+        }
+    }
+    if(!body.trim()){
+        return original
     }
     const styleDecodeRegex = /\<risu-style\>(.+?)\<\/risu-style\>/gms
     let styleDecodes:string[] = []
@@ -553,13 +569,13 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
             }
         ]
     }
-    const rq = await requestChatData({
+    const rq = await translateLimiter(() => requestChatData({
         formated,
         bias: {},
         useStreaming: false,
         noMultiGen: true,
         maxTokens: preset.maxResponse,
-    }, 'translate')
+    }, 'translate'))
 
     if(rq.type === 'fail'){
         alertError(rq.result)
@@ -572,12 +588,18 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
     const result = rq.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
         return styleDecodes[parseInt(p1)] ?? ''
     }).replace(/<\/style-data>/g, '')
-    await LLMCacheStorage.setItem(text, result)
-    return result
+    if(!isUsableTranslation(result)){
+        // An empty answer is not a translation: show the original and try again next time instead of caching a blank.
+        return original
+    }
+    const translated = thoughts + result
+    await LLMCacheStorage.setItem(original, translated)
+    return translated
 }
 
 export async function getLLMCache(text:string):Promise<string | null>{
-    return await LLMCacheStorage.getItem(text)
+    const cached = await LLMCacheStorage.getItem(text)
+    return isUsableTranslation(cached) ? cached : null
 }
 
 export async function searchLLMCache(partialKey:string):Promise<{key: string, value: string}[]>{
