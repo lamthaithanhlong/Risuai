@@ -244,8 +244,13 @@
         </button>
         <button onclick={() => {
             submenu = 3
-        }} class="p-2 flex-1" class:bg-darkbutton={submenu === 3}>
+        }} class="p-2 flex-1 border-r border-darkborderc" class:bg-darkbutton={submenu === 3}>
             <span>{language.imageGeneration}</span>
+        </button>
+        <button onclick={() => {
+            submenu = 4
+        }} class="p-2 flex-1" class:bg-darkbutton={submenu === 4}>
+            <span>Jev</span>
         </button>
     </div>
 {/if}
@@ -796,6 +801,9 @@
             <span class="text-textcolor">Model</span>
             <TextInput size="sm" marginBottom placeholder="dall-e-3" bind:value={DBState.db.openaiCompatImage.model}/>
 
+            <span class="text-textcolor">Style (prepended to every image prompt)</span>
+            <TextInput size="sm" marginBottom placeholder="anime style illustration, ..." bind:value={DBState.db.openaiCompatImage.style}/>
+
             <span class="text-textcolor">Image Size</span>
             <SelectInput className="mb-4" bind:value={DBState.db.openaiCompatImage.size}>
                 <OptionInput value="1024x1024" >1024x1024</OptionInput>
@@ -939,6 +947,24 @@
             {/if}
         {/if}
     </Accordion>
+{/if}
+
+{#if submenu === 4 || submenu === -1}
+<Accordion name="Jev" styled disabled={submenu !== -1}>
+    <span class="text-textcolor2 text-sm mb-4">One Jev call per bot reply. The guard rerolls a reply that speaks for your persona, breaks character, or (when auto-translate is off) is not Vietnamese; the rejected version stays one ← away. The image gate draws only scenes Jev finds worth a picture (characters set to Image Generation).</span>
+    <span class="text-textcolor">URL (key: the Custom API key)</span>
+    <TextInput size="sm" marginBottom placeholder="http://localhost:20128/v1/systemone" bind:value={DBState.db.jevGuard.url}/>
+    <span class="text-textcolor">Model</span>
+    <TextInput size="sm" marginBottom placeholder="v1m/jev-latest" bind:value={DBState.db.jevGuard.model}/>
+    <CheckInput bind:check={DBState.db.jevGuard.enabled} name="Guard: reroll bad replies" className="mb-4 mt-2"/>
+    <span class="text-textcolor">Guard fail threshold (0.5–0.95; higher = fewer rerolls)</span>
+    <NumberInput size="sm" marginBottom min={0.5} max={0.95} bind:value={DBState.db.jevGuard.threshold}/>
+    <span class="text-textcolor">Max rerolls per reply</span>
+    <NumberInput size="sm" marginBottom min={0} max={3} bind:value={DBState.db.jevGuard.retries}/>
+    <CheckInput bind:check={DBState.db.jevGuard.imageGate} name="Image gate: draw only scenes worth a picture" className="mb-4 mt-2"/>
+    <span class="text-textcolor">Draw when Jev scores at least (0–1; higher = fewer pictures)</span>
+    <NumberInput size="sm" marginBottom min={0} max={1} bind:value={DBState.db.jevGuard.imageThreshold}/>
+</Accordion>
 {/if}
 
 {#if submenu === 1 || submenu === -1}

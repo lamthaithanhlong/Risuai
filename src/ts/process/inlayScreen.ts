@@ -1,6 +1,7 @@
 import { writeInlayImage } from "./files/inlays";
 import type { character } from "../storage/database.svelte";
 import { generateAIImage } from "./stableDiff";
+import { jevShouldDraw } from "./jevGuard";
 
 const imggenRegex = [/<ImgGen="(.+?)">/gi, /{{ImgGen="(.+?)"}}/gi] as const
 
@@ -13,6 +14,9 @@ export function runInlayScreen(char:character, data:string):{text:string, promis
             return {
                 text: data.replace(imggenRegex[0],'[Generating...]').replace(imggenRegex[1],'[Generating...]'),
                 promise : (async () => {
+                    if(!(await jevShouldDraw(data, char))){
+                        return data.replace(imggenRegex[0], '').replace(imggenRegex[1], '')
+                    }
                     for(const regex of imggenRegex){
                         const promises:Promise<string|false>[] = [];
                         const neg = char.newGenData.negative

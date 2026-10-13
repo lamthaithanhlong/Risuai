@@ -731,8 +731,9 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
             return false
         }
 
+        const style = config.style?.trim()
         const body: {[key:string]: any} = {
-            "prompt": genPrompt,
+            "prompt": style ? `${style}. ${genPrompt}` : genPrompt,
             "response_format": "b64_json",
             "size": config.size || "1024x1024",
             "quality": config.quality || "auto"
