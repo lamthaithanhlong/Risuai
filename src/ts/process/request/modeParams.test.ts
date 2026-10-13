@@ -74,3 +74,12 @@ describe('migrateStreamingDisplay', () => {
         expect(migrateStreamingDisplay('off', true)).toEqual({ mode: 'off', migrated: true })
     })
 })
+
+describe('dropNeutralPenalties', () => {
+    test('a penalty of 0 is dropped, any other value and other fields stay', async () => {
+        const { dropNeutralPenalties } = await import('./modeParams')
+        expect(dropNeutralPenalties({ a: 1, frequency_penalty: 0, presence_penalty: 0 })).toEqual({ a: 1 })
+        expect(dropNeutralPenalties({ frequency_penalty: 0.4, presence_penalty: -0.2 })).toEqual({ frequency_penalty: 0.4, presence_penalty: -0.2 })
+        expect(dropNeutralPenalties({ temperature: 0 })).toEqual({ temperature: 0 })
+    })
+})

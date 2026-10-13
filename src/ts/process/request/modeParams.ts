@@ -2,6 +2,21 @@
 export const TOKEN_SAVER_OFF: [string, string] = ['header::x-9router-token-saver', 'off']
 
 /**
+ * grok behind 9router answers 400 "The request could not be processed" to any request that carries frequency_penalty,
+ * even 0 (measured 10-13: every other sampler, presence_penalty included, passes). Chat requests never send it, but the
+ * memory (HypaV3 summaries) and translation requests do, so the summary failed with that 400. A penalty of 0 is what the
+ * API assumes when the field is absent, so dropping a zero changes nothing for any other backend.
+ */
+export function dropNeutralPenalties(body: Record<string, any>): Record<string, any> {
+    for (const key of ['frequency_penalty', 'presence_penalty']) {
+        if (body[key] === 0) {
+            delete body[key]
+        }
+    }
+    return body
+}
+
+/**
  * One-time settings migration: chat replies were coming back 3-5x too short (74-138 characters against 213-570 for the
  * same turn) because 9router's compression adds "Respond ultra-terse. Maximum compression. Telegraphic" to the prompt.
  * Add the header that turns it off to the Additional Parameters once. A row with that key already there, whatever its

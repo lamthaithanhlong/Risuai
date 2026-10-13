@@ -1,4 +1,4 @@
-import { modeAdditionalParameters } from "../modeParams";
+import { modeAdditionalParameters, dropNeutralPenalties } from "../modeParams";
 import { composeStreamChunk } from "./thoughtsStream";
 import { language } from "src/lang"
 import { alertError } from "src/ts/alert";
@@ -576,6 +576,7 @@ export async function requestOpenAI(arg:RequestDataArgumentExtended):Promise<req
     }
     
     body = applyAdditionalParameters(body, headers, [...getAdditionalParameters(aiModel), ...(aiModel === 'reverse_proxy' ? modeAdditionalParameters(arg.mode, db.additionalParamsForTranslate, db.translatorRequestModel) : [])])
+    body = dropNeutralPenalties(body)
 
     // Some aux flows are intentionally non-streaming (e.g. memory/translate).
     // If custom Additional Parameters contains stream=true, force non-stream mode back.
