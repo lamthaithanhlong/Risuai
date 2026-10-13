@@ -1048,6 +1048,7 @@ export const languageEnglish = {
     htmlTranslation: "HTML Translate",
     deeplKey: "deepL API Key",
     deeplFreeKey: "deepL Free API Key",
+    translatorRequestModel: "Translation request model (Custom API only; empty = same as chat)",
     deeplXUrl: "deepLX URL",
     deeplXToken: "deepLX Token",
     exportPersona: "Export Persona",

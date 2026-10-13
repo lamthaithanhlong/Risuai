@@ -62,6 +62,7 @@ vi.mock('src/ts/platform', () => ({
 
 vi.mock('src/ts/network/localNetwork', () => ({
     isLocalNetworkUrl: () => false,
+    shouldRouteViaServer: () => false,
 }))
 
 vi.mock('../../templates/jsonSchema', () => ({

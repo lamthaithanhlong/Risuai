@@ -1,5 +1,6 @@
 import { getDatabase } from "src/ts/storage/database.svelte"
-import { isLocalNetworkUrl } from "src/ts/network/localNetwork"
+import { isLocalNetworkUrl, shouldRouteViaServer } from "src/ts/network/localNetwork"
+import { isNodeServer } from "src/ts/platform"
 
 export interface LocalNetworkRequestOptions {
     networkRoute?: 'auto' | 'local_network'
@@ -7,7 +8,8 @@ export interface LocalNetworkRequestOptions {
 }
 
 export function getLocalNetworkRequestOptions(url: string, db = getDatabase(), useStreaming = false): LocalNetworkRequestOptions {
-    if (!db.localNetworkMode || !isLocalNetworkUrl(url)) {
+    const viaServer = shouldRouteViaServer(url, globalThis.location?.hostname ?? '', isNodeServer)
+    if ((!db.localNetworkMode && !viaServer) || !isLocalNetworkUrl(url)) {
         return {}
     }
 

@@ -1,3 +1,5 @@
+import { modeAdditionalParameters } from "../modeParams";
+import { composeStreamChunk } from "./thoughtsStream";
 import { language } from "src/lang"
 import { alertError } from "src/ts/alert";
 import { getDatabase } from "src/ts/storage/database.svelte"
@@ -573,7 +575,7 @@ export async function requestOpenAI(arg:RequestDataArgumentExtended):Promise<req
         body.n = db.genTime
     }
     
-    body = applyAdditionalParameters(body, headers, getAdditionalParameters(aiModel))
+    body = applyAdditionalParameters(body, headers, [...getAdditionalParameters(aiModel), ...(aiModel === 'reverse_proxy' ? modeAdditionalParameters(arg.mode, db.additionalParamsForTranslate, db.translatorRequestModel) : [])])
 
     // Some aux flows are intentionally non-streaming (e.g. memory/translate).
     // If custom Additional Parameters contains stream=true, force non-stream mode back.
@@ -1116,17 +1118,8 @@ function getTranStream(arg:RequestDataArgumentExtended):TransformStream<Uint8Arr
                     console.log(JSONreaded)
                     control.enqueue(JSONreaded)
                 }
-                else if(reasoningContent){
-                    const chunk:Record<string,string> = {
-                        "0": `<Thoughts>\n${reasoningContent}\n</Thoughts>\n${readed["0"] ?? ''}`,
-                    }
-                    if(readed["__tool_calls"]){
-                        chunk["__tool_calls"] = readed["__tool_calls"]
-                    }
-                    control.enqueue(chunk)
-                }
                 else{
-                    control.enqueue(readed)
+                    control.enqueue(composeStreamChunk(reasoningContent, readed))
                 }
             } catch (error) {
                 

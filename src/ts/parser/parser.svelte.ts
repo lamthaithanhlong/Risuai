@@ -1,3 +1,4 @@
+import { wrapThoughts } from "./thoughts";
 import DOMPurify from 'dompurify';
 import markdownit from 'markdown-it'
 import { appVer, getCurrentCharacter, getDatabase, type Database, type character, type customscript, type groupChat, type triggerscript } from '../storage/database.svelte';
@@ -711,23 +712,7 @@ export interface simpleCharacterArgument{
 }
 
 function parseThoughtsAndTools(data:string){
-    let result = '', i = 0
-    while (i < data.length) {
-        if (data.slice(i, i + 10) === '<Thoughts>') {
-            let j = i + 10, depth = 1
-            while (j < data.length && depth > 0) {
-                if (data.slice(j, j + 10) === '<Thoughts>') depth++
-                if (data.slice(j, j + 11) === '</Thoughts>') depth--
-                j++
-            }
-            if (depth === 0) {
-                result += `<details><summary>${language.cot}</summary>${data.substring(i + 10, j - 1)}</details>`
-                i = j + 10
-                continue
-            }
-        }
-        result += data[i++]
-    }
+    const result = wrapThoughts(data, language.cot)
     return result.replace(/<tool_call>(.+?)<\/tool_call>/gms, (full, txt:string) => {
         return `<div class="x-risu-tool-call">🛠️ ${language.toolCalled.replace('{{tool}}',txt.split('\uf100')?.[1] ?? 'unknown')}</div>\n\n`
     })
