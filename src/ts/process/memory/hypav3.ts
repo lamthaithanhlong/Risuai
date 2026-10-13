@@ -1,3 +1,4 @@
+import { withRetry } from "../retry";
 import { type memoryVector, HypaProcesser, similarity } from "./hypamemory";
 import { isContextModel, getContextProvider } from "./contextualEmbedding";
 import { TaskRateLimiter } from "./taskRateLimiter";
@@ -1709,23 +1710,32 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
     if (settings.summarizationModel === "subModel") {
         console.log(logPrefix, `Using ax model ${db.subModel} for summarization.`);
 
-        const response = await requestChatData(
-            {
-                formated,
-                bias: {},
-                useStreaming: false,
-                noMultiGen: true,
-            },
-            "memory"
-        );
+        // One failed summary stops the whole reply, and the request fails now and then (an intermittent 400 from grok,
+        // "Load failed" on a phone), so ask again before giving up.
+        const response = await withRetry(async () => {
+            const res = await requestChatData(
+                {
+                    formated,
+                    bias: {},
+                    useStreaming: false,
+                    noMultiGen: true,
+                },
+                "memory"
+            );
 
-        if (response.type === "streaming" || response.type === "multiline") {
-            throw new Error("Unexpected response type");
-        }
+            if (res.type === "streaming" || res.type === "multiline") {
+                throw new Error("Unexpected response type");
+            }
 
-        if (response.type === "fail") {
-            throw new Error(response.result);
-        }
+            if (res.type === "fail") {
+                throw new Error(res.result);
+            }
+
+            return res;
+        }, {
+            delaysMs: [1500, 4000],
+            onRetry: (error, attempt) => console.log(logPrefix, `Summarization request failed (attempt ${attempt}), retrying:`, `${error}`),
+        });
 
         if (!response.result || response.result.trim().length === 0) {
             throw new Error("Empty summary returned");

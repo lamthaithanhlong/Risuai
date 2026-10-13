@@ -36,6 +36,12 @@ import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
 
+/** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
+function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
+    (globalThis as { __brLog?: (m: string) => void }).__brLog?.(`stages ms: prompt ${t.stage1Duration}, memory ${t.stage2Duration}, request ${t.stage3Duration}, after ${t.stage4Duration}`)
+}
+
+
 export interface OpenAIChat{
     role: 'system'|'user'|'assistant'|'function'
     content: string
@@ -2216,6 +2222,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     stageTimings.stage4Duration = Date.now() - stageTimings.stage4Start
+    reportStageTimings(stageTimings)
     
     if(generationInfo.stageTiming) {
         generationInfo.stageTiming.stage1 = stageTimings.stage1Duration
