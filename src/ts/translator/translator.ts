@@ -1,5 +1,5 @@
 import { createLimiter, splitThoughts } from "./limiter";
-import { looksVietnamese } from "./vietnamese";
+import { looksVietnamese, translateForeignRuns } from "./vietnamese";
 import { isUsableTranslation } from "./cacheValue";
 import { get } from "svelte/store"
 import { parseChatML } from "../parser/chatML";
@@ -526,7 +526,18 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
             return cacheMatch
         }
         if(arg.to === 'vi' && looksVietnamese(body)){
-            return original
+            // Already Vietnamese: no call for the message as a whole, but Korean/Japanese/Chinese passages inside it still need one.
+            const fixed = await translateForeignRuns(
+                body,
+                (listing) => translateLLM(listing, { ...arg, regenerate: false }),
+                (run) => translateLLM(run, { ...arg, regenerate: false }),
+            )
+            if(fixed === body){
+                return original
+            }
+            const mixed = thoughts + fixed
+            await LLMCacheStorage.setItem(original, mixed)
+            return mixed
         }
     }
     if(!body.trim()){
