@@ -1674,6 +1674,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                         continue
                     }
                     const flushStart = performance.now()
+                    brPhase('stream repaint')
                     if(deferStreamingPostProcessing){
                         DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = reformatContent(prefix + nextResult)
                         DBState.db.characters[selectedChar].reloadKeys += 1
@@ -1686,6 +1687,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     }
                     lastFlushedRaw = nextResult
                     const cost = performance.now() - flushStart
+                    if(cost > 400){
+                        brLog(`slow stream repaint: ${cost.toFixed(0)}ms for ${nextResult.length} chars`)
+                    }
                     flushStats.flushes++
                     flushStats.totalMs += cost
                     flushStats.maxMs = Math.max(flushStats.maxMs, cost)

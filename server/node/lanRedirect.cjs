@@ -19,6 +19,22 @@ function isLoopbackAddress(addr) {
     return typeof addr === 'string' && (addr === '::1' || addr === '127.0.0.1' || addr.startsWith('::ffff:127.'));
 }
 
+/** A private IPv4 address (10/8, 172.16/12, 192.168/16, 169.254/16), a .local name or a bare single-label name. */
+function isPrivateLanHost(hostname) {
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+    if (ipv4) {
+        const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+        if ([ipv4[1], ipv4[2], ipv4[3], ipv4[4]].some((o) => Number(o) > 255)) {
+            return false;
+        }
+        return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+    }
+    if (hostname.startsWith('[')) {
+        return false;
+    }
+    return /^[a-z0-9-]+(\.local)?$/.test(hostname);
+}
+
 /**
  * The https:// URL to send this request to, or null to serve it normally.
  * Redirect only a request that came from another device or the LAN address itself (a real, non-loopback client),
@@ -30,7 +46,12 @@ function lanRedirectTarget(hostHeader, remoteAddress, originalUrl, tlsPort) {
     if (!hostname || LOOPBACK_HOSTS.has(hostname) || isLoopbackAddress(remoteAddress)) {
         return null;
     }
+    // The Host header is the client's own word. Redirecting to any name it gives is an open redirect, so only a
+    // private-network address or a local name is sent on (what a phone typing the Mac's LAN address sends).
+    if (!isPrivateLanHost(hostname)) {
+        return null;
+    }
     return `https://${hostname}:${tlsPort}${originalUrl || '/'}`;
 }
 
-module.exports = { lanRedirectTarget, hostnameOf, isLoopbackAddress };
+module.exports = { lanRedirectTarget, hostnameOf, isLoopbackAddress, isPrivateLanHost };

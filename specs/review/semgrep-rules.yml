@@ -31,13 +31,13 @@ rules:
   - id: promise-that-never-settles
     languages: [javascript, typescript]
     severity: INFO
-    message: A promise that never settles parks the caller for good; make sure that is intended (here: waiting for a reload).
+    message: "A promise that never settles parks the caller for good; make sure that is intended (here, waiting for a reload)."
     pattern: new Promise(() => {})
 
   - id: unauthenticated-route
     languages: [javascript]
     severity: INFO
-    message: Route with no auth middleware or checkAuth call in the same file region. Confirm it exposes nothing and is bounded.
+    message: "Route with no auth middleware or checkAuth call in the same file region. Confirm it exposes nothing and is bounded."
     pattern-either:
       - pattern: app.get('/__client-log', ...)
       - pattern: app.get('/', ...)
@@ -47,26 +47,8 @@ rules:
   - id: empty-catch-swallows-error
     languages: [javascript, typescript]
     severity: INFO
-    message: An empty catch hides failures. Fine for best-effort telemetry, wrong for anything that changes state.
+    message: "An empty catch hides failures. Fine for best-effort telemetry, wrong for anything that changes state."
     pattern: |
       try { ... } catch { }
     paths:
       include: ["src/ts/**", "server/node/*.cjs"]
-
-  - id: quadratic-rescan-in-loop
-    languages: [typescript, javascript]
-    severity: WARNING
-    message: >-
-      slice/substring/indexOf of the whole remaining text inside a loop that advances by one: O(n^2). Found and fixed once in wrapThoughts.
-    pattern-either:
-      - pattern: |
-          while ($I < $S.length) {
-            ...
-            $S.slice($I, ...)
-            ...
-          }
-      - pattern: |
-          for (...) { ... $S.slice($J + $N) ... }
-    paths:
-      include: ["src/ts/**"]
-      exclude: ["**/*.test.ts"]

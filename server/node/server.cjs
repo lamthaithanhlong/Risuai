@@ -703,6 +703,8 @@ async function forwardUpstreamResponse(originalResponse, res) {
 }
 
 // RISU_ACCESS_LOG=1 also lets the page report its own errors to /__client-log, so a phone that stops at the loading screen says why.
+// Anything that came from a request and goes into a log line: no line breaks or control characters, so it cannot forge another line.
+const logSafe = (value) => String(value ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ');
 const CLIENT_ERROR_HOOK = `<script>(function(){function r(m){try{new Image().src='/__client-log?t='+Date.now()+'&m='+encodeURIComponent(String(m).slice(0,500))}catch(e){}}
 window.__brLog=r;(function(){try{var n=performance.getEntriesByType('navigation')[0];var p=sessionStorage.getItem('br-phase');r('page start nav='+(n&&n.type)+' prevPhase='+(p||'-')+(p?' ('+Math.round((Date.now()-Number(p.split('@')[1]))/1000)+'s ago)':''))}catch(e){}})();addEventListener('error',function(e){r('error: '+(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''))},true);
 addEventListener('unhandledrejection',function(e){var x=e.reason;r('rejection: '+((x&&(x.stack||x.message))||x))});
@@ -711,14 +713,14 @@ var last=Date.now();setInterval(function(){var n=Date.now(),g=n-last;last=n;if(g
 setTimeout(function(){r('t+8s sw='+(navigator.serviceWorker&&navigator.serviceWorker.controller?'controlled':'none')+' text='+st())},8000);
 setTimeout(function(){r('t+20s text='+st())},20000)})()</script>`;
 app.get('/__client-log', (req, res) => {
-    if (process.env.RISU_ACCESS_LOG) console.log(`[ClientLog] ${new Date().toISOString()} ${String(req.query.m || '').slice(0, 500)}`);
+    if (process.env.RISU_ACCESS_LOG) console.log(`[ClientLog] ${new Date().toISOString()} ${logSafe(String(req.query.m || '').slice(0, 500))}`);
     res.status(204).end();
 });
 app.get('/', async (req, res, next) => {
 
     const clientIP = req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || 'Unknown IP';
     const timestamp = new Date().toISOString();
-    console.log(`[Server] ${timestamp} | Connection from: ${clientIP}`);
+    console.log(`[Server] ${timestamp} | Connection from: ${logSafe(clientIP)}`);
     
     try {
         const mainIndex = await fs.readFile(path.join(process.cwd(), 'dist', 'index.html'))
