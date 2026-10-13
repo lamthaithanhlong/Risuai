@@ -107,3 +107,13 @@ Found in the code as it was:
 Each flag was turned off on its own and the matching invariant went red (`W = 1`, `FixFlush = FALSE`, `FixSendText = FALSE`).
 `ReplyIsGood` is not in these configs: this module reloads memory from the saved chat without tracking which job a saved
 reply came from, so that check would be a modelling artefact; it is covered in `GenQueue.tla`.
+
+### Pure algorithms (Dafny)
+
+`specs/algorithms/Resume.dfy` models four small functions that were only unit-tested on samples: `planResumeWithRestore`,
+`nextFlushDelay`, `withRetry` and `shouldWriteBackup`. `dafny verify Resume.dfy` proves for all inputs: a resumed chat always
+ends with the user's message at the recorded length; the note's copy is used only when exactly one message is missing; the
+repaint delay stays within [base, max] and never shrinks as the cost grows; a retry loop calls `run` at most `delays + 1` times
+and succeeds exactly when it fails no more than `delays` times; two backup copies are at least `gap` apart.
+Verified 18 / 0 errors; four deliberate breaks (restore when more is missing, no cap, one retry too many, backwards clock) are each
+rejected. The model mirrors the TypeScript by hand: the proof is about the model, the unit tests keep the code honest to it.
