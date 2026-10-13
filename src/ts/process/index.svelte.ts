@@ -35,10 +35,11 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
+import { brLog, brTimed } from "../brLog";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
 function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
-    (globalThis as { __brLog?: (m: string) => void }).__brLog?.(`stages ms: prompt ${t.stage1Duration}, memory ${t.stage2Duration}, request ${t.stage3Duration}, after ${t.stage4Duration}`)
+    brLog(`stages ms: prompt ${t.stage1Duration}, memory ${t.stage2Duration}, request ${t.stage3Duration}, after ${t.stage4Duration}`)
 }
 
 
@@ -1109,7 +1110,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         else if(DBState.db.hypaV3){
             console.log("Current chat's hypaV3 Data: ", currentChat.hypaV3Data)
-            const sp = await hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+            const sp = await brTimed('hypaV3 memory', () => hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer), 0)
             if(sp.error){
                 // Save new summary
                 if (sp.memory) {
@@ -1771,7 +1772,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             finally {
                 if(flushStats.flushes + flushStats.skipped > 0){
                     // Only exists when the server was started with RISU_ACCESS_LOG (its page hook reports to the server log).
-                    (globalThis as { __brLog?: (m: string) => void }).__brLog?.(`stream display: ${flushStats.flushes} repaints avg ${(flushStats.totalMs / Math.max(1, flushStats.flushes)).toFixed(0)}ms max ${flushStats.maxMs.toFixed(0)}ms, ${flushStats.skipped} skipped as unchanged, last delay ${flushDelay}ms, mode ${performanceMode}`)
+                    brLog(`stream display: ${flushStats.flushes} repaints avg ${(flushStats.totalMs / Math.max(1, flushStats.flushes)).toFixed(0)}ms max ${flushStats.maxMs.toFixed(0)}ms, ${flushStats.skipped} skipped as unchanged, last delay ${flushDelay}ms, mode ${performanceMode}`)
                 }
                 DBState.db.characters[selectedChar].chats[selectedChat].isStreaming = false
                 DBState.db.characters[selectedChar].chats[selectedChat].activeStreamingDisplayOptimizationMode = undefined

@@ -21,6 +21,7 @@ import { getNodetextToSentence, sleep } from "../util"
 import { processScriptFull } from "../process/scripts"
 import localforage from "localforage"
 import sendSound from '../../etc/send.mp3'
+import { brTimed } from "../brLog";
 
 let cache={
     origin: [''],
@@ -122,6 +123,10 @@ export async function runTranslator(text:string, reverse:boolean, from:string,ta
 }
 
 async function translateMain(text:string, arg:{from:string, to:string, host:string, translatorNote?:string}){
+    return await brTimed(`translate ${text.length} chars`, () => translateMainInner(text, arg), 0)
+}
+
+async function translateMainInner(text:string, arg:{from:string, to:string, host:string, translatorNote?:string}){
     let db = getDatabase()
     if(db.translatorType === 'llm'){
         const tr = arg.to || 'en'

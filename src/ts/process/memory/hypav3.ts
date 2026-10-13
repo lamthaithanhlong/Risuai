@@ -21,6 +21,7 @@ import { chatCompletion, unloadEngine } from "../webllm";
 import { hypaV3ProgressStore } from "src/ts/stores.svelte";
 import { type ChatTokenizer } from "src/ts/tokenizer";
 import { inlayTokenRegex } from "src/ts/util/inlayTokens";
+import { brTimed } from "../../brLog";
 
 export interface HypaV3Preset {
     name: string;
@@ -413,9 +414,9 @@ async function hypaMemoryV3MainExp(
         );
         const summarizeStartTime = performance.now();
 
-        const batchResult = await rateLimiter.executeBatch<string>(
+        const batchResult = await brTimed(`hypaV3 summarize ${summarizationTasks.length} chunks`, () => rateLimiter.executeBatch<string>(
             summarizationTasks
-        );
+        ), 0);
 
         const summarizeEndTime = performance.now();
         console.debug(
@@ -651,7 +652,7 @@ async function hypaMemoryV3MainExp(
             const addStartTime = performance.now();
 
             // Add EmbeddingTexts to processor for similarity search
-            await processor.addTexts(ebdTexts);
+            await brTimed(`hypaV3 embed ${ebdTexts.length} texts`, () => processor.addTexts(ebdTexts), 0);
 
             const addEndTime = performance.now();
             console.debug(

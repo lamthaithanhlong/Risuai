@@ -707,7 +707,7 @@ const CLIENT_ERROR_HOOK = `<script>(function(){function r(m){try{new Image().src
 window.__brLog=r;addEventListener('error',function(e){r('error: '+(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''))},true);
 addEventListener('unhandledrejection',function(e){var x=e.reason;r('rejection: '+((x&&(x.stack||x.message))||x))});
 var st=function(){var d=document.body&&document.body.innerText||'';return d.replace(/\\s+/g,' ').slice(0,160)};
-var last=Date.now();setInterval(function(){var n=Date.now(),g=n-last;last=n;if(g>1500)r('BLOCKED '+g+'ms (main thread frozen) text='+st())},500);
+var last=Date.now();setInterval(function(){var n=Date.now(),g=n-last;last=n;if(g>1500)r('BLOCKED '+g+'ms phase='+(window.__brPhase||'-')+' text='+st())},500);
 setTimeout(function(){r('t+8s sw='+(navigator.serviceWorker&&navigator.serviceWorker.controller?'controlled':'none')+' text='+st())},8000);
 setTimeout(function(){r('t+20s text='+st())},20000)})()</script>`;
 app.get('/__client-log', (req, res) => {
