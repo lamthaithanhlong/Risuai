@@ -12,6 +12,17 @@ const fs = require('fs/promises')
 const crypto = require('crypto')
 const rateLimit = require('express-rate-limit');
 const { WebSocketServer } = require('ws');
+// Phones on the LAN need HTTPS (crypto.subtle); active only when ~/.risu-lan/cert.pem exists, see lan-tls.cjs.
+const { lanRedirectTarget } = require('./lanRedirect.cjs');
+const lanTlsPort = existsSync(path.join(require('os').homedir(), '.risu-lan', 'cert.pem')) ? (Number(process.env.LAN_TLS_PORT) || 6443) : 0;
+app.use((req, res, next) => {
+    const target = lanTlsPort && lanRedirectTarget(req.headers.host, req.socket.remoteAddress, req.originalUrl, lanTlsPort);
+    if (target) {
+        res.redirect(307, target);
+        return;
+    }
+    next();
+});
 app.use(express.static(path.join(process.cwd(), 'dist'), {index: false}));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
@@ -55,16 +66,65 @@ const PROXY_STREAM_MAX_PENDING_EVENTS = 512;
 const PROXY_STREAM_MAX_PENDING_BYTES = 2 * 1024 * 1024;
 const PROXY_STREAM_MAX_BODY_BASE64_BYTES = 8 * 1024 * 1024;
 const proxyStreamJobs = new Map();
+
+// Durable log of every stream job's events (see jobStore.cjs): lets a phone that dropped or refreshed pick up the
+// reply from where it stopped. If SQLite cannot be opened the jobs still run, just without that.
+const PROXY_JOB_REUSE_MAX_AGE_MS = 30 * 60 * 1000;
+const PROXY_JOB_KEEP_MS = 6 * 60 * 60 * 1000;
+let jobStore = null;
+try {
+    const jobsDbPath = process.env.RISU_JOBS_DB || path.join(require('os').homedir(), '.risu-lan', 'jobs.sqlite');
+    mkdirSync(path.dirname(jobsDbPath), { recursive: true });
+    jobStore = require('./jobStore.cjs').openJobStore(jobsDbPath);
+    const interrupted = jobStore.interruptRunning();
+    const pruned = jobStore.prune(Date.now() - PROXY_JOB_KEEP_MS);
+    console.log(`[Server] Job store ready (${jobsDbPath}); interrupted ${interrupted}, pruned ${pruned}`);
+    setInterval(() => { try { jobStore.prune(Date.now() - PROXY_JOB_KEEP_MS); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
+} catch (error) {
+    console.error('[Server] Job store unavailable, stream jobs will not survive a dropped connection:', error?.message || error);
+    jobStore = null;
+}
+const jobWaiters = new Map();
+function notifyJob(jobId) {
+    const waiters = jobWaiters.get(jobId);
+    if (!waiters) {
+        return;
+    }
+    jobWaiters.delete(jobId);
+    for (const wake of waiters) {
+        wake();
+    }
+}
+function waitForJob(jobId, timeoutMs) {
+    return new Promise((resolve) => {
+        let timer = null;
+        const wake = () => {
+            clearTimeout(timer);
+            resolve();
+        };
+        timer = setTimeout(() => {
+            jobWaiters.get(jobId)?.delete(wake);
+            resolve();
+        }, timeoutMs);
+        if (!jobWaiters.has(jobId)) {
+            jobWaiters.set(jobId, new Set());
+        }
+        jobWaiters.get(jobId).add(wake);
+    });
+}
+// Requests per minute per client address. A private server behind the HTTPS front sees every device as 127.0.0.1,
+// so one phone importing a card with hundreds of assets can use up everyone's share: raise it with RISU_RATE_LIMIT.
+const RATE_LIMIT_PER_MIN = Number.parseInt(process.env.RISU_RATE_LIMIT || '', 10) > 0 ? Number.parseInt(process.env.RISU_RATE_LIMIT, 10) : 2000;
 const authenticatedRouteLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 2000,
+    max: RATE_LIMIT_PER_MIN,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests. Please retry shortly.' }
 });
 const authRouteLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 2000,
+    max: RATE_LIMIT_PER_MIN,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests. Please retry shortly.' }
@@ -419,11 +479,27 @@ function createProxyStreamJob(arg) {
         timeoutMs // lgtm[js/request-forgery]
     };
     proxyStreamJobs.set(jobId, job);
+    try {
+        jobStore?.createJob(jobId, arg.idempotencyKey);
+    } catch (error) {
+        console.error('[Server] Job store createJob failed:', error?.message || error);
+    }
     return job;
 }
 
 function pushJobEvent(job, event) {
     job.updatedAt = Date.now();
+    if (event.type === 'error') {
+        job.failed = true;
+    }
+    if (jobStore) {
+        try {
+            jobStore.append(job.id, event);
+        } catch (error) {
+            console.error('[Server] Job store append failed:', error?.message || error);
+        }
+        notifyJob(job.id);
+    }
     const text = JSON.stringify(event);
     if (job.clients.size === 0) {
         job.pendingEvents.push(text);
@@ -453,6 +529,14 @@ function markJobDone(job) {
     }
     job.done = true;
     job.cleanupAt = Date.now() + PROXY_STREAM_DONE_GRACE_MS;
+    if (jobStore) {
+        try {
+            jobStore.finish(job.id, job.aborted ? 'aborted' : job.failed ? 'error' : 'done');
+        } catch (error) {
+            console.error('[Server] Job store finish failed:', error?.message || error);
+        }
+        notifyJob(job.id);
+    }
 }
 
 function cleanupJob(jobId) {
@@ -505,6 +589,11 @@ async function runProxyStreamJob(job, arg) {
             filteredHeaders[key] = value;
         }
 
+        if (upstreamResponse.status >= 400) {
+            // The model answered with an error. Its body is still delivered, but the job is a failed one: it must
+            // not be reused, or a page refresh would replay this error instead of asking again.
+            job.failed = true;
+        }
         pushJobEvent(job, {
             type: 'upstream_headers',
             status: upstreamResponse.status,
@@ -1078,15 +1167,24 @@ app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
         res.status(413).send({ error: 'Request body too large' });
         return;
     }
+    const heartbeatSec = normalizeHeartbeatSec(Number(req.body?.heartbeatSec));
+    const idempotencyKey = typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey.slice(0, 200) : '';
+    const reusable = idempotencyKey && jobStore ? jobStore.findReusable(idempotencyKey, PROXY_JOB_REUSE_MAX_AGE_MS) : null;
+    if (reusable) {
+        // The same generation asked again (the page was refreshed): hand back the job that already has, or is
+        // producing, the reply instead of asking the model a second time.
+        res.send({ jobId: reusable.id, heartbeatSec, reused: true });
+        return;
+    }
     if (proxyStreamJobs.size >= PROXY_STREAM_MAX_ACTIVE_JOBS) {
         res.status(429).send({ error: 'Too many active stream jobs. Retry shortly.' });
         return;
     }
     const headers = normalizeForwardHeaders(req.body?.headers);
-    const heartbeatSec = normalizeHeartbeatSec(Number(req.body?.heartbeatSec));
     const job = createProxyStreamJob({
         heartbeatSec,
-        timeoutMs: req.body?.timeoutMs
+        timeoutMs: req.body?.timeoutMs,
+        idempotencyKey
     });
 
     void runProxyStreamJob(job, {
@@ -1109,13 +1207,75 @@ app.delete('/proxy-stream-jobs/:jobId', authenticatedRouteLimiter, async (req, r
     }
     const job = proxyStreamJobs.get(req.params.jobId);
     if (!job) {
+        try {
+            jobStore?.finish(req.params.jobId, 'aborted');
+        } catch { /* ignore */ }
         res.send({ success: true });
         return;
     }
+    job.aborted = true;
     job.abortController.abort();
     markJobDone(job);
     cleanupJob(job.id);
     res.send({ success: true });
+});
+
+// Replays a job's events from a cursor, then follows it live: GET /proxy-stream-jobs/:id/events?from=N.
+// One JSON line per event: {"seq":N,"event":{...}}; {"type":"ping"} lines keep the connection from idling out.
+app.get('/proxy-stream-jobs/:jobId/events', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkProxyAuth(req, res)) {
+        return;
+    }
+    const jobId = req.params.jobId;
+    if (!jobStore || !jobStore.getJob(jobId)) {
+        res.status(404).send({ error: 'Unknown job' });
+        return;
+    }
+    let next = Math.max(1, Number.parseInt(String(req.query.from), 10) || 1);
+    let closed = false;
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    req.on('close', () => {
+        closed = true;
+        notifyJob(jobId);
+    });
+    const heartbeat = setInterval(() => {
+        if (!closed) {
+            res.write('{"type":"ping"}\n');
+        }
+    }, 15000);
+    try {
+        while (!closed) {
+            const rows = jobStore.eventsFrom(jobId, next, 200);
+            let ended = false;
+            for (const row of rows) {
+                res.write(JSON.stringify(row) + '\n');
+                next = row.seq + 1;
+                if (row.event.type === 'done' || row.event.type === 'error') {
+                    ended = true;
+                }
+            }
+            if (ended) {
+                break;
+            }
+            if (rows.length > 0) {
+                continue;
+            }
+            const job = jobStore.getJob(jobId);
+            if (!job || job.status !== 'running') {
+                break;
+            }
+            await waitForJob(jobId, 15000);
+        }
+    } catch (error) {
+        console.error('[Server] Job events stream failed:', error?.message || error);
+    } finally {
+        clearInterval(heartbeat);
+        res.end();
+    }
 });
 
 // app.get('/api/password', async(req, res)=> {
