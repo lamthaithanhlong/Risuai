@@ -12,6 +12,9 @@ export function brPhase(name: string): void {
     const g = globalThis as Hooks
     if (g.__brLog) {
         g.__brPhase = name
+        try {
+            sessionStorage.setItem('br-phase', `${name}@${Date.now()}`)
+        } catch {}
     }
 }
 

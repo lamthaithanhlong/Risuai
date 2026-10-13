@@ -35,7 +35,7 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
-import { brLog, brTimed } from "../brLog";
+import { brLog, brPhase, brTimed } from "../brLog";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
 function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
@@ -245,7 +245,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     if(connectionOpen){
-        chatProcessStage.set(4)
+        chatProcessStage.set(4); brPhase('sendChat stage 4')
         const peerSafe = await peerSafeCheck()
         if(!peerSafe){
             peerRevertChat()
@@ -353,7 +353,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     nowChatroom.chats[selectedChat] = currentChat
     let maxContextTokens = DBState.db.maxContext
 
-    chatProcessStage.set(1)
+    chatProcessStage.set(1); brPhase('sendChat stage 1')
     stageTimings.stage1Start = Date.now()
     let unformated = {
         'main':([] as OpenAIChat[]),
@@ -1076,7 +1076,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     
     if(nowChatroom.supaMemory && (DBState.db.supaModelType !== 'none' || DBState.db.hanuraiEnable || DBState.db.hypav2 || DBState.db.hypaV3)){
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
-        chatProcessStage.set(2)
+        chatProcessStage.set(2); brPhase('sendChat stage 2')
         stageTimings.stage2Start = Date.now()
         if(DBState.db.hanuraiEnable){
             const hn = await hanuraiMemory(chats, {
@@ -1147,7 +1147,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             currentChat.lastMemory = sp.lastId ?? currentChat.lastMemory;
         }
         stageTimings.stage2Duration = Date.now() - stageTimings.stage2Start
-        chatProcessStage.set(1)
+        chatProcessStage.set(1); brPhase('sendChat stage 1')
     }
     else{
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
@@ -1555,7 +1555,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
     }
 
-    chatProcessStage.set(3)
+    chatProcessStage.set(3); brPhase('sendChat stage 3')
     stageTimings.stage3Start = Date.now()
     if(arg.preview){
         previewFormated = formated
@@ -1951,7 +1951,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(generationInfo.stageTiming) {
         generationInfo.stageTiming.stage3 = stageTimings.stage3Duration
     }
-    chatProcessStage.set(4)
+    chatProcessStage.set(4); brPhase('sendChat stage 4')
     stageTimings.stage4Start = Date.now()
 
     if(resendChat){

@@ -21,7 +21,7 @@ import { chatCompletion, unloadEngine } from "../webllm";
 import { hypaV3ProgressStore } from "src/ts/stores.svelte";
 import { type ChatTokenizer } from "src/ts/tokenizer";
 import { inlayTokenRegex } from "src/ts/util/inlayTokens";
-import { brTimed } from "../../brLog";
+import { brPhase, brTimed } from "../../brLog";
 
 export interface HypaV3Preset {
     name: string;
@@ -253,6 +253,7 @@ async function hypaMemoryV3MainExp(
 
     // If summarization is needed
     const summarizationMode = currentTokens > maxContextTokens;
+    brPhase(`hypaV3 start (summarize ${summarizationMode}, ${chats.length} chats, ${currentTokens} tokens)`);
     const targetTokens =
         maxContextTokens * (1 - settings.extraSummarizationRatio);
     const toSummarizeArray: OpenAIChat[][] = [];
@@ -545,6 +546,7 @@ async function hypaMemoryV3MainExp(
     let consumedRecentMemoryTokens = 0;
     const selectedRecentSummaries: Summary[] = [];
 
+    brPhase('hypaV3 recent');
     if (settings.recentMemoryRatio > 0) {
         // Target only summaries that haven't been selected yet
         const unusedSummaries = data.summaries.filter(
@@ -593,6 +595,7 @@ async function hypaMemoryV3MainExp(
     let consumedSimilarMemoryTokens = 0;
     const selectedSimilarSummaries: Summary[] = [];
 
+    brPhase('hypaV3 similar');
     if (settings.similarMemoryRatio > 0) {
         // Utilize unused token space from recent selection
         if (randomMemoryRatio <= 0) {
