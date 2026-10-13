@@ -1,3 +1,4 @@
+import { retryDelayMs, writeFailureMessage } from "./writeRetry"
 import { language } from "src/lang"
 import { alertError, alertInput, waitAlert } from "../alert"
 import { base64url, getKeypairStore, saveKeypairStore } from "../util"
@@ -71,21 +72,39 @@ export class NodeStorage{
 
     async setItem(key:string, value:Uint8Array) {
         await this.checkAuth()
-        const da = await fetch('/api/write', {
-            method: "POST",
-            body: value as any,
-            headers: {
-                'content-type': 'application/octet-stream',
-                'file-path': Buffer.from(key, 'utf-8').toString('hex'),
-                'risu-auth': await this.createAuth()
+        // Retry what passes by itself (the server's rate limit, a dropped connection) and say which status failed.
+        for(let attempt = 0; ; attempt++){
+            let da: Response | null = null
+            try {
+                da = await fetch('/api/write', {
+                    method: "POST",
+                    body: value as any,
+                    headers: {
+                        'content-type': 'application/octet-stream',
+                        'file-path': Buffer.from(key, 'utf-8').toString('hex'),
+                        'risu-auth': await this.createAuth()
+                    }
+                })
+            } catch (error) {
+                da = null
             }
-        })
-        if(da.status < 200 || da.status >= 300){
-            throw "setItem Error"
-        }
-        const data = await da.json()
-        if(data.error){
-            throw data.error
+            const status = da ? da.status : 0
+            if(da && status >= 200 && status < 300){
+                const data = await da.json()
+                if(data.error){
+                    throw data.error
+                }
+                return
+            }
+            const delay = retryDelayMs(status, attempt, da?.headers.get('retry-after') ?? da?.headers.get('ratelimit-reset'))
+            if(delay === null){
+                let serverMessage = ''
+                try {
+                    serverMessage = da ? await da.text() : ''
+                } catch {}
+                throw writeFailureMessage(status, serverMessage)
+            }
+            await new Promise<void>((resolve) => setTimeout(resolve, delay))
         }
     }
     async getItem(key:string):Promise<Buffer> {

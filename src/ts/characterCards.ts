@@ -1,3 +1,4 @@
+import { describeImportError } from "./importError";
 import { writable, type Writable } from "svelte/store"
 import { alertCardExport, alertConfirm, alertError, alertInput, alertMd, alertNormal, alertStore, alertTOS, alertWait } from "./alert"
 import { defaultSdDataFunc, type character, setDatabase, type customscript, type loreSettings, type loreBook, type triggerscript, importPreset, type groupChat, setCurrentCharacter, getCurrentCharacter, getDatabase, setDatabaseLite, appVer } from "./storage/database.svelte"
@@ -1905,8 +1906,8 @@ export async function downloadRisuHub(id:string, arg:{
         }
     } catch (error) {
         console.error(error)
-        console.log(error.stack)
-        alertError("Error while importing")
+        console.log(error?.stack)
+        alertError(describeImportError(error))
     }
 }
 
