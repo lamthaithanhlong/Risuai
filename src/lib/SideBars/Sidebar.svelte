@@ -30,11 +30,14 @@
     HomeIcon,
     WrenchIcon,
     User2Icon,
+    XIcon,
+    FolderPlusIcon,
   } from "@lucide/svelte";
     import {
   addCharacter,
     changeChar,
     getCharImage,
+    removeChar,
   } from "../../ts/characters";
     import CharConfig from "./CharConfig.svelte";
     import { language } from "../../lang";
@@ -45,6 +48,7 @@
     import { v4 } from "uuid";
     import { checkCharOrder, getFileSrc, saveAsset } from "src/ts/globalApi.svelte";
     import { alertInput, alertSelect } from "src/ts/alert";
+    import { groupOf, moveToGroup, type OrderItem } from "src/ts/characterGroups";
     import SideChatList from "./SideChatList.svelte";
     import { ConnectionIsHost, ConnectionOpenStore, RoomIdStore } from "src/ts/sync/multiuser";
   import { sideBarSize } from "src/ts/gui/guisize";
@@ -273,6 +277,46 @@
   })
 
 
+  // Button on every avatar: put the character into a group, a new group, or back out. Groups are the sidebar folders.
+  async function chooseGroup(chaId:string, name:string) {
+    const order = DBState.db.characterOrder as OrderItem[]
+    const groups = order.filter((o): o is folder => typeof o !== 'string')
+    const current = groupOf(order, chaId)
+    const labels = [
+      ...groups.map((g) => (g.id === current?.id ? '✓ ' : '') + g.name),
+      'New group...',
+      ...(current ? ['Remove from group'] : []),
+      language.cancel,
+    ]
+    const sel = parseInt(await alertSelect(labels, name))
+    if(Number.isNaN(sel) || sel < 0 || sel >= labels.length - 1){
+      return
+    }
+    let target: Parameters<typeof moveToGroup>[2]
+    if(sel < groups.length){
+      target = { kind: 'folder', id: groups[sel].id }
+    }
+    else if(sel === groups.length){
+      const groupName = await alertInput('Group name', [], 'Group ' + (groups.length + 1))
+      if(!groupName){
+        return
+      }
+      target = { kind: 'new', id: v4(), name: groupName }
+    }
+    else{
+      target = { kind: 'none' }
+    }
+    DBState.db.characterOrder = moveToGroup(order, chaId, target)
+    checkCharOrder()
+    if(target.kind !== 'none'){
+      const id = target.id
+      if(!openFolders.includes(id)){
+        openFolders.push(id)
+        openFolders = openFolders
+      }
+    }
+  }
+
   const createFolder = (mainIndex:DragData, targetIndex:DragData) => {
     if(mainIndex.index === targetIndex.index && mainIndex.folder === targetIndex.folder){
       return
@@ -395,6 +439,42 @@
     return false
   }
 </script>
+
+<!-- Two small buttons on an avatar, shown on hover and always for the open character so touch screens can reach them:
+     top right = move the character to the trash (recoverable; removeChar asks twice first),
+     bottom right = put it into a group. -->
+{#snippet removeButton(index: number, name: string)}
+  <button
+    class="absolute bottom-0 right-1 z-30 w-5 h-5 rounded-full bg-blue-600 text-white items-center justify-center shadow hover:bg-blue-500 group-hover:flex"
+    class:flex={$selectedCharID === index}
+    class:hidden={$selectedCharID !== index}
+    title="Group"
+    aria-label={'Group ' + name}
+    draggable="false"
+    onclick={(e) => {
+      e.stopPropagation()
+      const chaId = DBState.db.characters[index]?.chaId
+      if(chaId){
+        chooseGroup(chaId, name)
+      }
+    }}
+  ><FolderPlusIcon size={12} /></button>
+  <button
+    class="absolute top-0 right-1 z-30 w-5 h-5 rounded-full bg-red-600 text-white items-center justify-center shadow hover:bg-red-500 group-hover:flex"
+    class:flex={$selectedCharID === index}
+    class:hidden={$selectedCharID !== index}
+    title={language.removeCharacter}
+    aria-label={language.removeCharacter + ' ' + name}
+    draggable="false"
+    onclick={(e) => {
+      e.stopPropagation()
+      const chaId = DBState.db.characters[index]?.chaId
+      if(chaId){
+        removeChar(chaId, name)
+      }
+    }}
+  ><XIcon size={12} /></button>
+{/snippet}
 {#if DBState.db.menuSideBar}
 <div
   class="h-full w-20 min-w-20 flex-col items-center bg-bgcolor text-textcolor shadow-lg relative rs-sidebar"
@@ -573,6 +653,9 @@
         <SidebarIndicator
           isActive={char.type === 'normal' && $selectedCharID === char.index && sideBarMode !== 1}
         />
+        {#if char.type === 'normal'}
+          {@render removeButton(char.index, char.name)}
+        {/if}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
             role="button" tabindex="0"
@@ -736,6 +819,9 @@
               <SidebarIndicator
                 isActive={$selectedCharID === char2.index && sideBarMode !== 1}
               />
+              {#if char2.type === 'normal'}
+                {@render removeButton(char2.index, char2.name)}
+              {/if}
               <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
               <div
                   role="button" tabindex="0"
