@@ -13,6 +13,17 @@ export interface SaveTracker {
     flush(timeoutMs?: number): Promise<void>
 }
 
+/**
+ * The autosave effect reads the whole chat list ($state.snapshot) so it re-runs when anything in it changes. While a
+ * reply streams, that is a deep copy of every chat on every chunk. The copy is only there to subscribe: what gets saved is
+ * read from the database itself. So while the chat streams, subscribe to the flag alone; its change when the reply ends
+ * re-runs the effect, which then saves the finished reply. (A page killed mid-stream comes back with the saved
+ * placeholder and the resume note, GenQueueKill.)
+ */
+export function shouldTrackChatContent(chat: { isStreaming?: boolean } | undefined): boolean {
+    return !chat?.isStreaming
+}
+
 export function createSaveTracker(): SaveTracker {
     let changed = 0
     let saved = 0

@@ -13,6 +13,16 @@ export function migrateTokenSaverOff(params: [string, string][], alreadyMigrated
 }
 
 /**
+ * One-time settings migration: with Streaming Display Optimization "off" the page runs the regex scripts over the whole
+ * message and re-renders on every chunk. A resumed or long reply arrives as ~400 chunks at once and froze an iPhone
+ * for ~19 s (measured: two page timers due at +8 s and +20 s both fired at +22 s). "balanced" does that work at most every
+ * 125 ms. Switch "off" to "balanced" once; any other value is the owner's choice, and once migrated it is never touched again.
+ */
+export function migrateStreamingDisplay(mode: string | undefined, alreadyMigrated: boolean): { mode: string, migrated: true } {
+    return { mode: !alreadyMigrated && (mode === undefined || mode === 'off') ? 'balanced' : (mode ?? 'off'), migrated: true }
+}
+
+/**
  * Extra Additional Parameters that apply to translation requests only, on top of the general ones.
  * - Token saver off: 9router's caveman mode appends "Respond ultra-terse. Strip conjunctions" to the prompt, and the
  *   translator obeyed it (cut-short, half-Korean output, message body missing).

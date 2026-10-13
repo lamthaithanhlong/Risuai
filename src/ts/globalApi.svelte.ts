@@ -1,5 +1,5 @@
 import { readJobEvents } from "./network/proxyJobHttp";
-import { createSaveTracker } from "./storage/saveTracker";
+import { createSaveTracker, shouldTrackChatContent } from "./storage/saveTracker";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
 import {
@@ -403,7 +403,10 @@ export async function saveDb() {
                         $state.snapshot(DBState.db.characters[selIdState][key])
                     }
                 }
-                $state.snapshot(DBState.db.characters[selIdState].chats)
+                const trackedChats = DBState.db.characters[selIdState].chats
+                if (shouldTrackChatContent(trackedChats[DBState.db.characters[selIdState].chatPage])) {
+                    $state.snapshot(trackedChats)
+                }
                 if (changeTracker.character[0] !== DBState.db.characters[selIdState]?.chaId) {
                     changeTracker.character.unshift(DBState.db.characters[selIdState]?.chaId)
                 }

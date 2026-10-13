@@ -57,3 +57,20 @@ describe('migrateTokenSaverOff', () => {
         expect(rows).toEqual([])
     })
 })
+
+describe('migrateStreamingDisplay', () => {
+    test('off (or unset) becomes balanced once', async () => {
+        const { migrateStreamingDisplay } = await import('./modeParams')
+        expect(migrateStreamingDisplay('off', false)).toEqual({ mode: 'balanced', migrated: true })
+        expect(migrateStreamingDisplay(undefined, false)).toEqual({ mode: 'balanced', migrated: true })
+    })
+    test("the owner's own choice is kept", async () => {
+        const { migrateStreamingDisplay } = await import('./modeParams')
+        expect(migrateStreamingDisplay('strong', false).mode).toBe('strong')
+        expect(migrateStreamingDisplay('balanced', false).mode).toBe('balanced')
+    })
+    test('once migrated, switching back to off sticks', async () => {
+        const { migrateStreamingDisplay } = await import('./modeParams')
+        expect(migrateStreamingDisplay('off', true)).toEqual({ mode: 'off', migrated: true })
+    })
+})

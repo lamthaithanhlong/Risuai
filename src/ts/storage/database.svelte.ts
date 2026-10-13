@@ -1,4 +1,4 @@
-import { migrateTokenSaverOff } from "../process/request/modeParams";
+import { migrateStreamingDisplay, migrateTokenSaverOff } from "../process/request/modeParams";
 import { settleChatOnLoad } from "../process/emptyReply";
 import { get } from 'svelte/store';
 import { checkNullish, decryptBuffer, encryptBuffer, selectSingleFile } from '../util';
@@ -714,6 +714,11 @@ export function setDatabase(data:Database){
     data.chatLoadAdditionalPages = normalizeChatLoadPages(data.chatLoadAdditionalPages, DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES)
     data.streamingDisplayOptimizationMode ??= (data as {largeChatPerformanceMode?: StreamingDisplayOptimizationMode}).largeChatPerformanceMode ?? 'off'
     delete (data as {largeChatPerformanceMode?: unknown}).largeChatPerformanceMode
+    {
+        const m = migrateStreamingDisplay(data.streamingDisplayOptimizationMode, data.streamingDisplayMigrated === true)
+        data.streamingDisplayOptimizationMode = m.mode as StreamingDisplayOptimizationMode
+        data.streamingDisplayMigrated = m.migrated
+    }
     data.echoMessage ??= "Echo Message"
     data.echoDelay ??= 0
     if(!isNodeServer && !isTauri){
@@ -1276,6 +1281,7 @@ export interface Database{
     }
     additionalParamsForTranslate: [string, string][]
     chatTokenSaverOffMigrated?: boolean
+    streamingDisplayMigrated?: boolean
     translatorRequestModel: string
     jevGuard: {
         enabled: boolean

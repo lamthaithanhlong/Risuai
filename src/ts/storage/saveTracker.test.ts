@@ -58,3 +58,13 @@ describe('saveTracker.flush', () => {
         await expect(t.flush()).resolves.toBeUndefined()
     })
 })
+
+describe('shouldTrackChatContent', () => {
+    test('a streaming chat is not deep-copied on every chunk, a settled one is', async () => {
+        const { shouldTrackChatContent } = await import('./saveTracker')
+        expect(shouldTrackChatContent({ isStreaming: true })).toBe(false)
+        expect(shouldTrackChatContent({ isStreaming: false })).toBe(true)
+        expect(shouldTrackChatContent({})).toBe(true)
+        expect(shouldTrackChatContent(undefined)).toBe(true)
+    })
+})
