@@ -7,16 +7,24 @@ export function createLimiter(max: number) {
     let running = 0
     const waiting: (() => void)[] = []
 
+    // A finished task hands its slot straight to the next waiter (running does not change). Giving the slot back with
+    // `running--` and letting the waiter take it a microtask later let a call that arrived in between take it too: more
+    // than `max` tasks at once (measured: 2 at max 1).
     const release = () => {
-        running--
-        waiting.shift()?.()
+        const next = waiting.shift()
+        if (next) {
+            next()
+        } else {
+            running--
+        }
     }
 
     return async function run<T>(task: () => Promise<T>): Promise<T> {
         if (running >= max) {
             await new Promise<void>((resolve) => waiting.push(resolve))
+        } else {
+            running++
         }
-        running++
         try {
             return await task()
         } finally {
