@@ -9,6 +9,7 @@ What these check: one AI reply generation on a phone, through the durable stream
 | `GenQueue.tla` + `GenQueue.cfg` | TLC | Under network drops, page refreshes, a server crash, Stop and retries: is every event delivered exactly once and in order, is a reply only ever read from a good job, is cost bounded, and does the owner never stay on "Thinking..." for good? |
 | `GenQueueCurrent.cfg` | TLC | Same spec with `FixHttpErr = FALSE` and `FixPartial = FALSE`, i.e. the first version of the server and the page. TLC finds the flaws below. |
 | `GenQueuePartial.cfg` | TLC | Only `FixPartial = FALSE`: a half-written reply left in the chat. |
+| `GenQueueKill.tla` + `GenQueueKillBefore.cfg` / `GenQueueKillFixed.cfg` | TLC | The page is **killed** mid-reply (Safari swiped away) and reopened later. Adds the autosave lag (`saved` vs `msg`), time (`clock`, marker window `W`, server window `R`) and the three fix flags. `Before` is red, `Fixed` is green. |
 | `uppaal/reader_*.xml` + `reader.q` | UPPAAL | Time: a phone locked for minutes while the job finishes. Does the reader give up before it ever reconnects? |
 | `GenQueueKeys.als` | Alloy | Keys and jobs over time: never two reusable jobs for one key, a finished job never changes, a failed job is never handed back. |
 
@@ -80,3 +81,29 @@ the marker is cleared) holds.
 Bounded: 4 keys, 2 chunks, 1 network drop, 2 refreshes, 1 crash, 1 retry, 2 generations in a row (670,894 states). Abstracted: the client's "gave up"
 is one step to the note; time and the 10-minute marker expiry are a free choice at refresh; one generation at a
 time (the app's `doingChat` guarantees that).
+
+### Killed page (GenQueueKill)
+
+```sh
+$J -cp $T tlc2.TLC -config GenQueueKillBefore.cfg -metadir /tmp/k1 -workers auto -deadlock GenQueueKill.tla   # violated
+$J -cp $T tlc2.TLC -config GenQueueKillFixed.cfg  -metadir /tmp/k2 -workers auto -deadlock GenQueueKill.tla   # No error (893,879 states)
+```
+
+Do not raise `NKeys`/`MaxChunks`/`MaxGens` without watching the disk: the first attempt (NKeys=3, MaxChunks=2) wrote 3.4 GB of
+states for a single invariant before it was stopped.
+
+Found in the code as it was:
+
+- **The note expired after 10 minutes** (`PENDING_MAX_AGE_MS`) while the server kept a finished job 30 minutes. Reopen
+  Safari after 10+ minutes and the reply the server had finished was replaced by "no reply".
+  `NoteNeverHidesAFinishedReply` is violated by: send, save, 20 minutes pass, job done, reload.
+  Fix: the note lives 48 h, the server reuses a finished job for 24 h (`JOB_REUSE_MAX_AGE_MS`); a test pins note >= server window.
+- **The note was cleared before the reply was saved** (`PartialImpliesMarker`): a kill in that gap left a half-written
+  reply in the saved chat with no note to finish it. Fix: `await flushSave()` before `clearPending()` (`saveTracker.ts`).
+- **A kill in the first second after "send"** (`SentMessageSurvives`): the note was written at once, the chat autosave
+  waits 500 ms, so the chat came back without the user's message. Fix: the note carries the user's message and the page
+  puts it back (`planResumeWithRestore`).
+
+Each flag was turned off on its own and the matching invariant went red (`W = 1`, `FixFlush = FALSE`, `FixSendText = FALSE`).
+`ReplyIsGood` is not in these configs: this module reloads memory from the saved chat without tracking which job a saved
+reply came from, so that check would be a modelling artefact; it is covered in `GenQueue.tla`.
