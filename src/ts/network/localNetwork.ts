@@ -110,3 +110,17 @@ export function isLocalNetworkUrl(url: string): boolean {
         return false
     }
 }
+
+/**
+ * True when the page was opened from another device (a phone using the Mac's LAN address). Then "localhost"
+ * in an API URL means that device, not the Mac running the server, so such URLs must go through the server.
+ */
+export function isPageRemoteFromLocalhost(pageHostname: string): boolean {
+    const host = normalizeHost(pageHostname)
+    return !!host && !(host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1')
+}
+
+/** Only the Node server has a proxy that can reach the Mac's own network; plain web hosting does not. */
+export function shouldRouteViaServer(url: string, pageHostname: string, isNodeServer: boolean): boolean {
+    return isNodeServer && isLocalNetworkUrl(url) && isPageRemoteFromLocalhost(pageHostname)
+}

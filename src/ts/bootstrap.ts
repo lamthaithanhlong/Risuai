@@ -7,7 +7,7 @@ import {
     readDir,
     remove
 } from "@tauri-apps/plugin-fs"
-import { changeFullscreen, checkNullish, sleep } from "./util"
+import { changeFullscreen, checkNullish, findCharacterIndexbyId, sleep } from "./util"
 import { v4 as uuidv4 } from 'uuid';
 import { get } from "svelte/store";
 import { setDatabase, defaultSdDataFunc, getDatabase } from "./storage/database.svelte";
@@ -27,7 +27,8 @@ import { autoServerBackup } from "./kei/backup";
 import { language } from "src/lang";
 import { startObserveDom } from "./observer.svelte";
 import { updateGuisize } from "./gui/guisize";
-import { updateLorebooks } from "./characters";
+import { changeChar, updateLorebooks } from "./characters";
+import { clearPending, readPending, resumeGeneration } from "./process/pendingGeneration";
 import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import type { AccountStorage } from "./storage/accountStorage";
@@ -194,8 +195,14 @@ export async function loadData() {
                 }
                 LoadingStatusState.text = "Checking Service Worker..."
                 if (navigator.serviceWorker) {
-                    setUsingSw(true)
-                    await registerSw()
+                    try {
+                        setUsingSw(true)
+                        await registerSw()
+                    } catch (error) {
+                        // Embedded webviews can refuse SW registration; run without it instead of hanging.
+                        console.error(error)
+                        setUsingSw(false)
+                    }
                 }
                 else {
                     setUsingSw(false)
@@ -254,6 +261,16 @@ export async function loadData() {
             registerModelDynamic()
             saveDb()
             moduleUpdate()
+            const pending = readPending()
+            if (pending) {
+                const index = findCharacterIndexbyId(pending.chaId)
+                if (index === -1) {
+                    clearPending()
+                } else {
+                    await changeChar(index)
+                    resumeGeneration.set(pending)
+                }
+            }
             cleanChunks()
             alertTOS().then((a) => {
                 if (a === false) {

@@ -1,3 +1,6 @@
+import { readJobEvents } from "./network/proxyJobHttp";
+import { nextJobKey } from "./process/generationKey";
+import { safeEnqueue } from "./network/safeEnqueue";
 import {
     writeFile,
     BaseDirectory,
@@ -42,7 +45,7 @@ import { moduleUpdate } from "./process/modules";
 import type { AccountStorage } from "./storage/accountStorage";
 import { getColdStorageItem, makeColdData } from "./process/coldstorage.svelte";
 import { isTauri, isNodeServer } from "./platform";
-import { isLocalNetworkUrl } from "./network/localNetwork";
+import { isLocalNetworkUrl, shouldRouteViaServer } from "./network/localNetwork";
 import { decodeProxyJobWsChunk, formatProxyStreamErrorMessage, parseProxyJobWsEvent } from "./network/proxyJobWs";
 import { getNodeServerProxyAuth } from "./storage/nodeStorage";
 
@@ -684,7 +687,7 @@ export async function globalFetch(url: string, arg: GlobalFetchArgs = {}): Promi
         if (arg.abortSignal?.aborted) { return { ok: false, data: 'aborted', headers: {}, status: 400 }; }
 
         const urlHost = new URL(url).hostname
-        const useLocalNetworkRoute = arg.networkRoute === 'local_network' && isLocalNetworkUrl(url)
+        const useLocalNetworkRoute = (arg.networkRoute === 'local_network' || shouldRouteViaServer(url, globalThis.location?.hostname ?? '', isNodeServer)) && isLocalNetworkUrl(url)
         const forcePlainFetch = ((knownHostes.includes(urlHost) && !isTauri) || db.usePlainFetch || arg.plainFetchForce) && !arg.plainFetchDeforce && !useLocalNetworkRoute
 
         if (useLocalNetworkRoute && !isTauri && !isNodeServer) {
@@ -1575,6 +1578,7 @@ async function fetchViaProxyJobWs(url: string, arg: {
             streamController = controller;
         },
         cancel() {
+            settled = true;
             try {
                 ws.close();
             } catch {
@@ -1626,14 +1630,14 @@ async function fetchViaProxyJobWs(url: string, arg: {
                 return;
             case 'chunk':
                 ensureHeadersReady();
-                streamController.enqueue(decodeProxyJobWsChunk(parsed.dataBase64));
+                safeEnqueue(streamController, decodeProxyJobWsChunk(parsed.dataBase64), () => settled);
                 return;
             case 'error': {
                 status = parsed.status ?? 502;
                 responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
                 ensureHeadersReady();
                 const msg = formatProxyStreamErrorMessage(parsed.status, parsed.message);
-                streamController.enqueue(encoder.encode(msg));
+                safeEnqueue(streamController, encoder.encode(msg), () => settled);
                 closeAndEnd();
                 return;
             }
@@ -1651,7 +1655,7 @@ async function fetchViaProxyJobWs(url: string, arg: {
         status = 502;
         responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
         ensureHeadersReady();
-        streamController.enqueue(encoder.encode('Proxy WebSocket stream error'));
+        safeEnqueue(streamController, encoder.encode('Proxy WebSocket stream error'), () => settled);
         closeAndEnd();
     };
 
@@ -1668,9 +1672,7 @@ async function fetchViaProxyJobWs(url: string, arg: {
         status = 499;
         responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
         ensureHeadersReady();
-        if (streamController && !settled) {
-            streamController.enqueue(encoder.encode('Aborted'));
-        }
+        safeEnqueue(streamController, encoder.encode('Aborted'), () => settled);
         void fetch(`${baseUrl}/proxy-stream-jobs/${encodeURIComponent(jobId)}`, {
             method: 'DELETE',
             headers: {
@@ -1688,6 +1690,161 @@ async function fetchViaProxyJobWs(url: string, arg: {
 
     await waitHeaders;
     requestSignal?.removeEventListener('abort', abortHandler);
+    return new Response(pipedReadable, {
+        status,
+        headers: new Headers(responseHeaders)
+    });
+}
+
+/**
+ * Streams a reply through a durable server job over plain HTTP (no WebSocket). The server logs every event of the
+ * job; if the connection drops (phone locked, page frozen) the events are read again from the next sequence number,
+ * and a page refresh with the same idempotency key attaches to the job that already has, or is producing, the reply.
+ */
+async function fetchViaProxyJobHttp(url: string, arg: {
+    body: Uint8Array,
+    headers?: { [key: string]: string },
+    method: "POST" | "GET" | "PUT" | "DELETE",
+    signal?: AbortSignal,
+    requestTimeoutMs?: number,
+    chatId?: string,
+    fetchLogIndex?: number | null
+}): Promise<Response> {
+    const auth = await getNodeServerProxyAuth();
+    const baseUrl = getProxyStreamJobBaseUrl();
+    const requestSignal = arg.signal;
+
+    const createRes = await fetch(`${baseUrl}/proxy-stream-jobs`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'risu-auth': auth
+        },
+        body: JSON.stringify({
+            url,
+            method: arg.method,
+            headers: arg.headers ?? {},
+            bodyBase64: Buffer.from(arg.body).toString('base64'),
+            timeoutMs: arg.requestTimeoutMs,
+            heartbeatSec: defaultProxyJobHeartbeatSec,
+            idempotencyKey: nextJobKey()
+        }),
+        signal: requestSignal
+    });
+    if (!createRes.ok) {
+        throw new Error(`Proxy stream job creation failed: ${createRes.status} ${await createRes.text()}`);
+    }
+    const created = await createRes.json() as { jobId?: string };
+    if (!created.jobId) {
+        throw new Error('Proxy stream job creation returned no jobId');
+    }
+    const jobId = created.jobId;
+
+    let headersReady = false;
+    let status = 200;
+    let responseHeaders: HeadersInit = { 'content-type': 'text/event-stream' };
+    let settled = false;
+    let resolveHeaders: () => void = () => {};
+    const waitHeaders = new Promise<void>((resolve) => {
+        resolveHeaders = resolve;
+    });
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    const eventsAbort = new AbortController();
+
+    const readable = new ReadableStream<Uint8Array>({
+        start(controller) {
+            streamController = controller;
+        },
+        cancel() {
+            settled = true;
+            eventsAbort.abort();
+        }
+    });
+    const pipedReadable = arg.fetchLogIndex != null ? pipeFetchLog(arg.fetchLogIndex, readable) : readable;
+
+    const ensureHeadersReady = () => {
+        if (!headersReady) {
+            headersReady = true;
+            resolveHeaders();
+        }
+    };
+    const closeStream = () => {
+        if (settled) {
+            return;
+        }
+        settled = true;
+        try {
+            streamController?.close();
+        } catch {
+            // no-op
+        }
+    };
+    const failWith = (code: number, message: string) => {
+        if (!headersReady) {
+            status = code;
+            responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
+            ensureHeadersReady();
+        }
+        safeEnqueue(streamController, encoder.encode(message), () => settled);
+        closeStream();
+    };
+
+    const handleAbort = () => {
+        status = 499;
+        responseHeaders = { 'content-type': 'text/plain; charset=utf-8' };
+        ensureHeadersReady();
+        safeEnqueue(streamController, encoder.encode('Aborted'), () => settled);
+        void fetch(`${baseUrl}/proxy-stream-jobs/${encodeURIComponent(jobId)}`, {
+            method: 'DELETE',
+            headers: { 'risu-auth': auth }
+        }).catch(() => {});
+        eventsAbort.abort();
+        closeStream();
+    };
+    if (requestSignal?.aborted) {
+        handleAbort();
+    }
+    else {
+        requestSignal?.addEventListener('abort', handleAbort, { once: true });
+    }
+
+    void readJobEvents({
+        openEvents: (from) => fetch(`${baseUrl}/proxy-stream-jobs/${encodeURIComponent(jobId)}/events?from=${from}`, {
+            headers: { 'risu-auth': auth },
+            signal: eventsAbort.signal
+        }),
+        onEvent: (event) => {
+            switch (event.type) {
+                case 'upstream_headers':
+                    status = event.status;
+                    responseHeaders = event.headers ?? {};
+                    ensureHeadersReady();
+                    return;
+                case 'chunk':
+                    ensureHeadersReady();
+                    safeEnqueue(streamController, decodeProxyJobWsChunk(event.dataBase64), () => settled);
+                    return;
+                case 'error':
+                    failWith(event.status ?? 502, formatProxyStreamErrorMessage(event.status, event.message));
+                    return;
+                case 'done':
+                    ensureHeadersReady();
+                    closeStream();
+                    return;
+            }
+        },
+        isAborted: () => !!requestSignal?.aborted || settled,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    }).then((result) => {
+        if (result === 'gave_up') {
+            failWith(502, 'Lost the connection to the stream job and could not get it back');
+        }
+        closeStream();
+    });
+
+    await waitHeaders;
+    requestSignal?.removeEventListener('abort', handleAbort);
     return new Response(pipedReadable, {
         status,
         headers: new Headers(responseHeaders)
@@ -1762,7 +1919,7 @@ export async function fetchNative(url: string, arg: {
     }
 
     const db = getDatabase()
-    const useLocalNetworkRoute = arg.networkRoute === 'local_network' && isLocalNetworkUrl(url)
+    const useLocalNetworkRoute = (arg.networkRoute === 'local_network' || shouldRouteViaServer(url, globalThis.location?.hostname ?? '', isNodeServer)) && isLocalNetworkUrl(url)
     if (useLocalNetworkRoute && !isTauri && !isNodeServer) {
         throw new Error(webLocalNetworkBlockedMessage)
     }
@@ -1905,11 +2062,38 @@ export async function fetchNative(url: string, arg: {
 
     }
     else if (throughProxy) {
+        // The WebSocket job route is for the explicit Local Network Mode. A phone that was only auto-routed through the
+        // server (page opened from another device) uses the durable HTTP job route instead: iOS drops wss to a
+        // self-signed host and when the screen locks, which lost the whole reply.
+        const autoRoutedOnly = !DBState?.db?.localNetworkMode
+            && shouldRouteViaServer(url, globalThis.location?.hostname ?? '', isNodeServer);
         const useProxyJobWs = isNodeServer
             && arg.interceptor === 'openai_streaming'
             && arg.method === 'POST'
-            && useLocalNetworkRoute;
+            && useLocalNetworkRoute
+            && !autoRoutedOnly;
+        const useProxyJobHttp = isNodeServer
+            && arg.interceptor === 'openai_streaming'
+            && arg.method === 'POST'
+            && useLocalNetworkRoute
+            && autoRoutedOnly;
         const nodeProxyAuth = isNodeServer ? await getNodeServerProxyAuth() : null;
+
+        if (useProxyJobHttp) {
+            try {
+                return await fetchViaProxyJobHttp(url, {
+                    body: realBody,
+                    headers,
+                    method: arg.method,
+                    signal: requestSignal,
+                    requestTimeoutMs: arg.requestTimeoutMs,
+                    chatId: arg.chatId,
+                    fetchLogIndex
+                });
+            } catch (httpErr) {
+                console.warn('[ProxyJobHTTP] fallback to /proxy2 due to error:', httpErr);
+            }
+        }
 
         if (useProxyJobWs) {
             try {

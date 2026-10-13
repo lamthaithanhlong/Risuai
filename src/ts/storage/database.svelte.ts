@@ -1,3 +1,5 @@
+import { migrateTokenSaverOff } from "../process/request/modeParams";
+import { settleChatOnLoad } from "../process/emptyReply";
 import { get } from 'svelte/store';
 import { checkNullish, decryptBuffer, encryptBuffer, selectSingleFile } from '../util';
 import { changeLanguage, language } from '../../lang';
@@ -675,8 +677,28 @@ export function setDatabase(data:Database){
         key: '',
         model: '',
         size: '1024x1024',
-        quality: 'auto'
+        quality: 'auto',
+        style: 'anime style illustration, cel shading, clean lineart, vibrant colors, expressive eyes, detailed anime art'
     }
+    data.additionalParamsForTranslate ??= [['header::x-9router-token-saver', 'off']]
+    {
+        const m = migrateTokenSaverOff(data.additionalParams ??= [], data.chatTokenSaverOffMigrated === true)
+        data.additionalParams = m.params
+        data.chatTokenSaverOffMigrated = m.migrated
+    }
+    data.translatorRequestModel ??= 'story'
+    data.jevGuard ??= {
+        enabled: true,
+        url: 'http://localhost:20128/v1/systemone',
+        model: 'v1m/jev-latest',
+        threshold: 0.7,
+        retries: 1,
+        imageGate: true,
+        imageThreshold: 0.5,
+    }
+    data.jevGuard.imageGate ??= true
+    data.jevGuard.imageThreshold ??= 0.5
+    data.openaiCompatImage.style ??= 'anime style illustration, cel shading, clean lineart, vibrant colors, expressive eyes, detailed anime art'
     data.wavespeedImage ??= {
         key: '',
         model: '',
@@ -720,6 +742,8 @@ export function setDatabase(data:Database){
     data.coldstorage ??= data?.plugins?.length === 0
     for(const char of data.characters){
         for(const chat of char.chats ?? []){
+            // isStreaming is cleared in a finally block when a reply ends, however it ends; still set on load = cut off.
+            settleChatOnLoad(chat)
             chat.isStreaming = false
             chat.activeStreamingDisplayOptimizationMode = undefined
         }
@@ -1248,6 +1272,19 @@ export interface Database{
         model: string
         size: string
         quality: string
+        style?: string
+    }
+    additionalParamsForTranslate: [string, string][]
+    chatTokenSaverOffMigrated?: boolean
+    translatorRequestModel: string
+    jevGuard: {
+        enabled: boolean
+        url: string
+        model: string
+        threshold: number
+        retries: number
+        imageGate: boolean
+        imageThreshold: number
     }
     wavespeedImage: {
         key: string

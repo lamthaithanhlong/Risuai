@@ -1,4 +1,10 @@
 <script lang="ts">
+    import { NO_REPLY_NOTE, shouldRetryEmptyReply, visibleReply } from "src/ts/process/emptyReply";
+    import { jevCheck } from "src/ts/process/jevGuard";
+    import { untrack } from "svelte";
+    import { setGenerationKey } from "src/ts/process/generationKey";
+    import { clearPending, markPending, resumeGeneration } from "src/ts/process/pendingGeneration";
+    import { planResume } from "src/ts/process/pendingGenerationCore";
 
     import Suggestion from './Suggestion.svelte';
     import { CameraIcon, DatabaseIcon, DicesIcon, GlobeIcon, ImagePlusIcon, LanguagesIcon, Laugh, MenuIcon, MicOffIcon, PackageIcon, Plus, RefreshCcwIcon, ReplyIcon, Send, StepForwardIcon, XIcon, BrainIcon, ArrowDown, SparkleIcon } from "@lucide/svelte";
@@ -215,7 +221,7 @@
 
     }
 
-    async function reroll() {
+    async function reroll(guardRetry = 0) {
         if($doingChat){
             return
         }
@@ -267,7 +273,7 @@
             }
         }
         DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = cha
-        await sendChatMain()
+        await sendChatMain(false, guardRetry)
     }
 
     async function unReroll() {
@@ -302,11 +308,18 @@
 
     let abortController:null|AbortController = null
 
-    async function sendChatMain(continued:boolean = false) {
+    async function sendChatMain(continued:boolean = false, guardRetry = 0, emptyRetry = 0, resumeKey?:string) {
 
         let previousLength = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length
         messageInput = ''
         abortController = new AbortController()
+        const generationKey = resumeKey ?? crypto.randomUUID()
+        const pendingChar = DBState.db.characters[$selectedCharID]
+        if(!continued && pendingChar?.type === 'character'){
+            // A refresh mid-reply loses it; this note lets the next load generate it again.
+            markPending({ chaId: pendingChar.chaId, chatPage: pendingChar.chatPage, previousLength, jobKey: generationKey })
+        }
+        setGenerationKey(generationKey)
         try {
             await sendChat(-1, {
                 signal:abortController.signal,
@@ -320,13 +333,85 @@
             console.error(error)
             alertError(error)
         }
+        if(!continued && !abortController?.signal.aborted){
+            const chat = DBState.db.characters[$selectedCharID]?.chats[DBState.db.characters[$selectedCharID].chatPage]
+            const last = chat?.message.at(-1)
+            if(chat && chat.message.length > previousLength && shouldRetryEmptyReply(last?.role, last?.data, emptyRetry)){
+                // The reply came back with no words (stream cut): drop it and ask again, once the screen is back if it was locked.
+                chat.message = chat.message.slice(0, previousLength)
+                if(document.visibilityState === 'hidden'){
+                    await new Promise<void>((resolve) => {
+                        const onVisible = () => {
+                            if(document.visibilityState === 'visible'){
+                                document.removeEventListener('visibilitychange', onVisible)
+                                resolve()
+                            }
+                        }
+                        document.addEventListener('visibilitychange', onVisible)
+                    })
+                }
+                return await sendChatMain(false, guardRetry, emptyRetry + 1)
+            }
+            if(chat && chat.message.length > previousLength && last?.role === 'char' && visibleReply(last.data) === ''){
+                last.data = NO_REPLY_NOTE
+            }
+        }
+        setGenerationKey(null)
+        clearPending()
         lastCharId = $selectedCharID
         $doingChat = false
         if(DBState.db.playMessage){
             const audio = new Audio(sendSound);
             audio.play().catch(() => {});
         }
+        await jevGuardReply(continued, guardRetry, previousLength)
     }
+
+    // Jev judges the reply just written; a failed check rerolls it (the rejected version stays one unReroll away).
+    async function jevGuardReply(continued:boolean, guardRetry:number, previousLength:number) {
+        const char = DBState.db.characters[$selectedCharID]
+        if(continued || abortController?.signal.aborted || char?.type !== 'character'){
+            return
+        }
+        if(guardRetry >= (DBState.db.jevGuard?.retries ?? 0)){
+            return
+        }
+        const msgs = char.chats[char.chatPage].message
+        const last = msgs.at(-1)
+        if(msgs.length <= previousLength || last?.role !== 'char'){
+            return
+        }
+        const verdict = await jevCheck(last.data, char)
+        if(verdict && !verdict.ok && !$doingChat && DBState.db.characters[$selectedCharID] === char){
+            await reroll(guardRetry + 1)
+        }
+    }
+
+    // After a reload that cut a reply off: drop the partial reply and generate it again.
+    $effect(() => {
+        const pending = $resumeGeneration
+        if(!pending || $selectedCharID === -1){
+            return
+        }
+        const char = DBState.db.characters[$selectedCharID]
+        if(char?.type !== 'character' || char.chaId !== pending.chaId){
+            return
+        }
+        resumeGeneration.set(null)
+        untrack(() => {
+            const chat = char.chats[pending.chatPage]
+            const keep = chat && char.chatPage === pending.chatPage
+                ? planResume(pending, chat.message.map((m) => m.role))
+                : null
+            if(keep === null){
+                clearPending()
+                return
+            }
+            chat.message = chat.message.slice(0, keep)
+            chat.isStreaming = false
+            sendChatMain(false, 0, 0, pending.jobKey)
+        })
+    })
 
     function abortChat(){
         if(abortController){
@@ -820,7 +905,7 @@
                 bind:this={chatsInstance}
                 messages={currentChat}
                 loadPages={loadPages}
-                onReroll={reroll}
+                onReroll={() => reroll()}
                 unReroll={unReroll}
                 currentCharacter={currentCharacter}
                 currentUsername={currentUsername}
@@ -1036,7 +1121,7 @@
                     </div>
 
                     {#if DBState.db.sideMenuRerollButton}
-                        <div class="flex items-center cursor-pointer hover:text-green-500 transition-colors" onclick={reroll}>
+                        <div class="flex items-center cursor-pointer hover:text-green-500 transition-colors" onclick={() => reroll()}>
                             <RefreshCcwIcon />
                             <span class="ml-2">{language.reroll}</span>
                         </div>

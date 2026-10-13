@@ -23,6 +23,7 @@ import { getInlayAsset } from "./files/inlays";
 import { getGenerationModelString } from "./models/modelString";
 import { connectionOpen, peerRevertChat, peerSafeCheck, peerSync } from "../sync/multiuser";
 import { runInlayScreen } from "./inlayScreen";
+import { jevShouldDraw } from "./jevGuard";
 import { addRerolls } from "./prereroll";
 import { runImageEmbedding } from "./transformers";
 import { hanuraiMemory } from "./memory/hanuraiMemory";
@@ -2186,7 +2187,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             }
 
 
-            await stableDiff(currentChar, msgStr)
+            const lastReply = msgs.at(-1)
+            if(lastReply?.role !== 'char' || await jevShouldDraw(lastReply.data, currentChar)){
+                await stableDiff(currentChar, msgStr)
+            }
         }
     }
 
