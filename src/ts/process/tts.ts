@@ -5,6 +5,7 @@ import { globalFetch, loadAsset } from "../globalApi.svelte";
 import { language } from "src/lang";
 import { sleep } from "../util";
 import { runVITS } from "./transformers";
+import { resolveTTS } from "./ttsLocal";
 import {
     getTTSPreprocessors,
     getTTSPostprocessors,
@@ -113,7 +114,8 @@ export async function sayTTS(character:character,text:string) {
         }
         text = beforeResult.ctx.text;
 
-        switch(character.ttsMode){
+        const tts = resolveTTS(character, db.ttsLocal, db.openAIKey)
+        switch(tts.mode){
             case "webspeech":{
                 if(speechSynthesis && SpeechSynthesisUtterance){
                     const utterThis = new SpeechSynthesisUtterance(text);
@@ -183,12 +185,8 @@ export async function sayTTS(character:character,text:string) {
                 break
             }
             case 'openai':{
-                const cfg = character.oaiTTSConfig?.enabled ? character.oaiTTSConfig : null
-                const baseURL = (cfg?.baseURL?.trim() || 'https://api.openai.com/v1').replace(/\/+$/, '')
-                const apiKey  = (cfg?.apiKey || db.openAIKey || '').trim()
-                const model   = cfg?.model || 'tts-1'
-                const voice   = cfg?.voice || character.oaiVoice || 'alloy'
-                const format  = cfg?.format || 'mp3'
+                // The character's own endpoint, else the local TTS server (pdf2mp3), else OpenAI: see ttsLocal.ts
+                const { baseURL, apiKey, model, voice, format } = tts.openai!
 
                 const res = await globalFetch(`${baseURL}/audio/speech`, {
                     method: 'POST',

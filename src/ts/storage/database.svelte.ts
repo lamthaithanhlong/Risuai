@@ -713,6 +713,7 @@ export function setDatabase(data:Database){
     data.chatLoadInitialPages = normalizeChatLoadPages(data.chatLoadInitialPages, DEFAULT_CHAT_LOAD_INITIAL_PAGES)
     data.chatLoadAdditionalPages = normalizeChatLoadPages(data.chatLoadAdditionalPages, DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES)
     data.useTokenizerCaching ??= true
+    data.ttsLocal ??= { ...DEFAULT_LOCAL_TTS }
     data.streamingDisplayOptimizationMode ??= (data as {largeChatPerformanceMode?: StreamingDisplayOptimizationMode}).largeChatPerformanceMode ?? 'off'
     delete (data as {largeChatPerformanceMode?: unknown}).largeChatPerformanceMode
     {
@@ -1282,6 +1283,8 @@ export interface Database{
     }
     additionalParamsForTranslate: [string, string][]
     chatTokenSaverOffMigrated?: boolean
+    /** A local OpenAI-style TTS server (pdf2mp3: vieneu, kokoro) that fills in what a character left empty. */
+    ttsLocal?: LocalTTS
     streamingDisplayMigrated?: boolean
     translatorRequestModel: string
     jevGuard: {
@@ -2352,6 +2355,7 @@ import type { SerializableHypaV3Data } from '../process/memory/hypav3';
 import { defaultHotkeys, type Hotkey } from '../defaulthotkeys';
 import type { OpenAIChat } from '../process/index.svelte';
 import type { Loadout } from '../loadout';
+import { DEFAULT_LOCAL_TTS, type LocalTTS } from "../process/ttsLocal";
 
 export async function downloadPreset(id:number, type:'json'|'risupreset'|'return' = 'json'){
     saveCurrentPreset()
