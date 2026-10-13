@@ -1,5 +1,14 @@
 const express = require('express');
 const app = express();
+// RISU_ACCESS_LOG=1: one line per request (method, path, status, ms, user agent). For finding where a phone stops loading.
+if (process.env.RISU_ACCESS_LOG) {
+    app.use((req, res, next) => {
+        const t0 = Date.now();
+        res.on('finish', () => console.log(`[Access] ${new Date().toISOString()} ${req.method} ${req.originalUrl.slice(0, 90)} ${res.statusCode} ${Date.now() - t0}ms ${(req.headers['user-agent'] || '').includes('iPhone') ? 'iPhone' : 'other'}`));
+        res.on('close', () => { if (!res.writableFinished) console.log(`[Access] ${new Date().toISOString()} ${req.method} ${req.originalUrl.slice(0, 90)} ABORTED ${Date.now() - t0}ms`); });
+        next();
+    });
+}
 if (process.env.TRUST_PROXY) {
     app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
 }
@@ -693,6 +702,17 @@ async function forwardUpstreamResponse(originalResponse, res) {
     }
 }
 
+// RISU_ACCESS_LOG=1 also lets the page report its own errors to /__client-log, so a phone that stops at the loading screen says why.
+const CLIENT_ERROR_HOOK = `<script>(function(){function r(m){try{new Image().src='/__client-log?t='+Date.now()+'&m='+encodeURIComponent(String(m).slice(0,500))}catch(e){}}
+addEventListener('error',function(e){r('error: '+(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''))},true);
+addEventListener('unhandledrejection',function(e){var x=e.reason;r('rejection: '+((x&&(x.stack||x.message))||x))});
+var st=function(){var d=document.body&&document.body.innerText||'';return d.replace(/\\s+/g,' ').slice(0,160)};
+setTimeout(function(){r('t+8s sw='+(navigator.serviceWorker&&navigator.serviceWorker.controller?'controlled':'none')+' text='+st())},8000);
+setTimeout(function(){r('t+20s text='+st())},20000)})()</script>`;
+app.get('/__client-log', (req, res) => {
+    if (process.env.RISU_ACCESS_LOG) console.log(`[ClientLog] ${new Date().toISOString()} ${String(req.query.m || '').slice(0, 500)}`);
+    res.status(204).end();
+});
 app.get('/', async (req, res, next) => {
 
     const clientIP = req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || 'Unknown IP';
@@ -703,7 +723,7 @@ app.get('/', async (req, res, next) => {
         const mainIndex = await fs.readFile(path.join(process.cwd(), 'dist', 'index.html'))
         const root = htmlparser.parse(mainIndex)
         const head = root.querySelector('head')
-        head.innerHTML = `<script>globalThis.__NODE__ = true</script>` + head.innerHTML
+        head.innerHTML = `<script>globalThis.__NODE__ = true</script>` + (process.env.RISU_ACCESS_LOG ? CLIENT_ERROR_HOOK : '') + head.innerHTML
         
         // The shell names this build's hashed bundles: a copy kept by the phone after a rebuild points at files that are gone.
         res.set('Cache-Control', 'no-store')
