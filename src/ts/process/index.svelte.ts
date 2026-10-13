@@ -1,3 +1,4 @@
+import { nextFlushDelay } from "./streamingPace";
 import { get, writable } from "svelte/store";
 import { type character, type MessageGenerationInfo, type Chat, type MessagePresetInfo, changeToPreset, setCurrentChat, type Message, type StreamingDisplayOptimizationMode } from "../storage/database.svelte";
 import { DBState } from '../stores.svelte';
@@ -1620,6 +1621,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         const deferStreamingPostProcessing = performanceMode === 'strong'
         const coalesceStreamingDisplay = performanceMode === 'balanced' || performanceMode === 'strong'
         const streamingDisplayFlushDelay = 125
+        let flushDelay = streamingDisplayFlushDelay
+        let lastFlushedRaw: string | null = null
+        const flushStats = { flushes: 0, skipped: 0, totalMs: 0, maxMs: 0 }
         let pendingStreamingResult: string | null = null
         let streamingFlushTimer: ReturnType<typeof setTimeout> | null = null
         let streamingFlushFrame: number | null = null
@@ -1650,15 +1654,28 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     if(nextResult === null){
                         continue
                     }
+                    if(nextResult === lastFlushedRaw){
+                        // Same text as the last repaint (the "Thinking..." placeholder while the model reasons): nothing to draw.
+                        flushStats.skipped++
+                        continue
+                    }
+                    const flushStart = performance.now()
                     if(deferStreamingPostProcessing){
                         DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = reformatContent(prefix + nextResult)
                         DBState.db.characters[selectedChar].reloadKeys += 1
-                        continue
                     }
-                    let result2 = await processScriptFull(nowChatroom, reformatContent(prefix + nextResult), 'editoutput', msgIndex)
-                    DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = result2.data
-                    emoChanged = result2.emoChanged
-                    DBState.db.characters[selectedChar].reloadKeys += 1
+                    else{
+                        let result2 = await processScriptFull(nowChatroom, reformatContent(prefix + nextResult), 'editoutput', msgIndex)
+                        DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = result2.data
+                        emoChanged = result2.emoChanged
+                        DBState.db.characters[selectedChar].reloadKeys += 1
+                    }
+                    lastFlushedRaw = nextResult
+                    const cost = performance.now() - flushStart
+                    flushStats.flushes++
+                    flushStats.totalMs += cost
+                    flushStats.maxMs = Math.max(flushStats.maxMs, cost)
+                    flushDelay = nextFlushDelay(streamingDisplayFlushDelay, cost)
                 } while(streamingFlushQueued || pendingStreamingResult !== null)
             })().finally(() => {
                 streamingFlushPromise = null
@@ -1678,7 +1695,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                         void reader.cancel().catch(() => {})
                     })
                 })
-            }, streamingDisplayFlushDelay)
+            }, flushDelay)
         }
         const abortReader = () => {
             streamAborted = true
@@ -1746,6 +1763,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 }
             }
             finally {
+                if(flushStats.flushes + flushStats.skipped > 0){
+                    // Only exists when the server was started with RISU_ACCESS_LOG (its page hook reports to the server log).
+                    (globalThis as { __brLog?: (m: string) => void }).__brLog?.(`stream display: ${flushStats.flushes} repaints avg ${(flushStats.totalMs / Math.max(1, flushStats.flushes)).toFixed(0)}ms max ${flushStats.maxMs.toFixed(0)}ms, ${flushStats.skipped} skipped as unchanged, last delay ${flushDelay}ms, mode ${performanceMode}`)
+                }
                 DBState.db.characters[selectedChar].chats[selectedChat].isStreaming = false
                 DBState.db.characters[selectedChar].chats[selectedChat].activeStreamingDisplayOptimizationMode = undefined
                 DBState.db.characters[selectedChar].reloadKeys += 1

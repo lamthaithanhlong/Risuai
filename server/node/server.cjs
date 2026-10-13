@@ -704,7 +704,7 @@ async function forwardUpstreamResponse(originalResponse, res) {
 
 // RISU_ACCESS_LOG=1 also lets the page report its own errors to /__client-log, so a phone that stops at the loading screen says why.
 const CLIENT_ERROR_HOOK = `<script>(function(){function r(m){try{new Image().src='/__client-log?t='+Date.now()+'&m='+encodeURIComponent(String(m).slice(0,500))}catch(e){}}
-addEventListener('error',function(e){r('error: '+(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''))},true);
+window.__brLog=r;addEventListener('error',function(e){r('error: '+(e.message||'')+' @'+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''))},true);
 addEventListener('unhandledrejection',function(e){var x=e.reason;r('rejection: '+((x&&(x.stack||x.message))||x))});
 var st=function(){var d=document.body&&document.body.innerText||'';return d.replace(/\\s+/g,' ').slice(0,160)};
 var last=Date.now();setInterval(function(){var n=Date.now(),g=n-last;last=n;if(g>1500)r('BLOCKED '+g+'ms (main thread frozen) text='+st())},500);
