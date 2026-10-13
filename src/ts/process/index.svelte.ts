@@ -3,7 +3,7 @@ import { get, writable } from "svelte/store";
 import { type character, type MessageGenerationInfo, type Chat, type MessagePresetInfo, changeToPreset, setCurrentChat, type Message, type StreamingDisplayOptimizationMode } from "../storage/database.svelte";
 import { DBState } from '../stores.svelte';
 import { CharEmotion, selectedCharID } from "../stores.svelte";
-import { ChatTokenizer, tokenize, tokenizeNum } from "../tokenizer";
+import { ChatTokenizer, resetTokenizerStats, tokenize, tokenizeNum, tokenizerStats } from "../tokenizer";
 import { language } from "../../lang";
 import { alertError, alertToast } from "../alert";
 import { parseChatML } from "../parser/chatML";
@@ -1110,7 +1110,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         else if(DBState.db.hypaV3){
             console.log("Current chat's hypaV3 Data: ", currentChat.hypaV3Data)
+            resetTokenizerStats()
             const sp = await brTimed('hypaV3 memory', () => hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer), 0)
+            brLog(`tokenizer during memory: ${tokenizerStats.calls} calls (${tokenizerStats.hits} cached), ${tokenizerStats.chars} chars, ${tokenizerStats.ms.toFixed(0)}ms, caching ${DBState.db.useTokenizerCaching ? 'on' : 'off'}`)
             if(sp.error){
                 // Save new summary
                 if (sp.memory) {

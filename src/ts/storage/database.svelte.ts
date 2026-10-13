@@ -712,6 +712,7 @@ export function setDatabase(data:Database){
     data.newMessageButtonStyle ??= 'bottom-center'
     data.chatLoadInitialPages = normalizeChatLoadPages(data.chatLoadInitialPages, DEFAULT_CHAT_LOAD_INITIAL_PAGES)
     data.chatLoadAdditionalPages = normalizeChatLoadPages(data.chatLoadAdditionalPages, DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES)
+    data.useTokenizerCaching ??= true
     data.streamingDisplayOptimizationMode ??= (data as {largeChatPerformanceMode?: StreamingDisplayOptimizationMode}).largeChatPerformanceMode ?? 'off'
     delete (data as {largeChatPerformanceMode?: unknown}).largeChatPerformanceMode
     {

@@ -78,7 +78,27 @@ export async function encodeWithTokenizer(data: string, tokenizerType: string): 
     }
 }
 
+/** Cost of tokenizing since the last reset; read by the diagnostics (RISU_ACCESS_LOG) around the memory phase. */
+export const tokenizerStats = { calls: 0, hits: 0, chars: 0, ms: 0 }
+export function resetTokenizerStats() {
+    tokenizerStats.calls = 0
+    tokenizerStats.hits = 0
+    tokenizerStats.chars = 0
+    tokenizerStats.ms = 0
+}
+
 export async function encode(data:string):Promise<(number[]|Uint32Array|Int32Array)>{
+    const start = performance.now()
+    try {
+        return await encodeUncounted(data)
+    } finally {
+        tokenizerStats.calls++
+        tokenizerStats.chars += data.length
+        tokenizerStats.ms += performance.now() - start
+    }
+}
+
+async function encodeUncounted(data:string):Promise<(number[]|Uint32Array|Int32Array)>{
     const db = getDatabase();
     const modelInfo = getModelInfo(db.aiModel);
     const pluginTokenizer = pluginV2.providerOptions.get(db.currentPluginProvider)?.tokenizer ?? "none";
@@ -96,6 +116,7 @@ export async function encode(data:string):Promise<(number[]|Uint32Array|Int32Arr
         );
         const cachedResult = encodeCache.get(cacheKey);
         if (cachedResult !== undefined) {
+            tokenizerStats.hits++
             return cachedResult;
         }
     }
