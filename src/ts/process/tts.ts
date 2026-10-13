@@ -1,4 +1,4 @@
-import { alertError } from "../alert";
+import { alertError, alertToast } from "../alert";
 import { getCurrentCharacter, getDatabase, type character } from "../storage/database.svelte";
 import { runTranslator, translateVox } from "../translator/translator";
 import { globalFetch, loadAsset } from "../globalApi.svelte";
@@ -6,6 +6,8 @@ import { language } from "src/lang";
 import { sleep } from "../util";
 import { runVITS } from "./transformers";
 import { resolveTTS } from "./ttsLocal";
+import { playUnlocked, sharedAudioContext, stopUnlocked, unlockAudio } from "./audioUnlock";
+import { brLog } from "../brLog";
 import {
     getTTSPreprocessors,
     getTTSPostprocessors,
@@ -70,15 +72,18 @@ async function playAudio(audio: ArrayBuffer, mimeType: string, ctx: { ttsMode: s
     const processed = await runPostprocessorPipeline(audio, mimeType, ctx);
     if (processed.skip) return;
 
-    const audioContext = new AudioContext();
-    const decoded = await audioContext.decodeAudioData(processed.audio);
-    sourceNode = audioContext.createBufferSource();
-    sourceNode.buffer = decoded;
-    sourceNode.connect(audioContext.destination);
-    sourceNode.start();
+    // The shared context was unlocked at the tap (sayTTS); on iOS a context made now, after the fetch, would stay silent.
+    const context = await playUnlocked(processed.audio);
+    brLog(`tts play: ${processed.audio.byteLength} bytes, audio context ${context.state}`);
 }
 
 export async function sayTTS(character:character,text:string) {
+    // Synchronous, before any await: this is still inside the tap that asked for sound (iOS only lets it start audio here).
+    try {
+        unlockAudio()
+    } catch (error) {
+        brLog(`tts unlock failed: ${error}`)
+    }
     try {
         if(!character){
             const v = getCurrentCharacter()
@@ -187,6 +192,8 @@ export async function sayTTS(character:character,text:string) {
             case 'openai':{
                 // The character's own endpoint, else the local TTS server (pdf2mp3), else OpenAI: see ttsLocal.ts
                 const { baseURL, apiKey, model, voice, format } = tts.openai!
+                alertToast(`TTS: ${model} / ${voice}…`)
+                brLog(`tts openai request: ${baseURL} model ${model} voice ${voice}, ${text.length} chars`)
 
                 const res = await globalFetch(`${baseURL}/audio/speech`, {
                     method: 'POST',
@@ -203,6 +210,7 @@ export async function sayTTS(character:character,text:string) {
                     rawResponse: true,
                 })
                 const dat = res.data
+                brLog(`tts openai response: ok=${res.ok}`)
 
                 if(res.ok){
                     try {
@@ -357,7 +365,8 @@ export async function sayTTS(character:character,text:string) {
                         // build the gain-enabled graph with the final bytes.
                         const processed = await runPostprocessorPipeline(response.data.buffer, mimeType, hookCtx)
                         if (!processed.skip) {
-                            const audioContext = new AudioContext();
+                            const audioContext = sharedAudioContext() ?? new AudioContext();
+                            await audioContext.resume();
                             const decoded = await audioContext.decodeAudioData(processed.audio);
                             sourceNode = audioContext.createBufferSource();
                             sourceNode.buffer = decoded;
@@ -427,6 +436,7 @@ export const oaiVoices = [
 ]
 
 export function stopTTS(){
+    stopUnlocked()
     if(sourceNode){
         sourceNode.stop()
     }

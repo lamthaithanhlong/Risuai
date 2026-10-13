@@ -820,7 +820,7 @@
     </button>    
 {/if}
 {#if idx > -1}
-    {#if DBState.db.characters[selIdState.selId].type !== 'group' && DBState.db.characters[selIdState.selId].ttsMode !== 'none' && (DBState.db.characters[selIdState.selId].ttsMode)}
+    {#if DBState.db.characters[selIdState.selId].type !== 'group' && DBState.db.characters[selIdState.selId].ttsMode !== 'none' && (DBState.db.characters[selIdState.selId].ttsMode || DBState.db.ttsLocal?.enabled)}
         <button class="flex items-center hover:text-blue-500 transition-colors button-icon-tts" onclick={()=>{
             return sayTTS(null, isOptimizedStreamingMessage ? rawStreamingText : message)
         }}>
