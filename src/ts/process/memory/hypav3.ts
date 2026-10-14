@@ -1,3 +1,4 @@
+import { sanitizeHypaV3Settings } from "./hypaSettings";
 import { SUMMARY_RETRY_DELAYS_MS } from "./summaryRetry";
 import { trimOrphanedTail } from "./hypaOrphans";
 import { withRetry } from "../retry";
@@ -206,7 +207,7 @@ async function hypaMemoryV3MainExp(
 ): Promise<HypaV3Result> {
     const db = getDatabase();
     brPhase('hypaV3 settings');
-    const settings = getCurrentHypaV3Preset().settings;
+    const settings = sanitizeHypaV3Settings(getCurrentHypaV3Preset().settings);
 
     // Validate settings
     if (settings.recentMemoryRatio + settings.similarMemoryRatio > 1) {
@@ -991,7 +992,7 @@ async function hypaMemoryV3Main(
     tokenizer: ChatTokenizer
 ): Promise<HypaV3Result> {
     const db = getDatabase();
-    const settings = getCurrentHypaV3Preset().settings;
+    const settings = sanitizeHypaV3Settings(getCurrentHypaV3Preset().settings);
 
     // Validate settings
     if (settings.recentMemoryRatio + settings.similarMemoryRatio > 1) {
