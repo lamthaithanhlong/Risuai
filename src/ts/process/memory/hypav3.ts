@@ -1,3 +1,4 @@
+import { trimOrphanedTail } from "./hypaOrphans";
 import { withRetry } from "../retry";
 import { type memoryVector, HypaProcesser, localModels, similarity } from "./hypamemory";
 import { shouldSkipLocalEmbedding } from "./embeddingGuard";
@@ -1676,26 +1677,14 @@ function cleanOrphanedSummary(chats: OpenAIChat[], data: HypaV3Data): void {
     const currentChatMemos = new Set(chats.map((chat) => chat.memo));
     const originalLength = data.summaries.length;
 
-    // Filter summaries - keep only those whose chatMemos are subset of current chat memos
-    data.summaries = data.summaries.filter((summary) => {
-        return isSubset(summary.chatMemos, currentChatMemos);
-    });
+    // Drop orphaned summaries from the end of the chain only; see hypaOrphans.ts for why a summary in the middle must stay
+    data.summaries = trimOrphanedTail(data.summaries, currentChatMemos);
 
     const removedCount = originalLength - data.summaries.length;
 
     if (removedCount > 0) {
         console.log(logPrefix, `Cleaned ${removedCount} orphaned summaries.`);
     }
-}
-
-function isSubset(subset: Set<string>, superset: Set<string>): boolean {
-    for (const elem of subset) {
-        if (!superset.has(elem)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 function wrapWithXml(tag: string, content: string): string {

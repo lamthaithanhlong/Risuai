@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | `AssetSweep.tla` (+ `_FALSE` / `_TRUE` cfg) | TLC | The startup asset cleanup deleted a file another client was about to reference (5 states). Two strikes holds. Fix: `src/ts/storage/assetSweep.ts`. |
 | `GenerateContext.dfy` | Dafny (Z3) | 21 verified. A: the lorebook scan window `slice(length - depth)` loses messages when the chat is shorter than the depth (4 at depth 5 give 1), `lastItems` is exact. B: the lore token budget cut keeps the always-on entries when they come first in priority and fit the budget (the card fix). C: the context truncation loop keeps the newest message, never over-trims, and fails only when the newest message alone does not fit. |
+| `MemoryChain.tla` + `MemoryChain_all/none/tail.cfg` | TLC | HypaV3 default (`Clean=all`): deleting one message inside a summarized range drops the whole summary, and the survivors of that range land in neither the context nor a summary (9 states). `none` (preserveOrphanedMemory) and `tail` (the fix: drop orphaned summaries only from the end of the chain) hold over 451 states. Fix: `src/ts/process/memory/hypaOrphans.ts`. |
 
 The Dafny file models the algorithms; it does not verify the TypeScript. Each part is tied to the code by a test:
 `src/ts/process/scanWindow.test.ts` (A), `fate-simulator/lint_card.py` replays B on the card, and C was read against
