@@ -50,3 +50,6 @@ dist.zip
 
 # Due to Cargo.lock makes the project build fail, we ignore it
 Cargo.lock
+# server save bookkeeping (durable write queue, page revisions for merging)
+save.queue.sqlite*
+save.sync.sqlite*
