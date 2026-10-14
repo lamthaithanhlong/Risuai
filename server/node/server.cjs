@@ -18,6 +18,8 @@ const net = require('net');
 const htmlparser = require('node-html-parser');
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('fs');
 const { atomicWriteFile } = require('./atomicWrite.cjs');
+const { applyReasoningDefault } = require('./requestDefaults.cjs');
+const reasoningDefaultLogged = new Set();
 const fs = require('fs/promises')
 const crypto = require('crypto')
 const rateLimit = require('express-rate-limit');
@@ -600,7 +602,16 @@ async function runProxyStreamJob(job, arg) {
     if (!headers['x-forwarded-for']) {
         headers['x-forwarded-for'] = arg.clientIp;
     }
-    const bodyBuffer = arg.bodyBase64 ? Buffer.from(arg.bodyBase64, 'base64') : undefined;
+    let bodyBuffer = arg.bodyBase64 ? Buffer.from(arg.bodyBase64, 'base64') : undefined;
+    // the app cannot send reasoning_effort for its Custom API model; see requestDefaults.cjs
+    const defaulted = applyReasoningDefault(bodyBuffer);
+    if (defaulted.changed) {
+        bodyBuffer = defaulted.body;
+        if (!reasoningDefaultLogged.has(defaulted.model)) {
+            reasoningDefaultLogged.add(defaulted.model);
+            console.log(`[Server] reasoning_effort=${defaulted.effort} added to requests for model ${defaulted.model} (set RISU_REASONING_DEFAULTS='{}' to turn off)`);
+        }
+    }
 
     try {
         const upstreamResponse = await requestLocalTargetStream(targetUrl, {
