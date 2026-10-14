@@ -188,6 +188,9 @@ class Cloud {
 
 class AuthError extends Error {}
 
+// test seam: lets a test make the server write between two steps of a pass
+const hooks = { beforeDbRead() {} }
+
 function isDone(state, k) {
     const d = state.done[k.key]
     return !!d && d.size === k.size && d.mtimeMs === k.mtimeMs
@@ -243,17 +246,20 @@ async function pass(cloud, state) {
 
     if (dbItem && sent < limit) {
         const renamedAny = Object.values(state.done).some((d) => d.remote)
-        // a chat may have added assets while this pass ran; the database read now would point at files the account lacks
-        const unsent = listKeys().filter((k) => k.key !== DB_KEY && !isDone(state, k))
         if (renamedAny) {
             // the account database must point at the names the hub gave, which this script does not rewrite
             log(`not sending ${DB_KEY}: the hub renamed some asset(s), the database would point at missing names`)
-        } else if (unsent.length) {
-            log(`not sending ${DB_KEY} yet: ${unsent.length} asset(s) are not in the account yet`)
         } else {
+            hooks.beforeDbRead()
             const snap = readStable(dbItem.file)
+            // The check comes AFTER the read, on purpose. The server writes an asset before the database that points at it, so a
+            // database that already contains a reference was read after that asset existed, and the listing taken now includes it.
+            // Checked before the read, a chat could add an asset and save in between (specs/mirror/MirrorRace.tla, trace of 8 states).
+            const unsent = listKeys().filter((k) => k.key !== DB_KEY && !isDone(state, k))
             if (!snap) {
                 log(`not sending ${DB_KEY}: the file is being written, trying again next pass`)
+            } else if (unsent.length) {
+                log(`not sending ${DB_KEY} yet: ${unsent.length} asset(s) are not in the account yet`)
             } else {
                 const r = await cloud.write(DB_KEY, snap.buf)
                 if (r.warn) {
@@ -311,4 +317,4 @@ if (require.main === module) {
     })
 }
 
-module.exports = { readRootBlock, listKeys, isCompleteSave, readStable }
+module.exports = { readRootBlock, listKeys, isCompleteSave, readStable, Cloud, pass, loadState, hooks }

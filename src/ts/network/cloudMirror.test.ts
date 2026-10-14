@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createRequire } from 'node:module'
 import { createServer, type Server } from 'node:http'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
@@ -174,5 +175,36 @@ describe('cloud mirror', () => {
         expect(r.code).toBe(2)
         expect(r.out).toContain('STOPPED')
         expect(r.out).not.toContain('secret-token-value')
+    })
+
+    // specs/mirror/MirrorRace.tla: TLC found that checking "every asset is in the account" BEFORE reading the database lets a chat
+    // add an asset and save in between. This drives exactly that interleaving in-process through the test seam.
+    it('does not send a database saved after the last check (the race TLC found)', async () => {
+        put('database/database.bin', makeDb())
+        put('assets/a.png', 'AAA')
+        const saved = { ...process.env }
+        process.env.RISU_SAVE_DIR = save
+        process.env.RISU_HUB_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+        process.env.RISU_MIRROR_STATE = state
+        const req = createRequire(import.meta.url)
+        const path = req.resolve(SCRIPT)
+        delete req.cache[path]
+        const mirror = req(SCRIPT)
+        try {
+            mirror.hooks.beforeDbRead = () => {
+                put('assets/late.png', 'LATE')            // a chat adds an asset...
+                put('database/database.bin', makeDb('tok-2')) // ...and saves the database that points at it
+            }
+            const st = mirror.loadState()
+            await mirror.pass(new mirror.Cloud('tok-1'), st)
+            expect(hits.some((h) => h.key === 'database/database.bin')).toBe(false)
+            mirror.hooks.beforeDbRead = () => {}
+            await mirror.pass(new mirror.Cloud('tok-1'), st)
+            expect(hits.some((h) => h.key === 'assets/late.png')).toBe(true)
+            expect(hits[hits.length - 1].key).toBe('database/database.bin')
+        } finally {
+            process.env = saved
+            delete req.cache[path]
+        }
     })
 })
