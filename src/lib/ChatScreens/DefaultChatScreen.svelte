@@ -324,10 +324,15 @@
 
     async function sendChatMainRun(continued:boolean, guardRetry:number, emptyRetry:number, generationKey:string) {
 
-        let previousLength = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length
+        // The character this reply belongs to. The owner can leave the chat (selectedCharID becomes -1) while it is generating or
+        // being resumed; everything after the await must keep using THIS character, not whatever is selected by then.
+        const pendingChar = DBState.db.characters[$selectedCharID]
+        if(!pendingChar){
+            return
+        }
+        let previousLength = pendingChar.chats[pendingChar.chatPage].message.length
         messageInput = ''
         abortController = new AbortController()
-        const pendingChar = DBState.db.characters[$selectedCharID]
         if(!continued && pendingChar?.type === 'character'){
             // A refresh mid-reply loses it; this note lets the next load generate it again.
             const sent = pendingChar.chats[pendingChar.chatPage].message[previousLength - 1]
@@ -341,8 +346,9 @@
                 signal:abortController.signal,
                 continue:continued
             })
-            if(previousLength < DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.length){
-                rerolls.push(safeStructuredClone(DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.slice(previousLength)))
+            const after = pendingChar.chats?.[pendingChar.chatPage]?.message
+            if(after && previousLength < after.length){
+                rerolls.push(safeStructuredClone(after.slice(previousLength)))
                 rerollid = rerolls.length - 1
             }
         } catch (error) {
@@ -350,7 +356,7 @@
             alertError(error)
         }
         if(!continued && !abortController?.signal.aborted){
-            const chat = DBState.db.characters[$selectedCharID]?.chats[DBState.db.characters[$selectedCharID].chatPage]
+            const chat = pendingChar.chats?.[pendingChar.chatPage]
             const last = chat?.message.at(-1)
             if(chat && chat.message.length > previousLength && shouldRetryEmptyReply(last?.role, last?.data, emptyRetry)){
                 // The reply came back with no words (stream cut): drop it and ask again, once the screen is back if it was locked.
