@@ -220,7 +220,7 @@
 
     async function getTranslationCacheKey(): Promise<string> {
         if(DBState.db.translateBeforeHTMLFormatting){
-            return msgDisplay
+            return splitCoT(msgDisplay).main
         }
         if(!DBState.db.legacyTranslation){
             return await ParseMarkdown(msgDisplay, character, 'pretranslate', idx, getCbsCondition())

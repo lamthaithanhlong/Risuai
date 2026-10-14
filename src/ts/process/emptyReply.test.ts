@@ -106,3 +106,16 @@ describe('settleChatOnLoad', () => {
         expect(() => settleChatOnLoad({ isStreaming: true, message: [] })).not.toThrow()
     })
 })
+
+describe('visibleReply with <think> blocks', () => {
+    test('a reply that is only a <think> block shows nothing, so it is retried and settles to the no-reply note', () => {
+        expect(visibleReply('<think>\nđang nghĩ\n</think>\n')).toBe('')
+        expect(visibleReply('<think>đang nghĩ dở')).toBe('')
+        expect(shouldRetryEmptyReply('char', '<think>\nnghĩ\n</think>', 0)).toBe(true)
+        expect(settleInterrupted('<think>nghĩ dở')).toBe(NO_REPLY_NOTE)
+    })
+
+    test('a <think> block followed by the reply keeps the reply', () => {
+        expect(visibleReply('<think>nghĩ</think>\n\nKhang cười.')).toBe('Khang cười.')
+    })
+})

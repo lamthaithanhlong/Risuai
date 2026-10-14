@@ -72,6 +72,10 @@
         // track 'translated' and 'retranslate' state
         translated;
         retranslate;
+        // The chain of thought belongs to the panel. It must not be translated either: with "translate before formatting" the whole
+        // text went to the translator, which rewrote or dropped the <Thoughts> tags, so the thought landed in the chat as ordinary
+        // paragraphs (and cost a translation of several thousand characters per message).
+        data = splitCoT(data ?? '').main
         const preservePendingContent = lastRenderedRevision !== null && requestedRevision !== lastRenderedRevision
         let lastParsedQueue = ''
         let mode = 'notrim' as const

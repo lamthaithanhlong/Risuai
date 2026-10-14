@@ -1,4 +1,5 @@
 import { THINKING_PLACEHOLDER } from './request/openAI/thoughtsStream'
+import { splitCoT } from '../parser/cot'
 
 /** Shown in place of a reply that never arrived, so it does not sit on "Thinking..." for good. */
 export const NO_REPLY_NOTE = '*(Không nhận được phản hồi từ AI. Bấm reroll để thử lại.)*'
@@ -52,7 +53,8 @@ export function isStalledPlaceholder(data: string | undefined): boolean {
 
 /** The part of a bot message the reader sees: everything except the model's reasoning block. */
 export function visibleReply(data: string): string {
-    return data.replace(/<Thoughts>[\s\S]*?<\/Thoughts>\n*/g, '').trim()
+    // <Thoughts> and <think> blocks both count as reasoning; a thought that was never closed is still being written
+    return splitCoT(data).main.trim()
 }
 
 export const MAX_EMPTY_REPLY_RETRIES = 2
