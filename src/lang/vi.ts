@@ -1485,4 +1485,12 @@ export const languageVietnamese = {
     nanoGPTSelectFromList: "Chọn từ danh sách",
     nanoGPTManualInput: "Nhập thủ công",
     nanoGPTManualModelSelect: "Chọn mô hình thủ công",
+    "modelSlots": "Ô model",
+    "modelSlotsHint": "Giữ sẵn vài model, ví dụ Custom API với hai tên model yêu cầu khác nhau, rồi đổi qua lại ngay trong menu chat.",
+    "modelSlotInUse": "đang dùng",
+    "modelSlotUse": "Dùng",
+    "modelSlotSaveCurrent": "Lưu model hiện tại thành ô",
+    "modelSlotAdd": "Thêm ô trống",
+    "modelSlotsFull": "Đã dùng hết các ô. Xoá một ô để thêm ô khác.",
+    "modelSlotCustom": "tuỳ chỉnh (trong cài đặt)"
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;
