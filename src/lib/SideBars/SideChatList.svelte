@@ -19,6 +19,7 @@
     import { bookmarkListOpen } from "src/ts/stores.svelte";
     import { language } from "src/lang";
     import Toggles from "./Toggles.svelte";
+    import RowMenu from "../UI/RowMenu.svelte";
     import { changeChatTo, createChatCopyName } from "src/ts/globalApi.svelte";
 
     interface Props {
@@ -27,6 +28,66 @@
 
     let { chara = $bindable() }: Props = $props();
     let editMode = $state(false)
+
+    // the actions of a chat row, one place for both lists (in a folder and outside one)
+    async function chatOptions(chat: Chat) {
+        const option = await alertChatOptions()
+        switch(option){
+            case 0:{
+                const newChat = $state.snapshot(chara.chats[chara.chats.indexOf(chat)])
+                newChat.name = createChatCopyName(newChat.name, 'Copy')
+                newChat.id = v4()
+                chara.chats.unshift(newChat)
+                changeChatTo(0)
+                chara.chats = chara.chats
+                break
+            }
+            case 1:{
+                if(chat.bindedPersona){
+                    const confirm = await alertConfirm(language.doYouWantToUnbindCurrentPersona)
+                    if(confirm){
+                        chat.bindedPersona = ''
+                        alertNormal(language.personaUnbindedSuccess)
+                    }
+                }
+                else{
+                    const confirm = await alertConfirm(language.doYouWantToBindCurrentPersona)
+                    if(confirm){
+                        if(!DBState.db.personas[DBState.db.selectedPersona].id){
+                            DBState.db.personas[DBState.db.selectedPersona].id = v4()
+                        }
+                        chat.bindedPersona = DBState.db.personas[DBState.db.selectedPersona].id
+                        alertNormal(language.personaBindedSuccess)
+                    }
+                }
+                break
+            }
+            case 2:{
+                changeChatTo(chara.chats.indexOf(chat))
+                createMultiuserRoom()
+            }
+        }
+    }
+    async function removeChatRow(chat: Chat) {
+        if(chara.chats.length === 1){
+            alertError(language.errors.onlyOneChat)
+            return
+        }
+        const d = await alertConfirm(`${language.removeConfirm}${chat.name}`)
+        if(d){
+            changeChatTo(0)
+            $ReloadGUIPointer += 1
+            let chats = chara.chats
+            chats.splice(chara.chats.indexOf(chat), 1)
+            chara.chats = chats
+        }
+    }
+    const rowItems = (chat: Chat) => [
+        { label: language.chatOptions, icon: MenuIcon, onclick: () => chatOptions(chat) },
+        { label: language.renameChat, icon: PencilIcon, onclick: () => { editMode = !editMode } },
+        { label: language.export, icon: DownloadIcon, onclick: () => exportChat(chara.chats.indexOf(chat)) },
+        { label: language.remove, icon: TrashIcon, danger: true, onclick: () => removeChatRow(chat) },
+    ]
 
     let chatsStb: Sortable[] = []
     let folderStb: Sortable = null
@@ -256,91 +317,7 @@
                             <span>{chat.name}</span>
                         {/if}
                         <div class="grow flex justify-end">
-                            <div role="button" tabindex="0" onkeydown={(e) => {
-                                if(e.key === 'Enter'){
-                                    e.currentTarget.click()
-                                }
-                            }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={async () => {
-                                const option = await alertChatOptions()
-                                switch(option){
-                                    case 0:{
-                                        const newChat = $state.snapshot(chara.chats[chara.chats.indexOf(chat)])
-                                        newChat.name = createChatCopyName(newChat.name, 'Copy')
-                                        newChat.id = v4()
-                                        chara.chats.unshift(newChat)
-                                        changeChatTo(0)
-                                        chara.chats = chara.chats
-                                        break
-                                    }
-                                    case 1:{
-                                        if(chat.bindedPersona){
-                                            const confirm = await alertConfirm(language.doYouWantToUnbindCurrentPersona)
-                                            if(confirm){
-                                                chat.bindedPersona = ''
-                                                alertNormal(language.personaUnbindedSuccess)
-                                            }
-                                        }
-                                        else{
-                                            const confirm = await alertConfirm(language.doYouWantToBindCurrentPersona)
-                                            if(confirm){
-                                                if(!DBState.db.personas[DBState.db.selectedPersona].id){
-                                                    DBState.db.personas[DBState.db.selectedPersona].id = v4()
-                                                }
-                                                chat.bindedPersona = DBState.db.personas[DBState.db.selectedPersona].id
-                                                console.log(DBState.db.personas[DBState.db.selectedPersona])
-                                                alertNormal(language.personaBindedSuccess)
-                                            }
-                                        }
-                                        break
-                                    }
-                                    case 2:{
-                                        changeChatTo(chara.chats.indexOf(chat))
-                                        createMultiuserRoom()
-                                    }
-                                }
-                            }}>
-                                <MenuIcon size={18}/>
-                            </div>
-                            <div role="button" tabindex="0" onkeydown={(e) => {
-                                if(e.key === 'Enter'){
-                                    e.currentTarget.click()
-                                }
-                            }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={() => {
-                                editMode = !editMode
-                            }}>
-                                <PencilIcon size={18}/>
-                            </div>
-                            <div role="button" tabindex="0" onkeydown={(e) => {
-                                if(e.key === 'Enter'){
-                                    e.currentTarget.click()
-                                }
-                            }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={async (e) => {
-                                e.stopPropagation()
-                                exportChat(chara.chats.indexOf(chat))
-                            }}>
-                                <DownloadIcon size={18}/>
-                            </div>
-                            <div role="button" tabindex="0" onkeydown={(e) => {
-                                if(e.key === 'Enter'){
-                                    e.currentTarget.click()
-                                }
-                            }} class="text-textcolor2 hover:text-green-500 cursor-pointer" onclick={async (e) => {
-                                e.stopPropagation()
-                                if(chara.chats.length === 1){
-                                    alertError(language.errors.onlyOneChat)
-                                    return
-                                }
-                                const d = await alertConfirm(`${language.removeConfirm}${chat.name}`)
-                                if(d){
-                                    changeChatTo(0)
-                                    $ReloadGUIPointer += 1
-                                    let chats = chara.chats
-                                    chats.splice(chara.chats.indexOf(chat), 1)
-                                    chara.chats = chats
-                                }
-                            }}>
-                                <TrashIcon size={18}/>
-                            </div>
+                            <RowMenu label={language.chatActions} items={rowItems(chat)} />
                         </div>
                     </button>
                     {/each}
@@ -367,93 +344,8 @@
                     <span>{chat.name}</span>
                 {/if}
                 <div class="grow flex justify-end">
-                    <div role="button" tabindex="0" onkeydown={(e) => {
-                        if(e.key === 'Enter'){
-                            e.currentTarget.click()
-                        }
-                    }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={async () => {
-                        const option = await alertChatOptions()
-                        switch(option){
-                            case 0:{
-                                const newChat = $state.snapshot(chara.chats[i])
-                                newChat.name = createChatCopyName(newChat.name, 'Copy')
-                                newChat.id = v4()
-                                chara.chats.unshift(newChat)
-                                changeChatTo(0)
-                                chara.chats = chara.chats
-                                break
-                            }
-                            case 1:{
-                                const chat = chara.chats[i]
-                                if(chat.bindedPersona){
-                                    const confirm = await alertConfirm(language.doYouWantToUnbindCurrentPersona)
-                                    if(confirm){
-                                        chat.bindedPersona = ''
-                                        alertNormal(language.personaUnbindedSuccess)
-                                    }
-                                }
-                                else{
-                                    const confirm = await alertConfirm(language.doYouWantToBindCurrentPersona)
-                                    if(confirm){
-                                        if(!DBState.db.personas[DBState.db.selectedPersona].id){
-                                            DBState.db.personas[DBState.db.selectedPersona].id = v4()
-                                        }
-                                        chat.bindedPersona = DBState.db.personas[DBState.db.selectedPersona].id
-                                        console.log(DBState.db.personas[DBState.db.selectedPersona])
-                                        alertNormal(language.personaBindedSuccess)
-                                    }
-                                }
-                                break
-                            }
-                            case 2:{
-                                changeChatTo(i)
-                                createMultiuserRoom()
-                            }
-                        }
-                    }}>
-                        <MenuIcon size={18}/>
-                    </div>
-                    <div role="button" tabindex="0" onkeydown={(e) => {
-                        if(e.key === 'Enter'){
-                            e.currentTarget.click()
-                        }
-                    }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={() => {
-                        editMode = !editMode
-                    }}>
-                        <PencilIcon size={18}/>
-                    </div>
-                    <div role="button" tabindex="0" onkeydown={(e) => {
-                        if(e.key === 'Enter'){
-                            e.currentTarget.click()
-                        }
-                    }} class="text-textcolor2 hover:text-green-500 mr-1 cursor-pointer" onclick={async (e) => {
-                        e.stopPropagation()
-                        exportChat(i)
-                    }}>
-                        <DownloadIcon size={18}/>
-                    </div>
-                    <div role="button" tabindex="0" onkeydown={(e) => {
-                        if(e.key === 'Enter'){
-                            e.currentTarget.click()
-                        }
-                    }} class="text-textcolor2 hover:text-green-500 cursor-pointer" onclick={async (e) => {
-                        e.stopPropagation()
-                        if(chara.chats.length === 1){
-                            alertError(language.errors.onlyOneChat)
-                            return
-                        }
-                        const d = await alertConfirm(`${language.removeConfirm}${chat.name}`)
-                        if(d){
-                            changeChatTo(0)
-                            $ReloadGUIPointer += 1
-                            let chats = chara.chats
-                            chats.splice(i, 1)
-                            chara.chats = chats
-                        }
-                    }}>
-                        <TrashIcon size={18}/>
-                    </div>
-                </div>
+                            <RowMenu label={language.chatActions} items={rowItems(chat)} />
+                        </div>
             </button>
             {/if}
             {/each}

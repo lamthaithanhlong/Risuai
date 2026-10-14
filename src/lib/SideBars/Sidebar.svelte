@@ -32,6 +32,8 @@
     User2Icon,
     XIcon,
     FolderPlusIcon,
+    EllipsisIcon,
+    Trash2Icon,
   } from "@lucide/svelte";
     import {
   addCharacter,
@@ -398,6 +400,9 @@
     }
   })
 
+  // the open "more" menu of an avatar: which character and where to draw it
+  let avatarMenu = $state<{ index: number, name: string, x: number, y: number } | null>(null)
+
   const getCurrentSidebarDrag = (e:DragEvent) => {
     if(!currentDrag || !e.dataTransfer?.types.includes(RISU_SIDEBAR_DRAG_TYPE)){
       return null
@@ -440,41 +445,67 @@
   }
 </script>
 
-<!-- Two small buttons on an avatar, shown on hover and always for the open character so touch screens can reach them:
-     top right = move the character to the trash (recoverable; removeChar asks twice first),
-     bottom right = put it into a group. -->
+<!-- One "more" button on an avatar (always on the open character so a touch screen can reach it, on hover for the others). It opens a
+     menu with the two actions as labelled rows, drawn outside the scrolling list so nothing clips it: put the character into a group,
+     or move it to the trash (recoverable; removeChar asks twice first). Before, two 20 px round buttons (a red X on top, a blue folder
+     below) sat on every avatar: hard to hit, easy to hit the wrong one, and a destructive button was always on screen. -->
 {#snippet removeButton(index: number, name: string)}
   <button
-    class="absolute bottom-0 right-1 z-30 w-5 h-5 rounded-full bg-blue-600 text-white items-center justify-center shadow hover:bg-blue-500 group-hover:flex"
+    class="absolute bottom-0 right-0 z-30 h-7 w-7 rounded-full bg-darkbutton text-textcolor items-center justify-center shadow ring-1 ring-darkborderc hover:bg-selected group-hover:flex"
     class:flex={$selectedCharID === index}
     class:hidden={$selectedCharID !== index}
-    title="Group"
-    aria-label={'Group ' + name}
+    title={language.characterActions}
+    aria-label={language.characterActions + ' ' + name}
+    aria-haspopup="menu"
+    aria-expanded={avatarMenu?.index === index}
     draggable="false"
     onclick={(e) => {
       e.stopPropagation()
-      const chaId = DBState.db.characters[index]?.chaId
-      if(chaId){
-        chooseGroup(chaId, name)
+      if(avatarMenu?.index === index){
+        avatarMenu = null
+        return
       }
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      avatarMenu = { index, name, x: rect.right + 6, y: rect.bottom }
     }}
-  ><FolderPlusIcon size={12} /></button>
-  <button
-    class="absolute top-0 right-1 z-30 w-5 h-5 rounded-full bg-red-600 text-white items-center justify-center shadow hover:bg-red-500 group-hover:flex"
-    class:flex={$selectedCharID === index}
-    class:hidden={$selectedCharID !== index}
-    title={language.removeCharacter}
-    aria-label={language.removeCharacter + ' ' + name}
-    draggable="false"
-    onclick={(e) => {
-      e.stopPropagation()
-      const chaId = DBState.db.characters[index]?.chaId
-      if(chaId){
-        removeChar(chaId, name)
-      }
-    }}
-  ><XIcon size={12} /></button>
+  ><EllipsisIcon size={16} /></button>
 {/snippet}
+
+{#if avatarMenu}
+  {@const menu = avatarMenu}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-[60]" onclick={() => (avatarMenu = null)} oncontextmenu={(e) => { e.preventDefault(); avatarMenu = null }}></div>
+  <div
+    role="menu"
+    class="fixed z-[61] min-w-48 overflow-hidden rounded-md border border-darkborderc bg-darkbg py-1 text-textcolor shadow-lg"
+    style="left: {Math.min(menu.x, (typeof window !== 'undefined' ? window.innerWidth : 400) - 200)}px; bottom: {Math.max(8, (typeof window !== 'undefined' ? window.innerHeight : 600) - menu.y)}px;"
+  >
+    <div class="truncate px-3 py-1 text-xs text-textcolor2">{menu.name}</div>
+    <button
+      role="menuitem"
+      class="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-selected"
+      onclick={() => {
+        const chaId = DBState.db.characters[menu.index]?.chaId
+        avatarMenu = null
+        if(chaId){
+          chooseGroup(chaId, menu.name)
+        }
+      }}
+    ><FolderPlusIcon size={18} /><span>{language.characterGroup}</span></button>
+    <button
+      role="menuitem"
+      class="flex w-full items-center gap-3 px-3 py-3 text-left text-red-500 hover:bg-selected"
+      onclick={() => {
+        const chaId = DBState.db.characters[menu.index]?.chaId
+        avatarMenu = null
+        if(chaId){
+          removeChar(chaId, menu.name)
+        }
+      }}
+    ><Trash2Icon size={18} /><span>{language.removeCharacter}</span></button>
+  </div>
+{/if}
 {#if DBState.db.menuSideBar}
 <div
   class="h-full w-20 min-w-20 flex-col items-center bg-bgcolor text-textcolor shadow-lg relative rs-sidebar"
