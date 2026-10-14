@@ -17,6 +17,7 @@ const path = require('path');
 const net = require('net');
 const htmlparser = require('node-html-parser');
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('fs');
+const { atomicWriteFile } = require('./atomicWrite.cjs');
 const fs = require('fs/promises')
 const crypto = require('crypto')
 const rateLimit = require('express-rate-limit');
@@ -1418,14 +1419,15 @@ app.get('/api/remove', authenticatedRouteLimiter, async (req, res, next) => {
 
         try {
             await fs.rm(path.join(savePath, filePath));
-            res.send({
-                success: true,
-            });
         } catch (error) {
             next(error);
+            return;
         }
     }
-    
+    // one answer for the whole request; it used to answer inside the loop, so a second path made res.send throw
+    res.send({
+        success: true,
+    });
 });
 
 app.get('/api/list', authenticatedRouteLimiter, async (req, res, next) => {
@@ -1465,7 +1467,11 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
     }
 
     try {
-        await fs.writeFile(path.join(savePath, filePath), fileContent);
+        // temp file + rename: a reader or a crash never sees half of database.bin (specs/core/SaveLoad.tla)
+        await atomicWriteFile(path.join(savePath, filePath), fileContent, {
+            tmpDir: savePath + '.tmp',
+            sync: Buffer.from(filePath, 'hex').toString('utf-8').startsWith('database/'),
+        });
         res.send({
             success: true
         });

@@ -140,6 +140,8 @@ export async function loadData() {
                     console.error(error)
                     const backups = await getDbBackups()
                     let backupLoaded = false
+                    // newest first; stop at the first backup that decodes. Without the break every older backup overwrote the previous
+                    // one and the OLDEST readable backup was the one the app ended up with (specs/core/SaveLoad.tla).
                     for (const backup of backups) {
                         try {
                             LoadingStatusState.text = `Reading Backup File ${backup}...`
@@ -148,6 +150,7 @@ export async function loadData() {
                                 await decodeRisuSave(backupData)
                             )
                             backupLoaded = true
+                            break
                         } catch (error) { }
                     }
                     if (!backupLoaded) {
@@ -179,6 +182,7 @@ export async function loadData() {
                                     await decodeRisuSave(backupData)
                                 )
                                 backupLoaded = true
+                                break
                             } catch (error) { }
                         }
                         if (!backupLoaded) {

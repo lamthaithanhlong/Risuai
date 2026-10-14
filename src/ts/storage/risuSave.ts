@@ -422,6 +422,17 @@ export class RisuSaveEncoder {
     }
 }
 
+const MUST_HAVE_CONTENT = new Set<RisuSaveType>([RisuSaveType.ROOT, RisuSaveType.CHARACTER_WITH_CHAT, RisuSaveType.CHARACTER_WITHOUT_CHAT, RisuSaveType.BOTPRESET, RisuSaveType.ROOT_COMPONENT])
+
+// A save file that is torn, truncated or has a block that does not parse. It must not become a half-empty database: autosave would
+// write that over the file, and every backup the cleanup keeps would soon be the half-empty copy too (specs/core/SaveLoad.tla).
+export class RisuSaveCorrupt extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'RisuSaveCorrupt'
+    }
+}
+
 export class RisuSaveDecoder {
     private blocks: {
         name: string;
@@ -437,12 +448,18 @@ export class RisuSaveDecoder {
         const loadedBlocks = new Set<string>();
         while (offset < data.length) {
             try {
+                if (offset + 3 > data.length) {
+                    throw new RisuSaveCorrupt('block header is cut off')
+                }
                 const type = data[offset];
                 const compression = data[offset + 1] === 1;
                 offset += 2;
 
                 const nameLength = data[offset];
                 offset += 1;
+                if (offset + nameLength + 4 > data.length) {
+                    throw new RisuSaveCorrupt('block name or length is cut off')
+                }
                 const name = new TextDecoder().decode(data.subarray(offset, offset + nameLength));
                 offset += nameLength;
 
@@ -452,6 +469,9 @@ export class RisuSaveDecoder {
                 const length = new Uint32Array(newArrayBuf)[0];
                 offset += 4;
 
+                if (offset + length > data.length) {
+                    throw new RisuSaveCorrupt(`block ${name} is cut off (${data.length - offset} of ${length} bytes)`)
+                }
                 let blockData = data.subarray(offset, offset + length);
                 offset += length;
 
@@ -474,13 +494,21 @@ export class RisuSaveDecoder {
                     content: new TextDecoder().decode(blockData)
                 })   
             } catch (error) {
-                continue
+                if (error instanceof RisuSaveCorrupt) {
+                    throw error
+                }
+                throw new RisuSaveCorrupt(`a block could not be read: ${error}`)
             }
         }
         console.log('blocks',this.blocks)
         let directory: string[] = []
         for(let i = 0; i < this.blocks.length; i++){
             const key = i;
+            // The encoder writes an empty block for a value that is undefined (pluginStorage in a real save has size 0). That is not
+            // damage: only the blocks that carry characters, presets or the root must have content.
+            if (this.blocks[key].content === '' && !MUST_HAVE_CONTENT.has(this.blocks[key].type)) {
+                continue
+            }
             try {
                 switch(this.blocks[key].type){
                     case RisuSaveType.ROOT:{
@@ -605,10 +633,17 @@ export class RisuSaveDecoder {
             } catch (error) {
                 console.error(`Error processing block ${this.blocks[key].name}:`, error);
 
-                if(this.blocks[key].type === RisuSaveType.ROOT){
-                    throw new Error('Failed to decode root block, cannot proceed with decoding RisuSave data');
+                // Any block that does not parse means a character, preset or setting would silently be missing from the database.
+                // A remote block is the exception: it is read from another file, and a failed read is not proof that this file is damaged.
+                if (this.blocks[key].type !== RisuSaveType.REMOTE) {
+                    throw new RisuSaveCorrupt(`block ${this.blocks[key].name} could not be decoded: ${error}`)
                 }
             }
+        }
+        // every block the root says the file has must have been found, in the file or in the local cache
+        const missing = directory.filter((dirKey) => !loadedBlocks.has(dirKey))
+        if (missing.length > 0) {
+            throw new RisuSaveCorrupt(`${missing.length} block(s) listed in the root are missing: ${missing.slice(0, 3).join(', ')}`)
         }
         //to fix botpreset bugs
         if(!Array.isArray(db.botPresets) || db.botPresets.length === 0){
@@ -648,6 +683,10 @@ export async function decodeRisuSave(data:Uint8Array){
         return unpackr.decode(data)
     }
     catch (error) {
+        if (error instanceof RisuSaveCorrupt) {
+            // a file in the block format that is damaged: guessing an older format would decode garbage into a database
+            throw error
+        }
         console.error('Error decoding RisuSave data:', error);
         try {
             console.log('risudecode')

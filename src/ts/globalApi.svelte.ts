@@ -1,3 +1,4 @@
+import { pickBackupsToKeep } from "./storage/backupRetention"
 import { getBasename, getUncleanablesSync } from "./storage/uncleanable"
 export { getBasename, getUncleanablesSync }
 import { readJobEvents } from "./network/proxyJobHttp";
@@ -533,12 +534,11 @@ export async function getDbBackups() {
                 backups.push(parseInt(da))
             }
         }
-        backups.sort((a, b) => b - a)
-        while (backups.length > 20) {
-            const last = backups.pop()
-            await remove(`database/dbbackup-${last}.bin`, { baseDir: BaseDirectory.AppData })
+        const plan = pickBackupsToKeep(backups, Date.now() / 100)
+        for (const old of plan.remove) {
+            await remove(`database/dbbackup-${old}.bin`, { baseDir: BaseDirectory.AppData })
         }
-        return backups
+        return plan.keep
     }
     else {
         const keys = await forageStorage.keys()
@@ -546,13 +546,13 @@ export async function getDbBackups() {
         const backups = keys
             .filter(key => key.startsWith('database/dbbackup-'))
             .map(key => parseInt(key.slice(18, -4)))
-            .sort((a, b) => b - a);
+            .filter((n) => Number.isFinite(n));
 
-        while (backups.length > 20) {
-            const last = backups.pop()
-            await forageStorage.removeItem(`database/dbbackup-${last}.bin`)
+        const plan = pickBackupsToKeep(backups, Date.now() / 100)
+        for (const old of plan.remove) {
+            await forageStorage.removeItem(`database/dbbackup-${old}.bin`)
         }
-        return backups
+        return plan.keep
     }
 }
 
