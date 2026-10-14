@@ -51,6 +51,27 @@ if(!existsSync(savePath)){
     mkdirSync(savePath)
 }
 
+// Writes go through a durable SQLite queue (saveQueue.cjs, specs/core/SaveQueue.tla): acknowledged once committed, applied to the save
+// directory in order by one worker, newest write per key only. Reads and listings look at the queue first.
+const hexToKey = (hex) => Buffer.from(hex, 'hex').toString('utf-8');
+const saveQueue = require('./saveQueue.cjs').openSaveQueue({
+    dbFile: savePath + '.queue.sqlite',
+    saveDir: savePath,
+    isImmutable: (hex) => hexToKey(hex).startsWith('assets/'),
+    log: (kind, key, attempts, error) => console.error(`[SaveQueue] ${kind} ${hexToKey(key)} attempt ${attempts}: ${error && error.message || error}`),
+});
+require('./atomicWrite.cjs').cleanStaleTemp(savePath + '.tmp', 60 * 60 * 1000).catch(() => {});
+saveQueue.start();
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, async () => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        try { await Promise.race([saveQueue.flush(), new Promise((r) => setTimeout(r, 8000))]); await saveQueue.close(); } catch (e) { console.error('[SaveQueue] shutdown:', e); }
+        process.exit(0);
+    });
+}
+
 const passwordPath = path.join(process.cwd(), 'save', '__password')
 if(existsSync(passwordPath)){
     password = readFileSync(passwordPath, 'utf-8')
@@ -1385,7 +1406,18 @@ app.get('/api/read', authenticatedRouteLimiter, async (req, res, next) => {
         return;
     }
     try {
-        if(!existsSync(path.join(savePath, filePath))){
+        // an acknowledged write that has not reached the directory yet is the newest state
+        const queued = saveQueue.readPending(filePath);
+        if(queued){
+            if(queued.op === 'delete'){
+                res.send();
+            }
+            else{
+                res.setHeader('Content-Type','application/octet-stream');
+                res.send(queued.data);
+            }
+        }
+        else if(!existsSync(path.join(savePath, filePath))){
             res.send();
         }
         else{
@@ -1418,7 +1450,7 @@ app.get('/api/remove', authenticatedRouteLimiter, async (req, res, next) => {
         }
 
         try {
-            await fs.rm(path.join(savePath, filePath));
+            saveQueue.enqueueDelete(filePath);
         } catch (error) {
             next(error);
             return;
@@ -1435,7 +1467,14 @@ app.get('/api/list', authenticatedRouteLimiter, async (req, res, next) => {
         return;
     }
     try {
-        const data = (await fs.readdir(path.join(savePath))).map((v) => {
+        // the queue first, then the directory: a row the worker finishes in between is then in the directory listing, and a delete
+        // it finishes in between is still in the snapshot. The other order can miss a write or show a deleted key.
+        const pending = saveQueue.pendingKeys()
+        const names = new Set(await fs.readdir(path.join(savePath)))
+        for (const row of pending) {
+            if (row.op === 'delete') names.delete(row.key); else names.add(row.key);
+        }
+        const data = [...names].map((v) => {
             return Buffer.from(v, 'hex').toString('utf-8')
         })
         res.send({
@@ -1467,11 +1506,8 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
     }
 
     try {
-        // temp file + rename: a reader or a crash never sees half of database.bin (specs/core/SaveLoad.tla)
-        await atomicWriteFile(path.join(savePath, filePath), fileContent, {
-            tmpDir: savePath + '.tmp',
-            sync: Buffer.from(filePath, 'hex').toString('utf-8').startsWith('database/'),
-        });
+        // committed to SQLite before we answer; the worker moves it to the directory (atomically) in order
+        saveQueue.enqueueWrite(filePath, fileContent);
         res.send({
             success: true
         });

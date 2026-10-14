@@ -17,6 +17,22 @@ use the old window formula) and Dafny rejects it.
 
 Run: `dafny verify GenerateContext.dfy`; `java -cp tla2tools.jar tlc2.TLC -metadir /tmp/x -config AssetSweep_FALSE.cfg AssetSweep.tla`.
 
+## SaveQueue.tla: the SQLite write queue
+
+`server/node/saveQueue.cjs` (node:sqlite): /api/write commits the bytes to a table and answers; one worker applies rows in sequence order;
+reads and listings look at the table first; one row per key; a failing row is retried with backoff forever and later rows wait for it (still served to readers from the table).
+This is the role a Huey queue plays, kept in the Node process that owns the files (Huey is Python and pickles its tasks).
+
+| InOrder | AssetPolicy | Read returns the last acknowledged write | The directory never regresses | The directory never holds a database without its asset |
+| --- | --- | --- | --- | --- |
+| yes | ignore (an asset rewritten while pending keeps its place) | holds | holds | holds |
+| yes | replace (it moves to the end) | holds | holds | VIOLATED (the database overtakes the asset) |
+| no | ignore | holds | holds | VIOLATED |
+| yes | ignore, and the worker skips a row that is in backoff | holds | holds | VIOLATED (found by the independent review; the queue now waits for the failing row) |
+
+Tests `src/ts/network/saveQueue.test.ts` (12, including crash recovery with a second instance on the same SQLite file and a random property test).
+Found by those tests: sequence numbers were reused after the table emptied, so the worker deleted a newer row that had taken the same number.
+
 ## SaveLoad.tla: what each fix is needed for
 
 `Atomic` = the server writes through a temp file and a rename. `Strict` = the decoder rejects a torn or incomplete file. `Fallback` = which

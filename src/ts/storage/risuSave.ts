@@ -422,7 +422,7 @@ export class RisuSaveEncoder {
     }
 }
 
-const MUST_HAVE_CONTENT = new Set<RisuSaveType>([RisuSaveType.ROOT, RisuSaveType.CHARACTER_WITH_CHAT, RisuSaveType.CHARACTER_WITHOUT_CHAT, RisuSaveType.BOTPRESET, RisuSaveType.ROOT_COMPONENT])
+const MUST_HAVE_CONTENT = new Set<RisuSaveType>([RisuSaveType.ROOT, RisuSaveType.CHARACTER_WITH_CHAT, RisuSaveType.CHARACTER_WITHOUT_CHAT, RisuSaveType.ROOT_COMPONENT])
 
 // A save file that is torn, truncated or has a block that does not parse. It must not become a half-empty database: autosave would
 // write that over the file, and every backup the cleanup keeps would soon be the half-empty copy too (specs/core/SaveLoad.tla).
@@ -439,6 +439,7 @@ export class RisuSaveDecoder {
         type: RisuSaveType;
         compression: boolean;
         content: string;
+        fromRemote?: boolean;
     }[] = []
     async decode(data: Uint8Array): Promise<Database> {
         console.log('Decoding RisuSave data');
@@ -535,7 +536,7 @@ export class RisuSaveDecoder {
                                                     name: dirData.name,
                                                     type: dirData.type,
                                                     compression: false,
-                                                    content: dirData.data
+                                                    content: dirData.data ?? ''
                                                 });
                                                 loadedBlocks.add(dirKey);
                                             }
@@ -614,7 +615,8 @@ export class RisuSaveDecoder {
                             name: remoteInfo.name,
                             type: remoteInfo.type,
                             compression: false,
-                            content: decoded
+                            content: decoded,
+                            fromRemote: true
                         });
                         break;
                     }
@@ -635,7 +637,7 @@ export class RisuSaveDecoder {
 
                 // Any block that does not parse means a character, preset or setting would silently be missing from the database.
                 // A remote block is the exception: it is read from another file, and a failed read is not proof that this file is damaged.
-                if (this.blocks[key].type !== RisuSaveType.REMOTE) {
+                if (this.blocks[key].type !== RisuSaveType.REMOTE && !this.blocks[key].fromRemote) {
                     throw new RisuSaveCorrupt(`block ${this.blocks[key].name} could not be decoded: ${error}`)
                 }
             }

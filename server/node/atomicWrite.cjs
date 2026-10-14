@@ -27,10 +27,39 @@ async function atomicWriteFile(finalPath, content, opts = {}) {
             await opts.beforeRename(tmp)     // test seam
         }
         await fs.rename(tmp, finalPath)
+        if (opts.syncDir) {
+            // the rename itself is only durable once the directory is flushed; the queue deletes its row right after this returns
+            const dir = await fs.open(path.dirname(finalPath), 'r')
+            try { await dir.sync() } finally { await dir.close() }
+        }
     } catch (error) {
         await fs.rm(tmp, { force: true }).catch(() => {})
         throw error
     }
 }
 
-module.exports = { atomicWriteFile }
+// A process killed between creating the temporary file and the rename leaves it behind; nothing else ever reads that directory.
+async function cleanStaleTemp(tmpDir, maxAgeMs, now = Date.now()) {
+    let names = []
+    try {
+        names = await fs.readdir(tmpDir)
+    } catch (error) {
+        return 0
+    }
+    let removed = 0
+    for (const name of names) {
+        const file = path.join(tmpDir, name)
+        try {
+            const st = await fs.stat(file)
+            if (now - st.mtimeMs > maxAgeMs) {
+                await fs.rm(file, { force: true })
+                removed++
+            }
+        } catch (error) {
+            /* gone already */
+        }
+    }
+    return removed
+}
+
+module.exports = { atomicWriteFile, cleanStaleTemp }

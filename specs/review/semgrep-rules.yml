@@ -52,3 +52,30 @@ rules:
       try { ... } catch { }
     paths:
       include: ["src/ts/**", "server/node/*.cjs"]
+
+  - id: sql-built-from-a-variable
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      An SQL string is built from a variable. Use a prepared statement with ? placeholders; a key or a file name in SQL text is an injection.
+    pattern-either:
+      - pattern: $DB.exec(`...${$X}...`)
+      - pattern: $DB.exec($A + $B)
+      - pattern: $DB.prepare(`...${$X}...`)
+      - pattern: $DB.prepare($A + $B)
+    paths:
+      include: ["server/node/*.cjs"]
+
+  - id: file-write-in-place-in-the-save-api
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      fs.writeFile / writeFileSync on a file other code reads concurrently truncates it first: a reader or a crash sees a half file.
+      Use atomicWriteFile (temp file + rename), see specs/core/SaveLoad.tla.
+    pattern-either:
+      - pattern: fs.writeFile($P, ...)
+      - pattern: fs.writeFileSync($P, ...)
+      - pattern: writeFileSync($P, ...)
+    paths:
+      include: ["server/node/saveQueue.cjs", "server/node/atomicWrite.cjs"]
+

@@ -42,6 +42,7 @@ function openJobStore(file) {
         eventsFrom: db.prepare('SELECT seq, data FROM events WHERE job_id = ? AND seq >= ? ORDER BY seq LIMIT ?'),
         getJob: db.prepare('SELECT id, idem, status, created, updated FROM jobs WHERE id = ?'),
         setStatus: db.prepare('UPDATE jobs SET status = ?, updated = ? WHERE id = ? AND status = ?'),
+        // nosemgrep: sql-built-from-a-variable (the interpolation is a fixed list of ? placeholders, one per constant status)
         byIdem: db.prepare(`SELECT id, status FROM jobs WHERE idem = ? AND status IN (${REUSABLE_STATUSES.map(() => '?').join(',')}) AND updated >= ? ORDER BY created DESC LIMIT 1`),
         running: db.prepare("SELECT id FROM jobs WHERE status = 'running'"),
         oldJobs: db.prepare('SELECT id FROM jobs WHERE updated < ?'),

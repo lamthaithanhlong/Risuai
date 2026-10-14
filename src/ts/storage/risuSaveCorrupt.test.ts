@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 // the decoder only needs these two from the app; mocking them keeps the import cycle out of the test
-vi.mock('../globalApi.svelte', () => ({ forageStorage: { getItem: async () => null } }))
+const remote: { payload: Uint8Array | null } = vi.hoisted(() => ({ payload: null }))
+vi.mock('../globalApi.svelte', () => ({ forageStorage: { getItem: async () => remote.payload } }))
 vi.mock('./database.svelte', () => ({ getDatabase: () => ({}), presetTemplate: { name: 'preset' } }))
 
 import { decodeRisuSave, RisuSaveCorrupt } from './risuSave'
@@ -76,5 +77,25 @@ describe('RisuSave decoder rejects a damaged file (specs/core/SaveLoad.tla)', ()
     it('but an empty character block is damage', async () => {
         const bytes = file({ blocks: [block(2, 'ca', CHAR_A), block(2, 'cb', '')] })
         await expect(decodeRisuSave(bytes)).rejects.toBeInstanceOf(RisuSaveCorrupt)
+    })
+
+    // review findings 4 and 10
+    it('an empty preset block does not stop the app from starting (the decoder has its own fallback preset)', async () => {
+        const bytes = file({ directory: ['ca', 'cb', 'presets'], blocks: [block(2, 'ca', CHAR_A), block(2, 'cb', CHAR_B), block(4, 'presets', '')] })
+        const db: any = await decodeRisuSave(bytes)
+        expect(db.characters).toHaveLength(2)
+        expect(db.botPresets).toHaveLength(1)
+    })
+
+    it('a torn remote file drops that one character, as before, instead of making every backup fail and the app unable to start', async () => {
+        const pointer = block(6, 'rem', { v: 1, type: 2, name: 'rem' })
+        const bytes = file({ directory: ['ca', 'rem'], blocks: [block(2, 'ca', CHAR_A), pointer] })
+        remote.payload = new Uint8Array(Buffer.from('{"name": "Remote", "chats": ['))   // cut off mid-write
+        try {
+            const db: any = await decodeRisuSave(bytes)
+            expect(db.characters.map((c: any) => c.name)).toEqual(['Alice'])
+        } finally {
+            remote.payload = null
+        }
     })
 })
