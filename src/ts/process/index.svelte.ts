@@ -8,6 +8,7 @@ import { CharEmotion, selectedCharID } from "../stores.svelte";
 import { ChatTokenizer, resetTokenizerStats, tokenize, tokenizeNum, tokenizerStats } from "../tokenizer";
 import { language } from "../../lang";
 import { alertError, alertToast } from "../alert";
+import { TRANSIENT_RETRY_DELAYS_MS, isTransientFailure } from "./transientRetry";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -1569,7 +1570,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
     brReportAcc()
     brMem('before request')
-    const req = await brTimed('requestChatData', () => requestChatData({
+    const requestModelOnce = () => brTimed('requestChatData', () => requestChatData({
         formated: formated,
         biasString: biases,
         currentChar: currentChar,
@@ -1583,6 +1584,21 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
     }, 'model', abortSignal), 0)
+    let req = await requestModelOnce()
+    // A request that failed before any reply byte (provider has no channel for a moment, 502/503, dropped connection) is sent again
+    // instead of leaving the chat with nothing but a popup. Nothing has been written to the chat yet, so a retry cannot duplicate.
+    for(let attempt = 0; attempt < TRANSIENT_RETRY_DELAYS_MS.length; attempt++){
+        if(req.type !== 'fail' || abortSignal.aborted === true || arg.previewPrompt || !isTransientFailure(String(req.result))){
+            break
+        }
+        brLog(`model request failed, retry ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}: ${String(req.result).slice(0, 160)}`)
+        alertToast(`${String(req.result).slice(0, 80)} ... ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}`)
+        await new Promise<void>((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAYS_MS[attempt]))
+        if((abortSignal as AbortSignal).aborted){
+            return false
+        }
+        req = await requestModelOnce()
+    }
 
     console.log(req)
     if(req.model){
