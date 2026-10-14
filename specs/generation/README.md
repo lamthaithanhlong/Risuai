@@ -11,6 +11,7 @@ What these check: one AI reply generation on a phone, through the durable stream
 | `GenQueuePartial.cfg` | TLC | Only `FixPartial = FALSE`: a half-written reply left in the chat. |
 | `GenQueueKill.tla` + `GenQueueKillBefore.cfg` / `GenQueueKillFixed.cfg` | TLC | The page is **killed** mid-reply (Safari swiped away) and reopened later. Adds the autosave lag (`saved` vs `msg`), time (`clock`, marker window `W`, server window `R`) and the three fix flags. `Before` is red, `Fixed` is green. |
 | `uppaal/reader_*.xml` + `reader.q` | UPPAAL | Time: a phone locked for minutes while the job finishes. Does the reader give up before it ever reconnects? |
+| `uppaal/memory_template.xml` + `memory.q` | UPPAAL | One HypaV3 summary request on a phone that is locked while it is in flight: n attempts survive n-1 locks. The old 3 attempts fail on the third lock (`memory_attempts3_locks3.xml`: NOT satisfied); the new 4 attempts survive it (`memory_attempts4_locks3.xml`: satisfied). |
 | `GenQueueKeys.als` | Alloy | Keys and jobs over time: never two reusable jobs for one key, a finished job never changes, a failed job is never handed back. |
 
 ## Run

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+<declaration>// One HypaV3 summarization request on a phone that gets locked (src/ts/process/memory/hypav3.ts summarize, retry.ts withRetry).
+// Time unit: tenths of a second.
+const int DMIN = 100;     // a summary request takes at least 10 s ...
+const int D = 600;        // ... and at most 60 s (grok behind 9router)
+const int N = @N@;          // attempts: withRetry makes 1 + (number of delays) attempts
+const int BD[@NB@] = @BD@;   // waits before retry 1, 2, ...
+const int LMAX = 6000;    // a lock lasts at most 600 s
+const int LOCKS = @LOCKS@;    // how many times the screen is locked during this one summary
+
+int[0,10] nl = 0;
+clock c;                  // how long the screen has been locked
+clock r;                  // age of the current request
+clock b;                  // backoff timer
+broadcast chan lock, unlock;
+</declaration>
+
+<template>
+<name>Phone</name>
+<location id="p0"><name>Online</name></location>
+<location id="p1"><name>Locked</name><label kind="invariant">c &lt;= LMAX</label></location>
+<init ref="p0"/>
+<transition>
+  <source ref="p0"/><target ref="p1"/>
+  <label kind="guard">nl &lt; LOCKS</label>
+  <label kind="synchronisation">lock!</label>
+  <label kind="assignment">nl = nl + 1, c = 0</label>
+</transition>
+<transition>
+  <source ref="p1"/><target ref="p0"/>
+  <label kind="guard">c &gt;= 1</label>
+  <label kind="synchronisation">unlock!</label>
+</transition>
+</template>
+
+<template>
+<name>Summ</name>
+<declaration>int[1,4] k = 1;</declaration>
+<location id="s0"><name>Req</name><label kind="invariant">r &lt;= D</label></location>
+<location id="s1"><name>Dead</name></location>
+<location id="s2"><name>Wait</name><label kind="invariant">b &lt;= BD[k-1]</label></location>
+<location id="s3"><name>Done</name></location>
+<location id="s4"><name>Failed</name></location>
+<init ref="s0"/>
+<transition>
+  <source ref="s0"/><target ref="s3"/>
+  <label kind="guard">r &gt;= DMIN</label>
+</transition>
+<transition>
+  <source ref="s0"/><target ref="s1"/>
+  <label kind="synchronisation">lock?</label>
+</transition>
+<transition>
+  <source ref="s1"/><target ref="s4"/>
+  <label kind="guard">k == N</label>
+  <label kind="synchronisation">unlock?</label>
+</transition>
+<transition>
+  <source ref="s1"/><target ref="s2"/>
+  <label kind="guard">k &lt; N</label>
+  <label kind="synchronisation">unlock?</label>
+  <label kind="assignment">b = 0</label>
+</transition>
+<transition>
+  <source ref="s2"/><target ref="s0"/>
+  <label kind="guard">b &gt;= BD[k-1]</label>
+  <label kind="assignment">k = k + 1, r = 0</label>
+</transition>
+</template>
+
+<system>
+phone = Phone();
+summ = Summ();
+system phone, summ;
+</system>
+</nta>

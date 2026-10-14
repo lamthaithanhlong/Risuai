@@ -1,3 +1,4 @@
+import { SUMMARY_RETRY_DELAYS_MS } from "./summaryRetry";
 import { trimOrphanedTail } from "./hypaOrphans";
 import { withRetry } from "../retry";
 import { type memoryVector, HypaProcesser, localModels, similarity } from "./hypamemory";
@@ -1749,7 +1750,7 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
 
             return res;
         }, {
-            delaysMs: [1500, 4000],
+            delaysMs: SUMMARY_RETRY_DELAYS_MS,
             onRetry: (error, attempt) => console.log(logPrefix, `Summarization request failed (attempt ${attempt}), retrying:`, `${error}`),
         });
 
