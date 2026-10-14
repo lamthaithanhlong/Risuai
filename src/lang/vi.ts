@@ -1486,6 +1486,7 @@ export const languageVietnamese = {
     nanoGPTManualInput: "Nhập thủ công",
     nanoGPTManualModelSelect: "Chọn mô hình thủ công",
     "cotThinking": "Đang suy nghĩ…",
+    "savedMerged": "Dữ liệu này đã được sửa trên thiết bị khác. Thay đổi của bạn đã được gộp vào. Tải lại để thấy phần thay đổi kia.",
     "genSent": "Đã gửi, đang chờ model",
     "genRetrying": "Nhà cung cấp lỗi ({reason}), thử lại {n}/{m}",
     "genAccepted": "Model đã nhận và bắt đầu",

@@ -64,6 +64,28 @@ const saveQueue = require('./saveQueue.cjs').openSaveQueue({
 });
 require('./atomicWrite.cjs').cleanStaleTemp(savePath + '.tmp', 60 * 60 * 1000).catch(() => {});
 saveQueue.start();
+// Which version of database.bin each page loaded, so that a page's write is merged against it instead of replacing the whole file
+// (dbMerge.cjs, specs/mergesave). RISU_DB_MERGE=0 turns it off: every write replaces the file, as before.
+const DB_KEY_HEX = Buffer.from('database/database.bin', 'utf-8').toString('hex');
+let dbSync = null;
+if (process.env.RISU_DB_MERGE !== '0') {
+    try {
+        dbSync = require('./dbSync.cjs').openDbSync({
+            dbFile: process.env.RISU_SYNC_DB || savePath + '.sync.sqlite',
+            log: (m) => console.log(`[Sync] ${m}`),
+        });
+    } catch (error) {
+        console.error('[Sync] disabled:', error.message);
+    }
+}
+const clientIdOf = (req) => req.risuClient || (req.headers['x-risu-client'] ? String(req.headers['x-risu-client']) : require('crypto').createHash('sha1').update(`${req.ip}|${req.headers['user-agent'] || ''}`).digest('hex'));
+const currentSaveBytes = (hexKey) => {
+    const queued = saveQueue.readPending(hexKey);
+    if (queued) return queued.op === 'delete' ? null : Buffer.from(queued.data);
+    const f = path.join(savePath, hexKey);
+    return existsSync(f) ? readFileSync(f) : null;
+};
+let lastPremergeAt = 0;
 let shuttingDown = false;
 for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, async () => {
@@ -861,6 +883,7 @@ async function checkAuth(req, res, returnOnlyStatus = false){
             Buffer.from(`${jsonHeaderB64}.${jsonPayloadB64}`)
         );
 
+        req.risuClient = pubKeyHash
         if(!isValid){
             console.log('Invalid signature')
             if(returnOnlyStatus){
@@ -1417,6 +1440,13 @@ app.get('/api/read', authenticatedRouteLimiter, async (req, res, next) => {
         return;
     }
     try {
+        if(dbSync && filePath === DB_KEY_HEX){
+            // a page loads the database: that is what its later writes are compared with
+            const bytes = currentSaveBytes(filePath);
+            if(bytes && bytes.length > 0){
+                try { res.setHeader('x-risu-rev', String(dbSync.onRead(clientIdOf(req), bytes))); } catch (error) { console.error('[Sync] read:', error.message); }
+            }
+        }
         // an acknowledged write that has not reached the directory yet is the newest state
         const queued = saveQueue.readPending(filePath);
         if(queued){
@@ -1517,10 +1547,32 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
     }
 
     try {
+        let toStore = fileContent;
+        let merged = false;
+        if(dbSync && filePath === DB_KEY_HEX && Buffer.isBuffer(fileContent)){
+            try {
+                const r = dbSync.onWrite(clientIdOf(req), fileContent, currentSaveBytes(filePath));
+                toStore = r.bytes;
+                merged = r.merged;
+                res.setHeader('x-risu-rev', String(r.rev));
+                if(r.merged && Date.now() - lastPremergeAt > 10 * 60 * 1000){
+                    // a safety copy of what the server had and what the page wrote, at most one pair per ten minutes
+                    lastPremergeAt = Date.now();
+                    const cur = currentSaveBytes(filePath);
+                    const tag = new Date().toISOString().replace(/[:.]/g, '-');
+                    if(cur) saveQueue.enqueueWrite(Buffer.from(`database/premerge-${tag}-server.bin`).toString('hex'), cur);
+                    saveQueue.enqueueWrite(Buffer.from(`database/premerge-${tag}-page.bin`).toString('hex'), fileContent);
+                }
+            } catch (error) {
+                // never lose a write because the merge failed: store what the page wrote
+                console.error('[Sync] write:', error.message);
+            }
+        }
         // committed to SQLite before we answer; the worker moves it to the directory (atomically) in order
-        saveQueue.enqueueWrite(filePath, fileContent);
+        saveQueue.enqueueWrite(filePath, toStore);
         res.send({
-            success: true
+            success: true,
+            merged
         });
     } catch (error) {
         next(error);

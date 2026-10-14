@@ -1,12 +1,13 @@
 import { retryDelayMs, writeFailureMessage } from "./writeRetry"
 import { language } from "src/lang"
-import { alertError, alertInput, waitAlert } from "../alert"
+import { alertError, alertInput, alertToast, waitAlert } from "../alert"
 import { base64url, getKeypairStore, saveKeypairStore } from "../util"
 
 
 export class NodeStorage{
 
     authChecked = false
+    mergeNoticeShown = false
     JSONStringlifyAndbase64Url(obj:any){
         return base64url(Buffer.from(JSON.stringify(obj), 'utf-8'))
     }
@@ -93,6 +94,11 @@ export class NodeStorage{
                 const data = await da.json()
                 if(data.error){
                     throw data.error
+                }
+                if(data.merged && !this.mergeNoticeShown){
+                    // the server merged this write with a newer version written by another page; this page still shows its own copy
+                    this.mergeNoticeShown = true
+                    alertToast(language.savedMerged)
                 }
                 return
             }

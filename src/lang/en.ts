@@ -1095,6 +1095,7 @@ export const languageEnglish = {
     genTimes: "Generation Choices",
     cot: "Chain of Thoughts",
     cotThinking: "Thinking…",
+    savedMerged: "This data was changed on another device. Your changes were merged with it. Reload to see the other changes.",
     genSent: "Sent, waiting for the model",
     genRetrying: "Provider error ({reason}), trying again {n}/{m}",
     genAccepted: "The model got it and is starting",
