@@ -22,7 +22,7 @@
     import { HideIconStore, ReloadGUIPointer, selIdState } from "../../ts/stores.svelte"
     import AutoresizeArea from "../UI/GUI/TextAreaResizable.svelte"
     import ChatBody from './ChatBody.svelte'
-    import { cotPanel, openCoT } from "../../ts/process/cotPanel.svelte"
+    import { cotPanel, toggleCoT } from "../../ts/process/cotPanel.svelte"
     import { splitCoT, thoughtText } from "../../ts/parser/cot"
     import PopupButton from "../UI/PopupButton.svelte";
     import PartialEditController from './PartialEditController.svelte';
@@ -515,7 +515,7 @@
             bind:this={bodyRoot}
             onclick={(e) => {
             if((e.target as Element | null)?.closest?.('.x-risu-cot-open')){
-                openCoT(idx)
+                toggleCoT(idx)
                 return
             }
             if(DBState.db.clickToEdit && idx > -1 && !isOptimizedStreamingMessage){

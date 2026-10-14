@@ -1486,6 +1486,8 @@ export const languageVietnamese = {
     nanoGPTManualInput: "Nhập thủ công",
     nanoGPTManualModelSelect: "Chọn mô hình thủ công",
     "cotThinking": "Đang suy nghĩ…",
+    "cotShow": "Hiện suy nghĩ",
+    "cotHide": "Ẩn suy nghĩ",
     "cotEmpty": "Tin nhắn này không có chuỗi suy nghĩ.",
     "modelSlots": "Ô model",
     "modelSlotsHint": "Giữ sẵn vài model, ví dụ Custom API với hai tên model yêu cầu khác nhau, rồi đổi qua lại ngay trong menu chat.",

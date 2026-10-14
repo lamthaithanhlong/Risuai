@@ -6,10 +6,18 @@ export const cotPanel = $state({
     chatID: -1,
     text: '',
     thinking: false,
+    /** only the title bar is shown, the thought is hidden until it is opened again */
+    collapsed: false,
 })
 
-export function openCoT(chatID: number) {
+/** The button under a message: shows the panel for that message, hides it when it is already showing that message's thought. */
+export function toggleCoT(chatID: number) {
+    if (cotPanel.open && cotPanel.chatID === chatID && !cotPanel.collapsed) {
+        closeCoT()
+        return
+    }
     cotPanel.chatID = chatID
+    cotPanel.collapsed = false
     cotPanel.open = true
 }
 
@@ -17,4 +25,5 @@ export function closeCoT() {
     cotPanel.open = false
     cotPanel.text = ''
     cotPanel.thinking = false
+    cotPanel.collapsed = false
 }

@@ -1095,6 +1095,8 @@ export const languageEnglish = {
     genTimes: "Generation Choices",
     cot: "Chain of Thoughts",
     cotThinking: "Thinking…",
+    cotShow: "Show the thought",
+    cotHide: "Hide the thought",
     cotEmpty: "No chain of thought in this message.",
     forcePlainFetch: "Force Plain Fetch",
     autoFillRequestURL: "Autofill Request URL",

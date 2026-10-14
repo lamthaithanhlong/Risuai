@@ -2,7 +2,7 @@
     // The model's chain of thought, apart from the chat. It is plain text (no markdown, scripts or translation) and is only
     // built while open, so a long thought costs the chat nothing.
     import { tick } from 'svelte'
-    import { XIcon } from '@lucide/svelte'
+    import { XIcon, ChevronDownIcon, ChevronUpIcon } from '@lucide/svelte'
     import { language } from 'src/lang'
     import { selectedCharID } from 'src/ts/stores.svelte'
     import { cotPanel, closeCoT } from 'src/ts/process/cotPanel.svelte'
@@ -22,7 +22,7 @@
     // follow the end of the thought while it is being written
     $effect(() => {
         cotPanel.text
-        if (cotPanel.open && cotPanel.thinking && body) {
+        if (cotPanel.open && !cotPanel.collapsed && cotPanel.thinking && body) {
             tick().then(() => body && (body.scrollTop = body.scrollHeight))
         }
     })
@@ -35,10 +35,15 @@
             {#if cotPanel.thinking}
                 <span class="text-sm text-textcolor2 animate-pulse">{language.cotThinking}</span>
             {/if}
+            <button class="text-textcolor2 hover:text-textcolor p-1" title={cotPanel.collapsed ? language.cotShow : language.cotHide}
+                aria-expanded={!cotPanel.collapsed} onclick={() => (cotPanel.collapsed = !cotPanel.collapsed)}>
+                {#if cotPanel.collapsed}<ChevronUpIcon size={18} />{:else}<ChevronDownIcon size={18} />{/if}
+            </button>
             <button class="text-textcolor2 hover:text-textcolor p-1" title={language.close} onclick={closeCoT}>
                 <XIcon size={18} />
             </button>
         </div>
+        {#if !cotPanel.collapsed}
         <div bind:this={body} class="overflow-y-auto p-3 text-sm text-textcolor2 whitespace-pre-wrap break-words">
             {#if cotPanel.text}
                 {cotPanel.text}
@@ -46,5 +51,6 @@
                 {cotPanel.thinking ? '…' : language.cotEmpty}
             {/if}
         </div>
+        {/if}
     </div>
 {/if}
