@@ -1,3 +1,4 @@
+import { lastItems } from "./scanWindow"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -105,7 +106,7 @@ export async function loadLoreBookV3Prompt(){
         all?:boolean
         dontSearchWhenRecursive: boolean
     }) => {
-        const sliced = messages.slice(messages.length - arg.searchDepth,messages.length)
+        const sliced = lastItems(messages, arg.searchDepth)
         const newKeys = []
         for (const key of arg.keys) {
             const trimmed = key.trim()
