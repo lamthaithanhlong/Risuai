@@ -1,6 +1,6 @@
 import { normalizeSlots, type ModelSlot } from "../model/modelSlots";
 import { migrateStreamingDisplay, migrateTokenSaverOff } from "../process/request/modeParams";
-import { settleChatOnLoad } from "../process/emptyReply";
+import { settleCharacterOnLoad } from "../process/emptyReply";
 import { get } from 'svelte/store';
 import { checkNullish, decryptBuffer, encryptBuffer, selectSingleFile } from '../util';
 import { changeLanguage, language } from '../../lang';
@@ -755,12 +755,7 @@ export function setDatabase(data:Database){
     data.skipSavingAssetsOnWebSync ??= true
     data.coldstorage ??= data?.plugins?.length === 0
     for(const char of data.characters){
-        for(const chat of char.chats ?? []){
-            // isStreaming is cleared in a finally block when a reply ends, however it ends; still set on load = cut off.
-            settleChatOnLoad(chat)
-            chat.isStreaming = false
-            chat.activeStreamingDisplayOptimizationMode = undefined
-        }
+        settleCharacterOnLoad(char)
     }
     changeLanguage(data.language)
     setDatabaseLite(data)
@@ -1510,6 +1505,8 @@ export interface character{
     replaceGlobalNote:string
     backgroundHTML?:string
     reloadKeys?:number
+    /** set while this character's reply is being generated, refreshed every few seconds; see isStreamAliveElsewhere */
+    streamingAt?:number
     backgroundCSS?:string
     license?:string
     private?:boolean
@@ -1611,6 +1608,8 @@ export interface groupChat{
     orderByOrder?:boolean
     backgroundHTML?:string,
     reloadKeys?:number
+    /** set while this character's reply is being generated, refreshed every few seconds; see isStreamAliveElsewhere */
+    streamingAt?:number
     backgroundCSS?:string
     oneAtTime?:boolean
     virtualscript?:string

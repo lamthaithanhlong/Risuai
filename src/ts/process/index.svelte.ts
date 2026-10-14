@@ -1,4 +1,5 @@
 import { ChatSlot } from "./chatSlot"
+import { STREAM_BEAT_MS } from './emptyReply'
 import { nextFlushDelay } from "./streamingPace";
 import { get, writable } from "svelte/store";
 import { type character, type MessageGenerationInfo, type Chat, type MessagePresetInfo, changeToPreset, setCurrentChat, type Message, type StreamingDisplayOptimizationMode } from "../storage/database.svelte";
@@ -1630,6 +1631,23 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         DBState.db.characters[sel.char].chats[sel.chat].isStreaming = true
         DBState.db.characters[sel.char].chats[sel.chat].activeStreamingDisplayOptimizationMode = performanceMode
         DBState.db.characters[sel.char].reloadKeys += 1
+        // Tell other pages that load this chat that a reply is being written here, so they do not "settle" it as a dead page's
+        // leftover. The stamp is a character field (chat content is not saved while streaming) so that refreshing it is saved too.
+        {
+            const beatChaId = DBState.db.characters[sel.char].chaId
+            const beatChatId = DBState.db.characters[sel.char].chats[sel.chat].id
+            const stamp = () => {
+                const c = DBState.db.characters.find((x) => x.chaId === beatChaId)
+                const chatNow = c?.chats?.find((x) => x.id === beatChatId)
+                if(!c || !chatNow?.isStreaming){
+                    return false
+                }
+                c.streamingAt = Date.now()
+                return true
+            }
+            stamp()
+            const beatTimer = setInterval(() => { if(!stamp()) clearInterval(beatTimer) }, STREAM_BEAT_MS)
+        }
         let lastResponseChunk:{[key:string]:string} = {}
         let streamAborted:boolean = abortSignal.aborted
         let receivedStreamingResult = false
@@ -1788,6 +1806,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 }
                 DBState.db.characters[sel.char].chats[sel.chat].isStreaming = false
                 DBState.db.characters[sel.char].chats[sel.chat].activeStreamingDisplayOptimizationMode = undefined
+                DBState.db.characters[sel.char].streamingAt = undefined
                 DBState.db.characters[sel.char].reloadKeys += 1
                 void reader.cancel().catch(() => {})
             }

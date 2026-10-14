@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { NO_REPLY_NOTE, PARTIAL_NOTE, isStalledPlaceholder, settleChatOnLoad, settleInterrupted, shouldRetryEmptyReply, visibleReply } from './emptyReply'
+import { NO_REPLY_NOTE, PARTIAL_NOTE, STREAM_ALIVE_MS, STREAM_BEAT_MS, isStalledPlaceholder, isStreamAliveElsewhere, settleCharacterOnLoad, settleChatOnLoad, settleInterrupted, shouldRetryEmptyReply, visibleReply } from './emptyReply'
 
 describe('visibleReply', () => {
     test('reasoning alone is not a reply', () => {
@@ -117,5 +117,54 @@ describe('visibleReply with <think> blocks', () => {
 
     test('a <think> block followed by the reply keeps the reply', () => {
         expect(visibleReply('<think>nghĩ</think>\n\nKhang cười.')).toBe('Khang cười.')
+    })
+})
+
+describe('a page that loads while another page is generating', () => {
+    const NOW = 1_000_000
+    const generating = (streamingAt?: number) => ({
+        streamingAt,
+        chats: [{ isStreaming: true, activeStreamingDisplayOptimizationMode: 'strong', message: [{ role: 'user', data: 'tiến lên' }, { role: 'char', data: '<Thoughts>\n…\n</Thoughts>\n' }] }],
+    })
+
+    test('a fresh stamp: the chat is left exactly as saved, flag included (so this page does not save it either)', () => {
+        const c = generating(NOW - 5_000)
+        settleCharacterOnLoad(c, NOW)
+        expect(c.chats[0].message[1].data).toBe('<Thoughts>\n…\n</Thoughts>\n')
+        expect(c.chats[0].isStreaming).toBe(true)
+        expect(c.streamingAt).toBe(NOW - 5_000)
+    })
+
+    test('an old stamp, or none: the page is dead, the reply is settled as before', () => {
+        for (const at of [NOW - STREAM_ALIVE_MS, NOW - 10 * 60_000, undefined]) {
+            const c = generating(at)
+            settleCharacterOnLoad(c, NOW)
+            expect(c.chats[0].message[1].data).toBe(NO_REPLY_NOTE)
+            expect(c.chats[0].isStreaming).toBe(false)
+            expect(c.streamingAt).toBeUndefined()
+        }
+    })
+
+    test('the window is a few beats wide, so one missed beat does not make a live page look dead', () => {
+        expect(STREAM_ALIVE_MS).toBeGreaterThanOrEqual(3 * STREAM_BEAT_MS)
+        expect(isStreamAliveElsewhere(NOW - STREAM_ALIVE_MS + 1, NOW)).toBe(true)
+        expect(isStreamAliveElsewhere(NOW - STREAM_ALIVE_MS, NOW)).toBe(false)
+        expect(isStreamAliveElsewhere(undefined, NOW)).toBe(false)
+        expect(isStreamAliveElsewhere(0, NOW)).toBe(false)
+    })
+
+    test('a chat of the same character that is not streaming is still tidied, and a stamp on a character with no streaming chat does not matter', () => {
+        const c = {
+            streamingAt: NOW - 1_000,
+            chats: [
+                { isStreaming: true, message: [{ role: 'char', data: 'dở dang' }] },
+                { isStreaming: false, activeStreamingDisplayOptimizationMode: 'strong', message: [{ role: 'char', data: 'xong' }] },
+            ],
+        }
+        settleCharacterOnLoad(c, NOW)
+        expect(c.chats[0]).toMatchObject({ isStreaming: true })
+        expect(c.chats[0].message[0].data).toBe('dở dang')
+        expect(c.chats[1]).toMatchObject({ isStreaming: false, activeStreamingDisplayOptimizationMode: undefined })
+        expect(c.chats[1].message[0].data).toBe('xong')
     })
 })

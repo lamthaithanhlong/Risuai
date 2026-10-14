@@ -23,6 +23,19 @@ export function settleInterrupted(data: string | undefined): string {
     return text + PARTIAL_NOTE
 }
 
+/** How often the page that is generating stamps the character (index.svelte.ts), and how old a stamp may be before the page is taken to be dead. */
+export const STREAM_BEAT_MS = 15_000
+export const STREAM_ALIVE_MS = 45_000
+
+/**
+ * True when the saved chat was written by a page that is still generating (its stamp is fresh). Another page that loads the same
+ * data must then leave the chat alone: settling it would replace a reply that is still arriving with the "no reply" note, and
+ * saving that would overwrite the generating page's work (specs/settle/SettleRace.tla: three steps, load then save).
+ */
+export function isStreamAliveElsewhere(streamingAt: number | undefined, now: number = Date.now()): boolean {
+    return typeof streamingAt === 'number' && streamingAt > 0 && now - streamingAt < STREAM_ALIVE_MS
+}
+
 interface LoadedChat {
     isStreaming?: boolean
     message?: { role: string, data: string }[]
@@ -65,4 +78,29 @@ export const MAX_EMPTY_REPLY_RETRIES = 2
  */
 export function shouldRetryEmptyReply(role: string | undefined, data: string | undefined, retriesDone: number): boolean {
     return role === 'char' && visibleReply(data ?? '') === '' && retriesDone < MAX_EMPTY_REPLY_RETRIES
+}
+
+interface LoadedCharacter {
+    streamingAt?: number
+    chats?: (LoadedChat & { activeStreamingDisplayOptimizationMode?: unknown })[]
+}
+
+/**
+ * Applied to every character when the saved data is loaded. A chat still marked as streaming is cut off (its page died) and is
+ * settled, unless the character was stamped a moment ago: then another page is generating it right now and the chat is left
+ * exactly as saved, flag included, so this page neither rewrites nor saves it.
+ */
+export function settleCharacterOnLoad(char: LoadedCharacter, now: number = Date.now()): void {
+    const aliveElsewhere = isStreamAliveElsewhere(char.streamingAt, now)
+    if (!aliveElsewhere) {
+        char.streamingAt = undefined
+    }
+    for (const chat of char.chats ?? []) {
+        if (aliveElsewhere && chat.isStreaming === true) {
+            continue
+        }
+        settleChatOnLoad(chat)
+        chat.isStreaming = false
+        chat.activeStreamingDisplayOptimizationMode = undefined
+    }
 }
