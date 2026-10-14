@@ -7,10 +7,10 @@ const body = (o: unknown) => Buffer.from(JSON.stringify(o))
 const chat = (extra: Record<string, unknown> = {}) => ({ model: 'main', stream: true, messages: [{ role: 'user', content: 'hi' }], temperature: 0.8, ...extra })
 
 describe('applyReasoningDefault (measured: 4081 reasoning tokens and 86 s at the default, 1836 and 50 s at low)', () => {
-    it('adds reasoning_effort low for the main model and leaves the rest of the request alone', () => {
+    it('adds reasoning_effort medium for the main model and leaves the rest of the request alone', () => {
         const r = applyReasoningDefault(body(chat()))
         expect(r.changed).toBe(true)
-        expect(JSON.parse(r.body.toString())).toEqual({ ...chat(), reasoning_effort: 'low' })
+        expect(JSON.parse(r.body.toString())).toEqual({ ...chat(), reasoning_effort: 'medium' })
     })
 
     it('does not override a request that already chose its own effort or thinking mode', () => {
@@ -35,8 +35,8 @@ describe('applyReasoningDefault (measured: 4081 reasoning tokens and 86 s at the
 
     it('can be turned off or changed by the environment, and a bad value falls back to the default', () => {
         expect(applyReasoningDefault(body(chat()), readConfig({ RISU_REASONING_DEFAULTS: '{}' })).changed).toBe(false)
-        const r = applyReasoningDefault(body(chat()), readConfig({ RISU_REASONING_DEFAULTS: '{"main":"medium"}' }))
-        expect(JSON.parse(r.body.toString()).reasoning_effort).toBe('medium')
+        const r = applyReasoningDefault(body(chat()), readConfig({ RISU_REASONING_DEFAULTS: '{"main":"low"}' }))
+        expect(JSON.parse(r.body.toString()).reasoning_effort).toBe('low')
         expect(readConfig({ RISU_REASONING_DEFAULTS: '[1,2' })).toBe(DEFAULTS)
         expect(applyReasoningDefault(body(chat()), { main: 'extreme' }).changed).toBe(false)   // not a known effort
     })

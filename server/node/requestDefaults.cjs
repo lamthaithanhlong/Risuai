@@ -3,12 +3,13 @@
 // Measured on this setup (9router, grok-4.5, the Fate Simulator prompt of ~7k tokens): the app sends no reasoning_effort for its Custom API
 // model (modellist.ts lists only temperature/top_*/thinking_tokens for it), so the provider thinks at its default, which is long:
 // 3431 to 4081 hidden reasoning tokens before the first visible word, 75 to 85 s of "Thoughts ...". With reasoning_effort "low" the
-// same prompt took 1836 reasoning tokens and 50 s in total. This adds that parameter on the server, for the models named below, only
+// same prompt took 1836 reasoning tokens and 50 s in total. The owner chose "medium" as the balance between speed and obeying the rules
+// (measured numbers for it in specs/generation/README.md). This adds the parameter on the server, for the models named below, only
 // when the request does not already set one, so it works for every device and needs no change to the saved database.
 //
 // RISU_REASONING_DEFAULTS is a JSON object {model: effort}; "{}" turns it off. Default: the main combo and its target.
 
-const DEFAULTS = { 'main': 'low', 'mvn/grok-4.5': 'low', 'grok-4.5': 'low' }
+const DEFAULTS = { 'main': 'medium', 'mvn/grok-4.5': 'medium', 'grok-4.5': 'medium' }
 const EFFORTS = new Set(['low', 'medium', 'high', 'minimal'])
 const ALREADY_SET = ['reasoning_effort', 'reasoning', 'thinking', 'thinking_budget', 'enable_thinking']
 
