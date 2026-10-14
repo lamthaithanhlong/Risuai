@@ -26,6 +26,8 @@
     import MainMenu from '../UI/MainMenu.svelte';
     import ModelSlotPicker from './ModelSlotPicker.svelte';
     import CoTPanel from './CoTPanel.svelte';
+    import GenStatusLine from './GenStatusLine.svelte';
+    import { genStatusEvents } from 'src/ts/process/genStatus.svelte';
     import AssetInput from './AssetInput.svelte';
     import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile, flushSave } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
@@ -387,6 +389,7 @@
         clearPending()
         lastCharId = $selectedCharID
         $doingChat = false
+        genStatusEvents.end()
         endGeneration(generationKey)
         if(DBState.db.playMessage){
             const audio = new Audio(sendSound);
@@ -703,6 +706,7 @@
                 showNewMessageButton = false;
             }
         }}>
+            <GenStatusLine />
             <div
                     class="{DBState.db.fixedChatTextarea ? 'sticky pt-2 pb-2 right-0 bottom-0 bg-bgcolor' : 'mt-2 mb-2'} flex items-stretch w-full"
                     style="{DBState.db.fixedChatTextarea ? 'z-index:29;' : ''}"

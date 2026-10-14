@@ -1,4 +1,5 @@
 import { modeAdditionalParameters, dropNeutralPenalties } from "../modeParams";
+import { createChatStreamDecoder } from './chatStreamDecoder'
 import { composeStreamChunk } from "./thoughtsStream";
 import { language } from "src/lang"
 import { alertError } from "src/ts/alert";
@@ -973,135 +974,22 @@ export async function requestOpenAILegacyInstruct(arg:RequestDataArgumentExtende
 }
 
 function getTranStream(arg:RequestDataArgumentExtended):TransformStream<Uint8Array, StreamResponseChunk> {
-    let dataUint:Uint8Array|Buffer = new Uint8Array([])
-    let reasoningContent = ""
-    let reasoningFromStructured = false
     const db = getDatabase()
-
-    const appendStreamingFragment = (current:string, incoming?:string) => {
-        if(!incoming){
-            return current
-        }
-        if(incoming.length > current.length && incoming.startsWith(current)){
-            return incoming
-        }
-        return current + incoming
-    }
+    // The decoder keeps what has been read between chunks and handles every event once (chatStreamDecoder.ts); this function only
+    // turns its state into what the chat shows after each chunk.
+    const decoder = createChatStreamDecoder({ multiGen: !!arg.multiGen })
 
     return new TransformStream<Uint8Array, StreamResponseChunk>({
         transform(chunk, control) {
-            const combined = new Uint8Array(dataUint.length + chunk.length);
-            combined.set(dataUint, 0);
-            combined.set(chunk, dataUint.length);
-            dataUint = Buffer.from(combined);
-            let JSONreaded:{[key:string]:string} = {}
-            reasoningContent = ""
-                        try {
-                const datas = dataUint.toString().split('\n')
-                let readed:{[key:string]:string} = {}
-                for(const data of datas){
-                    if(data.startsWith("data: ")){
-                        try {
-                            const rawChunk = data.replace("data: ", "")
-                            if(rawChunk === "[DONE]"){
-                                if(arg.modelInfo.flags.includes(LLMFlags.deepSeekThinkingOutput) && !reasoningFromStructured){
-                                    readed["0"] = readed["0"].replace(/(.*)\<\/think\>/gms, (m, p1) => {
-                                        reasoningContent = p1
-                                        return ""
-                                    })
+            try {
+                decoder.feed(chunk)
+                const st = decoder.state()
+                // what the chat gets is a copy: the <think> handling below rewrites the text and must not touch what is kept
+                const readed:{[key:string]:string} = { ...st.readed }
+                let reasoningContent = st.reasoning
+                let JSONreaded:{[key:string]:string} = {}
 
-                                    if(reasoningContent){
-                                        reasoningContent = reasoningContent.replace(/\<think\>/gm, '')
-                                    }
-                                }
-                                if(arg.extractJson && (db.jsonSchemaEnabled || arg.schema)){
-                                    for(const key in readed){
-                                        const extracted = extractJSON(readed[key], arg.extractJson)
-                                        JSONreaded[key] = extracted
-                                    }
-                                    console.log(JSONreaded)
-                                    control.enqueue(JSONreaded)
-                                }
-                                else if(reasoningContent){
-                                    const chunk:Record<string,string> = {
-                                        "0": `<Thoughts>\n${reasoningContent}\n</Thoughts>\n${readed["0"] ?? ''}`,
-                                    }
-                                    if(readed["__tool_calls"]){
-                                        chunk["__tool_calls"] = readed["__tool_calls"]
-                                    }
-                                    control.enqueue(chunk)
-                                }
-                                else{
-                                    control.enqueue(readed)
-                                }
-                                return
-                            }
-                            const choices = JSON.parse(rawChunk).choices
-                            for(const choice of choices){
-                                const chunk = choice.delta.content ?? choice.text
-                                if(chunk){
-                                    if(arg.multiGen){
-                                        const ind = choice.index.toString()
-                                        if(!readed[ind]){
-                                            readed[ind] = ""
-                                        }
-                                        readed[ind] = appendStreamingFragment(readed[ind], chunk)
-                                    }
-                                    else{
-                                        if(!readed["0"]){
-                                            readed["0"] = ""
-                                        }
-                                        readed["0"] = appendStreamingFragment(readed["0"], chunk)
-                                    }
-                                }
-                                // Check for tool calls in the delta
-                                if(choice?.delta?.tool_calls){
-                                    if(!readed["__tool_calls"]){
-                                        readed["__tool_calls"] = JSON.stringify({})
-                                    }
-                                    const toolCallsData = JSON.parse(readed["__tool_calls"])
-                                    
-                                    for(const toolCall of choice.delta.tool_calls) {
-                                        const index = toolCall.index ?? 0
-                                        const toolCallId = toolCall.id
-                                        
-                                        // Initialize tool call data if not exists
-                                        if(!toolCallsData[index]) {
-                                            toolCallsData[index] = {
-                                                id: toolCallId || null,
-                                                type: 'function',
-                                                function: {
-                                                    name: null,
-                                                    arguments: ''
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Update tool call data incrementally
-                                        if(toolCall.id) {
-                                            toolCallsData[index].id = toolCall.id
-                                        }
-                                        if(toolCall.function?.name) {
-                                            toolCallsData[index].function.name = toolCall.function.name
-                                        }
-                                        if(toolCall.function?.arguments) {
-                                            toolCallsData[index].function.arguments = appendStreamingFragment(toolCallsData[index].function.arguments, toolCall.function.arguments)
-                                        }
-                                    }
-                                    
-                                    readed["__tool_calls"] = JSON.stringify(toolCallsData)
-                                }
-                                const reasoningChunk = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
-                                if(reasoningChunk){
-                                    reasoningFromStructured = true
-                                    reasoningContent = appendStreamingFragment(reasoningContent, reasoningChunk)
-                                }
-                            }
-                        } catch (error) {}
-                    }
-                }
-                
-                if(arg.modelInfo.flags.includes(LLMFlags.deepSeekThinkingOutput) && !reasoningFromStructured){
+                if(arg.modelInfo.flags.includes(LLMFlags.deepSeekThinkingOutput) && !st.reasoningFromStructured){
                     readed["0"] = readed["0"].replace(/(.*)\<\/think\>/gms, (m, p1) => {
                         reasoningContent = p1
                         return ""
@@ -1119,13 +1007,28 @@ function getTranStream(arg:RequestDataArgumentExtended):TransformStream<Uint8Arr
                     console.log(JSONreaded)
                     control.enqueue(JSONreaded)
                 }
+                else if(st.done){
+                    // [DONE]: the finished reply, thought closed (not the streaming form)
+                    if(reasoningContent){
+                        const done:Record<string,string> = {
+                            "0": `<Thoughts>\n${reasoningContent}\n</Thoughts>\n${readed["0"] ?? ''}`,
+                        }
+                        if(readed["__tool_calls"]){
+                            done["__tool_calls"] = readed["__tool_calls"]
+                        }
+                        control.enqueue(done)
+                    }
+                    else{
+                        control.enqueue(readed)
+                    }
+                }
                 else{
                     control.enqueue(composeStreamChunk(reasoningContent, readed))
                 }
             } catch (error) {
-                
+
             }
-        }        
+        }
     })
 }
 

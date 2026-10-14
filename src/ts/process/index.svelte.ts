@@ -9,6 +9,7 @@ import { ChatTokenizer, resetTokenizerStats, tokenize, tokenizeNum, tokenizerSta
 import { language } from "../../lang";
 import { alertError, alertToast } from "../alert";
 import { TRANSIENT_RETRY_DELAYS_MS, isTransientFailure } from "./transientRetry";
+import { genStatus, genStatusEvents } from "./genStatus.svelte";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -1584,6 +1585,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
     }, 'model', abortSignal), 0)
+    genStatusEvents.send()
     let req = await requestModelOnce()
     // A request that failed before any reply byte (provider has no channel for a moment, 502/503, dropped connection) is sent again
     // instead of leaving the chat with nothing but a popup. Nothing has been written to the chat yet, so a retry cannot duplicate.
@@ -1592,6 +1594,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             break
         }
         brLog(`model request failed, retry ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}: ${String(req.result).slice(0, 160)}`)
+        genStatusEvents.retry(attempt + 2, TRANSIENT_RETRY_DELAYS_MS.length + 1, String(req.result).slice(0, 60))
         alertToast(`${String(req.result).slice(0, 80)} ... ${attempt + 1}/${TRANSIENT_RETRY_DELAYS_MS.length}`)
         await new Promise<void>((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAYS_MS[attempt]))
         if((abortSignal as AbortSignal).aborted){
@@ -1619,10 +1622,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         return false
     }
     if(req.type === 'fail'){
+        genStatusEvents.end()
         throwError(req.result)
         return false
     }
     else if(req.type === 'streaming'){
+        genStatusEvents.accept()
         const reader = req.result.getReader()
         let msgIndex = DBState.db.characters[sel.char].chats[sel.chat].message.length
         let prefix = ''
@@ -1778,6 +1783,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     }
                     if(DBState.db.removeIncompleteResponse){
                         result = trimUntilPunctuation(result)
+                    }
+                    if(genStatus.phase !== 'writing'){
+                        genStatusEvents.text(result)
                     }
                     if(coalesceStreamingDisplay){
                         pendingStreamingResult = result
