@@ -7,9 +7,9 @@
 // (measured numbers for it in specs/generation/README.md). This adds the parameter on the server, for the models named below, only
 // when the request does not already set one, so it works for every device and needs no change to the saved database.
 //
-// RISU_REASONING_DEFAULTS is a JSON object {model: effort}; "{}" turns it off. Default: the main combo and its target.
+// RISU_REASONING_DEFAULTS is a JSON object {model: effort}, for example '{"main":"low"}'. Default: empty, nothing is added.
 
-const DEFAULTS = { 'main': 'medium', 'mvn/grok-4.5': 'medium', 'grok-4.5': 'medium' }
+const DEFAULTS = {}   // off: the owner chose the provider's own default (measured: medium is no faster than it, low is 4 to 5 times faster)
 const EFFORTS = new Set(['low', 'medium', 'high', 'minimal'])
 const ALREADY_SET = ['reasoning_effort', 'reasoning', 'thinking', 'thinking_budget', 'enable_thinking']
 
