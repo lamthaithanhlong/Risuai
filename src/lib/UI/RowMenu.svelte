@@ -40,7 +40,7 @@
     aria-expanded={open !== null}
     aria-label={label}
     title={title || label}
-    class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-textcolor2 hover:bg-darkbutton hover:text-textcolor"
+    class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-textcolor hover:bg-darkbutton"
     onclick={toggle}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e) } }}
 ><EllipsisIcon size={18} /></div>
