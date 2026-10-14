@@ -1,3 +1,4 @@
+import { normalizeSlots, type ModelSlot } from "../model/modelSlots";
 import { migrateStreamingDisplay, migrateTokenSaverOff } from "../process/request/modeParams";
 import { settleChatOnLoad } from "../process/emptyReply";
 import { get } from 'svelte/store';
@@ -661,6 +662,12 @@ export function setDatabase(data:Database){
         otherAx: data.fallbackModels.otherAx.filter((v) => v !== '')
     }
     data.customModels ??= []
+    {
+        // model slots (src/ts/model/modelSlots.ts): whatever was stored becomes a valid state, so no later code has to check it
+        const slotState = normalizeSlots({ slots: data.modelSlots, active: data.activeModelSlot }, { model: data.aiModel, req: data.customProxyRequestModel ?? '' })
+        data.modelSlots = slotState.slots
+        data.activeModelSlot = slotState.active
+    }
     data.authRefreshes ??= []
     data.openAIFlexProcessing ??= false
     data.rememberToolUsage ??= true
@@ -1029,6 +1036,8 @@ export interface Database{
     localStopStrings?:string[]
     autofillRequestUrl:boolean
     customProxyRequestModel:string
+    modelSlots:ModelSlot[]
+    activeModelSlot:string
     generationSeed:number
     newOAIHandle:boolean
     gptVisionQuality:string

@@ -1,3 +1,4 @@
+import { getGenerationModel } from "../generationKey";
 import { Ollama } from 'ollama/dist/browser.mjs';
 import { language } from "../../../lang";
 import { fetchNative, globalFetch } from "../../globalApi.svelte";
@@ -437,7 +438,9 @@ export async function requestChatDataMain(arg:requestDataArgument, model:ModelMo
     const targ:RequestDataArgumentExtended = arg
 
     
-    targ.aiModel = arg.staticModel ? arg.staticModel : (model === 'model' ? db.aiModel : db.subModel)
+    // a running generation keeps the model it started with, whatever is changed meanwhile (specs/modelslots/SlotGeneration.tla)
+    const generationModel = model === 'model' && !arg.staticModel ? getGenerationModel() : null
+    targ.aiModel = arg.staticModel ? arg.staticModel : (model === 'model' ? (generationModel?.aiModel ?? db.aiModel) : db.subModel)
     targ.modelInfo = getModelInfo(targ.aiModel)
     if(db.seperateModelsForAxModels && !arg.staticModel){
         if(db.seperateModels[model]){
@@ -466,7 +469,7 @@ export async function requestChatDataMain(arg:requestDataArgument, model:ModelMo
     targ.mode = model
     targ.extractJson = arg.extractJson ?? db.extractJson
     if(targ.aiModel === 'reverse_proxy'){
-        targ.modelInfo.internalID = db.customProxyRequestModel
+        targ.modelInfo.internalID = generationModel ? generationModel.requestModel : db.customProxyRequestModel
         targ.modelInfo.format = db.customAPIFormat
         targ.customURL = db.forceReplaceUrl
         targ.key = db.proxyKey

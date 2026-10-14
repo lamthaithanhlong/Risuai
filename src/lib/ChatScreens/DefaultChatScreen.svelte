@@ -24,6 +24,7 @@
     import CreatorQuote from "./CreatorQuote.svelte";
     import { stopTTS } from "src/ts/process/tts";
     import MainMenu from '../UI/MainMenu.svelte';
+    import ModelSlotPicker from './ModelSlotPicker.svelte';
     import AssetInput from './AssetInput.svelte';
     import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile, flushSave } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
@@ -310,7 +311,7 @@
 
     async function sendChatMain(continued:boolean = false, guardRetry = 0, emptyRetry = 0, resumeKey?:string) {
         const generationKey = resumeKey ?? crypto.randomUUID()
-        if(!beginGeneration(generationKey)){
+        if(!beginGeneration(generationKey, { aiModel: DBState.db.aiModel, requestModel: DBState.db.customProxyRequestModel })){
             // A reply is already being generated: leave its key, resume note, busy flag and Stop button alone.
             return
         }
@@ -1014,6 +1015,7 @@
                 <div class="{DBState.db.fixedChatTextarea ? 'fixed' : 'absolute'} right-2 bottom-16 p-5 bg-darkbg flex flex-col gap-3 text-textcolor rounded-md" onclick={(e) => {
                     e.stopPropagation()
                 }}>
+                    <ModelSlotPicker />
                     {#if DBState.db.characters[$selectedCharID].type === 'group'}
                         <div class="flex items-center cursor-pointer hover:text-green-500 transition-colors" onclick={runAutoMode}>
                             <DicesIcon />

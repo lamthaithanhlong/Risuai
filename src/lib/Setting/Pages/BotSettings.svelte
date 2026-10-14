@@ -10,6 +10,7 @@
     import { isTauri } from "src/ts/platform"
     import { tokenizeAccurate, tokenizerList } from "src/ts/tokenizer";
     import ModelList from "src/lib/UI/ModelList.svelte";
+    import ModelSlotsSettings from "./ModelSlotsSettings.svelte";
     import DropList from "src/lib/SideBars/DropList.svelte";
     import { PlusIcon, TrashIcon, HardDriveUploadIcon, DownloadIcon, UploadIcon } from "@lucide/svelte";
     import TextInput from "src/lib/UI/GUI/TextInput.svelte";
@@ -165,6 +166,7 @@
 {#if submenu === 0 || submenu === -1}
     <span class="text-textcolor mt-4">{language.model} <Help key="model"/></span>
     <ModelList bind:value={DBState.db.aiModel}/>
+    <ModelSlotsSettings />
 
     <span class="text-textcolor mt-2">{language.submodel} <Help key="submodel"/></span>
     <ModelList bind:value={DBState.db.subModel}/>
