@@ -57,6 +57,33 @@ function readRootBlock(buf) {
     throw new Error('no root block in database.bin')
 }
 
+// true when the block list covers the whole file with no torn tail (the server may be writing the file while we read it)
+function isCompleteSave(buf) {
+    if (buf.subarray(0, SAVE_MAGIC.length).compare(SAVE_MAGIC) !== 0) return false
+    let o = SAVE_MAGIC.length
+    while (o < buf.length) {
+        if (o + 3 > buf.length) return false
+        o += 2
+        o += 1 + buf[o]
+        if (o + 4 > buf.length) return false
+        o += 4 + buf.readUInt32LE(o)
+    }
+    return o === buf.length
+}
+
+// reads a file that must not change while it is read; null if it keeps changing or is torn
+function readStable(file) {
+    for (let i = 0; i < 3; i++) {
+        const a = fs.statSync(file)
+        const buf = fs.readFileSync(file)
+        const b = fs.statSync(file)
+        if (a.size === b.size && a.mtimeMs === b.mtimeMs && buf.length === a.size && isCompleteSave(buf)) {
+            return { buf, size: a.size, mtimeMs: Math.floor(a.mtimeMs) }
+        }
+    }
+    return null
+}
+
 function readToken() {
     if (process.env.RISU_ACCOUNT_TOKEN) return process.env.RISU_ACCOUNT_TOKEN
     const root = readRootBlock(fs.readFileSync(path.join(SAVE, Buffer.from(DB_KEY).toString('hex'))))
@@ -161,13 +188,15 @@ class Cloud {
 
 class AuthError extends Error {}
 
+function isDone(state, k) {
+    const d = state.done[k.key]
+    return !!d && d.size === k.size && d.mtimeMs === k.mtimeMs
+}
+
 // ---- one pass --------------------------------------------------------------------------------------------------------
 async function pass(cloud, state) {
     const keys = listKeys()
-    const todo = keys.filter((k) => {
-        const d = state.done[k.key]
-        return !d || d.size !== k.size || d.mtimeMs !== k.mtimeMs
-    })
+    const todo = keys.filter((k) => !isDone(state, k))
     const total = keys.length
     log(`${total - todo.length}/${total} already in the account, ${todo.length} to send`)
     if (!todo.length) return { sent: 0, renamed: 0 }
@@ -213,14 +242,28 @@ async function pass(cloud, state) {
     saveState(state)
 
     if (dbItem && sent < limit) {
-        if (renamed > 0) {
+        const renamedAny = Object.values(state.done).some((d) => d.remote)
+        // a chat may have added assets while this pass ran; the database read now would point at files the account lacks
+        const unsent = listKeys().filter((k) => k.key !== DB_KEY && !isDone(state, k))
+        if (renamedAny) {
             // the account database must point at the names the hub gave, which this script does not rewrite
-            log(`not sending ${DB_KEY}: the hub renamed ${renamed} asset(s), the database would point at missing names`)
-        } else if (assets.some((a) => !state.done[a.key])) {
-            log(`not sending ${DB_KEY} yet: some assets did not go through`)
+            log(`not sending ${DB_KEY}: the hub renamed some asset(s), the database would point at missing names`)
+        } else if (unsent.length) {
+            log(`not sending ${DB_KEY} yet: ${unsent.length} asset(s) are not in the account yet`)
         } else {
-            await one(dbItem)
-            saveState(state)
+            const snap = readStable(dbItem.file)
+            if (!snap) {
+                log(`not sending ${DB_KEY}: the file is being written, trying again next pass`)
+            } else {
+                const r = await cloud.write(DB_KEY, snap.buf)
+                if (r.warn) {
+                    log(`warning response for ${DB_KEY}, will retry on the next pass`)
+                } else {
+                    state.done[DB_KEY] = { size: snap.size, mtimeMs: snap.mtimeMs }
+                    sent += 1
+                    saveState(state)
+                }
+            }
         }
     }
     log(`pass done: sent ${sent}, renamed ${renamed}`)
@@ -230,19 +273,34 @@ async function pass(cloud, state) {
 async function main() {
     const cloud = new Cloud(readToken())
     const state = loadState()
+    let retriedToken = false
     for (;;) {
         try {
             const r = await pass(cloud, state)
+            retriedToken = false
             if (once || r.sent >= limit) return
         } catch (e) {
+            saveState(state)
             if (e instanceof AuthError) {
+                // the owner may have just logged in again; the new token is in the saved database
+                let fresh = null
+                try {
+                    fresh = readToken()
+                } catch (err) {}
+                if (!retriedToken && fresh && fresh !== cloud.token) {
+                    retriedToken = true
+                    cloud.token = fresh
+                    cloud.session = ''
+                    log('token refused, retrying with the one now in the saved database')
+                    continue
+                }
                 log(`STOPPED: ${e.message}`)
                 process.exit(2)
             }
             log(`pass failed: ${e.message}`)
             if (once) process.exit(1)
         }
-        await sleep(RESCAN_MS)
+        await sleep(once ? 0 : RESCAN_MS)
     }
 }
 
@@ -253,4 +311,4 @@ if (require.main === module) {
     })
 }
 
-module.exports = { readRootBlock, listKeys }
+module.exports = { readRootBlock, listKeys, isCompleteSave, readStable }
