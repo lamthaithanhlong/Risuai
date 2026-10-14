@@ -8,6 +8,8 @@
     import { getModuleAssets } from "src/ts/process/modules";
     import { getCurrentCharacter } from "src/ts/storage/database.svelte";
     import { getFileSrc } from "src/ts/globalApi.svelte";
+    import { splitCoT } from "src/ts/parser/cot";
+    import { language } from "src/lang";
 
     interface Props {
         character?: simpleCharacterArgument|string|null
@@ -255,6 +257,9 @@
         }
     }
 
+    // the thought is not part of what is parsed or translated; this button opens it in the panel
+    let cotInfo = $derived(splitCoT((shouldRenderRawStreaming ? rawStreamingText : msgDisplay) ?? ''))
+
     let markParsingResult = $derived.by(() => markParsing(msgDisplay, character, idx, renderRevision))
 
     $effect(() => {
@@ -267,8 +272,11 @@
     })
 </script>
 
+{#if cotInfo.thoughts.length > 0 || cotInfo.thinking}
+    <div class="x-risu-cot-open" role="button" tabindex="0" data-cot={cotInfo.thinking ? 'thinking' : 'done'} style="cursor:pointer;opacity:.7;font-size:.85em;margin-bottom:.25rem">▸ {cotInfo.thinking ? `${language.cot} · ${language.cotThinking}` : language.cot}</div>
+{/if}
 {#if shouldRenderRawStreaming}
-    <span class="whitespace-pre-wrap">{rawStreamingText}</span>
+    <span class="whitespace-pre-wrap">{splitCoT(rawStreamingText ?? '').main}</span>
 {:else}
     {#await markParsingResult}
         {@html addMetadataToElement(trimMarkdown(lastParsed), modelShortName)}

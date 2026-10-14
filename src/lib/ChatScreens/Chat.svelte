@@ -22,6 +22,8 @@
     import { HideIconStore, ReloadGUIPointer, selIdState } from "../../ts/stores.svelte"
     import AutoresizeArea from "../UI/GUI/TextAreaResizable.svelte"
     import ChatBody from './ChatBody.svelte'
+    import { cotPanel, openCoT } from "../../ts/process/cotPanel.svelte"
+    import { splitCoT, thoughtText } from "../../ts/parser/cot"
     import PopupButton from "../UI/PopupButton.svelte";
     import PartialEditController from './PartialEditController.svelte';
     import { getLLMCache, setLLMCache } from "../../ts/translator/translator"
@@ -269,6 +271,16 @@
     let displayMessage = $derived(isOptimizedStreamingMessage ? rawStreamingText : message)
     let renderRawStreaming = $derived(isOptimizedStreamingMessage && streamingOptimizationMode === 'strong')
 
+    // keeps the open thought panel current for this message, also while the reply is still streaming
+    $effect(() => {
+        if(!cotPanel.open || cotPanel.chatID !== idx){
+            return
+        }
+        const split = splitCoT(displayMessage ?? '')
+        cotPanel.text = thoughtText(split)
+        cotPanel.thinking = split.thinking
+    })
+
     function updateDisplayedMessage(){
         if(renderRawStreaming){
             return
@@ -501,7 +513,11 @@
             class:hidden={editTranslationMode}
             class:prose-invert={$ColorSchemeTypeStore}
             bind:this={bodyRoot}
-            onclick={() => {
+            onclick={(e) => {
+            if((e.target as Element | null)?.closest?.('.x-risu-cot-open')){
+                openCoT(idx)
+                return
+            }
             if(DBState.db.clickToEdit && idx > -1 && !isOptimizedStreamingMessage){
                 startOriginalEdit()
             }

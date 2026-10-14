@@ -1094,6 +1094,8 @@ export const languageEnglish = {
     topP: "Top P",
     genTimes: "Generation Choices",
     cot: "Chain of Thoughts",
+    cotThinking: "Thinking…",
+    cotEmpty: "No chain of thought in this message.",
     forcePlainFetch: "Force Plain Fetch",
     autoFillRequestURL: "Autofill Request URL",
     newOAIHandle: "New OpenAI Handling",

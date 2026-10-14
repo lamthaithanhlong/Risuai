@@ -25,6 +25,7 @@
     import { stopTTS } from "src/ts/process/tts";
     import MainMenu from '../UI/MainMenu.svelte';
     import ModelSlotPicker from './ModelSlotPicker.svelte';
+    import CoTPanel from './CoTPanel.svelte';
     import AssetInput from './AssetInput.svelte';
     import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile, flushSave } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
@@ -1180,6 +1181,8 @@
         {/each}
     </div>
 {/if}
+
+<CoTPanel />
 <style>
 
     .chat-process-stage-1{

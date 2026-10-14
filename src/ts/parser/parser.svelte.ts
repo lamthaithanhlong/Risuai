@@ -1,4 +1,5 @@
 import { wrapThoughts } from "./thoughts";
+import { splitCoT } from "./cot";
 import DOMPurify from 'dompurify';
 import markdownit from 'markdown-it'
 import { appVer, getCurrentCharacter, getDatabase, type Database, type character, type customscript, type groupChat, type triggerscript } from '../storage/database.svelte';
@@ -726,6 +727,9 @@ export async function ParseMarkdown(
     cbsConditions:CbsConditions = {}
 ) {
     let firstParsed = ''
+    // The chain of thought leaves the message here: only the reply goes through the stages below. The chat shows a button for it
+    // (ChatBody) that opens the thought panel (CoTPanel), so a long thought costs nothing per streamed chunk or per translation.
+    data = splitCoT(data ?? '').main
     const additionalAssetMode = (mode === 'back') ? 'back' : 'normal'
     let char = (typeof(charArg) === 'string') ? (findCharacterbyId(charArg)) : (charArg)
 
