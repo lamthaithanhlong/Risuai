@@ -1,3 +1,4 @@
+import { planSweep, loadSweepSeen, saveSweepSeen } from "./storage/assetSweep"
 import {
     writeFile,
     BaseDirectory,
@@ -619,14 +620,18 @@ async function cleanChunks(options:{
         const characterIds = new Set<string>(
             db.characters.map((v) => v.chaId)
         )
+        // assets: two strikes, so a file another client has just written (database save still to come) is not deleted
+        const unreferenced = indexes.filter((asset) => asset.startsWith('assets/') && !uncleanable.has(getBasename(asset)))
+        const sweep = planSweep(unreferenced, loadSweepSeen(), Date.now())
+        saveSweepSeen(sweep.seen)
+        for (const asset of sweep.remove) {
+            await forageStorage.removeItem(asset)
+        }
         for (const asset of indexes) {
             if (asset.startsWith('assets/')) {
-                const n = getBasename(asset)
-                if(!uncleanable.has(n)) {
-                    await forageStorage.removeItem(asset)
-                }
+                continue
             }
-            else if (asset.endsWith('.meta')){
+            if (asset.endsWith('.meta')){
                 continue
             }
             else if (asset.startsWith('remotes/')) {
