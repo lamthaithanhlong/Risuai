@@ -269,6 +269,12 @@
 
     let blankMessage = $derived((message === '{{none}}' || message === '{{blank}}' || message === '') && idx === -1 || isComment)
     let displayMessage = $derived(isOptimizedStreamingMessage ? rawStreamingText : message)
+    // The reply and the chain of thought are separate: only the reply is run through the display parser, so a thought that grows
+    // with every streamed chunk costs the chat nothing. `replyText` is a string, so nothing downstream reruns while only the
+    // thought changes.
+    let cot = $derived(splitCoT(displayMessage ?? ''))
+    let replyText = $derived(cot.main)
+    let hasThought = $derived(cot.thoughts.length > 0 || cot.thinking)
     let renderRawStreaming = $derived(isOptimizedStreamingMessage && streamingOptimizationMode === 'strong')
 
     // keeps the open thought panel current for this message, also while the reply is still streaming
@@ -276,16 +282,15 @@
         if(!cotPanel.open || cotPanel.chatID !== idx){
             return
         }
-        const split = splitCoT(displayMessage ?? '')
-        cotPanel.text = thoughtText(split)
-        cotPanel.thinking = split.thinking
+        cotPanel.text = thoughtText(cot)
+        cotPanel.thinking = cot.thinking
     })
 
     function updateDisplayedMessage(){
         if(renderRawStreaming){
             return
         }
-        displaya(displayMessage)
+        displaya(replyText)
     }
 
     $effect.pre(() => {
@@ -531,6 +536,8 @@
                     {firstMessage}
                     {idx}
                     {msgDisplay}
+                    {hasThought}
+                    thinking={cot.thinking}
                     {name}
                     {bodyRoot}
                     renderRevision={chatBodyRevision}
@@ -838,7 +845,7 @@
 {#if idx > -1}
     {#if DBState.db.characters[selIdState.selId].type !== 'group' && DBState.db.characters[selIdState.selId].ttsMode !== 'none' && (DBState.db.characters[selIdState.selId].ttsMode || DBState.db.ttsLocal?.enabled)}
         <button class="flex items-center hover:text-blue-500 transition-colors button-icon-tts" onclick={()=>{
-            return sayTTS(null, isOptimizedStreamingMessage ? rawStreamingText : message)
+            return sayTTS(null, replyText)
         }}>
             <Volume2Icon size={20}/>
             {#if showNames}

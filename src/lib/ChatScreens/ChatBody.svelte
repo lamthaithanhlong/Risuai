@@ -16,6 +16,9 @@
         firstMessage?: boolean
         idx?: number
         msgDisplay?: string
+        /** the message has a chain of thought (Chat.svelte split it off; msgDisplay is the reply only) */
+        hasThought?: boolean
+        thinking?: boolean
         name?: string
         role: string|null
         translated: boolean
@@ -33,6 +36,8 @@
         idx = 0,
         firstMessage = false,
         msgDisplay,
+        hasThought = false,
+        thinking = false,
         role,
         translated = $bindable(false),
         translating = $bindable(false),
@@ -262,10 +267,9 @@
     }
 
     // the thought is not part of what is parsed or translated; this button opens it in the panel
-    let cotInfo = $derived(splitCoT((shouldRenderRawStreaming ? rawStreamingText : msgDisplay) ?? ''))
 
     // reasoning is in the message but the reply has not started: show a live "Thinking… 42s" line
-    let waitingForReply = $derived((cotInfo.thoughts.length > 0 || cotInfo.thinking) && cotInfo.main.trim() === '')
+    let waitingForReply = $derived(hasThought && (shouldRenderRawStreaming ? splitCoT(rawStreamingText ?? '').main : msgDisplay ?? '').trim() === '')
     let thinkSeconds = $state(0)
     $effect(() => {
         if(!waitingForReply){
@@ -290,8 +294,8 @@
     })
 </script>
 
-{#if cotInfo.thoughts.length > 0 || cotInfo.thinking}
-    <div class="x-risu-cot-open" role="button" tabindex="0" data-cot={cotInfo.thinking ? 'thinking' : 'done'} style="cursor:pointer;opacity:.7;font-size:.85em;margin-bottom:.25rem">▸ {cotInfo.thinking ? `${language.cot} · ${language.cotThinking}` : language.cot}</div>
+{#if hasThought}
+    <div class="x-risu-cot-open" role="button" tabindex="0" data-cot={thinking ? 'thinking' : 'done'} style="cursor:pointer;opacity:.7;font-size:.85em;margin-bottom:.25rem">▸ {thinking ? `${language.cot} · ${language.cotThinking}` : language.cot}</div>
 {/if}
 {#if waitingForReply}
     <!-- the model is still reasoning and no word of the reply has arrived: say so, with how long, instead of an empty message -->

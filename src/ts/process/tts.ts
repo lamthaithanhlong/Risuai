@@ -1,4 +1,5 @@
 import { alertError, alertToast } from "../alert";
+import { splitCoT } from '../parser/cot'
 import { getCurrentCharacter, getDatabase, type character } from "../storage/database.svelte";
 import { runTranslator, translateVox } from "../translator/translator";
 import { globalFetch, loadAsset } from "../globalApi.svelte";
@@ -98,7 +99,8 @@ export async function sayTTS(character:character,text:string) {
         }
     
         let db = getDatabase()
-        text = text.replace(/\*/g,'')
+        // the chain of thought is not part of what is said
+        text = splitCoT(text).main.replace(/\*/g,'')
     
         if(character.ttsReadOnlyQuoted){
             const matches = text.match(/["「](.*?)["」]/g)
