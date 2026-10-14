@@ -264,6 +264,20 @@
     // the thought is not part of what is parsed or translated; this button opens it in the panel
     let cotInfo = $derived(splitCoT((shouldRenderRawStreaming ? rawStreamingText : msgDisplay) ?? ''))
 
+    // reasoning is in the message but the reply has not started: show a live "Thinking… 42s" line
+    let waitingForReply = $derived((cotInfo.thoughts.length > 0 || cotInfo.thinking) && cotInfo.main.trim() === '')
+    let thinkSeconds = $state(0)
+    $effect(() => {
+        if(!waitingForReply){
+            thinkSeconds = 0
+            return
+        }
+        const started = Date.now()
+        thinkSeconds = 0
+        const timer = setInterval(() => { thinkSeconds = Math.round((Date.now() - started) / 1000) }, 1000)
+        return () => clearInterval(timer)
+    })
+
     let markParsingResult = $derived.by(() => markParsing(msgDisplay, character, idx, renderRevision))
 
     $effect(() => {
@@ -278,6 +292,10 @@
 
 {#if cotInfo.thoughts.length > 0 || cotInfo.thinking}
     <div class="x-risu-cot-open" role="button" tabindex="0" data-cot={cotInfo.thinking ? 'thinking' : 'done'} style="cursor:pointer;opacity:.7;font-size:.85em;margin-bottom:.25rem">▸ {cotInfo.thinking ? `${language.cot} · ${language.cotThinking}` : language.cot}</div>
+{/if}
+{#if waitingForReply}
+    <!-- the model is still reasoning and no word of the reply has arrived: say so, with how long, instead of an empty message -->
+    <div class="x-risu-thinking animate-pulse" style="opacity:.65;font-style:italic">{language.cotThinking} {thinkSeconds}s</div>
 {/if}
 {#if shouldRenderRawStreaming}
     <span class="whitespace-pre-wrap">{splitCoT(rawStreamingText ?? '').main}</span>
