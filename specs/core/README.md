@@ -19,9 +19,9 @@ Run: `dafny verify GenerateContext.dfy`; `java -cp tla2tools.jar tlc2.TLC -metad
 
 ## SaveQueue.tla: the SQLite write queue
 
-`server/node/saveQueue.cjs` (node:sqlite): /api/write commits the bytes to a table and answers; one worker applies rows in sequence order;
+`server/node/saveQueue.cjs` (better-sqlite3 for the table, p-queue with concurrency 1 for the worker): /api/write commits the bytes to a table and answers; one worker applies rows in sequence order;
 reads and listings look at the table first; one row per key; a failing row is retried with backoff forever and later rows wait for it (still served to readers from the table).
-This is the role a Huey queue plays, kept in the Node process that owns the files (Huey is Python and pickles its tasks).
+This is the role a Huey queue plays, kept in the Node process that owns the files (Huey is Python and pickles its tasks). The job store (`jobStore.cjs`) uses the same driver, with its multi-statement updates now in transactions. If the native binding is missing after `pnpm install`, run `pnpm rebuild better-sqlite3`.
 
 | InOrder | AssetPolicy | Read returns the last acknowledged write | The directory never regresses | The directory never holds a database without its asset |
 | --- | --- | --- | --- | --- |

@@ -1,11 +1,11 @@
-// A durable log for proxy stream jobs (SQLite, node:sqlite).
+// A durable log for proxy stream jobs (SQLite, better-sqlite3).
 //
 // A job is one upstream request (a chat reply streaming back). Every event it produces is appended here with a
 // sequence number, so a client that disconnected (phone screen locked, page refreshed, flaky Wi-Fi) can ask for
 // "everything after seq N" and get exactly what it missed, and a job that finished while nobody listened still
 // has its whole answer. A job found by its idempotency key is reused instead of asking the model again.
 
-const { DatabaseSync } = require('node:sqlite');
+const Database = require('better-sqlite3');
 
 const REUSABLE_STATUSES = ['running', 'done'];
 
@@ -15,8 +15,9 @@ const JOB_REUSE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const JOB_KEEP_MS = 48 * 60 * 60 * 1000;
 
 function openJobStore(file) {
-    const db = new DatabaseSync(file);
-    db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+    const db = new Database(file);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
     db.exec(`
         CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY,
@@ -52,16 +53,39 @@ function openJobStore(file) {
 
     const nextSeq = new Map();
 
+    // the event and the job's "updated" time are written together or not at all
+    const appendTx = db.transaction((jobId, event, now, seq) => {
+        q.insertEvent.run(jobId, seq, JSON.stringify(event));
+        q.touch.run(now, jobId);
+    });
+
     function append(jobId, event, now = Date.now()) {
         let seq = nextSeq.get(jobId);
         if (seq === undefined) {
             seq = q.lastSeq.get(jobId).seq + 1;
         }
-        q.insertEvent.run(jobId, seq, JSON.stringify(event));
-        q.touch.run(now, jobId);
+        appendTx(jobId, event, now, seq);
         nextSeq.set(jobId, seq + 1);
         return seq;
     }
+
+    // each of these is one transaction: a crash in the middle leaves the job as it was, not half interrupted or half pruned
+    const interruptTx = db.transaction(() => {
+        const ids = q.running.all().map((row) => row.id);
+        for (const id of ids) {
+            append(id, { type: 'error', status: 502, message: 'Server restarted while this job was running' });
+            q.setStatus.run('interrupted', Date.now(), id, 'running');
+        }
+        return ids.length;
+    });
+    const pruneTx = db.transaction((before) => {
+        const ids = q.oldJobs.all(before).map((row) => row.id);
+        for (const id of ids) {
+            q.delEvents.run(id);
+            q.delJob.run(id);
+        }
+        return ids;
+    });
 
     return {
         createJob(id, idem, now = Date.now()) {
@@ -94,20 +118,13 @@ function openJobStore(file) {
 
         /** After a restart nothing is still running upstream: say so to anyone who asks for those jobs. */
         interruptRunning() {
-            const ids = q.running.all().map((row) => row.id);
-            for (const id of ids) {
-                append(id, { type: 'error', status: 502, message: 'Server restarted while this job was running' });
-                q.setStatus.run('interrupted', Date.now(), id, 'running');
-            }
-            return ids.length;
+            return interruptTx();
         },
 
         /** Drops jobs untouched since `before` (ms epoch). */
         prune(before) {
-            const ids = q.oldJobs.all(before).map((row) => row.id);
+            const ids = pruneTx(before);
             for (const id of ids) {
-                q.delEvents.run(id);
-                q.delJob.run(id);
                 nextSeq.delete(id);
             }
             return ids.length;

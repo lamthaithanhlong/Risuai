@@ -95,6 +95,9 @@ importers:
       astring:
         specifier: ^1.9.0
         version: 1.9.0
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
@@ -164,6 +167,9 @@ importers:
       openid-client:
         specifier: ^6.8.1
         version: 6.8.1
+      p-queue:
+        specifier: ^10.0.0
+        version: 10.0.0
       pdfjs-dist:
         specifier: ^4.10.38
         version: 4.10.38
@@ -1633,6 +1639,10 @@ packages:
     resolution: {integrity: sha512-Sg0xJUNDU1sJNGdfGWhVHX0kkZ+HWcvmVymJbj6NSgZZmW/8S9Y2HQ5euytnIgakgxN6papOAWiwDo1ctFDcoQ==}
     hasBin: true
 
+  better-sqlite3@13.0.3:
+    resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
+    engines: {node: '>=22'}
+
   body-parser@1.20.4:
     resolution: {integrity: sha512-ZTgYYLMOXY9qKU/57FAo8F+HA2dGX7bqGc71txDRC1rS4frdFI5R7NhluHxH6M0YItAP0sHB4uqAOcYKxO6uGA==}
     engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
@@ -2288,6 +2298,10 @@ packages:
     resolution: {integrity: sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==}
     engines: {node: '>= 0.6'}
 
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
+
   node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
     hasBin: true
@@ -2360,6 +2374,10 @@ packages:
   p-finally@1.0.0:
     resolution: {integrity: sha512-LICb2p9CB7FS+0eR1oqWnHhp0FljGLZCWBE9aix0Uye9W8LTQPwMTYVGWQWIw9RdQiDg4+epXQODwIYJtSJaow==}
     engines: {node: '>=4'}
+
+  p-queue@10.0.0:
+    resolution: {integrity: sha512-P2wrCri3bhGLPo3kX7qYVXbo/5GvaVATU0DpO24CbeT53Y4z35t8JUWku04ERpXHUYB5rPMi3TkWE3fmJgx5rA==}
+    engines: {node: '>=22'}
 
   p-timeout@3.2.0:
     resolution: {integrity: sha512-rhIwUycgwwKcP9yTOOFK/AKsAopjjCakVqLHePO3CC6Mir1Z99xT+R63jZxAT5lFZLa2inS5h+ZS2GvR99/FBg==}
@@ -3858,6 +3876,10 @@ snapshots:
 
   baseline-browser-mapping@2.9.11: {}
 
+  better-sqlite3@13.0.3:
+    dependencies:
+      node-addon-api: 8.9.2
+
   body-parser@1.20.4:
     dependencies:
       bytes: 3.1.2
@@ -4500,6 +4522,8 @@ snapshots:
 
   negotiator@0.6.3: {}
 
+  node-addon-api@8.9.2: {}
+
   node-gyp-build-optional-packages@5.2.2:
     dependencies:
       detect-libc: 2.1.2
@@ -4573,6 +4597,8 @@ snapshots:
       p-timeout: 3.2.0
 
   p-finally@1.0.0: {}
+
+  p-queue@10.0.0: {}
 
   p-timeout@3.2.0:
     dependencies:

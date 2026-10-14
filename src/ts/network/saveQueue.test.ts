@@ -218,6 +218,27 @@ describe('saveQueue (specs/core/SaveQueue.tla)', () => {
         expect(seen).toEqual([])
     })
 
+    it('an apply that hangs is cut off by the p-queue timeout and retried like any failure', async () => {
+        let calls = 0
+        const q = open({
+            applyTimeoutMs: 40,
+            apply: async (row: Row) => {
+                calls++
+                if (calls === 1) await never()                 // the first attempt never returns
+                writeFileSync(join(save, row.key), Buffer.from(row.data!))
+            },
+        })
+        q.enqueueWrite('db', buf('D'))
+        await q.flush()
+        await new Promise((r) => setTimeout(r, 120))
+        expect(q.status().stuck[0]?.last_error).toBe('apply timed out')
+        clock += 40_000
+        await q.flush()
+        expect(calls).toBe(2)
+        expect(onDisk('db')).toBe('D')
+        expect(q.status().pending).toBe(0)
+    })
+
     it('property: whatever the interleaving of writes, deletes and drains, the directory ends with the last acknowledged state of every key', async () => {
         let state = 2024
         const rnd = (n: number) => Math.floor(((state = (state * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * n)
