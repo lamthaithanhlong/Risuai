@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+<declaration>// From "send" to the first visible word of the reply on the phone. Time unit: milliseconds.
+// Parameters are MEASURED values (9router request log, the Fate Simulator prompt): see specs/generation/README.md.
+const int PREP = 540;            // building the prompt in the page (stage1 in generationInfo)
+const int TTFT_MIN = 2500;       // router time to first token (3176, 5007, 4502, 4334 measured)
+const int TTFT_MAX = 7000;
+const int R = @R@;               // hidden reasoning tokens before the first visible word
+const int RATE_MIN = 18;         // ms per token: about 46-55 tokens/s measured (86 s for 4640 tokens, 50 s for 2212)
+const int RATE_MAX = 22;
+const int LIMIT = @LIMIT@;       // the wait we want the user to have at most
+
+clock t;                         // since the user pressed send
+clock x;                         // per-token timer
+int[0,6000] done = 0;            // reasoning tokens produced so far
+</declaration>
+
+<template>
+<name>Reply</name>
+<location id="a0"><name>Prepare</name><label kind="invariant">t &lt;= PREP</label></location>
+<location id="a1"><name>FirstToken</name><label kind="invariant">t &lt;= PREP + TTFT_MAX</label></location>
+<location id="a2"><name>Thinking</name><label kind="invariant">x &lt;= RATE_MAX</label></location>
+<location id="a3"><name>Visible</name></location>
+<init ref="a0"/>
+<transition>
+  <source ref="a0"/><target ref="a1"/>
+  <label kind="guard">t &gt;= PREP</label>
+</transition>
+<transition>
+  <source ref="a1"/><target ref="a2"/>
+  <label kind="guard">t &gt;= PREP + TTFT_MIN &amp;&amp; done &lt; R</label>
+  <label kind="assignment">x = 0</label>
+</transition>
+<transition>
+  <source ref="a1"/><target ref="a3"/>
+  <label kind="guard">t &gt;= PREP + TTFT_MIN &amp;&amp; R == 0</label>
+</transition>
+<transition>
+  <source ref="a2"/><target ref="a2"/>
+  <label kind="guard">x &gt;= RATE_MIN &amp;&amp; done &lt; R - 1</label>
+  <label kind="assignment">done = done + 1, x = 0</label>
+</transition>
+<transition>
+  <source ref="a2"/><target ref="a3"/>
+  <label kind="guard">x &gt;= RATE_MIN &amp;&amp; done &gt;= R - 1</label>
+  <label kind="assignment">done = R</label>
+</transition>
+</template>
+
+<system>
+reply = Reply();
+system reply;
+</system>
+</nta>
