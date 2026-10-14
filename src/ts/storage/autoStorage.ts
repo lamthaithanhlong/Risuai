@@ -42,6 +42,11 @@ export class AutoStorage{
         if(this.isAccount){
             return true
         }
+        if(isNodeServer){
+            // The save already lives on this server. A saved db.account.useSync (or a stray 'dosync') made every fresh
+            // browser upload all of the server's files, one request at a time, to the Risu cloud before the app opened.
+            return false
+        }
         if(localStorage.getItem('dosync') === 'avoid'){
             return false
         }
