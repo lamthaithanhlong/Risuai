@@ -13,6 +13,8 @@ import {
 
 //#region module mocks
 
+let canEncodeWebp = true
+
 // happy-dom canvas getContext returns null
 const fakeCtx = {
     drawImage: vi.fn(),
@@ -22,8 +24,10 @@ vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: a
     const el = origCreateElement(tag, options)
     if (tag === 'canvas') {
         ;(el as HTMLCanvasElement).getContext = (() => fakeCtx) as any
-        ;(el as HTMLCanvasElement).toBlob = ((cb: BlobCallback) => {
-            cb(new Blob(['fake-png'], { type: 'image/png' }))
+        // like a browser: the requested type when it can encode it, PNG otherwise (canEncodeWebp off = a browser without WebP)
+        ;(el as HTMLCanvasElement).toBlob = ((cb: BlobCallback, type?: string) => {
+            const t = type === 'image/webp' && !canEncodeWebp ? 'image/png' : (type ?? 'image/png')
+            cb(new Blob(['fake'], { type: t }))
         }) as any
     }
     return el
@@ -369,12 +373,25 @@ describe('writeInlayImage', () => {
         const stored = store.get('custom-id') as InlayAsset
         expect(stored).toMatchObject({
             data: expect.any(Blob),
-            ext: 'png',
+            ext: 'webp',
             height: 100,
             name: 'photo.jpg',
             type: 'image',
             width: 200,
         })
+        expect((stored.data as Blob).type).toBe('image/webp')
+    })
+
+    test('a browser that cannot encode WebP stores JPEG, never the large PNG', async () => {
+        canEncodeWebp = false
+        try {
+            await writeInlayImage(makeImage(200, 100), { id: 'no-webp' })
+            const stored = store.get('no-webp') as InlayAsset
+            expect(stored.ext).toBe('jpeg')
+            expect((stored.data as Blob).type).toBe('image/jpeg')
+        } finally {
+            canEncodeWebp = true
+        }
     })
 
     test('generates uuid when no id is provided', async () => {

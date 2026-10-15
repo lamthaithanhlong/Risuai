@@ -4,6 +4,8 @@ import { getImageType } from "src/ts/media";
 import { getDatabase } from "../../storage/database.svelte";
 import { getModelInfo, LLMFlags, LLMFormat } from "src/ts/model/modellist";
 import { asBuffer } from "../../util";
+import { isNodeServer } from "src/ts/platform";
+import { readInlay, singleFlight, upload, uploadPending, type InlayDeps, type LocalInlay } from "./inlaySync";
 
 export type InlayAsset = {
     data: string | Blob
@@ -13,6 +15,8 @@ export type InlayAsset = {
     name: string
     type: 'image' | 'video' | 'audio' | 'signature'
     width?: number
+    /** true once the server has the file inlays/<id> (inlaySync.ts) */
+    synced?: boolean
 }
 
 const inlayImageExts = [
@@ -31,6 +35,47 @@ const inlayStorage = localforage.createInstance({
     name: 'inlay',
     storeName: 'inlay'
 })
+
+// The browser copy (IndexedDB) is a cache; on the Node server every picture is also the file inlays/<id> (inlaySync.ts).
+// globalApi is imported when needed: importing it here would make a cycle through the parser.
+const inlayDeps: InlayDeps = {
+    remoteEnabled: isNodeServer,
+    async readRemote(key) {
+        const { forageStorage } = await import('../../globalApi.svelte')
+        const data = await forageStorage.getItem(key)
+        return data ? new Uint8Array(data) : null
+    },
+    async writeRemote(key, bytes) {
+        const { forageStorage } = await import('../../globalApi.svelte')
+        await forageStorage.setItem(key, bytes)
+    },
+    readLocal: (id) => inlayStorage.getItem<LocalInlay | null>(id),
+    writeLocal: async (id, item) => { await inlayStorage.setItem(id, item) },
+    listLocal: () => listInlayAssets() as Promise<[string, LocalInlay][]>,
+    log: (message, error) => console.warn(message, error),
+}
+
+/** Puts on the server every picture this browser has that the server lacks (one pass at a time). */
+export const syncInlaysToServer = singleFlight(async () => {
+    const result = await uploadPending(inlayDeps)
+    if (result.uploaded || result.failed) {
+        console.log(`[inlay] uploaded ${result.uploaded} picture(s) to the server, ${result.failed} failed (tried again later)`)
+    }
+    return result
+})
+
+// A failed upload must not wait for the next start: a Risu tab can stay open for days, and the phone would show the raw tag all
+// that time (TLC: with uploads only at start, "every picture reaches the server" fails; with this timer it holds).
+const RETRY_EVERY_MS = 5 * 60 * 1000
+let retryTimer: ReturnType<typeof setInterval> | null = null
+
+/** Uploads now, then every five minutes and whenever the network comes back. Safe to call more than once. */
+export function startInlaySync() {
+    if (!isNodeServer || retryTimer) return
+    void syncInlaysToServer().catch((e) => console.warn('[inlay] sync failed', e))
+    retryTimer = setInterval(() => { void syncInlaysToServer().catch(() => {}) }, RETRY_EVERY_MS)
+    globalThis.addEventListener?.('online', () => { void syncInlaysToServer().catch(() => {}) })
+}
 
 export async function postInlayAsset(img:{
     name:string,
@@ -53,12 +98,14 @@ export async function postInlayAsset(img:{
         const audioBlob = new Blob([asBuffer(img.data)], {type: `audio/${extention}`})
         const imgid = v4()
 
-        await inlayStorage.setItem(imgid, {
+        const item = {
             name: img.name,
             data: audioBlob,
             ext: extention,
-            type: 'audio'
-        })
+            type: 'audio' as const
+        }
+        await inlayStorage.setItem(imgid, item)
+        await upload(inlayDeps, imgid, item)
 
         return `${imgid}`
     }
@@ -67,12 +114,14 @@ export async function postInlayAsset(img:{
         const videoBlob = new Blob([asBuffer(img.data)], {type: `video/${extention}`})
         const imgid = v4()
 
-        await inlayStorage.setItem(imgid, {
+        const item = {
             name: img.name,
             data: videoBlob,
             ext: extention,
-            type: 'video'
-        })
+            type: 'video' as const
+        }
+        await inlayStorage.setItem(imgid, item)
+        await upload(inlayDeps, imgid, item)
 
         return `${imgid}`
     }
@@ -102,19 +151,27 @@ export async function writeInlayImage(imgObj:HTMLImageElement, arg:{name?:string
             resolve(null)
         }
     })
-    const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
+    // WebP at 0.8: a 360 px picture is about 16 KB instead of 223 KB as PNG (measured). A browser that cannot encode WebP
+    // returns PNG from toBlob; then JPEG at 0.8 (about 41 KB) is used.
+    let imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.8))
+    if (!imageBlob || imageBlob.type !== 'image/webp') {
+        imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8))
+    }
+    const ext = imageBlob?.type === 'image/webp' ? 'webp' : 'jpeg'
 
     const imgid = arg.id ?? v4()
 
-    await inlayStorage.setItem(imgid, {
+    const item = {
         name: arg.name ?? imgid,
         data: imageBlob,
-        ext: 'png',
+        ext,
         height: drawHeight,
         width: drawWidth,
-        type: 'image'
-    })
+        type: 'image' as const
+    }
+    await inlayStorage.setItem(imgid, item)
+    // on the server too, so the phone (or another browser) shows it; a failure keeps it here and is retried next start
+    await upload(inlayDeps, imgid, item)
 
     return `${imgid}`
 }
@@ -166,7 +223,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 // Returns with base64 data URI
 export async function getInlayAsset(id: string){
-    const img = await inlayStorage.getItem<InlayAsset | null>(id)
+    const img = await readInlay(inlayDeps, id) as InlayAsset | null
     if(img === null){
         return null
     }
@@ -183,7 +240,7 @@ export async function getInlayAsset(id: string){
 
 // Returns with Blob
 export async function getInlayAssetBlob(id: string){
-    const img = await inlayStorage.getItem<InlayAsset | null>(id)
+    const img = await readInlay(inlayDeps, id) as InlayAsset | null
     if(img === null){
         return null
     }

@@ -59,7 +59,8 @@ const hexToKey = (hex) => Buffer.from(hex, 'hex').toString('utf-8');
 const saveQueue = require('./saveQueue.cjs').openSaveQueue({
     dbFile: savePath + '.queue.sqlite',
     saveDir: savePath,
-    isImmutable: (hex) => hexToKey(hex).startsWith('assets/'),
+    // assets/ are content-addressed and inlays/ (chat pictures, one uuid each) never change once written
+    isImmutable: (hex) => { const key = hexToKey(hex); return key.startsWith('assets/') || key.startsWith('inlays/'); },
     log: (kind, key, attempts, error) => console.error(`[SaveQueue] ${kind} ${hexToKey(key)} attempt ${attempts}: ${error && error.message || error}`),
 });
 require('./atomicWrite.cjs').cleanStaleTemp(savePath + '.tmp', 60 * 60 * 1000).catch(() => {});

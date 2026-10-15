@@ -158,6 +158,10 @@ export async function loadData() {
                     }
                 }
 
+                // chat pictures this browser has and the server lacks go up in the background, and again every few minutes
+                // while the app stays open (files/inlaySync.ts)
+                void import('./process/files/inlays').then((m) => m.startInlaySync()).catch((e) => console.warn('[inlay] sync failed', e))
+
                 if (await forageStorage.checkAccountSync()) {
                     LoadingStatusState.text = "Checking Account Sync..."
                     let gotStorage: Uint8Array = await (forageStorage.realStorage as AccountStorage).getItem('database/database.bin', (v) => {
