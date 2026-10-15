@@ -8,7 +8,7 @@
     import type { Chat } from "src/ts/storage/database.svelte";
     import { KIND_LABEL, parseReplies, setHanReadings, setKanjiReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { ReloadGUIPointer } from "src/ts/stores.svelte";
-    import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
+    import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
     import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
@@ -33,7 +33,9 @@
     let askedFor = $state('')
     let asked = $state<SuggestedReply[]>([])
     let asking = $state(false)
-    let typedViet = $derived(enabled && looksVietnamese(value ?? '') ? (value ?? '').trim() : '')
+    // what is on offer before any lookup: the sound of one of these, even with tone marks, is not Vietnamese to look up
+    let offered = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang }) : [])
+    let typedViet = $derived(enabled && looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) ? (value ?? '').trim() : '')
     // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
     let wordList = $state<Dictionary | null>(null)
     let wordListLang = $state('')
@@ -48,8 +50,9 @@
         listReady = false
         loadWordList(want).then((w) => { if (lang === want) { wordList = w; listReady = true } })
     })
+    // the sound of an offered answer is not a word to look up, with or without tone marks (喜欢 再 增加 蚊帐 for "ùa lái tảng mẩn")
     let fromList = $derived(wordListLang !== lang ? [] : typedViet ? dictSuggestions(typedViet, wordList?.words ?? null, lang)
-        : typedAny ? toneless(typedAny, wordList, lang) : [])
+        : typedAny && !soundMatch(typedAny, offered) ? toneless(typedAny, wordList, lang) : [])
     let listSure = $derived(fromList.length > 0 && !needsModel(typedViet, wordList))
     let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])
     let items = $derived(enabled ? suggest(value ?? '', pool) : [])

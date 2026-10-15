@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fromVietji } from './vietji'
-import { foldTyping, insertText, looksVietnamese, starterSet, suggest, suggestionPool } from './vietjiSuggest'
+import { foldTyping, insertText, looksVietnamese, soundMatch, starterSet, suggest, suggestionPool } from './vietjiSuggest'
 
 const lastReply = 'Haru: 「ふたつ です。」 (Hai đồng.)\n\n[[REPLIES\nふたつ ですか | Hai đồng à?\nいいえ、 だいじょうぶ です | Không, tôi không cần.\n]]'
 const vocab = JSON.stringify([{ text: 'しお です。', vietji: 'xi-ô đê-sư', meaning: 'Đây là muối.' }, { text: 'いくら ですか', vietji: 'i-cư-ra đê-sư-ca', meaning: 'Bao nhiêu tiền?' }])
@@ -112,5 +112,21 @@ describe('nothing typed and no answers in the last reply (reported: many replies
         expect(shown.length).toBeGreaterThan(0)
         expect(shown[0].source).toBe('heard')
         expect(suggest('', suggestionPool({ lang: 'zh' }))[0].source).toBe('starter')
+    })
+})
+
+describe('the sound of an offered answer, typed with its tone marks (reported: ùa lái tảng mẩn)', () => {
+    const reply = '[[REPLIES\n我[wǒ] 来[lái] 挡[dǎng] 门[mén]。 | Để tôi chặn cửa. | easy\n快[kuài] 上[shàng] 楼[lóu]! | Mau lên gác! | easy\n]]'
+    const pool = suggestionPool({ lastReply: reply, lang: 'zh' })
+    it('is the sound, not Vietnamese words: the answer comes first', () => {
+        const vj = pool.find((s) => s.text.startsWith('我'))!.vietji
+        expect(soundMatch(vj, pool)).toBe(true)
+        expect(soundMatch('ùa lái', pool)).toBe(true)
+        expect(suggest('ùa lái', pool)[0].text.startsWith('我')).toBe(true)
+    })
+    it('real Vietnamese still looks the meaning up', () => {
+        expect(soundMatch('mau lên', pool)).toBe(false)
+        expect(suggest('mau lên', pool)[0].meaning).toBe('Mau lên gác!')
+        expect(soundMatch('có', pool)).toBe(false)                       // too short to be a sound
     })
 })

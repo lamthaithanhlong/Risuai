@@ -16,6 +16,16 @@ export function looksVietnamese(s: string): boolean {
     return /[đĐ]/.test(t) || /[\u0300-\u0309\u031b\u0323]/.test(t) || /[ăâêôơư]/i.test(s ?? '')
 }
 
+/**
+ * Typed the sound of a phrase on offer ("ùa lái tảng mẩn" for 我来挡门 = ủa-lái-tảng-mẩn): Việt-ji carries Vietnamese tone
+ * marks, so marks alone do not mean the learner is writing Vietnamese. Reported: this was looked up as Vietnamese words
+ * (流 开 板块 工作) and sent to the model.
+ */
+export function soundMatch(typed: string, pool: Suggestion[]): boolean {
+    const q = foldTyping(typed)
+    return q.length >= 3 && pool.some((s) => s.source !== 'dict' && s.source !== 'asked' && foldTyping(s.vietji).startsWith(q))
+}
+
 /** The meaning's words, folded: "Bao nhiêu tiền?" → ["bao", "nhieu", "tien"]. */
 const meaningWords = (s: string) => (s ?? '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
 const foldWord = (w: string) => foldTyping(w)
@@ -107,7 +117,7 @@ export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[
         return (replies.length ? replies : [...pool.filter((s) => s.source === 'heard'), ...pool.filter((s) => s.source === 'starter')]).slice(0, max)
     }
     const scored: [number, number, Suggestion][] = []
-    if (looksVietnamese(typed)) {
+    if (looksVietnamese(typed) && !soundMatch(typed, pool)) {
         // what the learner means, in Vietnamese: by meaning only (the sound of "có" says nothing about "oui")
         pool.forEach((s, i) => {
             const score = s.source === 'asked' || s.source === 'dict' ? 4 : meaningScore(typed, s.meaning)
