@@ -4,6 +4,7 @@ const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
 import { readNotebook } from './learningStore'
+import { SAY_BUTTON } from './vietji'
 import { howToSayPrompt, learningReminder, CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 // the player's text as sent, without the format reminder learningRequest puts after the last one
@@ -40,7 +41,7 @@ describe('learning mode on', () => {
     it('shows readings, and not when readings are switched off', () => {
         expect(learningDisplay('「やめて」')).toContain('>da-mê-tê</span>')
         db.learningReadings = false
-        expect(learningDisplay('「やめて」')).toBe('「やめて」')
+        expect(learningDisplay('「やめて」')).toBe('「やめて」 ' + SAY_BUTTON)          // no readings, but it can still be heard
     })
     it('sends Việt-ji typing as kana, with or without a name prefix, and leaves Vietnamese and the model turns alone', () => {
         expect(userOf(learningRequest(req('da me te')))).toBe('やめて')

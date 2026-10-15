@@ -74,6 +74,30 @@ function textAtPoint(root: Element, x: number, y: number): { text: string; pos: 
     return pos < 0 ? null : { text, pos }
 }
 
+/** The foreign phrases of the line a speaker button ends (readings left out), joined: what the button reads. */
+export function foreignOfLine(text: string, lang: string): string {
+    const out: string[] = []
+    if (lang === 'es' || lang === 'fr') {
+        for (const m of text.matchAll(/«([^»]+)»/g)) out.push(m[1].trim())
+    }
+    for (const m of text.matchAll(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー][\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー \u3000、。，！？!?・…〜~]*/g)) {
+        const run = m[0].trim()
+        if (run) out.push(run)
+    }
+    return out.join(' ')
+}
+
+/** Taps closer than MIN_GAP_MS, or more than PER_MINUTE in a minute, are dropped (the TTS server also limits). */
+const MIN_GAP_MS = 300, PER_MINUTE = 20
+const recent: number[] = []
+export function allowTap(now = Date.now()): boolean {
+    while (recent.length && now - recent[0] > 60_000) recent.shift()
+    if (recent.length && now - recent[recent.length - 1] < MIN_GAP_MS) return false
+    if (recent.length >= PER_MINUTE) return false
+    recent.push(now)
+    return true
+}
+
 let installed: ((e: MouseEvent) => void) | null = null
 
 /** Listens for taps on chat messages (once for the page); getLang is read at each tap. */
@@ -82,11 +106,25 @@ export function installTapToSpeak(deps: StreamDeps, getLang: () => string) {
     installed = (e: MouseEvent) => {
         const target = e.target as Element | null
         const root = target?.closest?.('.chattext')
-        if (!root || target!.closest('a, button, input, textarea, select, summary, label')) return
+        if (!root) return
+        // the speaker button at the end of a line: read the line's foreign phrases
+        if (target!.getAttribute('title') === 'Nghe' && target!.textContent === '🔊') {
+            const block = target!.closest('p, div, li, blockquote') ?? root
+            const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
+            let text = ''
+            for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!skipped(n, block)) text += n.textContent ?? ''
+            const say = foreignOfLine(text, getLang())
+            if (say && allowTap()) {
+                const lang = /[\uac00-\ud7a3]/.test(say) ? 'ko' : /[\u3040-\u30ff]/.test(say) ? 'ja' : getLang()
+                speakForeign(deps, say, lang).catch((err) => console.warn('[tts] speaker button failed', err))
+            }
+            return
+        }
+        if (target!.closest('a, button, input, textarea, select, summary, label')) return
         if (!(globalThis.getSelection?.()?.isCollapsed ?? true)) return      // selecting text, not tapping
         const at = textAtPoint(root, e.clientX, e.clientY)
         const hit = at && foreignAt(at.text, at.pos, getLang())
-        if (!hit) return
+        if (!hit || !allowTap()) return
         speakForeign(deps, hit.text, hit.lang).catch((err) => console.warn('[tts] tap to speak failed', err))
     }
     document.addEventListener('click', installed, true)

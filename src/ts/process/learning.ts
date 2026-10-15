@@ -3,7 +3,7 @@
 
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
-import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
+import { addReadings, addSayButtons, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
 import { addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult } from './learningMemory'
 import { migrateChat, readNotebook, writeNotebook } from './learningStore'
 
@@ -49,7 +49,7 @@ export function learningDisplay(text: string): string {
     const readings = db.learningReadings !== false
     const { main: body, note } = splitCheck(text)
     const { main, box } = splitReplies(body, readings)
-    return (readings ? addReadings(main) : main) + box + note
+    return addSayButtons(readings ? addReadings(main) : main) + box + note
 }
 
 /** A message with a foreign line is not auto-translated while learning: the translation would replace the line the learner reads. */

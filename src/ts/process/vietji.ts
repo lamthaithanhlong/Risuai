@@ -192,6 +192,15 @@ function readKanji(t: string, i: number): { han: string; reading: string } | nul
     return null
 }
 
+/** The speaker button put after a line with a foreign phrase (tapToSpeak.ts reads the line when it is pressed). */
+export const SAY_BUTTON = '<span title="Nghe" style="cursor:pointer;opacity:.7;font-size:.85em;margin-left:.3em;user-select:none">🔊</span>'
+const FOREIGN_LINE = /[\u3041-\u30FA\u4E00-\u9FFF\uAC00-\uD7A3]|«[^»\n]+»/
+
+/** Each line with a foreign phrase gets the speaker button at its end, so it is plain that the phrase can be heard. */
+export function addSayButtons(text: string): string {
+    return (text ?? '').split('\n').map((l) => (FOREIGN_LINE.test(l) && !l.includes('title="Nghe"') ? l + ' ' + SAY_BUTTON : l)).join('\n')
+}
+
 function cjkWord(word: string): string {
     let reading = ''          // the word's sound: kana for Japanese, pinyin for Chinese
     let pinyin = false
@@ -320,7 +329,7 @@ export function splitReplies(message: string, withReadings = true): { main: stri
     const line = (r: SuggestedReply) => {
         const shown = /[«\uAC00-\uD7A3\u3041-\u30FA\u4E00-\u9FFF]/.test(r.text) ? r.text : `«${r.text}»`
         const tag = r.kind ? ` <span style="font-size:.75em;padding:0 .35em;border:1px solid #f2c76b55;border-radius:.6em;opacity:.8">${KIND_LABEL[r.kind]}</span>` : ''
-        return `<div>${withReadings ? readText(shown) : esc(stripReadings(shown))} <span style="opacity:.75">— ${esc(r.meaning)}</span>${tag}</div>`
+        return `<div>${withReadings ? readText(shown) : esc(stripReadings(shown))} <span style="opacity:.75">— ${esc(r.meaning)}</span>${tag}${SAY_BUTTON}</div>`
     }
     const box = '\n\n<div style="margin-top:.6em;padding:.4em .7em;border-left:3px solid #f2c76b;opacity:.92"><div style="font-size:.8em;opacity:.7">Bạn có thể đáp</div>'
         + replies.map(line).join('') + '</div>'

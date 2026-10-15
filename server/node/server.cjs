@@ -1268,8 +1268,18 @@ async function pipeLocalTTS(req, res, path, body) {
         else res.end();
     }
 }
+// at most TTS_PER_MINUTE readings a minute: a run of taps (or a stuck script) must not keep the TTS server busy
+const TTS_PER_MINUTE = Number(process.env.RISU_TTS_PER_MINUTE || 60);
+const ttsTimes = [];
+function ttsAllowed(now = Date.now()) {
+    while (ttsTimes.length && now - ttsTimes[0] > 60000) ttsTimes.shift();
+    if (ttsTimes.length >= TTS_PER_MINUTE) return false;
+    ttsTimes.push(now);
+    return true;
+}
 app.post('/api/tts/speech', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
+    if (!ttsAllowed()) { res.status(429).setHeader('retry-after', '20'); res.send({ error: { message: 'too many readings, wait a little' } }); return; }
     const { model, voice, input } = req.body ?? {};
     if (typeof input !== 'string' || !input.trim()) { res.status(400).send({ error: { message: 'input is empty' } }); return; }
     await pipeLocalTTS(req, res, '/audio/speech', { model, voice, input, stream: true });

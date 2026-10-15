@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FrameParser } from './ttsStream'
-import { foreignAt } from './tapToSpeak'
+import { allowTap, foreignAt, foreignOfLine } from './tapToSpeak'
+import { addSayButtons, SAY_BUTTON } from './vietji'
 import { isLocalTTS } from './ttsLocal'
 
 const frame = (kind: string, bytes: number[]) => new Uint8Array([kind.charCodeAt(0), 0, 0, (bytes.length >> 8) & 255, bytes.length & 255, ...bytes])
@@ -58,4 +59,28 @@ it('only the pdf2mp3 server on this machine is streamed', () => {
     expect(isLocalTTS('http://127.0.0.1:8765/v1')).toBe(true)
     expect(isLocalTTS('https://api.openai.com/v1')).toBe(false)
     expect(isLocalTTS('http://localhost:9999/v1')).toBe(false)
+})
+
+describe('the speaker button (asked: something that shows the line can be heard, with a rate limit)', () => {
+    it('ends every line with a foreign phrase, and only those', () => {
+        const out = addSayButtons('Cô nhìn Kenji.\n“血 它 可能 跟着 血 来。” (Máu.)\nÔng lão nói «Hola».')
+        const lines = out.split('\n')
+        expect(lines[0]).toBe('Cô nhìn Kenji.')
+        expect(lines[1].endsWith(SAY_BUTTON)).toBe(true)
+        expect(lines[2].endsWith(SAY_BUTTON)).toBe(true)
+        expect(addSayButtons(out)).toBe(out)                               // drawn again: no second button
+    })
+    it('reads the line\'s foreign phrases, not its Vietnamese', () => {
+        expect(foreignOfLine('😨 “血 它 可能 跟着 血 来。” (Máu. Có thể nó đã theo máu đến đây.)', 'zh')).toBe('血 它 可能 跟着 血 来。')
+        expect(foreignOfLine('Ông lão nói «Hola, amigo» rồi «Adiós».', 'es')).toBe('Hola, amigo Adiós')
+    })
+    it('taps closer than 0.3 s, or past 20 a minute, are dropped', () => {
+        const t = 1_000_000_000
+        expect(allowTap(t)).toBe(true)
+        expect(allowTap(t + 100)).toBe(false)
+        let ok = 1
+        for (let i = 1; i < 40; i++) if (allowTap(t + i * 1000)) ok++
+        expect(ok).toBe(20)
+        expect(allowTap(t + 120_000)).toBe(true)                            // a minute later it is free again
+    })
 })
