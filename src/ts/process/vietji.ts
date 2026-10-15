@@ -171,6 +171,27 @@ function readHan(run: string): { html: string; reading: string; unread: boolean 
     return { html, reading: reading.join(' '), unread }
 }
 
+// Japanese kanji written without [reading] (開けて): read from public/dict/ja-kanji.json (scripts/build_kanji.py), set while
+// learning Japanese only. Keys carry okurigana (開け → あけ), so the longest key at the kanji, kana after it included, is
+// taken, and only the kanji part gets the reading; the kana after it is shown and read as written.
+let kanjiReadings: Record<string, string> | null = null
+export function setKanjiReadings(words: Record<string, string> | null) { kanjiReadings = words }
+
+/** The kanji at t[i] read from the list: the kanji part, its reading, and how many characters that is; null if unknown. */
+function readKanji(t: string, i: number): { han: string; reading: string } | null {
+    if (!kanjiReadings) return null
+    for (let n = Math.min(8, t.length - i); n >= 1; n--) {
+        const key = t.slice(i, i + n), reading = kanjiReadings[key]
+        if (!reading) continue
+        const han = /^[\u4e00-\u9fff々〆]+/.exec(key)?.[0] ?? ''
+        const tail = key.slice(han.length)
+        if (!han || /[\u4e00-\u9fff々〆]/.test(tail)) continue           // kanji, then kana only
+        if (tail && !reading.endsWith(tail)) continue
+        return { han, reading: tail ? reading.slice(0, reading.length - tail.length) : reading }
+    }
+    return null
+}
+
 function cjkWord(word: string): string {
     let reading = ''          // the word's sound: kana for Japanese, pinyin for Chinese
     let pinyin = false
@@ -180,6 +201,15 @@ function cjkWord(word: string): string {
     const parts = [...word.matchAll(BRACKETED)]
     const plain = (t: string) => {
         // kana between bracketed words, or a bare kanji run without a reading
+        if (kanjiReadings) {
+            for (let i = 0; i < t.length;) {
+                if (!new RegExp(`[${HAN}]`).test(t[i])) { html += t[i]; reading += t[i]; i++; continue }
+                const k = readKanji(t, i)
+                if (k) { html += `<ruby>${k.han}<rt style="${SUB_STYLE}">${esc(k.reading)}</rt></ruby>`; reading += k.reading; i += k.han.length }
+                else { html += `<span style="${UNREAD_STYLE}" title="chưa có cách đọc">${t[i]}</span>`; unread = true; i++ }
+            }
+            return
+        }
         for (const m of t.matchAll(new RegExp(`([${HAN}]+)|([^${HAN}]+)`, 'g'))) {
             const known = m[1] ? readHan(m[1]) : null
             if (known) { html += known.html; if (known.reading) { pinyin = true; reading += (reading ? ' ' : '') + known.reading } unread ||= known.unread }

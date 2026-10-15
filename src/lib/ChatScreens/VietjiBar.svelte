@@ -6,7 +6,7 @@
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
     import { DBState } from "src/ts/stores.svelte";
     import type { Chat } from "src/ts/storage/database.svelte";
-    import { KIND_LABEL, parseReplies, setHanReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { KIND_LABEL, parseReplies, setHanReadings, setKanjiReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { ReloadGUIPointer } from "src/ts/stores.svelte";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
@@ -107,13 +107,24 @@
         }, () => want)
     })
 
-    // learning Chinese: pinyin for Han the model wrote without brackets; the shown messages are drawn again once it is here
-    let pinyin: Promise<Record<string, string> | null> | null = null
+    // readings for Han the model wrote without brackets: pinyin while learning Chinese, kana while learning Japanese (never the
+    // other's); the shown messages are drawn again once the list is here
+    const READING_LISTS: Record<string, { file: string; set: (w: Record<string, string> | null) => void }> = {
+        zh: { file: '/dict/zh-pinyin.json', set: setHanReadings },
+        ja: { file: '/dict/ja-kanji.json', set: setKanjiReadings },
+    }
+    const readingLists = new Map<string, Promise<Record<string, string> | null>>()
     $effect(() => {
-        if (!enabled || lang !== 'zh') { setHanReadings(null); return }
-        pinyin ??= fetch('/dict/zh-pinyin.json').then((r) => r.ok ? r.json() : null).then((d) => d?.words ?? null).catch(() => { pinyin = null; return null })
-        pinyin.then((words) => {
-            if (words && lang === 'zh') { setHanReadings(words); ReloadGUIPointer.update((v) => v + 1) }
+        for (const [l, r] of Object.entries(READING_LISTS)) if (!enabled || lang !== l) r.set(null)
+        const list = enabled ? READING_LISTS[lang] : undefined
+        if (!list) return
+        const want = lang
+        if (!readingLists.has(want)) {
+            readingLists.set(want, fetch(list.file).then((r) => r.ok ? r.json() : null).then((d) => d?.words ?? null)
+                .catch(() => { readingLists.delete(want); return null }))
+        }
+        readingLists.get(want)!.then((words) => {
+            if (words && lang === want) { list.set(words); ReloadGUIPointer.update((v) => v + 1) }
         })
     })
 

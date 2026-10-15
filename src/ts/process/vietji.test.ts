@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import TABLE from './vietjiTable.json'
-import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, phraseVietji, setHanReadings, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
+import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, phraseVietji, setHanReadings, setKanjiReadings, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
 import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji, toneSyllable } from './vietjiLang'
 
 const fold = (s: string) => s.toLowerCase().replace(/ê/g, 'e').replace(/ô/g, 'o').replace(/ư/g, 'u').replace(/ơ/g, 'o')
@@ -224,3 +224,30 @@ describe('Korean as it is said, not as it is spelled (표준 발음법)', () => 
     ])('%s → %s', (w, v) => expect(hangulToVietji(w)).toBe(v))
 })
 
+describe('Japanese kanji written without [reading]', () => {
+    const words = { '開け': 'あけ', '開': 'ひら', '今日': 'きょう', '今': 'いま', '早く': 'はやく' }
+    it('the kanji gets its reading, the okurigana stays as written, and the Việt-ji reads the whole word', () => {
+        setKanjiReadings(words)
+        try {
+            const html = addReadings('「早く開けて！」')
+            expect(html).toContain('<ruby>開<rt')
+            expect(html).toMatch(/<ruby>開<rt[^>]*>あ<\/rt><\/ruby>けて/)          // 開け → あけ: only あ goes on 開
+            expect(html).toContain('<ruby>早<rt')
+            expect(html).not.toContain('chưa có cách đọc')
+            expect(html).toContain(toVietji('あけて'))
+        } finally { setKanjiReadings(null) }
+    })
+    it('the longest word wins (今日, not 今 + 日), and an unknown kanji stays marked unread', () => {
+        setKanjiReadings(words)
+        try {
+            expect(addReadings('今日')).toMatch(/<ruby>今日<rt[^>]*>きょう</)
+            expect(addReadings('鬼')).toContain('chưa có cách đọc')
+        } finally { setKanjiReadings(null) }
+    })
+    it('the Chinese list never reads Japanese kanji, nor the other way round', () => {
+        setHanReadings({ '开门': 'kāimén', '今日': 'jīnrì' })
+        try { expect(addReadings('今日')).toContain('jīnrì') } finally { setHanReadings(null) }
+        setKanjiReadings({ '开门': 'あ' })
+        try { expect(addReadings('今日')).toContain('chưa có cách đọc') } finally { setKanjiReadings(null) }
+    })
+})
