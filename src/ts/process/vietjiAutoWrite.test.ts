@@ -70,3 +70,22 @@ describe('reported: "cô nên bình tĩnh lại đi" came out 逆该冷静lại'
         expect(chips).toContain('你')
     })
 })
+
+describe('reported: typing "hết sức" in Korean gave 매우 아주 지극히 and then 했 숙, 햇, 헷', () => {
+    it('Vietnamese the list fully knows gets no sound chips; Korean sound typed still does', async () => {
+        const { dictSuggestions, needsModel } = await import('./vietjiDict')
+        const { mixChips } = await import('./vietjiSuggest')
+        const vi = json('public/dict/vi-ko.json')
+        const dict = { words: vi.words, unsure: new Set<string>(vi.unsure ?? []), order: vi.order ?? [] } as any
+        const chipsFor = (typed: string) => {
+            const rest = dictSuggestions(typed, dict.words, 'ko')
+            const ime = imeSuggestions(typed, ko)
+            expect(ime.length).toBeGreaterThan(0)                                // the letters do read as Korean sounds
+            return mixChips(rest, ime, [], { soundTyping: false, listSure: rest.length > 0 && !needsModel(typed, dict) }).map((c) => c.text)
+        }
+        const words = chipsFor('hết sức')
+        expect(words).toContain('매우')
+        expect(words.some((w) => ['했 숙', '햇', '헷', '했'].includes(w))).toBe(false)
+        expect(mixChips([], imeSuggestions('an-niơng', ko), [], { soundTyping: true, listSure: false }).length).toBeGreaterThan(0)
+    })
+})

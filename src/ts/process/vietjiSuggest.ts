@@ -150,3 +150,13 @@ export function insertText(s: Suggestion, lang: LearningLang): string {
     if (s.replace !== undefined) return s.replace
     return lang === 'ja' ? s.vietji.replace(/-/g, ' ') : stripReadings(s.text)
 }
+
+/**
+ * The bar's chips from the word lists (rest) and from sound typing (ime). Sound first only when the input clearly is sound.
+ * When the Vietnamese list fully knows what was typed, it is Vietnamese: the sound chips are left out (reported: "hết sức"
+ * gave 매우 아주 지극히 and then 했 숙, 햇, 헷, the same letters read as Korean sounds).
+ */
+export function mixChips(rest: Suggestion[], ime: Suggestion[], offeredHit: Suggestion[], o: { soundTyping: boolean; listSure: boolean }): Suggestion[] {
+    if (o.soundTyping) return [...offeredHit.slice(0, 4), ...ime, ...rest]
+    return o.listSure ? rest : [...rest, ...ime]
+}
