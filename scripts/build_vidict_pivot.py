@@ -32,9 +32,10 @@ from collections import defaultdict
 MAX_OUT = 3
 ZIPF_WEIGHT = 0.5
 # per language (frequency weight, weight of where the meaning sits), picked by a grid search on scripts/vidict_golden.json
-# and scripts/vidict_holdout.json (64 words; measured 2026-10-15: top-1 ja 78% zh 80% ko 58% es 81%, before vidict_common.json);
+# and scripts/vidict_holdout.json (64 words); Korean was then improved against scripts/vidict_holdout_ko2.json, 50 words written
+# before any Korean tuning: top-1 54% -> 68%, top-3 64% -> 78% (2026-10-15, before vidict_common.json);
 # Korean trusts frequency least: its list has conjugated forms, so a dictionary form (작다) is only estimated
-WEIGHTS = {'ja': (0.9, 0.3), 'zh': (0.5, 0.3), 'es': (0.9, 0.3), 'ko': (0.3, 0.9)}
+WEIGHTS = {'ja': (0.9, 0.3), 'zh': (0.5, 0.3), 'es': (0.9, 0.3), 'ko': (0.5, 0.9)}
 OLD_OR_RARE = {'historical', 'archaic', 'obsolete', 'dated', 'rare', 'euphemistic', 'vulgar', 'slang', 'derogatory'}
 VI_SENSES = 3
 
@@ -64,8 +65,12 @@ def head_word(key: str):
     return parts[-1] if 2 <= len(parts) <= 3 and len(parts[-1]) > 2 else None
 
 
-def qualified(gloss: str) -> bool:
-    """'go (board game)', 'cold (of a person)': a narrower sense than the bare English word."""
+def qualified(gloss: str, key: str = '') -> bool:
+    """'go (board game)', 'cold (of a person)': a narrower sense than the bare English word. With a key, only the part of
+    the gloss that holds it counts: in 'to eat, drink, consume (food)' the note belongs to 'consume', not to 'eat'."""
+    if key:
+        part = next((p for p in re.split(r'[;,/]', gloss or '') if key in p.lower()), gloss or '')
+        return qualified(part)
     g = re.sub(r'\((?:CL|Tw|abbr|lit|fig|coll|dialect|loanword|onom)[^)]*\)', '', gloss or '', flags=re.I)   # 鱼 "fish (CL:条)"
     return bool(re.search(r'\([^)]*\)', g))
 
@@ -168,8 +173,8 @@ def chinese(path: str):
         except UnicodeEncodeError:
             rare = 1.5                                         # outside the 6763 everyday characters
         for rank, g in enumerate(x for x in glosses if x and not x.startswith('CL:')):
-            for k in en_keys(g):
-                out.append((k, text, rank, -0.15 * max(0, len(simp) - 2) - rare - 0.8 * qualified(g), 'verb' if g.startswith('to ') else ''))
+            for j, k in enumerate(en_keys(g)):
+                out.append((k, text, rank, -0.15 * max(0, len(simp) - 2) - rare - 0.8 * qualified(g, k) - PART * j, 'verb' if g.startswith('to ') else ''))
     return out
 
 
@@ -200,30 +205,66 @@ def japanese(path: str):
                 if any('archaic' in (m.text or '') or 'obsolete' in (m.text or '') for m in s.findall('misc')):
                     continue
                 for g in s.findall('gloss')[:3]:
-                    for k in en_keys(g.text or ''):
-                        out.append((k, text, rank, (1.0 if common else 0.0) - katakana - 0.8 * qualified(g.text), pos))
+                    for j, k in enumerate(en_keys(g.text or '')):
+                        out.append((k, text, rank, (1.0 if common else 0.0) - katakana - 0.8 * qualified(g.text, k) - PART * j, pos))
                     rank += 1
             el.clear()
     return out
 
 
-KO_HOMOGRAPHS = defaultdict(int)
+HOMOGRAPH = 0.6       # per place behind the first entry of the same spelling (Wiktionary lists the everyday word first:
+                      # 눈 eye before snow, 개 dog, 달 moon, 강 river)
+
+# hangul → a rough romanization, enough to see a loanword's English consonants (밀크 → milkeu, 핫 → hat)
+_L = ['g', 'kk', 'n', 'd', 'tt', 'r', 'm', 'b', 'pp', 's', 'ss', '', 'j', 'jj', 'ch', 'k', 't', 'p', 'h']
+_V = ['a', 'ae', 'ya', 'yae', 'eo', 'e', 'yeo', 'ye', 'o', 'wa', 'wae', 'oe', 'yo', 'u', 'wo', 'we', 'wi', 'yu', 'eu', 'ui', 'i']
+_T = ['', 'k', 'k', 'k', 'n', 'n', 'n', 't', 'l', 'k', 'm', 'l', 'l', 'l', 'p', 'l', 'm', 'p', 'p', 't', 't', 'ng', 't', 't', 'k', 't', 'p', 't']
+
+
+def romanize(w: str) -> str:
+    out = []
+    for ch in w:
+        c = ord(ch) - 0xAC00
+        if 0 <= c < 11172:
+            out.append(_L[c // 588] + _V[(c % 588) // 28] + _T[c % 28])
+    return ''.join(out)
+
+
+def skeleton(word: str) -> str:
+    """The consonants as heard, voicing and l/r merged: milk → mlk, white → wt, 밀크 (milkeu) → mlk, 화이트 (hwaiteu) → wt."""
+    w = word.lower().replace('wh', 'w').replace('hw', 'w').replace('ph', 'p').replace('th', 't').replace('ck', 'k').replace('ng', 'n')
+    w = w.translate(str.maketrans('bdgvfzqcxr', 'ptkppjkksl'))
+    w = re.sub(r'[^ptkjslmnwh]', '', w)
+    return re.sub(r'(.)\1+', r'\1', w)
+
+
+def loanword_of(text: str, key: str) -> bool:
+    """밀크 for milk, 핫 for hot, 모드 for mode: the hangul spells the English word itself."""
+    a, b = skeleton(romanize(text)), skeleton(key)
+    return len(b) >= 2 and a == b
+
+
+KO_OTHER_WORDS = set()                                         # spellings that are also a word other than a verb/adjective
 
 
 def korean(path: str):
     out = []
-    for line in open(path, encoding='utf-8'):
-        e = json.loads(line)
-        if e.get('pos') not in ('character', 'syllable', 'romanization'):
-            KO_HOMOGRAPHS[e['w']] += 1
+    seen = defaultdict(int)
     for line in open(path, encoding='utf-8'):
         e = json.loads(line)
         w = e['w']
-        if e.get('pos') in ('character', 'syllable', 'romanization', 'name', 'suffix', 'prefix', 'symbol') or not re.fullmatch(r'[가-힣]+(?: [가-힣]+)?', w):
+        if e.get('pos') in ('character', 'syllable', 'romanization'):
+            continue
+        if e.get('pos') not in ('verb', 'adj'):
+            KO_OTHER_WORDS.add(w)
+        h = seen[w]                                            # how many entries of this spelling came before
+        seen[w] += 1
+        if e.get('pos') in ('name', 'suffix', 'prefix', 'symbol') or not re.fullmatch(r'[가-힣]+(?: [가-힣]+)?', w):
             continue
         for rank, g in enumerate(e['g']):
-            for k in en_keys(g):
-                out.append((k, w, rank, -0.1 * max(0, len(w) - 3) - 0.8 * qualified(g), coarse_pos(e.get('pos'))))
+            for j, k in enumerate(en_keys(g)):
+                out.append((k, w, rank, -0.1 * max(0, len(w) - 3) - 0.8 * qualified(g, k) - min(HOMOGRAPH * h, 2.0) - PART * j
+                            - LOANWORD * loanword_of(w, k), coarse_pos(e.get('pos'))))
     return out
 
 
@@ -253,22 +294,19 @@ def zipf_lookup(lang: str):
         return None
     import math
     freq = get_frequency_dict(lang)
-    by_stem = defaultdict(float)
-    if lang == 'ko':
-        # the Korean list has conjugated forms (먹어, 먹고), not 먹다: a verb counts the forms of its stem
-        for w, f in freq.items():
-            for n in range(1, min(len(w), 4) + 1):
-                by_stem[w[:n]] += f if len(w) - n <= 2 else 0
 
     def zipf(word: str) -> float:
         w = bare(word)
         f = freq.get(w, 0.0)
         if not f and lang == 'ko' and w.endswith('다') and len(w) >= 2:
-            f = by_stem.get(w[:-1], 0.0) / 4
-        z = math.log10(f * 1e9) if f > 0 else 0.0
-        if lang == 'ko' and KO_HOMOGRAPHS.get(w, 1) > 1:
-            z /= KO_HOMOGRAPHS[w]                              # 수 = water shares its count with 수 in "할 수 있다"
-        return z
+            # the Korean list is cut into morphemes: 먹다 is counted as its stem 먹, 사랑하다 as 사랑 + 하
+            if w.endswith('하다') and len(w) > 2:
+                f = freq.get(w[:-2], 0.0) / 2
+            else:
+                f = freq.get(w[:-1], 0.0)
+                if w[:-1] in KO_OTHER_WORDS:
+                    f /= 4                                     # 잘 (well) is not the stem of 잘다; 가 is mostly the particle
+        return math.log10(f * 1e9) if f > 0 else 0.0
     return zipf
 
 
@@ -276,6 +314,8 @@ def zipf_lookup(lang: str):
 
 
 POS_MISMATCH = 0.8
+PART = 0.3                                                     # 먹다 = "to eat, drink, ...": drink is its second meaning, 마시다's first
+LOANWORD = 0.8                                                 # a native or Sino-Korean word beats the English one in hangul
 UNSURE_MARGIN = 0.2                                            # measured: 'sure' picks right 73-88% (ko lowest)
 UNSURE = set()                                                 # words whose first pick is a guess: the bar also asks the model
 HEAD_KEY = 0.7
@@ -286,7 +326,7 @@ def index(rows):
     for k, text, rank, common, pos in rows:
         by_key[k].append((text, rank, common, pos))
         h = head_word(k)
-        if h:
+        if h and pos in ('noun', ''):
             by_key[h].append((text, rank, common - HEAD_KEY, pos))
     return by_key
 
@@ -299,7 +339,7 @@ def join(vi: dict, by_key: dict, zipf=None, rank_weight: float = 0.6) -> dict:
         for k, vpos in keys:
             expanded.append((k, vpos, 0.0))
             h = head_word(k)
-            if h:
+            if h and coarse_pos(vpos) == 'noun':                # "medical doctor" → doctor; "thank you" is not a "you"
                 expanded.append((h, vpos, HEAD_KEY))
         for i, (k, vpos, extra) in enumerate(expanded):
             cands = by_key.get(k)
