@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import TABLE from './vietjiTable.json'
-import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, phraseVietji, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
+import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, phraseVietji, setHanReadings, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
 import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji, toneSyllable } from './vietjiLang'
 
 const fold = (s: string) => s.toLowerCase().replace(/ê/g, 'e').replace(/ô/g, 'o').replace(/ư/g, 'u').replace(/ơ/g, 'o')
@@ -184,5 +184,30 @@ describe('suggested replies and vocabulary', () => {
     })
     it('strips the readings from a phrase', () => {
         expect(stripReadings('今日[きょう]は «x»')).toBe('今日は x')
+    })
+})
+
+describe('Chinese written without [pinyin] (reported: 快开门！ showed no reading)', () => {
+    const words = { '快': 'kuài', '开门': 'kāimén', '开': 'kāi', '门': 'mén' }
+    it('is read from the word list, longest word first, with the Việt-ji line', () => {
+        setHanReadings(words)
+        try {
+            const html = addReadings('“快开门！” (Mở cửa mau!)')
+            expect(html).toContain('<ruby>快<rt')
+            expect(html).toContain('<ruby>开门<rt')                       // the word, not 开 + 门
+            expect(html).not.toContain('chưa có cách đọc')
+            expect(html).toContain(pinyinToVietji('kuài kāimén')!)
+        } finally { setHanReadings(null) }
+    })
+    it('a character not in the list stays marked unread, the rest is read', () => {
+        setHanReadings(words)
+        try {
+            const html = addReadings('快鬼')
+            expect(html).toContain('<ruby>快<rt')
+            expect(html).toContain('chưa có cách đọc')
+        } finally { setHanReadings(null) }
+    })
+    it('without the list (Japanese, or not loaded yet) nothing is guessed', () => {
+        expect(addReadings('快开门')).toContain('chưa có cách đọc')
     })
 })

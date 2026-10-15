@@ -104,6 +104,8 @@ describe('learning mode on', () => {
         expect(users[0].content).toBe('a')
         expect(users[1].content).toBe('我 有 问题' + learningReminder('zh'))
         expect(learningReminder('zh')).toContain('Chinese')
+        expect(learningReminder('zh')).toContain('pinyin')                 // 快开门！ came back without brackets
+        expect(learningReminder('ja')).toContain('hiragana')
         expect(input[2].content).toBe('我 有 问题')                      // what is stored is never changed
     })
     it('a story without a foreign speaker still teaches: one line in the language and the answers in EVERY reply', () => {

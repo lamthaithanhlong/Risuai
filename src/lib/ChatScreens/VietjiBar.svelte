@@ -6,7 +6,8 @@
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
     import { DBState } from "src/ts/stores.svelte";
     import type { Chat } from "src/ts/storage/database.svelte";
-    import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { KIND_LABEL, parseReplies, setHanReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { ReloadGUIPointer } from "src/ts/stores.svelte";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
@@ -104,6 +105,16 @@
             fetch: (input, init) => fetch(input, init),
             auth: async () => (await import('src/ts/storage/nodeStorage')).getNodeServerProxyAuth(),
         }, () => want)
+    })
+
+    // learning Chinese: pinyin for Han the model wrote without brackets; the shown messages are drawn again once it is here
+    let pinyin: Promise<Record<string, string> | null> | null = null
+    $effect(() => {
+        if (!enabled || lang !== 'zh') { setHanReadings(null); return }
+        pinyin ??= fetch('/dict/zh-pinyin.json').then((r) => r.ok ? r.json() : null).then((d) => d?.words ?? null).catch(() => { pinyin = null; return null })
+        pinyin.then((words) => {
+            if (words && lang === 'zh') { setHanReadings(words); ReloadGUIPointer.update((v) => v + 1) }
+        })
     })
 
     // a chat from before the notebook was per language brings its phrases in as soon as it is opened

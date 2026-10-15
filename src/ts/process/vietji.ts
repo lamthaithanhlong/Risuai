@@ -148,6 +148,29 @@ function wordUnit(baseHtml: string, vietji: string | null): string {
 const CJK_WORD = new RegExp(`(?:[${HAN}]+\\[[^\\]\\n]{1,40}\\]|[\\u3041-\\u3096\\u30A1-\\u30FA\\u30FC]+|[${HAN}]+)+`, 'g')
 const BRACKETED = new RegExp(`([${HAN}]+)\\[([^\\]\\n]{1,40})\\]`, 'g')
 
+// Chinese written without [pinyin] (the model forgot the brackets: "快开门！"): read from a word list instead of leaving it
+// unread. Set while learning Chinese only (public/dict/zh-pinyin.json, scripts/build_pinyin.py); a Japanese kanji is never given
+// a Chinese reading.
+let hanReadings: Record<string, string> | null = null
+export function setHanReadings(words: Record<string, string> | null) { hanReadings = words }
+
+/** A bare Han run read word by word, longest word first; a character not in the list stays unread. */
+function readHan(run: string): { html: string; reading: string; unread: boolean } | null {
+    if (!hanReadings) return null
+    let html = '', unread = false
+    const reading: string[] = []
+    for (let i = 0; i < run.length;) {
+        let n = Math.min(4, run.length - i)
+        for (; n >= 1; n--) if (hanReadings[run.slice(i, i + n)]) break
+        if (n === 0) { html += `<span style="${UNREAD_STYLE}" title="chưa có cách đọc">${run[i]}</span>`; unread = true; i++; continue }
+        const w = run.slice(i, i + n), p = hanReadings[w]
+        html += `<ruby>${w}<rt style="${SUB_STYLE}">${esc(p)}</rt></ruby>`
+        reading.push(p)
+        i += n
+    }
+    return { html, reading: reading.join(' '), unread }
+}
+
 function cjkWord(word: string): string {
     let reading = ''          // the word's sound: kana for Japanese, pinyin for Chinese
     let pinyin = false
@@ -158,7 +181,9 @@ function cjkWord(word: string): string {
     const plain = (t: string) => {
         // kana between bracketed words, or a bare kanji run without a reading
         for (const m of t.matchAll(new RegExp(`([${HAN}]+)|([^${HAN}]+)`, 'g'))) {
-            if (m[1]) { html += `<span style="${UNREAD_STYLE}" title="chưa có cách đọc">${m[1]}</span>`; unread = true }
+            const known = m[1] ? readHan(m[1]) : null
+            if (known) { html += known.html; if (known.reading) { pinyin = true; reading += (reading ? ' ' : '') + known.reading } unread ||= known.unread }
+            else if (m[1]) { html += `<span style="${UNREAD_STYLE}" title="chưa có cách đọc">${m[1]}</span>`; unread = true }
             else { html += m[2]; reading += m[2] }
         }
     }

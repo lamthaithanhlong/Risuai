@@ -119,9 +119,17 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     return typed.map((m, i) => (i === last ? { ...m, content: m.content + learningReminder(lang) } : m))
 }
 
+// how the line is written, in the reminder too: a Chinese line came back as 快开门！ with no pinyin, so it had no reading
+const REMIND_WRITING: Partial<Record<LearningLang, string>> = {
+    zh: ' (pinyin with tone marks in square brackets after every word: 快[kuài] 开门[kāimén])',
+    ja: ' (hiragana reading in square brackets after every word with kanji: 開けて[あけて])',
+    es: ' (inside «» guillemets)',
+    fr: ' (inside «» guillemets)',
+}
+
 /** The short reminder put after the player's last message in the request (see learningRequest). */
 export function learningReminder(lang: LearningLang): string {
-    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, then the [[CHECK]] line if the player wrote in that language.]`
+    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, then the [[CHECK]] line if the player wrote in that language.]`
 }
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */
