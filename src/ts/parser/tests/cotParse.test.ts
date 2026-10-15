@@ -91,9 +91,15 @@ describe('ParseMarkdown and the chain-of-thought panel', () => {
     const reply = 'Tôi bước lên phía trước. '.repeat(50)
     const thought = 'Tiếp tục vai trò Shadow Slave, kiểm tra quy tắc. '.repeat(220)
     const time = async (s: string) => { const t = performance.now(); for (let i = 0; i < 30; i++) await ParseMarkdown(s, null, 'normal', 0); return performance.now() - t }
-    await time(reply)
-    const a = await time(reply)
-    const b = await time(`${OPEN}${thought}${CLOSE}${reply}`)
+    const long = `${OPEN}${thought}${CLOSE}${reply}`
+    await time(reply); await time(long)
+    // the fastest of interleaved rounds: a busy machine (the full suite runs files in parallel) only ever makes a round slower,
+    // and one slow round of b failed this test 2 times in 20 full runs (2026-10-15)
+    let a = Infinity, b = Infinity
+    for (let r = 0; r < 5; r++) {
+      a = Math.min(a, await time(reply))
+      b = Math.min(b, await time(long))
+    }
     expect(b).toBeLessThan(a * 3 + 20)
   })
 })

@@ -98,7 +98,10 @@ describe('cloud mirror', () => {
         put('assets/b.png', 'BBB')
         const r = await run()
         expect(r.code).toBe(0)
-        expect(hits.map((h) => h.key)).toEqual(['assets/a.png', 'assets/b.png', 'database/database.bin'].sort((a, b) => (a === 'database/database.bin' ? 1 : b === 'database/database.bin' ? -1 : a.localeCompare(b))))
+        // assets go up in parallel (cloudMirror.cjs WORKERS), so they may arrive in any order: a slow a.png next to a small
+        // b.png reached the hub second and this test failed now and then. What must hold is which files go, and the
+        // database strictly after every asset.
+        expect(hits.slice(0, -1).map((h) => h.key).sort()).toEqual(['assets/a.png', 'assets/b.png'])
         expect(hits[hits.length - 1].key).toBe('database/database.bin')
         expect(hits.every((h) => h.auth === 'tok-1' && h.session === '7')).toBe(true)
         expect(hits.find((h) => h.key === 'database/database.bin')!.body.equals(makeDb())).toBe(true)
