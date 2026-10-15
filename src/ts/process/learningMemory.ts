@@ -105,7 +105,10 @@ export function recentAccuracy(history: boolean[], window = 10): number | null {
 
 /** One paragraph for the format note: what to bring back, what to practise, and how fast to go (aiming at 60-70% right). */
 export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boolean[], now: number): string {
-    const lines: string[] = []
+    // the check comes first and is required: placed last, the model skipped it (measured 2026-10-15)
+    const lines: string[] = [
+        'REQUIRED whenever the player\'s last message has words in the foreign language: the very last line of your reply is a check of that line, after the REPLIES block: [[CHECK ok]] when it was right, or [[CHECK <what they wrote> → <the right form> | <the reason in a few Vietnamese words>]] when it needed fixing. The story text can still show the speaker repeating it correctly.',
+    ]
     const due = dueItems(vocab, now)
     if (due.length) lines.push(`Bring back these phrases naturally in the scene, the player is due to review them: ${due.map((v) => `${stripReadings(v.text)} (${v.meaning})`).join('; ')}.`)
     const often = mistakes.filter((m) => m.count >= 2).slice(0, 3)
@@ -113,6 +116,5 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     const acc = recentAccuracy(history)
     if (acc !== null && acc > 0.8) lines.push('The player is getting almost everything right: you may add up to three new words this reply.')
     else if (acc !== null && acc < 0.5) lines.push('The player is struggling: no new words this reply, shorter and simpler sentences, reuse what they know.')
-    lines.push('After each reply in which the player answered in the foreign language, add a hidden line checking their last foreign line: [[CHECK ok]] when it was right, or [[CHECK <what they wrote> → <the right form> | <the reason in a few Vietnamese words>]] when it needed fixing.')
     return lines.join('\n')
 }
