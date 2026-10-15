@@ -16,6 +16,8 @@ Sources (all downloaded by hand, see the commit that added this file):
   zh      cedict_1_0_ts_utf-8_mdbg.txt.gz           CC-CEDICT, CC BY-SA 4.0
   ko      kaikki Korean, slimmed to {w, pos, g}      English Wiktionary via wiktextract, CC BY-SA 4.0
   es      freedict-eng-spa .tei                     FreeDict eng-spa (from Wiktionary), CC BY-SA 3.0
+  pairs   Tatoeba sentences + links (vie-X direct, and vie-eng + eng-X), CC BY 2.0 FR, as JSONL [vi, x]
+  ko also needs the slimmed Korean file with tags and an etymology loan flag (see the commit that added --pairs)
 
     python3 scripts/build_vidict_pivot.py ja --vi vi-en.jsonl --src JMdict_e.gz --out public/dict/vi-ja.json
     python3 scripts/build_vidict_pivot.py ja ... --golden scripts/vidict_golden.json      # score only, nothing written
@@ -34,8 +36,11 @@ ZIPF_WEIGHT = 0.5
 # per language (frequency weight, weight of where the meaning sits), picked by a grid search on scripts/vidict_golden.json
 # and scripts/vidict_holdout.json (64 words); Korean was then improved against scripts/vidict_holdout_ko2.json, 50 words written
 # before any Korean tuning: top-1 54% -> 68%, top-3 64% -> 78% (2026-10-15, before vidict_common.json);
+# then sentence pairs (Tatoeba) and Korean etymology; scripts/vidict_final.json (60 words a language, committed before that
+# round, scored once): top-1 ja 58->73%, zh 65->70%, ko 63->70%, es 65->77%.
 # Korean trusts frequency least: its list has conjugated forms, so a dictionary form (작다) is only estimated
-WEIGHTS = {'ja': (0.9, 0.3), 'zh': (0.5, 0.3), 'es': (0.9, 0.3), 'ko': (0.5, 0.9)}
+WEIGHTS = {'ja': (0.6, 0.3), 'zh': (0.9, 0.3), 'es': (0.9, 0.3), 'ko': (0.5, 0.9)}
+TATOEBA_BY_LANG = {'ja': 2.5, 'zh': 1.5, 'es': 4.0, 'ko': 6.0}   # grid on the tuning sets with the sentence pairs (2026-10-15)
 OLD_OR_RARE = {'historical', 'archaic', 'obsolete', 'dated', 'rare', 'euphemistic', 'vulgar', 'slang', 'derogatory'}
 VI_SENSES = 3
 
@@ -244,6 +249,10 @@ def loanword_of(text: str, key: str) -> bool:
     return len(b) >= 2 and a == b
 
 
+# only words a learner must not be handed (measured: marking informal / rare / dialect words as well cost accuracy, since
+# Wiktionary tags many everyday words that way)
+KO_MARKED = {'vulgar', 'derogatory'}
+MARKED = 0.8
 KO_OTHER_WORDS = set()                                         # spellings that are also a word other than a verb/adjective
 
 
@@ -261,10 +270,12 @@ def korean(path: str):
         seen[w] += 1
         if e.get('pos') in ('name', 'suffix', 'prefix', 'symbol') or not re.fullmatch(r'[가-힣]+(?: [가-힣]+)?', w):
             continue
+        marked = MARKED * bool(set(e.get('tags') or []) & KO_MARKED)     # 찌찌, 개새끼: not what a learner should say
+        loan = LOANWORD / 2 * bool(e.get('loan'))                      # borrowed (etymology says so): a native word first
         for rank, g in enumerate(e['g']):
             for j, k in enumerate(en_keys(g)):
                 out.append((k, w, rank, -0.1 * max(0, len(w) - 3) - 0.8 * qualified(g, k) - min(HOMOGRAPH * h, 2.0) - PART * j
-                            - LOANWORD * loanword_of(w, k), coarse_pos(e.get('pos'))))
+                            - LOANWORD * loanword_of(w, k) - marked - loan, coarse_pos(e.get('pos'))))
     return out
 
 
@@ -310,6 +321,55 @@ def zipf_lookup(lang: str):
     return zipf
 
 
+# ---------------------------------------------------------------- sentence pairs (Tatoeba, CC BY 2.0 FR; build time only)
+
+def forms(text: str, lang: str) -> list:
+    """What to look for in a translated sentence: 飲む[のむ] → 飲む, のむ, 飲; 먹다 → 먹; 사랑하다 → 사랑; beber → beb."""
+    b = bare(text)
+    out = [b]
+    m = re.search(r'\[([^\]]+)\]', text)
+    if lang == 'ja':
+        if m:
+            out.append(m.group(1))
+        if len(b) >= 2 and re.search(r'[うくぐすつぬぶむるい]$', b):
+            out.append(b[:-1])                                 # 飲む → 飲 (飲みます, 飲んだ)
+    elif lang == 'ko' and b.endswith('다') and len(b) >= 2:
+        out.append(b[:-2] if b.endswith('하다') and len(b) > 2 else b[:-1])
+    elif lang == 'es':
+        out = [b.lower()]
+        if len(b) >= 5 and re.search(r'(ar|er|ir)$', b):
+            out.append(b.lower()[:-2])                          # beber → beb (bebo, bebes, bebió)
+    return [f for f in dict.fromkeys(out) if f]
+
+
+class Evidence:
+    """How often a Vietnamese word's sentences are translated with a given foreign word."""
+    def __init__(self, path: str, lang: str):
+        self.lang = lang
+        self.vi, self.x = [], []
+        self.by_syl = defaultdict(set)
+        for i, line in enumerate(open(path, encoding='utf-8')):
+            v, x = json.loads(line)
+            v = ' ' + ' '.join(re.findall(r'[^\W\d_]+', unicodedata.normalize('NFC', v.lower()))) + ' '
+            self.vi.append(v); self.x.append(x.lower() if lang == 'es' else x)
+            for syl in set(v.split()):
+                self.by_syl[syl].add(i)
+
+    def rows(self, w: str):
+        syls = w.split()
+        ids = set.intersection(*(self.by_syl.get(x, set()) for x in syls)) if syls else set()
+        return [i for i in ids if f' {w} ' in self.vi[i]]
+
+    def share(self, w: str, text: str, rows=None):
+        """(share of w's sentence pairs whose translation holds the word, number of pairs)."""
+        rows = self.rows(w) if rows is None else rows
+        if not rows:
+            return 0.0, 0
+        fs = forms(text, self.lang)
+        hit = sum(1 for i in rows if any(f in self.x[i] for f in fs))
+        return hit / len(rows), len(rows)
+
+
 # ---------------------------------------------------------------- the join
 
 
@@ -331,7 +391,12 @@ def index(rows):
     return by_key
 
 
-def join(vi: dict, by_key: dict, zipf=None, rank_weight: float = 0.6) -> dict:
+TATOEBA = 1.5          # score bonus for a word found in every translation of the Vietnamese word's sentences
+TATOEBA_MIN = 2        # pairs needed before the sentences count
+POOL = 8               # candidates looked at again with the sentences
+
+
+def join(vi: dict, by_key: dict, zipf=None, rank_weight: float = 0.6, evidence=None) -> dict:
     out = {}
     for w, keys in vi.items():
         scored = {}                                            # text → (score, which sense led to it)
@@ -357,8 +422,21 @@ def join(vi: dict, by_key: dict, zipf=None, rank_weight: float = 0.6) -> dict:
                 weak = bool(extra) or bool(vp and tpos and vp != tpos)
                 if text not in scored or s < scored[text][0]:
                     scored[text] = (s, k, weak)
-        # the best word of each sense first, so a rare first sense ("trà" = generation) cannot fill all three places
         ranked = sorted(scored.items(), key=lambda x: x[1][0])
+        backed = False
+        if evidence and ranked:
+            rows = evidence.rows(w)
+            if len(rows) >= TATOEBA_MIN:
+                again = {}
+                for text, (s, k, weak) in ranked[:POOL]:
+                    share, _ = evidence.share(w, text, rows)
+                    again[text] = (s - TATOEBA * share, k, weak, share)
+                for text, v in ranked[POOL:]:
+                    again[text] = (*v, 0.0)
+                ranked = sorted(again.items(), key=lambda x: x[1][0])
+                backed = ranked[0][1][3] >= 0.3                 # the sentences agree with the first pick
+                ranked = [(t, v[:3]) for t, v in ranked]
+        # the best word of each sense first, so a rare first sense ("trà" = generation) cannot fill all three places
         best, senses = [], set()
         for text, (s, k, _) in ranked:
             if k not in senses and len(best) < MAX_OUT:
@@ -371,7 +449,7 @@ def join(vi: dict, by_key: dict, zipf=None, rank_weight: float = 0.6) -> dict:
         if best:
             out[w] = [t for t, _ in best]
             margin = ranked[1][1][0] - ranked[0][1][0] if len(ranked) > 1 else 9.0
-            if margin < UNSURE_MARGIN or ranked[0][1][2]:
+            if (margin < UNSURE_MARGIN or ranked[0][1][2]) and not backed:
                 UNSURE.add(w)
     return out
 
@@ -405,6 +483,7 @@ if __name__ == '__main__':
     ap.add_argument('--src', required=True)
     ap.add_argument('--out')
     ap.add_argument('--golden')
+    ap.add_argument('--pairs', help='Tatoeba Vietnamese/foreign sentence pairs (JSONL [vi, x]) used as evidence')
     ap.add_argument('--common', help='JSON {lang: {vi: [..]}} of everyday words put first (same role as COMMON in build_vidict.py)')
     a = ap.parse_args()
     vi = vietnamese(a.vi)
@@ -412,7 +491,8 @@ if __name__ == '__main__':
     if zipf is None:
         print('wordfreq not installed: ranking without word frequency', file=sys.stderr)
     ZIPF_WEIGHT, rank_weight = WEIGHTS[a.lang]
-    words = join(vi, index(READERS[a.lang](a.src)), zipf, rank_weight)
+    TATOEBA = TATOEBA_BY_LANG[a.lang]
+    words = join(vi, index(READERS[a.lang](a.src)), zipf, rank_weight, Evidence(a.pairs, a.lang) if a.pairs else None)
     if a.common:
         for w, g in json.load(open(a.common, encoding='utf-8')).get(a.lang, {}).items():
             words[w] = (g + [x for x in words.get(w, []) if bare(x) not in {bare(y) for y in g}])[:MAX_OUT]
