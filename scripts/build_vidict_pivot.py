@@ -291,6 +291,8 @@ def spanish(path: str):
         key = re.sub(r'^(?:to|a|an|the)\s+', '', orth)
         quotes = [q.text.strip() for q in entry.iter('{http://www.tei-c.org/ns/1.0}quote') if q.text and q.text.strip()]
         for rank, q in enumerate(dict.fromkeys(quotes)):
+            if len(q) == 1 and q.lower() not in 'yaoeu':       # the English "I" came through as "i" (bần tăng, bố, cô: 21 words)
+                continue
             if len(q.split()) <= 3:                              # "hospital" is Spanish too: frequency sorts out "go"
                 out.append((key, q, rank, 1.0 if rank == 0 else 0.5, coarse_pos(pos)))
     return out

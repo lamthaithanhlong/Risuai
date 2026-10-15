@@ -13,8 +13,13 @@ import sys
 
 # the most used words, where the Wiktionary order puts a rare sense first ("tôi" = servant before je)
 COMMON = {
-    'tôi': ['je', 'moi'], 'bạn': ['tu', 'vous', 'ami'], 'anh': ['tu', 'vous', 'il', 'grand frère'], 'em': ['tu', 'je', 'petit frère'],
+    'tôi': ['je', 'moi'], 'bạn': ['tu', 'vous', 'ami'], 'anh': ['tu', 'vous', 'grand frère'], 'em': ['tu', 'petit frère'],
     'chị': ['tu', 'vous', 'grande sœur'], 'nó': ['il', 'elle'], 'chúng tôi': ['nous'], 'họ': ['ils', 'elles'],
+    # kin words are "you" when spoken to (cô gave tante paternelle; mày gave sourcils, tớ valet, mình corps)
+    'cô': ['vous', 'tu', 'tante'], 'ông': ['vous', 'grand-père'], 'bà': ['vous', 'grand-mère'], 'chú': ['vous', 'oncle'],
+    'bác': ['vous', 'oncle'], 'cậu': ['tu'], 'cháu': ['je'], 'con': ['je', 'enfant'], 'mày': ['tu', 'toi'], 'tao': ['je', 'moi'],
+    'tớ': ['je', 'moi'], 'mình': ['je', 'nous'], 'cô ấy': ['elle'], 'chị ấy': ['elle'], 'bà ấy': ['elle'], 'anh ấy': ['il'],
+    'ông ấy': ['il'], 'chúng ta': ['nous'],
     'có': ['avoir', 'il y a', 'oui'], 'không': ['non', 'ne... pas'], 'vâng': ['oui'], 'dạ': ['oui'],
     'ở đâu': ['où'], 'đâu': ['où'], 'gì': ['quoi', 'que'], 'ai': ['qui'], 'tại sao': ['pourquoi'], 'sao': ['pourquoi', 'comment'],
     'thế nào': ['comment'], 'khi nào': ['quand'], 'đây': ['ici', 'voici'], 'kia': ['là-bas'], 'này': ['ce', 'cet', 'cette'],
