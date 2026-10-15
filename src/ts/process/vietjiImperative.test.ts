@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
-import { imperative, teForm } from './vietjiImperative'
+import { imperative, naiForm, prohibitive, teForm } from './vietjiImperative'
 import { composeSuggestions, dictSuggestions } from './vietjiDict'
 
 // asked 2026-10-15: "sửa luôn đuôi đi thành mệnh lệnh" — 침착하다 đi gave 침착하다 가다
@@ -127,5 +127,55 @@ describe('in the bar', () => {
             expect(dictSuggestions('tôi đi', list(l).words, l as any).every((c) => !c.meaning.includes('mệnh lệnh'))).toBe(true)
         }
         expect(composeSuggestions('我 đi', list('zh'), 'zh').every((c) => !c.meaning.includes('mệnh lệnh'))).toBe(true)
+    })
+})
+
+// asked 2026-10-15: "làm luôn đuôi đừng thành mệnh lệnh phủ định"
+describe('do not (đừng + verb)', () => {
+    it.each([
+        ['가다', '가지 마세요', '가지 마'], ['먹다', '먹지 마세요', '먹지 마'], ['듣다', '듣지 마세요', '듣지 마'], ['걱정하다', '걱정하지 마세요', '걱정하지 마'],
+        ['울다', '울지 마세요', '울지 마'], ['무섭다', '무서워하지 마세요', '무서워하지 마'], ['슬프다', '슬퍼하지 마세요', '슬퍼하지 마'],
+    ])('Korean %s → %s, %s', (w, a, b) => expect(prohibitive(w, 'ko')).toEqual([a, b]))
+    it.each([
+        ['行く[いく]', '行かない[いかない]でください'], ['食べる[たべる]', '食べない[たべない]でください'], ['泣く[なく]', '泣かない[なかない]でください'],
+        ['帰る[かえる]', '帰らない[かえらない]でください'], ['心配する[しんぱいする]', '心配しない[しんぱいしない]でください'], ['来る[くる]', '来ない[こない]でください'],
+        ['見る[みる]', '見ない[みない]でください'], ['買う[かう]', '買わない[かわない]でください'], ['待つ[まつ]', '待たない[またない]でください'],
+    ])('Japanese %s → %s', (w, a) => expect(prohibitive(w, 'ja')[0]).toBe(a))
+    it('Japanese ない forms', () => {
+        expect(['いく', 'たべる', 'する', 'くる', 'およぐ', 'はなす', 'しぬ', 'あそぶ', 'のむ', 'きる'].map((k) => naiForm(k)))
+            .toEqual(['いかない', 'たべない', 'しない', 'こない', 'およがない', 'はなさない', 'しなない', 'あそばない', 'のまない', 'きない'])
+        expect(naiForm('きる', '切る')).toBe('きらない')
+        expect(naiForm('ある')).toBe(null)
+    })
+    it('Chinese 别 / 不要, never before a person', () => {
+        expect(prohibitive('哭[kū]', 'zh')).toEqual(['别[bié]哭[kū]', '不要[búyào]哭[kū]'])
+        expect(prohibitive('我[wǒ]', 'zh')).toEqual([])
+    })
+    it.each([
+        ['correr', 'no corras', 'no corra'], ['hablar', 'no hables', 'no hable'], ['ir', 'no vayas', 'no vaya'], ['irse', 'no te vayas', 'no se vaya'],
+        ['preocuparse', 'no te preocupes', 'no se preocupe'], ['llorar', 'no llores', 'no llore'], ['dar', 'no des', 'no dé'], ['tener', 'no tengas', 'no tenga'],
+        ['decir', 'no digas', 'no diga'], ['hacer', 'no hagas', 'no haga'], ['dormir', 'no duermas', 'no duerma'], ['jugar', 'no juegues', 'no juegue'],
+    ])('Spanish %s → %s, %s', (w, a, b) => expect(prohibitive(w, 'es')).toEqual([a, b]))
+    it.each([
+        ['partir', 'ne pars pas', 'ne partez pas'], ['pleurer', 'ne pleure pas', 'ne pleurez pas'], ['avoir', "n'aie pas", "n'ayez pas"],
+        ['oublier', "n'oublie pas", "n'oubliez pas"], ['s’inquiéter', "ne t'inquiète pas", 'ne vous inquiétez pas'], ['se lever', 'ne te lève pas', 'ne vous levez pas'],
+        ['aller', 'ne va pas', "n'allez pas"], ["s'en aller", "ne t'en va pas", 'ne vous en allez pas'], ['être', 'ne sois pas', 'ne soyez pas'],
+    ])('French %s → %s, %s', (w, a, b) => expect(prohibitive(w, 'fr')).toEqual([a, b]))
+
+    it('in the bar: "đừng đi" is do not go, in every language (not the order ending)', () => {
+        const first = (t: string, l: string) => dictSuggestions(t, list(l).words, l as any, 6, new Set(list(l).verbs ?? JSON.parse(readFileSync(`public/dict/vi-${l}.json`, 'utf8')).verbs))[0]?.text
+        expect(first('đừng đi', 'ko')).toBe('가지 마세요')
+        expect(first('đừng đi', 'ja')).toBe('行かない[いかない]でください')
+        expect(first('đừng đi', 'zh')).toBe('别[bié]去[qù]')
+        expect(first('đừng đi', 'es')).toBe('no vayas')
+        expect(first('đừng đi', 'fr')).toBe('ne va pas')
+        expect(first('đừng khóc', 'ko')).toBe('울지 마세요')
+        expect(first('đừng lo', 'es')).toBe('no te preocupes')
+        expect(first('đừng sợ', 'fr')).toBe("n'aie pas peur")
+        expect(first('cô đừng đi', 'ko')).toMatch(/가지 마세요$/)
+    })
+    it('in the bar: đừng before a person or a non-verb gives no "do not"', () => {
+        const v = new Set<string>(JSON.parse(readFileSync('public/dict/vi-ko.json', 'utf8')).verbs)
+        for (const t of ['đừng tôi', 'đừng nhà']) expect(dictSuggestions(t, list('ko').words, 'ko', 6, v).every((c) => !c.meaning.includes('cấm'))).toBe(true)
     })
 })

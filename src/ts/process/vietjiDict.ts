@@ -7,7 +7,7 @@
 import type { LearningLang } from './vietji'
 import { phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
-import { IMPERATIVE_VI, PERSON_VI, imperative } from './vietjiImperative'
+import { IMPERATIVE_VI, PERSON_VI, PROHIBIT_VI, imperative, prohibitive } from './vietjiImperative'
 
 export type WordList = Record<string, string[]>
 export type Dictionary = { words: WordList; unsure: Set<string>; order?: string[]; verbs?: Set<string> }
@@ -186,6 +186,19 @@ const plainWord = (text: string) => stripReadings(text).replace(/[«»]/g, '').t
 
 /** "… <verb> đi": the words before, then the verb as an order instead of verb + "go" (침착하다 가다 → 침착하세요). */
 function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, joiner: string, verbs?: Set<string>): { text: string; source: string; meaning: string }[] {
+    const isVerb = (p: { vi: string }) => !PERSON_VI.has(p.vi) && (!verbs || verbs.has(p.vi))
+    // "đừng <verb> …" = do not: first, because the đi of "đừng đi" is the verb go, not the order ending
+    const k = parts.findIndex((p) => PROHIBIT_VI.has(p.vi))
+    if (k >= 0 && k + 1 < parts.length && isVerb(parts[k + 1])) {
+        const forms = parts[k + 1].fr.map((w) => prohibitive(w, lang)).find((f) => f.length) ?? []
+        const before = parts.slice(0, k), after = parts.slice(k + 2).filter((p) => !IMPERATIVE_VI.has(p.vi))
+        const meaning = `${parts.map((p) => p.vi).join(' ')} · cấm (đừng)`
+        return forms.map((f) => ({
+            text: [...before.map((p) => plainWord(p.fr[0])), plainWord(f), ...after.map((p) => plainWord(p.fr[0]))].join(joiner),
+            source: [...before.map((p) => p.fr[0]), f, ...after.map((p) => p.fr[0])].join(' '),
+            meaning,
+        }))
+    }
     if (parts.length < 2 || !IMPERATIVE_VI.has(parts[parts.length - 1].vi)) return []
     const verb = parts[parts.length - 2]
     // only after a verb (the lists vote which Vietnamese words are: không đi gave 不吧, có đi あってください)

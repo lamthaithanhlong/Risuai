@@ -1,5 +1,5 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support).",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15).",
  "ja": {
   "tôi": [
    "私[わたし]",
@@ -242,6 +242,23 @@
   "về": [
    "帰る[かえる]",
    "戻る[もどる]"
+  ],
+  "đừng": [
+   "ないで",
+   "ないでください"
+  ],
+  "đừng sợ": [
+   "怖がらないで[こわがらないで]",
+   "怖がらないでください[こわがらないでください]"
+  ],
+  "đừng lo": [
+   "心配しないで[しんぱいしないで]",
+   "心配しないでください[しんぱいしないでください]"
+  ],
+  "làm": [
+   "する",
+   "作る[つくる]",
+   "やる"
   ]
  },
  "zh": {
@@ -458,6 +475,27 @@
   "về": [
    "回去[huíqù]",
    "回[huí]"
+  ],
+  "đừng": [
+   "别[bié]",
+   "不要[búyào]"
+  ],
+  "đừng sợ": [
+   "别怕[biépà]",
+   "不要怕[búyàopà]"
+  ],
+  "đừng lo": [
+   "别担心[biédānxīn]",
+   "不要担心[búyàodānxīn]"
+  ],
+  "đến": [
+   "来[lái]",
+   "到[dào]"
+  ],
+  "vào": [
+   "进[jìn]",
+   "进来[jìnlái]",
+   "进入[jìnrù]"
   ]
  },
  "ko": {
@@ -712,6 +750,18 @@
   "giúp": [
    "도와주다",
    "돕다"
+  ],
+  "đừng": [
+   "하지 마세요",
+   "하지 마"
+  ],
+  "đừng sợ": [
+   "무서워하지 마세요",
+   "겁내지 마"
+  ],
+  "đừng lo": [
+   "걱정하지 마세요",
+   "걱정하지 마"
   ]
  },
  "es": {
@@ -927,6 +977,17 @@
   "về": [
    "volver",
    "regresar"
+  ],
+  "đừng": [
+   "no"
+  ],
+  "đừng sợ": [
+   "no tengas miedo",
+   "no tenga miedo"
+  ],
+  "đừng lo": [
+   "no te preocupes",
+   "no se preocupe"
   ]
  },
  "fr": {
@@ -983,6 +1044,21 @@
   "về": [
    "rentrer",
    "revenir"
+  ],
+  "đừng": [
+   "ne … pas"
+  ],
+  "đừng sợ": [
+   "n'aie pas peur",
+   "n'ayez pas peur"
+  ],
+  "đừng lo": [
+   "ne t'inquiète pas",
+   "ne vous inquiétez pas"
+  ],
+  "làm": [
+   "faire",
+   "travailler"
   ]
  }
 }
