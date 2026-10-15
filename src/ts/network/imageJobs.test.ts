@@ -65,6 +65,31 @@ describe('image jobs', () => {
         expect(jobs.get(id)).toMatchObject({ status: 'done', model: 'terra' })
         expect(calls.map((c) => c.model)).toEqual(['luna', 'terra', 'luna', 'terra'])
     })
+    it('the router down (no model reachable) is waited out longer: a ~90 s 9router restart failed three jobs (2026-10-15)', async () => {
+        const waits: number[] = []
+        // unreachable for three rounds (a restart), then back
+        const { jobs } = setup({ luna: ['throw', 'throw', 'throw', 'ok'], terra: ['throw', 'throw', 'throw'] }, { sleep: async (ms: number) => { waits.push(ms) } })
+        const id = jobs.submit(req(['luna', 'terra']))
+        await settle(jobs)
+        expect(jobs.get(id)).toMatchObject({ status: 'done', model: 'luna' })
+        expect(waits).toEqual([8000, 15000, 30000])
+    })
+    it('the router down for good still ends, after about 100 s of waiting', async () => {
+        const waits: number[] = []
+        const { jobs } = setup({ luna: Array(9).fill('throw'), terra: Array(9).fill('throw') }, { sleep: async (ms: number) => { waits.push(ms) } })
+        const id = jobs.submit(req(['luna', 'terra']))
+        await settle(jobs)
+        expect(jobs.get(id).status).toBe('error')
+        expect(waits.reduce((a, b) => a + b, 0)).toBe(98000)
+    })
+    it('a model that answers (an error, not a dead connection) keeps the single retry round', async () => {
+        const waits: number[] = []
+        const { jobs, calls } = setup({ luna: Array(9).fill('refuse'), terra: Array(9).fill('throw') }, { sleep: async (ms: number) => { waits.push(ms) } })
+        const id = jobs.submit(req(['luna', 'terra']))
+        await settle(jobs)
+        expect(jobs.get(id).status).toBe('error')
+        expect(calls.length).toBe(4)
+    })
     it('every model failing ends in an error that names each one', async () => {
         const { jobs } = setup({ luna: ['refuse', 'refuse'], terra: ['throw', 'throw'] })
         const id = jobs.submit(req(['luna', 'terra']))

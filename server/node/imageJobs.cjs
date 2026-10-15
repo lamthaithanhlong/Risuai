@@ -19,6 +19,10 @@ const path = require('path');
 const KEEP_MS = 48 * 60 * 60 * 1000;
 const MAX_SIDE = 360;
 const MAX_RUNNING = 2;
+// When no model could even be reached (the router is down, not a model saying no), wait longer before each new round: a
+// 9router restart took ~90 s on 2026-10-15 and three jobs failed in it, each after one 8 s retry. Toxiproxy, 40 s outage:
+// the job failed after 8.1 s before this, and finished after the router came back with it.
+const DOWN_WAITS_MS = [8000, 15000, 30000, 45000];
 const TRANSIENT = /terminated|timed? ?out|timeout|overloaded|temporar|unavailable|connection|socket|network|fetch failed|ECONN|EAI_AGAIN|bad gateway|gateway|\b5\d\d\b/i;
 
 /** The picture from a streamed router answer (`event: done` carries {data:[{b64_json}]}), or a plain JSON answer. */
@@ -120,9 +124,10 @@ function openImageJobs({ dbFile, writeInlay, fetchImpl = fetch, sleep = (ms) => 
         const { url, key, models, body } = job.req;
         const chain = models && models.length ? models : [undefined];
         let failures = [];
-        for (let round = 1; round <= 2; round++) {
+        for (let round = 1; round <= 1 + DOWN_WAITS_MS.length; round++) {
             failures = [];
             let shortest = null;
+            let unreachable = 0;
             for (const model of chain) {
                 let result;
                 try {
@@ -138,11 +143,13 @@ function openImageJobs({ dbFile, writeInlay, fetchImpl = fetch, sleep = (ms) => 
                 }
                 if (result.b64) return { b64: result.b64, model: model ?? '' };
                 failures.push(`${model ?? '(default)'}: ${String(result.error).slice(0, 140)}`);
+                if (result.status === 0 && /^request failed: /.test(String(result.error))) unreachable += 1;
                 const wait = retryDelayMs(result);
                 if (wait !== null && (shortest === null || wait < shortest)) shortest = wait;
             }
-            if (shortest === null || round === 2) break;
-            await sleep(shortest);
+            const routerDown = unreachable === chain.length;
+            if (shortest === null || round > DOWN_WAITS_MS.length || (!routerDown && round >= 2)) break;
+            await sleep(routerDown ? DOWN_WAITS_MS[round - 1] : shortest);
         }
         throw new Error('Image generation failed on every model: ' + failures.join(' | '));
     }
