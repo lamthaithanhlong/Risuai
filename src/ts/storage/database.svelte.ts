@@ -899,6 +899,8 @@ export interface Database{
     learningSuggest?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
+    /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */
+    learningNotebook?: { [lang: string]: { vocab?: string; mistakes?: string; history?: string } }
     fullScreen:boolean
     playMessage:boolean
     iconsize:number

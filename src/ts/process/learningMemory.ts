@@ -8,7 +8,7 @@
 // The block is never shown as is: a fix becomes one short "Sửa:" line under the reply.
 
 import { foldTyping } from './vietjiSuggest'
-import { fromVietji, hasForeign, stripReadings, type SuggestedReply } from './vietji'
+import { fromVietji, hasForeign, phraseVietji, stripReadings, type SuggestedReply } from './vietji'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -111,6 +111,8 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     ]
     const due = dueItems(vocab, now)
     if (due.length) lines.push(`Bring back these phrases naturally in the scene, the player is due to review them: ${due.map((v) => `${stripReadings(v.text)} (${v.meaning})`).join('; ')}.`)
+    const hard = flagged(vocab, mistakes).slice(0, 4)
+    if (hard.length) lines.push(`The player often gets these wrong or mixes them up with similar sounds; use them more and make the difference clear in the scene: ${hard.map((v) => `${stripReadings(v.text)} (${v.meaning})`).join('; ')}.`)
     const often = mistakes.filter((m) => m.count >= 2).slice(0, 3)
     if (often.length) lines.push(`The player keeps getting these wrong; give them a chance to say them right: ${often.map((m) => `${m.wrong} → ${m.right}`).join('; ')}.`)
     const acc = recentAccuracy(history)
@@ -139,4 +141,59 @@ export function selfCheck(userLine: string, known: VocabItem[]): CheckResult | n
     const sound = foldTyping(line)
     const hit = known.some((v) => stripReadings(v.text).replace(PUNCT, '').toLowerCase() === plain || (sound.length >= 3 && foldTyping(v.vietji) === sound))
     return hit ? { ok: true } : null
+}
+
+// ---- how wrong, and what is easy to confuse ----------------------------------------------------------------------------------
+
+/** Share of the answers with this phrase that were wrong (0 when never graded). */
+export function errorRate(v: VocabItem): number {
+    const n = (v.ok ?? 0) + (v.bad ?? 0)
+    return n === 0 ? 0 : (v.bad ?? 0) / n
+}
+
+/** Edit distance between two typed sounds (folded Việt-ji), stopping early above `max`. */
+export function soundDistance(a: string, b: string, max = 4): number {
+    if (Math.abs(a.length - b.length) > max) return max + 1
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+    for (let i = 1; i <= a.length; i++) {
+        const cur = [i]
+        let rowMin = i
+        for (let j = 1; j <= b.length; j++) {
+            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+            rowMin = Math.min(rowMin, cur[j])
+        }
+        if (rowMin > max) return max + 1
+        prev = cur
+    }
+    return prev[b.length]
+}
+
+export type Flagged = VocabItem & { rate: number; confusedWith: string[]; weight: number }
+
+/**
+ * Every phrase with how often it was wrong and which mistakes sound close to it. A phrase is flagged when it was wrong at least
+ * a third of the time, or when it sounds close (small edit distance of the folded sound) to something the learner wrote wrong:
+ * the learner is likely to mix them up. Heaviest first.
+ */
+/** The typed sound of a phrase: its Việt-ji when it is written in the language (kana, hangul, «...»), else the letters typed. */
+export function soundOf(text: string): string {
+    return foldTyping(hasForeign(text) ? (phraseVietji(text) ?? '') : text)
+}
+
+export function flagged(vocab: VocabItem[], mistakes: Mistake[]): Flagged[] {
+    const wrongSounds = mistakes.map((m) => ({ m, sound: soundOf(m.wrong), right: soundOf(m.right) }))
+    return vocab.map((v) => {
+        const sound = foldTyping(v.vietji)
+        const confusedWith: string[] = []
+        for (const w of wrongSounds) {
+            if (!w.sound || sound.length < 2) continue
+            const limit = Math.max(1, Math.floor(Math.min(sound.length, w.sound.length) * 0.3))
+            // close in sound to what was written wrong, or the very form that was missed: both need the practice
+            const d = soundDistance(sound, w.sound, limit)
+            if (d <= limit || w.right === sound) confusedWith.push(w.m.wrong)
+        }
+        const rate = errorRate(v)
+        const weight = rate * 2 + confusedWith.length * 0.5 + (v.bad ?? 0) * 0.1
+        return { ...v, rate, confusedWith, weight }
+    }).filter((f) => f.rate >= 1 / 3 || f.confusedWith.length > 0).sort((a, b) => b.weight - a.weight)
 }

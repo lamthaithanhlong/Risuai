@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
+import { readNotebook } from './learningStore'
 import { CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content
+
+const nb = () => readNotebook(db, 'ja')
 
 beforeEach(() => {
     for (const k of Object.keys(db)) delete db[k]
@@ -69,7 +72,7 @@ describe('learning mode on', () => {
     it('adds what the speaker said to the chat vocabulary after a reply', () => {
         const chat: any = { message: [{ role: 'user', data: 'x' }, { role: 'char', data: '「しお です。」 (Đây là muối.)' }] }
         noteLearningVocab(chat)
-        expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0]).toMatchObject({ text: 'しお です。', vietji: 'xi-ô đê-sư' })
+        expect(nb().vocab[0]).toMatchObject({ text: 'しお です。', vietji: 'xi-ô đê-sư' })
     })
     it('grades the learner’s line from the speaker’s check, keeps the mistake, counts right and wrong', () => {
         const chat: any = { message: [
@@ -80,8 +83,8 @@ describe('learning mode on', () => {
         noteLearningVocab({ ...chat, message: chat.message.slice(0, 1) })   // the first reply adds the phrase
         chat.scriptstate = { [VOCAB_VAR]: JSON.stringify([{ text: 'いくら ですか', vietji: 'i-cư-ra đê-sư-ca', meaning: 'Bao nhiêu tiền?' }]) }
         noteLearningVocab(chat, 1_800_000_000_000)
-        expect(JSON.parse(chat.scriptstate[MISTAKES_VAR])[0]).toMatchObject({ wrong: 'いくら です', right: 'いくら ですか', count: 1 })
-        expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([false])
+        expect(nb().mistakes[0]).toMatchObject({ wrong: 'いくら です', right: 'いくら ですか', count: 1 })
+        expect(nb().history).toEqual([false])
     })
     it('shows a fix as one Sửa line and never the raw check block', () => {
         const out = learningDisplay('Haru cười.\n[[CHECK ok]]')
@@ -105,11 +108,11 @@ describe('learning mode on', () => {
             ]) },
         }
         noteLearningVocab(chat, 1_800_000_000_000)
-        const vocab = JSON.parse(chat.scriptstate[VOCAB_VAR])
+        const vocab = nb().vocab
         expect(vocab.map((v: any) => v.text)).toEqual(['ふたつ ですか。', 'はい'])
         expect(vocab[0].reps).toBe(1)
-        expect(vocab[0].kana).toBeUndefined()
-        expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true])
+        expect((vocab[0] as Record<string, unknown>).kana).toBeUndefined()
+        expect(nb().history).toEqual([true])
     })
     describe('when the speaker forgets the check', () => {
         const known = JSON.stringify([{ text: 'いいえ、いりません。', vietji: 'i-i-ê i-ri-ma-sên', meaning: 'Không, tôi không lấy.' }])
@@ -117,16 +120,16 @@ describe('learning mode on', () => {
         it('a line that is exactly a known phrase is graded right, and the miss is counted and logged', () => {
             const chat = turn('i i ê, i ri ma sên')
             noteLearningVocab(chat, 1_800_000_000_000)
-            expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0].reps).toBe(1)
-            expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true])
+            expect(nb().vocab[0].reps).toBe(1)
+            expect(nb().history).toEqual([true])
             expect(chat.scriptstate[CHECK_MISSED_VAR]).toBe('1')
             expect(chat.scriptstate[CHECK_MISSED_LAST_VAR]).toBe('1')
         })
         it('a line Risu cannot judge is not graded at all, only counted', () => {
             const chat = turn('ha i ma ta')
             noteLearningVocab(chat, 1_800_000_000_000)
-            expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0].reps).toBeUndefined()
-            expect(chat.scriptstate[HISTORY_VAR]).toBeUndefined()
+            expect(nb().vocab[0].reps).toBeUndefined()
+            expect(nb().history).toEqual([])
             expect(chat.scriptstate[CHECK_MISSED_VAR]).toBe('1')
         })
         it('a Vietnamese line is not a missed check', () => {
@@ -145,10 +148,10 @@ describe('learning mode on', () => {
             expect(note()).not.toContain('forgot the [[CHECK]] line')
         })
     })
-    it('old-format rows are written back in the clean form even when the reply adds nothing', () => {
+    it('old-format rows reach the notebook in the clean form even when the reply adds nothing', () => {
         const chat: any = { message: [{ role: 'char', data: 'Haru im lặng.' }], scriptstate: { [VOCAB_VAR]: JSON.stringify([{ kana: 'はい', vietji: 'ha-i', meaning: 'Vâng' }]) } }
         noteLearningVocab(chat)
-        expect(chat.scriptstate[VOCAB_VAR]).toBe(JSON.stringify([{ vietji: 'ha-i', meaning: 'Vâng', text: 'はい' }]))
+        expect(nb().vocab).toEqual([{ vietji: 'ha-i', meaning: 'Vâng', text: 'はい' }])
     })
     describe('found by the TLA+ model (Grading.tla)', () => {
         const known = JSON.stringify([{ text: 'いいえ、いりません。', vietji: 'i-i-ê i-ri-ma-sên', meaning: 'Không, tôi không lấy.' }])
@@ -157,8 +160,8 @@ describe('learning mode on', () => {
             noteLearningVocab(chat, 1_800_000_000_000)
             chat.message[1] = { role: 'char', data: 'b (rerolled)\n[[CHECK ok]]' }
             noteLearningVocab(chat, 1_800_000_000_000)
-            expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0].reps).toBe(1)
-            expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true])
+            expect(nb().vocab[0].reps).toBe(1)
+            expect(nb().history).toEqual([true])
             expect(chat.scriptstate[GRADED_FOR_VAR]).toContain('u1')
         })
         it('the same words sent again as a new line are graded again', () => {
@@ -166,12 +169,26 @@ describe('learning mode on', () => {
             noteLearningVocab(chat, 1_800_000_000_000)
             chat.message.push({ role: 'user', data: 'i i ê, i ri ma sên', chatId: 'u2' }, { role: 'char', data: 'c\n[[CHECK ok]]' })
             noteLearningVocab(chat, 1_800_000_000_000)
-            expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true, true])
+            expect(nb().history).toEqual([true, true])
         })
         it('a check on a Vietnamese line is ignored: it does not count as a right answer', () => {
             const chat: any = { message: [{ role: 'user', data: 'Tôi đi chợ.' }, { role: 'char', data: 'a\n[[CHECK ok]]' }], scriptstate: {} }
             noteLearningVocab(chat, 1_800_000_000_000)
-            expect(chat.scriptstate[HISTORY_VAR]).toBeUndefined()
+            expect(nb().history).toEqual([])
         })
     })
+    it('a new chat brings back what was learned in another chat (the notebook is per language)', () => {
+        const old: any = { message: [{ role: 'user', data: 'i cu ra dde su ca', chatId: 'u1' }, { role: 'char', data: '「いくら ですか」 (Bao nhiêu tiền?)\n[[CHECK ok]]' }], scriptstate: {} }
+        noteLearningVocab(old, 1_000)
+        const fresh: any = { message: [], scriptstate: {} }
+        const note = learningRequest(req('x'), fresh, 1_000 + 3 * 86_400_000).find((m: any) => m.role === 'system').content
+        expect(note).toContain('いくら ですか (Bao nhiêu tiền?)')
+    })
+    it('the note asks for extra practice on phrases often wrong', () => {
+        db.learningNotebook = { ja: { vocab: JSON.stringify([{ text: 'はい', vietji: 'ha-i', meaning: 'Vâng', ok: 1, bad: 3 }]) } }
+        const note = learningRequest(req('x'), { message: [], scriptstate: {} } as any).find((m: any) => m.role === 'system').content
+        expect(note).toContain('often gets these wrong or mixes them up')
+        expect(note).toContain('はい (Vâng)')
+    })
 })
+
