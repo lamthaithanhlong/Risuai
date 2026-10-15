@@ -12,6 +12,8 @@ export const HISTORY_VAR = '$vj_history'
 /** How many replies forgot the check although the learner tried the language, and whether the last one did. */
 export const CHECK_MISSED_VAR = '$vj_check_missed'
 export const CHECK_MISSED_LAST_VAR = '$vj_check_missed_last'
+/** The learner line already graded: a rerolled reply for the same line must not grade it again (TLC found the double grade). */
+export const GRADED_FOR_VAR = '$vj_graded_for'
 
 function readList<T>(chat: Chat | undefined, key: string): T[] {
     try { const v = JSON.parse((chat?.scriptstate?.[key] as string) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
@@ -110,9 +112,16 @@ function rememberReply(chat: Chat | undefined, now: number): void {
         ? mergeVocab(chat.scriptstate[VOCAB_VAR] as string, found)
         : JSON.stringify(readVocab(chat.scriptstate[VOCAB_VAR] as string))
     // the speaker's check of the learner's line: review the phrases they used, keep the mistake, count right and wrong
-    const userLine = chat.message.slice(0, -1).findLast((m) => m.role === 'user')?.data ?? ''
+    const userIndex = chat.message.slice(0, -1).findLastIndex((m) => m.role === 'user')
+    const userMsg = userIndex >= 0 ? chat.message[userIndex] : undefined
+    const userLine = userMsg?.data ?? ''
+    // only a try at the language is graded: a check on a Vietnamese line would count an answer the learner never gave
+    if (!triedForeign(userLine)) { chat.scriptstate[CHECK_MISSED_LAST_VAR] = '0'; return }
+    // one grade per learner line: regenerating the reply runs this again for the same line
+    const lineKey = `${userIndex}:${userMsg?.chatId ?? ''}:${userLine}`
+    if (chat.scriptstate[GRADED_FOR_VAR] === lineKey) return
     let check: CheckResult | null = parseCheck(last.data)
-    const missed = !check && triedForeign(userLine)
+    const missed = !check
     chat.scriptstate[CHECK_MISSED_LAST_VAR] = missed ? '1' : '0'
     if (missed) {
         chat.scriptstate[CHECK_MISSED_VAR] = String(Number(chat.scriptstate[CHECK_MISSED_VAR] ?? 0) + 1)
@@ -120,6 +129,7 @@ function rememberReply(chat: Chat | undefined, now: number): void {
         check = selfCheck(userLine, readVocab<VocabItem>(chat.scriptstate[VOCAB_VAR] as string))
     }
     if (!check) return
+    chat.scriptstate[GRADED_FOR_VAR] = lineKey
     chat.scriptstate[VOCAB_VAR] = JSON.stringify(gradeUse(readVocab<VocabItem>(chat.scriptstate[VOCAB_VAR] as string), userLine, check, now))
     chat.scriptstate[MISTAKES_VAR] = JSON.stringify(addMistake(readList<Mistake>(chat, MISTAKES_VAR), check, now))
     chat.scriptstate[HISTORY_VAR] = JSON.stringify([...readList<boolean>(chat, HISTORY_VAR), check.ok].slice(-30))

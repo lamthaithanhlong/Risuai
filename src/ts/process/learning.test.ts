@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
-import { CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
+import { CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content
 
@@ -149,5 +149,29 @@ describe('learning mode on', () => {
         const chat: any = { message: [{ role: 'char', data: 'Haru im lặng.' }], scriptstate: { [VOCAB_VAR]: JSON.stringify([{ kana: 'はい', vietji: 'ha-i', meaning: 'Vâng' }]) } }
         noteLearningVocab(chat)
         expect(chat.scriptstate[VOCAB_VAR]).toBe(JSON.stringify([{ vietji: 'ha-i', meaning: 'Vâng', text: 'はい' }]))
+    })
+    describe('found by the TLA+ model (Grading.tla)', () => {
+        const known = JSON.stringify([{ text: 'いいえ、いりません。', vietji: 'i-i-ê i-ri-ma-sên', meaning: 'Không, tôi không lấy.' }])
+        it('a rerolled reply does not grade the same learner line twice', () => {
+            const chat: any = { message: [{ role: 'user', data: 'i i ê, i ri ma sên', chatId: 'u1' }, { role: 'char', data: 'a\n[[CHECK ok]]' }], scriptstate: { [VOCAB_VAR]: known } }
+            noteLearningVocab(chat, 1_800_000_000_000)
+            chat.message[1] = { role: 'char', data: 'b (rerolled)\n[[CHECK ok]]' }
+            noteLearningVocab(chat, 1_800_000_000_000)
+            expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0].reps).toBe(1)
+            expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true])
+            expect(chat.scriptstate[GRADED_FOR_VAR]).toContain('u1')
+        })
+        it('the same words sent again as a new line are graded again', () => {
+            const chat: any = { message: [{ role: 'user', data: 'i i ê, i ri ma sên', chatId: 'u1' }, { role: 'char', data: 'a\n[[CHECK ok]]' }], scriptstate: { [VOCAB_VAR]: known } }
+            noteLearningVocab(chat, 1_800_000_000_000)
+            chat.message.push({ role: 'user', data: 'i i ê, i ri ma sên', chatId: 'u2' }, { role: 'char', data: 'c\n[[CHECK ok]]' })
+            noteLearningVocab(chat, 1_800_000_000_000)
+            expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true, true])
+        })
+        it('a check on a Vietnamese line is ignored: it does not count as a right answer', () => {
+            const chat: any = { message: [{ role: 'user', data: 'Tôi đi chợ.' }, { role: 'char', data: 'a\n[[CHECK ok]]' }], scriptstate: {} }
+            noteLearningVocab(chat, 1_800_000_000_000)
+            expect(chat.scriptstate[HISTORY_VAR]).toBeUndefined()
+        })
     })
 })
