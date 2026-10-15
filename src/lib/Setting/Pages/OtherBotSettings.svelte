@@ -801,6 +801,9 @@
             <span class="text-textcolor">Model</span>
             <TextInput size="sm" marginBottom placeholder="dall-e-3" bind:value={DBState.db.openaiCompatImage.model}/>
 
+            <span class="text-textcolor">{language.imageFallbackModels}</span>
+            <TextInput size="sm" marginBottom placeholder="model-b, model-c" bind:value={DBState.db.openaiCompatImage.fallbackModels}/>
+
             <span class="text-textcolor">Style (prepended to every image prompt)</span>
             <TextInput size="sm" marginBottom placeholder="anime style illustration, ..." bind:value={DBState.db.openaiCompatImage.style}/>
 

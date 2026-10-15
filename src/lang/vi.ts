@@ -1489,6 +1489,7 @@ export const languageVietnamese = {
     "characterActions": "Thao tác với nhân vật",
     "myStories": "Truyện của tôi",
     "illustrate": "Vẽ ảnh minh hoạ cho đoạn này",
+    "imageFallbackModels": "Model dự phòng (cách nhau bằng dấu phẩy, thử lần lượt khi model trên lỗi)",
     "redrawPicture": "Vẽ lại ảnh (thay ảnh đang có)",
     "illustrating": "Đang vẽ ảnh, có thể mất một hai phút",
     "myStoriesEmpty": "Chưa có truyện nào. Nhập một nhân vật hoặc mở RisuRealm bên dưới.",

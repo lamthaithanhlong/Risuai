@@ -706,6 +706,7 @@ export function setDatabase(data:Database){
     data.jevGuard.imageGate ??= true
     data.jevGuard.imageThreshold ??= 0.5
     data.openaiCompatImage.style ??= 'anime style illustration, cel shading, clean lineart, vibrant colors, expressive eyes, detailed anime art'
+    data.openaiCompatImage.fallbackModels ??= 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image'
     data.wavespeedImage ??= {
         key: '',
         model: '',
@@ -1284,6 +1285,8 @@ export interface Database{
         size: string
         quality: string
         style?: string
+        /** Comma-separated models tried in order when the model above fails to draw. */
+        fallbackModels?: string
     }
     additionalParamsForTranslate: [string, string][]
     chatTokenSaverOffMigrated?: boolean

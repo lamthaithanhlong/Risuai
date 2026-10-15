@@ -7,6 +7,7 @@ import { CharEmotion } from "../stores.svelte"
 import type { OpenAIChat } from "./index.svelte"
 import { processZip } from "./processzip"
 import { keiServerURL } from "../kei/kei"
+import { modelChain, parseImageStream, requestWithFallback, type ImageResponse } from "./imageRetry"
 import random from "lodash/random"
 
 export async function stableDiff(currentChar:character,prompt:string){
@@ -734,7 +735,10 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
         const style = config.style?.trim()
         const body: {[key:string]: any} = {
             "prompt": style ? `${style}. ${genPrompt}` : genPrompt,
+            "n": 1,
             "response_format": "b64_json",
+            "output_format": "png",
+            "background": "auto",
             "size": config.size || "1024x1024",
             "quality": config.quality || "auto"
         }
@@ -751,10 +755,28 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
             headers["Authorization"] = "Bearer " + config.key
         }
 
-        const da = await globalFetch(config.url, {
-            body: body,
-            headers: headers
+        // The configured model first, then the fallback models in order, so one model that fails ("terminated", "not supported with this
+        // account") does not end the picture. A temporary failure of every model waits and goes round once more (imageRetry.ts).
+        const chain = modelChain(config.model ?? '', config.fallbackModels)
+        // Asked as a stream: the router then sends progress every few seconds while the model draws, so the connection is never silent
+        // for the 30-60 s a picture takes (a silent one is what got cut off as "terminated"). parseImageStream reads the final picture.
+        const streamHeaders = { ...headers, "Accept": "text/event-stream" }
+        const result = await requestWithFallback(chain, async (model) => {
+            const res = await globalFetch(config.url, {
+                body: model ? { ...body, model } : body,
+                headers: streamHeaders,
+                rawResponse: true,
+                requestTimeoutMs: 180_000,
+            })
+            if (!(res.data instanceof Uint8Array)) return res as ImageResponse
+            return parseImageStream(new TextDecoder().decode(res.data), res.status)
+        }, {
+            onFallback: (model, why, next) => console.warn(`[image] ${model} failed (${why})${next ? `; trying ${next}` : ''}`),
         })
+        if(result.failures.length > 0 && result.model){
+            console.warn(`[image] drawn by ${result.model} after ${result.failures.length} failed attempt(s)`)
+        }
+        const da = result.response as Awaited<ReturnType<typeof globalFetch>>
 
         if(returnSdData === 'inlay'){
             let res = da?.data?.data?.[0]?.b64_json

@@ -776,6 +776,7 @@ export const languageEnglish = {
     characterActions: "Character actions",
     myStories: "My Stories",
     illustrate: "Illustrate this reply",
+    imageFallbackModels: "Fallback models (comma separated, tried in order when the model above fails)",
     redrawPicture: "Redraw the picture (replaces the current one)",
     illustrating: "Drawing the picture, it can take a minute or two",
     myStoriesEmpty: "No stories yet. Import a character or open RisuRealm below.",
