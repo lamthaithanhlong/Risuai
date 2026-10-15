@@ -486,10 +486,12 @@
       role="menuitem"
       class="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-selected"
       onclick={() => {
-        const chaId = DBState.db.characters[menu.index]?.chaId
+        // read everything from `menu` first: it is {@const menu = avatarMenu}, so it turns null the moment avatarMenu does
+        const { index, name } = menu
+        const chaId = DBState.db.characters[index]?.chaId
         avatarMenu = null
         if(chaId){
-          chooseGroup(chaId, menu.name)
+          chooseGroup(chaId, name)
         }
       }}
     ><FolderPlusIcon size={18} /><span>{language.characterGroup}</span></button>
@@ -497,10 +499,11 @@
       role="menuitem"
       class="flex w-full items-center gap-3 px-3 py-3 text-left text-red-500 hover:bg-selected"
       onclick={() => {
-        const chaId = DBState.db.characters[menu.index]?.chaId
+        const { index, name } = menu
+        const chaId = DBState.db.characters[index]?.chaId
         avatarMenu = null
         if(chaId){
-          removeChar(chaId, menu.name)
+          removeChar(chaId, name)
         }
       }}
     ><Trash2Icon size={18} /><span>{language.removeCharacter}</span></button>
