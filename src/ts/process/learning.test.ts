@@ -256,3 +256,15 @@ describe('reported: "hết sức bình sinh tui leo lên được", built word b
         forgetThoughts()
     })
 })
+
+describe('the Vietnamese thought survives a reload', () => {
+    it('is kept in this browser and read back', async () => {
+        forgetThoughts()
+        rememberThought('그렇게 개 거기 이다', 'thế cái đó là')
+        expect(JSON.parse(localStorage.getItem('risu-vj-thoughts')!)).toEqual([{ text: '그렇게 개 거기 이다', viet: 'thế cái đó là' }])
+        vi.resetModules()
+        const fresh = await import('./learningThought')
+        expect(fresh.thoughtFor('그렇게 개 거기 이다')).toBe('thế cái đó là')
+        forgetThoughts()
+    })
+})

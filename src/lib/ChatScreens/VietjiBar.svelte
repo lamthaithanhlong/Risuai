@@ -11,7 +11,7 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
-    import { allowCoach, filledHtml, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
+    import { allowCoach, filledHtml, sentBefore, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
     import { phraseVietji } from "src/ts/process/vietji";
     import { mixChips } from "src/ts/process/vietjiSuggest";
     import { rememberThought, thoughtFor } from "src/ts/process/learningThought";
@@ -202,25 +202,27 @@
         })
     })
 
-    // "🔍 Chi tiết" under a reply's grammar note: the sentence word by word, asked of the model once per sentence when pressed
-    let detail = $state<{ fix: string; wrote: string; data: Detail | null; loading: boolean; error: string } | null>(null)
+    // "🔍 Chi tiết" under a reply's grammar note: the player's whole sentence before that reply, taught in steps, asked of the
+    // model once per sentence when pressed (the note itself may fix only one word of it)
+    let detail = $state<{ sent: string; data: Detail | null; loading: boolean; error: string } | null>(null)
     const detailAsker = makeAsker<Detail | null>(async (key) => {
-        const [l, fix, wrote] = JSON.parse(key) as [string, string, string]
+        const [l, sent, hint] = JSON.parse(key) as [string, string, string]
         const { requestChatData } = await import("src/ts/process/request/request")
-        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(fix, wrote, l, thoughtFor(wrote) ?? '') }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(sent, l, thoughtFor(sent) ?? '', hint) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
         return res.type === 'success' && typeof res.result === 'string' ? parseDetail(res.result) : null
     })
     $effect(() => {
         if (!enabled) return
-        return installDetailButton((fix, wrote) => {
-            const key = JSON.stringify([lang, fix, wrote])
+        return installDetailButton((fix, wrote, at) => {
+            const sent = sentBefore(chat?.message, at) || wrote || fix
+            const key = JSON.stringify([lang, sent, wrote ? `${wrote} → ${fix}` : ''])
             const cached = detailAsker.cached(key)
-            detail = { fix, wrote, data: cached ?? null, loading: !cached, error: '' }
+            detail = { sent, data: cached ?? null, loading: !cached, error: '' }
             if (cached) return
             if (!allowCoach()) { detail = { ...detail, loading: false, error: 'Bấm nhiều quá, đợi chút rồi bấm lại.' }; return }
             detailAsker.ask(key).then((d) => {
-                if (detail?.fix === fix) detail = { ...detail, data: d, loading: false, error: d ? '' : 'Chưa phân tích được câu này.' }
-            }).catch(() => { if (detail?.fix === fix) detail = { ...detail, loading: false, error: 'Không gọi được model.' } })
+                if (detail?.sent === sent) detail = { ...detail, data: d, loading: false, error: d ? '' : 'Chưa phân tích được câu này.' }
+            }).catch(() => { if (detail?.sent === sent) detail = { ...detail, loading: false, error: 'Không gọi được model.' } })
         })
     })
 
@@ -264,50 +266,49 @@
 {#if enabled}
     <div class={"flex flex-col shrink-0 px-4 pb-1 gap-1 " + (floating ? 'absolute bottom-full left-0 right-0 pt-1 bg-bgcolor' : 'mb-1')}>
         {#if detail}
-            <div class="max-h-80 overflow-y-auto rounded-md border border-darkborderc bg-darkbg p-2 text-sm" aria-label="Ngữ pháp chi tiết">
-                <div class="flex justify-between items-baseline gap-2 mb-1">
-                    <div><span class="text-xs" style="color:#8fb8ff;font-weight:600">Ngữ pháp chi tiết</span>
-                        <span class="text-lg font-semibold ml-2">{stripReadings(detail.fix)}</span>
-                        <span class="text-xs ml-1" style="color:#f2c76b;font-weight:600">{phraseVietji(detail.fix) ?? ''}</span></div>
+            <div class="max-h-96 overflow-y-auto rounded-md border border-darkborderc bg-darkbg p-2 text-sm" aria-label="Ngữ pháp chi tiết">
+                <div class="flex justify-between items-start gap-2 mb-1">
+                    <div><span class="text-xs" style="color:#8fb8ff;font-weight:600">Ngữ pháp chi tiết · câu bạn gửi</span>
+                        <div class="text-base mt-0.5">{@html filledHtml(detail.sent, detail.data?.pieces.filter((p) => p.ok).map((p) => p.piece) ?? [], detail.data?.pieces.filter((p) => !p.ok).map((p) => p.piece) ?? [])}</div></div>
                     <button class="text-textcolor2 hover:text-textcolor" title="Đóng" onclick={() => { detail = null }}>✕</button>
                 </div>
-                {#if detail.wrote}<div class="text-xs text-textcolor2 mb-1">bạn viết: <s>{detail.wrote}</s> <span style="color:#f2c76b;font-weight:600">{phraseVietji(detail.wrote) ?? ''}</span></div>{/if}
                 {#if detail.loading}
                     <div class="text-xs text-textcolor2">đang phân tích câu của bạn…</div>
                 {:else if detail.error}
                     <div class="text-xs text-textcolor2">{detail.error}</div>
                 {:else if detail.data}
                     {@const d = detail.data}
-                    <div class="text-xs mt-1" style="color:#8fb8ff;font-weight:600">① Câu bạn viết — người bản xứ nghe từng chỗ</div>
+                    {@const right = d.pieces.filter((p) => p.ok)}
+                    <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">① Câu này chưa đúng ngữ pháp. Sườn đúng là:</div>
+                    <div class="text-sm">{@html readInline(d.frame)}</div>
+                    {#if d.heard}<div class="text-xs text-textcolor2">(viết như bạn, người ta sẽ hiểu: «{d.heard}»)</div>{/if}
+                    <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">② Từ vựng trong câu bạn — <span class="text-green-500">xanh là đúng</span>, <span class="text-red-500">đỏ là sai</span></div>
                     <table class="w-full text-xs">
                         <tbody>
                         {#each d.pieces as p, k (p.piece + '#' + k)}
                             <tr class="border-b border-darkborderc/40 align-top">
-                                <td class="py-0.5 pr-1 w-4">{p.ok ? '✓' : '✗'}</td>
-                                <td class="py-0.5 pr-2 text-base font-semibold whitespace-nowrap" style={p.ok ? '' : 'color:#e0a46b'}>{p.piece}</td>
+                                <td class="py-0.5 pr-2 text-base font-semibold whitespace-nowrap {p.ok ? 'text-green-500' : 'text-red-500'}">{p.ok ? '✓' : '✗'} {p.piece}</td>
                                 <td class="py-0.5 pr-2 whitespace-nowrap" style="color:#f2c76b;font-weight:600">{phraseVietji(p.piece) ?? ''}</td>
-                                <td class="py-0.5 pr-2 text-textcolor">nghe ra: {@html readInline(p.heard)}{#if !p.ok && p.why}<span style="color:#e0a46b"> · sai: {@html readInline(p.why)}</span>{/if}</td>
+                                <td class="py-0.5 pr-2 text-textcolor2 whitespace-nowrap">{p.kind}</td>
+                                <td class="py-0.5 pr-2 text-textcolor">{@html readInline(p.heard)}{#if !p.ok && p.why}<span class="text-red-500"> · {@html readInline(p.why)}</span>{/if}</td>
                             </tr>
                         {/each}
                         </tbody>
                     </table>
-                    {#if d.heard}<div class="text-xs mt-1">→ Cả câu, người ta sẽ hiểu là: <i>«{d.heard}»</i></div>{/if}
-                    {#if d.frame}
-                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">② Sườn câu đúng</div>
-                        <div class="text-sm">{@html readInline(d.frame)}</div>
-                    {/if}
                     {#if d.filled}
-                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">③ Bỏ chữ đúng của bạn vào sườn (chỗ trống là còn thiếu)</div>
-                        <div class="text-sm">{@html filledHtml(d.filled)}</div>
+                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">③ Gắn chữ đúng của bạn vào sườn</div>
+                        <div class="text-base">{@html filledHtml(d.filled, right.map((p) => p.piece))}</div>
+                        {#if right.length}<div class="text-xs text-green-500">OK, mấy chữ này bạn đúng rồi: {right.map((p) => p.piece).join(', ')}</div>{/if}
                     {/if}
-                    {#if d.adds.length}
-                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">④ Thêm vào cho đủ</div>
+                    {#if d.order || d.adds.length}
+                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">④ Còn sai, còn thiếu — cần sửa thêm</div>
+                        {#if d.order}<div class="text-xs">↔ {@html readInline(d.order)}</div>{/if}
                         {#each d.adds as x, k (k)}
                             <div class="text-xs">+ <b class="text-sm">{@html readInline(x.add)}</b>{#if x.why} — {@html readInline(x.why)}{/if}</div>
                         {/each}
                     {/if}
                     <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">⑤ Câu hoàn chỉnh</div>
-                    <div class="text-base font-semibold">{d.final} <span class="text-xs" style="color:#f2c76b;font-weight:600">{phraseVietji(d.final) ?? ''}</span></div>
+                    <div class="text-lg font-semibold">{@html filledHtml(d.final)}</div>
                     {#if d.meaning}<div class="text-xs text-textcolor2">= {d.meaning}</div>{/if}
                 {/if}
             </div>

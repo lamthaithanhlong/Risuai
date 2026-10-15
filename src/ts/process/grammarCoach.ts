@@ -64,27 +64,30 @@ export function lessonHtml(l: Lesson): string {
 // Measured on the story model (2026-10-15): 5.8-6.8 s, well-formed JSON for Korean and Chinese (다시 침착하게 생각하자: 침착하게
 // "trạng từ chỉ cách thức", 자 "đuôi câu rủ rê", and each change from what was written, with why).
 
-// Shown as steps (asked 2026-10-15: "đưa câu tui dùng dịch từng chỗ… người ta đọc câu bạn sẽ hiểu bạn đang nói thế này nhưng
-// sai rồi, chỗ sai ở đâu, sườn ngữ pháp đúng là gì, câu bạn nói chỗ nào đúng bỏ vào sườn, thiếu chỗ nào… rồi cuối cùng 1 câu
-// hoàn chỉnh"): the learner's own pieces and how a native hears each, what that whole sounds like, the right frame, their right
-// pieces put in it with the gaps left open, what fills each gap, and the finished sentence.
+// Shown as steps, in the order the owner asked (2026-10-15): start from the WHOLE sentence they sent (the check line may fix only
+// one word: 개 → 게 for 그렇게 개 거기 이다 개 이상하다뭐 그렇다), say it is not grammatical and give the right frame, then their
+// words one by one, right in green and wrong in red, then their right nouns and verbs put into the frame ("ok, these are
+// right"), then what is wrong or missing (in Korean the verb goes last, so reorder; add the particles), then the finished sentence.
 
-export type DetailPiece = { piece: string; heard: string; ok: boolean; why: string }
+export type DetailPiece = { piece: string; kind: string; heard: string; ok: boolean; why: string }
 export type DetailAdd = { add: string; why: string }
-export type Detail = { pieces: DetailPiece[]; heard: string; frame: string; filled: string; adds: DetailAdd[]; final: string; meaning: string }
+export type Detail = { pieces: DetailPiece[]; heard: string; frame: string; filled: string; order: string; adds: DetailAdd[]; final: string; meaning: string }
 
 const NAMES: Record<string, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin)', ko: 'Korean', es: 'Spanish', fr: 'French' }
 
-export function detailPrompt(fix: string, wrote: string, lang: string, meant = ''): string {
-    return `A Vietnamese learner of ${NAMES[lang] ?? lang} put a sentence together word by word from Vietnamese: "${wrote}".`
+/** sent: the player's whole message; meant: the Vietnamese they typed for it (bar); hint: the reply's own check, maybe one word. */
+export function detailPrompt(sent: string, lang: string, meant = '', hint = ''): string {
+    return `A Vietnamese learner of ${NAMES[lang] ?? lang} put this sentence together word by word from Vietnamese and sent it: "${sent}".`
         + (meant ? ` What they meant, in Vietnamese: "${meant}".` : '')
-        + ` The natural sentence is "${fix}" (give a better one as final if it drops an idea of theirs, such as I think or should; Vietnamese lại after a verb is usually not again: bình tĩnh lại is calm down).`
+        + (hint ? ` The story's check corrected: ${hint} (it may cover only one word; teach the whole sentence).` : '')
+        + ' Keep every idea of theirs; Vietnamese lại after a verb is usually not again (bình tĩnh lại is calm down), and cái is a classifier, not a dog.'
         + ' Teach it in steps, all explanations in short simple Vietnamese. Answer with only JSON:'
-        + ' {"pieces": [{"piece": "<each piece of what THEY wrote, in their order>", "heard": "<what a native hears from this piece as written>", "ok": <true if the piece can stay as it is>, "why": "<if not ok: what is wrong, in a few words>"}],'
-        + ' "heard": "<what a native would understand from their whole sentence, in Vietnamese, word for word>",'
-        + ' "frame": "<the right grammar frame, slots in brackets, e.g. [Chủ ngữ]는 + [tân ngữ]을 + [động từ]고 + [nơi] 위로 + [động từ]>",'
-        + ' "filled": "<the frame with THEIR right pieces put in, each gap written as ___>",'
-        + ' "adds": [{"add": "<what goes into a gap or must change, in the language>", "why": "<why, in Vietnamese>"}],'
+        + ' {"frame": "<the right grammar frame for what they meant, slots in brackets, e.g. [Chủ ngữ]는 + [tân ngữ]을 + [động từ]>",'
+        + ' "heard": "<what a native understands from their sentence as written, in Vietnamese>",'
+        + ' "pieces": [{"piece": "<each word of THEIR sentence, in their order, exactly as they wrote it>", "kind": "<danh từ, động từ, đại từ, trạng từ…>", "heard": "<its meaning as written>", "ok": <true if this word is the right word for what they meant (form may change)>, "why": "<if not ok: what is wrong>"}],'
+        + ' "filled": "<the sentence in the right order with only THEIR right words in it and ___ for each missing part, written as a sentence: no brackets, no + signs>",'
+        + ' "order": "<how this language orders the sentence unlike Vietnamese, and what to move, one sentence>",'
+        + ' "adds": [{"add": "<what to add or change, in the language: a particle, an ending, a word>", "why": "<why, in Vietnamese>"}],'
         + ' "final": "<the finished natural sentence>", "meaning": "<its meaning in Vietnamese>"}'
 }
 
@@ -96,42 +99,57 @@ export function parseDetail(answer: string): Detail | null {
     try {
         const j = JSON.parse(m[0])
         const pieces: DetailPiece[] = (Array.isArray(j.pieces) ? j.pieces : []).filter((p: any) => p && typeof p.piece === 'string' && p.piece.trim())
-            .map((p: any) => ({ piece: p.piece.trim(), heard: str(p.heard), ok: p.ok === true, why: str(p.why) }))
+            .map((p: any) => ({ piece: p.piece.trim(), kind: str(p.kind), heard: str(p.heard), ok: p.ok === true, why: str(p.why) }))
         const adds: DetailAdd[] = (Array.isArray(j.adds) ? j.adds : []).filter((a: any) => a && typeof a.add === 'string')
             .map((a: any) => ({ add: a.add, why: str(a.why) })).slice(0, 8)
         const final = str(j.final).trim()
         if (!pieces.length || !final) return null
-        return { pieces, heard: str(j.heard), frame: str(j.frame), filled: str(j.filled), adds, final, meaning: str(j.meaning) }
+        return { pieces, heard: str(j.heard), frame: str(j.frame), filled: str(j.filled), order: str(j.order), adds, final, meaning: str(j.meaning) }
     } catch {
         return null
     }
 }
 
-/** The filled frame: each word with its Việt-ji under it, each gap an empty dashed slot (a reading after a word ran into the
- *  gap next to it: "나는 그na-nưn cư ___ 의 손을 잡고ưi sô-nưl…"). */
+/** The player's message the reply answers: the newest user message before the reply at `at` (data-chat-index). */
+export function sentBefore(messages: { role: string; data: string }[] | undefined, at: number | null): string {
+    if (!messages?.length) return ''
+    for (let k = Math.min(at ?? messages.length, messages.length) - 1; k >= 0; k--) {
+        if (messages[k]?.role === 'user') return (messages[k].data ?? '').trim()
+    }
+    return ''
+}
+
+/** A sentence as words with the Việt-ji under each; gaps (___) as empty dashed slots; words from `right` in green
+ *  (Risu's text-green-500), from `wrong` in red (text-red-500). */
 const GAP = '<span style="display:inline-block;min-width:2.4em;border-bottom:2px dashed #e0a46b;margin:0 .2em;vertical-align:top">&nbsp;</span>'
-export function filledHtml(filled: string): string {
+const GREEN = '#22c55e', RED = '#ef4444'
+export function filledHtml(filled: string, right: string[] = [], wrong: string[] = []): string {
+    const has = (list: string[], t: string) => list.some((w) => w && (t === w || t.startsWith(w) || w.startsWith(t.replace(/[.?!。？！,，]+$/, ''))))
     return (filled ?? '').split(/(_{2,}|\s+)/).filter((t) => t !== '').map((t) => {
         if (/^_{2,}$/.test(t)) return GAP
         if (/^\s+$/.test(t)) return ' '
         const v = FOREIGN_RUN.test(t) ? readAloud(t) : null
         FOREIGN_RUN.lastIndex = 0
+        const color = has(right, t) ? `color:${GREEN}` : has(wrong, t) ? `color:${RED}` : ''
         return v ? `<span style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:top;margin:0 .1em">`
-            + `<span>${esc(t)}</span><span style="font-size:.7em;color:#f2c76b;font-weight:600">${esc(v)}</span></span>` : esc(t)
+            + `${color ? `<span style="${color}">` : '<span>'}${esc(t)}</span><span style="font-size:.7em;color:#f2c76b;font-weight:600">${esc(v)}</span></span>`
+            : color ? `<span style="${color}">${esc(t)}</span>` : esc(t)
     }).join('')
 }
 
 export const DETAIL_BUTTON = '<span title="Chi tiết ngữ pháp" style="cursor:pointer;margin-left:.5em;padding:0 .4em;border:1px solid #8fb8ff66;border-radius:.6em;font-size:.9em;user-select:none">🔍 Chi tiết</span>'
 
-/** Presses on a "Chi tiết" button in a message: the sentence (first <b>) and what was written (first <s>) of its note. */
-export function installDetailButton(open: (fix: string, wrote: string) => void) {
+/** Presses on a "Chi tiết" button in a message: the note's sentence (first <b>), what it struck (first <s>), and the index
+ *  of the message it sits in, so the player's whole sentence before it can be found. */
+export function installDetailButton(open: (fix: string, wrote: string, at: number | null) => void) {
     const handler = (e: MouseEvent) => {
         const t = e.target as Element | null
         if (t?.getAttribute?.('title') !== 'Chi tiết ngữ pháp') return
         const note = t.closest('div[data-vj-note], div') as Element | null
         const fix = note?.querySelector('b')?.textContent?.trim() ?? ''
         const wrote = note?.querySelector('s')?.textContent?.trim() ?? ''
-        if (fix) open(fix, wrote)
+        const at = Number((t.closest('[data-chat-index]') as HTMLElement | null)?.dataset.chatIndex)
+        if (fix) open(fix, wrote, Number.isFinite(at) ? at : null)
     }
     document.addEventListener('click', handler, true)
     return () => document.removeEventListener('click', handler, true)

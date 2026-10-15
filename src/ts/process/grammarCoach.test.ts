@@ -81,8 +81,24 @@ describe('the lesson shows the Việt-ji and a "Chi tiết" button (asked: thêm
         expect(filledHtml('<b>___</b>')).not.toContain('<b>')
     })
     it('the prompt carries what they meant when the bar knows it', () => {
-        expect(detailPrompt('나는…', '나 잡다', 'ko', 'tui nắm tay cô ấy')).toContain('What they meant, in Vietnamese: "tui nắm tay cô ấy"')
-        expect(detailPrompt('나는…', '나 잡다', 'ko')).not.toContain('What they meant')
+        expect(detailPrompt('나 잡다', 'ko', 'tui nắm tay cô ấy')).toContain('What they meant, in Vietnamese: "tui nắm tay cô ấy"')
+        expect(detailPrompt('나 잡다', 'ko')).not.toContain('What they meant')
+    })
+    it('reported: the note fixed only 개 → 게, the detail teaches the whole sentence that was sent', async () => {
+        const { sentBefore } = await import('./grammarCoach')
+        const msgs = [{ role: 'char', data: 'a' }, { role: 'user', data: '그렇게 개 거기 이다 개 이상하다뭐 그렇다' }, { role: 'char', data: 'b' }]
+        expect(sentBefore(msgs, 2)).toBe('그렇게 개 거기 이다 개 이상하다뭐 그렇다')
+        expect(sentBefore(msgs, 1)).toBe('')
+        expect(sentBefore(msgs, null)).toBe('그렇게 개 거기 이다 개 이상하다뭐 그렇다')
+        const prompt = detailPrompt('그렇게 개 거기 이다 개 이상하다뭐 그렇다', 'ko', '', '개 → 게')
+        expect(prompt).toContain('sent it: "그렇게 개 거기 이다 개 이상하다뭐 그렇다"')
+        expect(prompt).toContain('teach the whole sentence')
+    })
+    it('their words are green when right, red when wrong (Risu text-green-500 / text-red-500)', async () => {
+        const { filledHtml } = await import('./grammarCoach')
+        const html = filledHtml('그렇게 개 거기', ['그렇게', '거기'], ['개'])
+        expect(html.match(/#22c55e/g)).toHaveLength(2)
+        expect(html.match(/#ef4444/g)).toHaveLength(1)
     })
     it('pressing the button hands over the sentence and what was written', () => {
         const div = document.createElement('div')
@@ -112,7 +128,7 @@ describe('reported: "tui nghĩ cô nên bình tĩnh lại" was coached as 다시
         const note = memoryNote([], [], [], Date.now(), { grammarLater: true })
         expect(note).toContain('keeps every idea')
         expect(note).toContain('bình tĩnh lại = calm down')
-        expect(detailPrompt('침착해야 해요', '당신 해야하다 침착하다 다시', 'ko')).toContain('bình tĩnh lại is calm down')
+        expect(detailPrompt('당신 해야하다 침착하다 다시', 'ko')).toContain('bình tĩnh lại is calm down')
     })
 })
 
