@@ -62,14 +62,55 @@ const KO_LIAISON: [string, string][] = [
 ]
 const SILENT_IEUNG = 11
 
+// How Korean is said, not how it is spelled (표준 발음법): applied to the jamo between two syllables before they are read.
+// Initials: ㄱ0 ㄲ1 ㄴ2 ㄷ3 ㄸ4 ㄹ5 ㅁ6 ㅂ7 ㅃ8 ㅅ9 ㅆ10 ㅇ11 ㅈ12 ㅉ13 ㅊ14 ㅋ15 ㅌ16 ㅍ17 ㅎ18.
+// Finals: 0 none, ㄱ1 ㄲ2 ㄳ3 ㄴ4 ㄵ5 ㄶ6 ㄷ7 ㄹ8 ㄺ9 ㄻ10 ㄼ11 ㄽ12 ㄾ13 ㄿ14 ㅀ15 ㅁ16 ㅂ17 ㅄ18 ㅅ19 ㅆ20 ㅇ21 ㅈ22 ㅊ23 ㅋ24 ㅌ25 ㅍ26 ㅎ27.
+type Jamo = { i: number; v: number; f: number }
+const KO_H_FINAL: Record<number, number> = { 27: 0, 6: 4, 15: 8 }            // ㅎ ㄶ ㅀ → what is left when the ㅎ goes
+const KO_ASPIRATE: Record<number, number> = { 0: 15, 3: 16, 12: 14 }          // ㄱ ㄷ ㅈ → ㅋ ㅌ ㅊ
+const KO_TENSE: Record<number, number> = { 0: 1, 3: 4, 7: 8, 9: 10, 12: 13 }  // ㄱ ㄷ ㅂ ㅅ ㅈ → ㄲ ㄸ ㅃ ㅆ ㅉ
+const KO_STOP_K = [1, 2, 3, 24], KO_STOP_T = [7, 19, 20, 22, 23, 25], KO_STOP_P = [17, 18, 26]
+
+function koSurface(parts: Jamo[]): Jamo[] {
+    const p = parts.map((x) => ({ ...x }))
+    for (let k = 0; k + 1 < p.length; k++) {
+        const cur = p[k], next = p[k + 1]
+        // palatalization (구개음화): ㄷ ㅌ ㄾ before 이 → 지 치 (같이 → 가치, 굳이 → 구지)
+        if (next.i === 11 && next.v === 20 && (cur.f === 7 || cur.f === 25 || cur.f === 13)) {
+            next.i = cur.f === 7 ? 12 : 14
+            cur.f = cur.f === 13 ? 8 : 0
+            continue
+        }
+        // aspiration (격음화): ㅎ meets ㄱ ㄷ ㅈ, or ㄱ ㄷ ㅂ meets ㅎ (좋다 → 조타, 축하 → 추카, 입학 → 이팍, 밝히다 → 발키다)
+        if (cur.f in KO_H_FINAL) {
+            if (next.i in KO_ASPIRATE) { next.i = KO_ASPIRATE[next.i]; cur.f = KO_H_FINAL[cur.f]; continue }
+            if (next.i === 9) { next.i = 10; cur.f = KO_H_FINAL[cur.f]; continue }        // 좋소 → 조쏘
+            if (next.i === 2 && cur.f === 27) { cur.f = 4; continue }                      // 놓는 → 논는
+        }
+        if (next.i === 18) {
+            if (KO_STOP_K.includes(cur.f) || cur.f === 9) { next.i = 15; cur.f = cur.f === 9 ? 8 : 0; continue }
+            if (KO_STOP_T.includes(cur.f)) { next.i = 16; cur.f = 0; continue }            // 못하다 → 모타다
+            if (KO_STOP_P.includes(cur.f) || cur.f === 11) { next.i = 17; cur.f = cur.f === 11 ? 8 : 0; continue }
+        }
+        // ㄹ next to ㄴ (유음화): 신라 → 실라, 설날 → 설랄
+        if (cur.f === 4 && next.i === 5) { cur.f = 8; continue }
+        if ((cur.f === 8 || cur.f === 13 || cur.f === 15) && next.i === 2) { next.i = 5; continue }
+        // ㄹ after ㅁ ㅇ, or after a stop, is said ㄴ (심리 → 심니, 종로 → 종노, 국립 → 궁닙: the stop then turns nasal below)
+        if (next.i === 5 && (cur.f === 16 || cur.f === 21 || ['k', 't', 'p'].includes(KO_FINAL[cur.f]))) { next.i = 2; continue }
+        // tense after a stop (경음화): 먹다 → 먹따, 학교 → 학꾜, 학비 → 학삐
+        if (['k', 't', 'p'].includes(KO_FINAL[cur.f]) && next.i in KO_TENSE) next.i = KO_TENSE[next.i]
+    }
+    return p
+}
+
 /** One hangul word → Việt-ji ("안녕하세요" → "an-niơng-ha-sê-dô"); null when it holds no hangul syllable. */
 export function hangulToVietji(word: string): string | null {
     const blocks = [...word].filter((c) => { const cp = c.codePointAt(0)!; return cp >= 0xAC00 && cp <= 0xD7A3 })
     if (blocks.length === 0) return null
-    const parts = blocks.map((c) => {
+    const parts = koSurface(blocks.map((c) => {
         const n = c.codePointAt(0)! - 0xAC00
         return { i: Math.floor(n / 588), v: Math.floor((n % 588) / 28), f: n % 28 }
-    })
+    }))
     const out: string[] = []
     let carried = ''                                                    // a consonant moved here from the syllable before
     for (let k = 0; k < parts.length; k++) {
@@ -79,6 +120,8 @@ export function hangulToVietji(word: string): string | null {
         if (carried) {
             const onset = carried === 'g' && /^[eêi]/.test(vowel) ? 'gh' : carried === 'c' && /^[eêi]/.test(vowel) ? 'k' : carried
             syl = onset + vowel
+        } else if (i === 5 && k > 0 && KO_FINAL[parts[k - 1].f] === 'l') {
+            syl = 'l' + vowel                                               // ㄹㄹ is a long l, not r: 실라 → sil-la
         } else if (i === 0 && k > 0 && [0, 4, 8, 16, 21].includes(parts[k - 1].f)) {
             syl = (/^[eêi]/.test(vowel) ? 'gh' : 'g') + vowel                 // ㄱ between voiced sounds is said g: 한국 → han-guc
         } else {

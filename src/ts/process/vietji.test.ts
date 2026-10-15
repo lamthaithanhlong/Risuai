@@ -211,3 +211,16 @@ describe('Chinese written without [pinyin] (reported: 快开门！ showed no rea
         expect(addReadings('快开门')).toContain('chưa có cách đọc')
     })
 })
+
+describe('Korean as it is said, not as it is spelled (표준 발음법)', () => {
+    it.each([
+        ['국물', 'cung-mul'], ['감사합니다', 'cam-sa-ham-ni-đa'],                          // a stop before ㄴ ㅁ turns nasal
+        ['같이', 'ca-chi'], ['굳이', 'cu-chi'],                                              // palatalization
+        ['좋다', 'chô-tha'], ['많다', 'man-tha'], ['축하', 'chu-kha'], ['입학', 'i-pac'], ['못해요', 'mô-the-dô'],   // aspiration
+        ['신라', 'sil-la'], ['설날', 'sơl-lal'],                                              // ㄹ next to ㄴ
+        ['심리', 'sim-ni'], ['종로', 'chông-nô'], ['국립', 'cung-nip'],                      // ㄹ said ㄴ
+        ['먹다', 'mơc-ta'], ['학교', 'hac-kiô'],                                             // tense after a stop
+        ['맛있어요', 'ma-si-sơ-dô'], ['좋아요', 'chô-a-dô'], ['안녕하세요', 'an-niơng-ha-sê-dô'], ['한국어', 'han-gu-gơ'],
+    ])('%s → %s', (w, v) => expect(hangulToVietji(w)).toBe(v))
+})
+
