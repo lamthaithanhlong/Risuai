@@ -11,9 +11,9 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
-    import { allowCoach, filledHtml, sentBefore, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
+    import { allowCoach, detailAsker, filledHtml, sentBefore, readInline, installDetailButton, type Detail } from "src/ts/process/grammarCoach";
     import { phraseVietji } from "src/ts/process/vietji";
-    import { mixChips } from "src/ts/process/vietjiSuggest";
+    import { mixChips, repliesOrThrow } from "src/ts/process/vietjiSuggest";
     import { rememberThought, thoughtFor } from "src/ts/process/learningThought";
     import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
@@ -133,7 +133,7 @@
         const { requestChatData } = await import("src/ts/process/request/request")
         const known = notebook.vocab.filter((v) => (v.ok ?? 0) > 0).map((v) => stripReadings(v.text))
         const res = await requestChatData({ formated: [{ role: 'user', content: howToSayPrompt(viet, askLang, known) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
-        return res.type === 'success' && typeof res.result === 'string' ? parseReplies(res.result) : []
+        return repliesOrThrow(res)
     })
 
     // docs/specs/VietjiBar.tla: wait for the word list before the pause timer (else a text the list knows is asked when the
@@ -205,24 +205,23 @@
     // "🔍 Chi tiết" under a reply's grammar note: the player's whole sentence before that reply, taught in steps, asked of the
     // model once per sentence when pressed (the note itself may fix only one word of it)
     let detail = $state<{ sent: string; data: Detail | null; loading: boolean; error: string } | null>(null)
-    const detailAsker = makeAsker<Detail | null>(async (key) => {
-        const [l, sent, hint] = JSON.parse(key) as [string, string, string]
+    const askDetail = detailAsker(async (prompt) => {
         const { requestChatData } = await import("src/ts/process/request/request")
-        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(sent, l, thoughtFor(sent) ?? '', hint) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
-        return res.type === 'success' && typeof res.result === 'string' ? parseDetail(res.result) : null
+        const res = await requestChatData({ formated: [{ role: 'user', content: prompt }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+        return res.type === 'success' && typeof res.result === 'string' ? res.result : null
     })
     $effect(() => {
         if (!enabled) return
         return installDetailButton((fix, wrote, at) => {
             const sent = sentBefore(chat?.message, at) || wrote || fix
-            const key = JSON.stringify([lang, sent, wrote ? `${wrote} → ${fix}` : ''])
-            const cached = detailAsker.cached(key)
+            const key = JSON.stringify([lang, sent, wrote ? `${wrote} → ${fix}` : '', thoughtFor(sent) ?? ''])
+            const cached = askDetail.cached(key)
             detail = { sent, data: cached ?? null, loading: !cached, error: '' }
             if (cached) return
             if (!allowCoach()) { detail = { ...detail, loading: false, error: 'Bấm nhiều quá, đợi chút rồi bấm lại.' }; return }
-            detailAsker.ask(key).then((d) => {
-                if (detail?.sent === sent) detail = { ...detail, data: d, loading: false, error: d ? '' : 'Chưa phân tích được câu này.' }
-            }).catch(() => { if (detail?.sent === sent) detail = { ...detail, loading: false, error: 'Không gọi được model.' } })
+            askDetail.ask(key).then((d) => {
+                if (detail?.sent === sent) detail = { ...detail, data: d, loading: false, error: '' }
+            }).catch(() => { if (detail?.sent === sent) detail = { ...detail, loading: false, error: 'Chưa phân tích được câu này — bấm 🔍 lần nữa để thử lại.' } })
         })
     })
 

@@ -1,3 +1,5 @@
+import { makeAsker } from './vietjiDict'
+
 // The grammar lesson under a reply (asked: after sending, the reply shows how it should be said and explains each part, like
 // a teacher, in a small line, for every language; the points are kept so mistakes are reminded later).
 //
@@ -68,6 +70,20 @@ export function lessonHtml(l: Lesson): string {
 // one word: 개 → 게 for 그렇게 개 거기 이다 개 이상하다뭐 그렇다), say it is not grammatical and give the right frame, then their
 // words one by one, right in green and wrong in red, then their right nouns and verbs put into the frame ("ok, these are
 // right"), then what is wrong or missing (in Korean the verb goes last, so reorder; add the particles), then the finished sentence.
+
+/**
+ * The panel's asker: one request per sentence, a good answer kept. A bad one (no JSON, or JSON that does not parse) is not
+ * kept, so the next press asks again: it was kept as null, and every later press showed "Chưa phân tích được" without
+ * asking (TLC, docs/specs/VietjiDetail.tla, PressAlwaysTries). `request` sends the prompt and gives the model's text.
+ */
+export function detailAsker(request: (prompt: string) => Promise<string | null>) {
+    return makeAsker<Detail>(async (key) => {
+        const [lang, sent, hint, meant] = JSON.parse(key) as [string, string, string, string]
+        const d = parseDetail((await request(detailPrompt(sent, lang, meant ?? '', hint))) ?? '')
+        if (!d) throw new Error('bad answer')
+        return d
+    })
+}
 
 export type DetailPiece = { piece: string; kind: string; heard: string; ok: boolean; why: string }
 export type DetailAdd = { add: string; why: string }

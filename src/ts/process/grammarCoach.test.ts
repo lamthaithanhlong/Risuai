@@ -157,3 +157,24 @@ describe('reported: some Korean in the explanations had no Việt-ji', () => {
         expect(html.match(/f2c76b/g)!.length).toBeGreaterThanOrEqual(5)
     })
 })
+
+describe('found by TLC (VietjiDetail.tla, PressAlwaysTries): a bad answer was kept, and later presses never asked again', () => {
+    it('the detail asker forgets a bad answer and asks again; a good one is kept', async () => {
+        const { detailAsker } = await import('./grammarCoach')
+        const answers = ['xin lỗi, không có JSON', KO_DETAIL]
+        let sent = 0
+        const ask = detailAsker(async () => { sent++; return answers.shift() ?? null })
+        const key = JSON.stringify(['ko', '나 잡다', '', ''])
+        await expect(ask.ask(key)).rejects.toThrow('bad answer')
+        expect(ask.cached(key)).toBeUndefined()
+        expect((await ask.ask(key)).final).toBe('나는 그 여자의 손을 잡고 문턱을 넘어 지붕 위로 올라간다.')
+        await ask.ask(key)
+        expect(sent).toBe(2)                                                   // asked again after the bad one, not after the good
+    })
+    it('the how-to-say answer: a failed or empty one throws (so it is not kept)', async () => {
+        const { repliesOrThrow } = await import('./vietjiSuggest')
+        expect(() => repliesOrThrow({ type: 'fail', result: 'x' })).toThrow()
+        expect(() => repliesOrThrow({ type: 'success', result: 'không có khối' })).toThrow()
+        expect(repliesOrThrow({ type: 'success', result: '[[REPLIES\n가요 | Đi | easy\n]]' })[0].text).toBe('가요')
+    })
+})

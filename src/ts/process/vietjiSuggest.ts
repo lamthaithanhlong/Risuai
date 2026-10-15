@@ -160,3 +160,15 @@ export function mixChips(rest: Suggestion[], ime: Suggestion[], offeredHit: Sugg
     if (o.soundTyping) return [...offeredHit.slice(0, 4), ...ime, ...rest]
     return o.listSure ? rest : [...rest, ...ime]
 }
+
+/**
+ * The model's "how to say it" answer as replies, or a throw: a failed request (the model down, 9router restarting) or an
+ * answer with no replies must not be kept by the asker, else that text is never asked again until a reload (it was kept as
+ * [], the same fault as the detail panel's; docs/specs/VietjiDetail.tla, PressAlwaysTries).
+ */
+export function repliesOrThrow(res: { type: string; result?: unknown }): SuggestedReply[] {
+    if (res.type !== 'success' || typeof res.result !== 'string') throw new Error('how-to-say request failed')
+    const got = parseReplies(res.result)
+    if (!got.length) throw new Error('how-to-say answer had no replies')
+    return got
+}
