@@ -5,7 +5,7 @@ Source: the Vietnamese entries of the French Wiktionary, as extracted by wiktext
 kaikki.org-dictionary-Vietnamien.jsonl), CC BY-SA 4.0. Each word keeps up to four short French
 glosses, everyday senses first; Han characters and proper names are left out.
 
-    python3 scripts/build_vidict.py kaikki.org-dictionary-Vietnamien.jsonl public/dict/vi-fr.json
+    python3 scripts/build_vidict.py kaikki.org-dictionary-Vietnamien.jsonl public/dict/vi-fr.json [vie_sentences.tsv.bz2]
 """
 import json
 import re
@@ -65,6 +65,10 @@ if __name__ == '__main__':
     src, out = sys.argv[1], sys.argv[2]
     words = build(src)
     data = {'_source': 'French Wiktionary (fr.wiktionary.org), Vietnamese entries, via wiktextract/kaikki.org; CC BY-SA 4.0', 'words': words}
+    if len(sys.argv) > 3:                                      # Tatoeba vie_sentences.tsv.bz2: the words' everyday order
+        sys.path.insert(0, __import__('os').path.dirname(__file__))
+        from build_vidict_pivot import vi_order
+        data['order'] = vi_order(sys.argv[3], words)
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
     print(f'{len(words)} words -> {out}')

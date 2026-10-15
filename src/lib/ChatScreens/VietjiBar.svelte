@@ -9,7 +9,7 @@
     import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
-    import { dictSuggestions, loadWordList, makeAsker, needsModel, type Dictionary } from "src/ts/process/vietjiDict";
+    import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
 
@@ -36,15 +36,17 @@
     let wordList = $state<Dictionary | null>(null)
     let wordListLang = $state('')
     let listReady = $state(false)
+    let typedAny = $derived(enabled && /\p{L}/u.test(value ?? '') ? (value ?? '').trim() : '')
     $effect(() => {
-        if (!typedViet || wordListLang === lang) return
+        if (!typedAny || wordListLang === lang) return            // without marks too: "tui" is a Vietnamese word as well
         const want = lang
         wordListLang = want
         wordList = null
         listReady = false
         loadWordList(want).then((w) => { if (lang === want) { wordList = w; listReady = true } })
     })
-    let fromList = $derived(typedViet && wordListLang === lang ? dictSuggestions(typedViet, wordList?.words ?? null, lang) : [])
+    let fromList = $derived(wordListLang !== lang ? [] : typedViet ? dictSuggestions(typedViet, wordList?.words ?? null, lang)
+        : typedAny ? toneless(typedAny, wordList, lang) : [])
     let listSure = $derived(fromList.length > 0 && !needsModel(typedViet, wordList))
     let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])
     let items = $derived(enabled ? suggest(value ?? '', pool) : [])

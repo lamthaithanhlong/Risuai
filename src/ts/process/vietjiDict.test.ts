@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dictSuggestions, loadWordList, makeAsker, needsModel, segment, type WordList } from './vietjiDict'
+import { dictSuggestions, foldVietnamese, loadWordList, makeAsker, needsModel, segment, toneless, type WordList } from './vietjiDict'
 import { suggest, suggestionPool } from './vietjiSuggest'
 
 const words: WordList = {
@@ -106,5 +106,37 @@ describe('asking the model (docs/specs/VietjiBar.tla)', () => {
         expect(asker.pending('k')).toBe(false)
         expect(await asker.ask('k')).toBe('ok')
         expect(calls).toBe(2)
+    })
+})
+
+describe('typed without marks (the bug: "tui" in Chinese showed nothing)', () => {
+    // the object's own order differs from the everyday order on purpose; "ăn" alone is a word too (longest match must win)
+    const zh = { words: { 'tủi': ['委屈[wěiqu]'], 'túi': ['袋[dài]'], 'tụi': ['他们[tāmen]'], 'tui': ['我[wǒ]'], 'ăn': ['吃[chī]'], 'ăn cơm': ['吃饭[chīfàn]'], 'đói': ['饿[è]'] } as WordList,
+        unsure: new Set<string>(), order: ['tui', 'ăn cơm', 'túi', 'tụi', 'đói'] }
+    it('folds marks away, spaces kept', () => {
+        expect(foldVietnamese('Túi đỏ!')).toBe('tui do')
+        expect(foldVietnamese('ĂN CƠM')).toBe('an com')
+    })
+    it('"tui": every word it could be, the most used first, Vietnamese with marks on top', () => {
+        const s = toneless('tui', zh, 'zh')
+        expect(s.map((x) => x.meaning)).toEqual(['tui', 'túi', 'tụi', 'tủi'])     // tủi is not in the order: last
+        expect(s[0]).toMatchObject({ text: '我[wǒ]', source: 'dict' })
+        expect(s[0].vietji).toBeTruthy()
+    })
+    it('a toneless sentence: the most used reading of each word, in order', () => {
+        const s = toneless('tui an com', zh, 'zh')
+        expect(s[0]).toMatchObject({ text: '我[wǒ] 吃饭[chīfàn]', meaning: 'tui ăn cơm · từng chữ' })
+        // each word alone too, and the bar keeps them although their meaning is only part of what was typed
+        expect(suggest('tui an com', suggestionPool({ lang: 'zh', dict: s })).map((x) => x.text)).toContain('吃饭[chīfàn]')
+    })
+    it('in the bar: sound matches first ("ni hao"), the toneless word after, and "tui" is no longer empty', () => {
+        const pool = suggestionPool({ lang: 'zh', dict: toneless('tui', zh, 'zh') })
+        expect(suggest('tui', pool)[0].text).toBe('我[wǒ]')
+        const hello = suggestionPool({ lang: 'zh', dict: toneless('ni hao', zh, 'zh') })
+        expect(suggest('ni hao', hello)[0].text).toBe('你好[nǐhǎo]')
+    })
+    it('no list, or nothing it knows: nothing', () => {
+        expect(toneless('tui', null, 'zh')).toEqual([])
+        expect(toneless('xyzzy', zh, 'zh')).toEqual([])
     })
 })

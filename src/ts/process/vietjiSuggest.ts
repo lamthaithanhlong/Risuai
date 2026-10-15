@@ -113,7 +113,8 @@ export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[
     pool.forEach((s, i) => {
         const sound = foldTyping(s.vietji)
         const meaning = foldTyping(s.meaning)
-        const score = sound.startsWith(q) ? 3 : sound.includes(q) ? 2 : q.length >= 3 && meaning.includes(q) ? 1 : 0
+        // a word of the offline list read from toneless Vietnamese ("tui" → 我) comes after the sound matches ("ni hao")
+        const score = sound.startsWith(q) ? 3 : sound.includes(q) ? 2 : s.source === 'dict' ? 1.5 : q.length >= 3 && meaning.includes(q) ? 1 : 0
         if (score) scored.push([score, i, s])
     })
     return scored.sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, max).map((x) => x[2])

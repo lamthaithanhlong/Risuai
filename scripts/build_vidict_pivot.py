@@ -474,6 +474,26 @@ def score(words: dict, golden: dict, lang: str):
     return top1 / n, top3 / n, misses
 
 
+def vi_order(sentences_bz2: str, words) -> list:
+    """The list's Vietnamese words, most used first (occurrences in Tatoeba's Vietnamese sentences): the bar uses it to rank
+    the words a toneless spelling could be ("tui" → tui, túi, tụi, tủi)."""
+    import bz2
+    from collections import Counter
+    want = set(words)
+    counts = Counter()
+    for line in bz2.open(sentences_bz2, 'rt', encoding='utf-8'):
+        parts = line.rstrip('\n').split('\t')
+        if len(parts) < 3:
+            continue
+        syl = re.findall(r'[^\W\d_]+', unicodedata.normalize('NFC', parts[2].lower()))
+        for n in range(1, 5):
+            for i in range(len(syl) - n + 1):
+                g = ' '.join(syl[i:i + n])
+                if g in want:
+                    counts[g] += 1
+    return [w for w, _ in counts.most_common(8000)]
+
+
 READERS = {'ja': japanese, 'zh': chinese, 'ko': korean, 'es': spanish}
 
 if __name__ == '__main__':
@@ -484,6 +504,8 @@ if __name__ == '__main__':
     ap.add_argument('--out')
     ap.add_argument('--golden')
     ap.add_argument('--pairs', help='Tatoeba Vietnamese/foreign sentence pairs (JSONL [vi, x]) used as evidence')
+    ap.add_argument('--sentences', help="Tatoeba vie_sentences.tsv.bz2: write the words' everyday order ('order')")
+    ap.add_argument('--ai', help='JSON {lang: {vi: [..]}} from scripts/vidict_ai_review.py: reviewed picks first, and sure')
     ap.add_argument('--common', help='JSON {lang: {vi: [..]}} of everyday words put first (same role as COMMON in build_vidict.py)')
     a = ap.parse_args()
     vi = vietnamese(a.vi)
@@ -493,6 +515,13 @@ if __name__ == '__main__':
     ZIPF_WEIGHT, rank_weight = WEIGHTS[a.lang]
     TATOEBA = TATOEBA_BY_LANG[a.lang]
     words = join(vi, index(READERS[a.lang](a.src)), zipf, rank_weight, Evidence(a.pairs, a.lang) if a.pairs else None)
+    if a.ai:
+        # measured on 100 known answers (25 words x 4 languages): the reviewing model was right 97 times, more than the
+        # list's own "sure" picks (82-90%), so a reviewed word takes the model's picks in every language it answered
+        for w, g in json.load(open(a.ai, encoding='utf-8')).get(a.lang, {}).items():
+            if w in words or w in vi:
+                words[w] = (g + [x for x in words.get(w, []) if bare(x) not in {bare(y) for y in g}])[:MAX_OUT]
+                UNSURE.discard(w)
     if a.common:
         for w, g in json.load(open(a.common, encoding='utf-8')).get(a.lang, {}).items():
             words[w] = (g + [x for x in words.get(w, []) if bare(x) not in {bare(y) for y in g}])[:MAX_OUT]
@@ -507,6 +536,8 @@ if __name__ == '__main__':
                'es': 'FreeDict eng-spa (CC BY-SA 3.0)'}[a.lang]
         data = {'_source': f'Joined through English: English Wiktionary Vietnamese entries (CC BY-SA 4.0) + {src}', 'words': dict(sorted(words.items())),
                 'unsure': sorted(UNSURE & set(words))}
+        if a.sentences:
+            data['order'] = vi_order(a.sentences, words)
         with open(a.out, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
         print(f'{len(words)} words -> {a.out}', file=sys.stderr)
