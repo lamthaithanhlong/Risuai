@@ -12,7 +12,7 @@
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
     import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
-    import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
+    import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
 
@@ -41,9 +41,15 @@
     let koIndex = $state<SoundIndex | null>(null)
     let kanaIndex = $state<KanaIndex | null>(null)
     let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex)))
-    let typedViet = $derived(enabled && looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) && !soundTyping ? (value ?? '').trim() : '')
-    // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
     let wordList = $state<Dictionary | null>(null)
+    // building a sentence: words already written in the language, then Vietnamese at the end ("我 想 cô ấy"): only that end is
+    // looked up (and asked about), and its chips keep what is before it
+    let vietSet = $derived(new Set(Object.keys(wordList?.words ?? {})))
+    let composing = $derived(enabled ? vietnameseTail(value ?? '', vietSet) : { head: '', tail: '' })
+    let composeMode = $derived(!!composing.head.trim() && !!composing.tail)
+    let typedViet = $derived(!enabled || soundTyping ? '' : composeMode ? composing.tail
+        : looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) ? (value ?? '').trim() : '')
+    // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
     let wordListLang = $state('')
     let listReady = $state(false)
     let typedAny = $derived(enabled && /\p{L}/u.test(value ?? '') ? (value ?? '').trim() : '')
@@ -92,7 +98,7 @@
     })
 
     // typed right, written at once: at the space, a word whose sound reads exactly as one word becomes its characters
-    let vietnameseWords = $derived(new Set(Object.keys(wordList?.words ?? {})))
+    let vietnameseWords = $derived(vietSet)
     $effect(() => {
         const v = value ?? ''
         if (!enabled || DBState.db.learningAutoWrite === false || !v.endsWith(' ')) return
@@ -101,7 +107,12 @@
     })
     let items = $derived.by(() => {
         if (!enabled) return []
-        const rest = suggest(value ?? '', pool)
+        // in a sentence being built, a chip for the Vietnamese end replaces only that end
+        const compose = composeMode ? composeSuggestions(value ?? '', wordList, lang) : []
+        const keepHead = (x: Suggestion) => (composeMode && x.replace === undefined && (x.source === 'asked' || x.source === 'dict')
+            ? { ...x, replace: composing.head.replace(/(?<=[\u3040-\u30ff\u3400-\u9fff])\s+$/, '') + stripReadings(x.text).replace(/[«»]/g, '').trim() } : x)
+        // while composing, the list's own chips for the Vietnamese end are the compose chips: the whole-input ones would repeat them
+        const rest = [...compose, ...suggest(composeMode ? composing.tail : value ?? '', pool).filter((x) => !(composeMode && x.source === 'dict')).map(keepHead)]
         // an offered answer that starts with the typed sound is most likely what is being typed: it goes first
         const offeredHit = soundMatch(value ?? '', offered) ? rest.filter((s) => s.source === 'reply' || s.source === 'heard' || s.source === 'starter') : []
         // at most four of them, so the word-by-word chips (我 alone) still have room

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
-import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, convert, jaConvert, jaSuggestions } from './vietjiIme'
+import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, convert, imeSuggestions, jaConvert, jaSuggestions } from './vietjiIme'
 import { fromVietji } from './vietji'
 import { hangulToVietji } from './vietjiLang'
 
@@ -48,12 +48,25 @@ describe('typed right, written at once (at the space)', () => {
             .filter((l) => commitOnSpace(w + ' ', l, { zh, ko, ja, vietnamese }) !== null).map((l) => `${w}/${l}`))
         expect(eaten).toEqual([])
     })
-    it('without the Vietnamese list a one-syllable collision would be eaten: the guard is what stops it', () => {
-        expect(commitOnSpace('là ', 'zh', { zh })).not.toBe(null)                 // là = 辣 (fourth tone)
-        expect(commitOnSpace('là ', 'zh', { zh, vietnamese: new Set(['là']) })).toBe(null)
+    it('without the Vietnamese list some one-syllable collisions would be eaten: the guard is what stops them', () => {
+        const vi = json('public/dict/vi-zh.json')
+        const common = (vi.order as string[]).filter((w) => !w.includes(' ')).slice(0, 300)
+        const wouldEat = common.filter((w) => commitOnSpace(w + ' ', 'zh', { zh }) !== null)
+        expect(wouldEat.length).toBeGreaterThan(0)                                 // e.g. dùng → 用 (fourth tone, the usual word)
+        expect(wouldEat.filter((w) => commitOnSpace(w + ' ', 'zh', { zh, vietnamese: new Set(Object.keys(vi.words)) }) !== null)).toEqual([])
     })
     it('nothing happens before the space, or for a word that is not exact', () => {
         expect(commitOnSpace('trư-tào', 'zh', { zh })).toBe(null)
         expect(commitOnSpace('tru-tao ', 'zh', { zh })).toBe(null)                // no marks: not exact
+    })
+})
+
+describe('reported: "cô nên bình tĩnh lại đi" came out 逆该冷静lại', () => {
+    it('a tone off is not written at once: "nì" (逆) is not the usual word for that sound (你 nǐ), so the chips offer both', () => {
+        expect(commitOnSpace('nì ', 'zh', { zh })).toBe(null)
+        expect(commitOnSpace('nỉ ', 'zh', { zh })).toBe('你')
+        const chips = imeSuggestions('nì', zh).map((c) => c.text)
+        expect(chips).toContain('逆')
+        expect(chips).toContain('你')
     })
 })

@@ -5,7 +5,7 @@
 // the model, the way it does when the list has nothing.
 
 import type { LearningLang } from './vietji'
-import { phraseVietji, setLatinLanguage } from './vietji'
+import { phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
 
 export type WordList = Record<string, string[]>
@@ -152,4 +152,68 @@ export function toneless(typed: string, dict: Dictionary | null, lang: LearningL
     }
     const sentence = parts.map((p) => p[0]).join(' ')
     return dictSuggestions(sentence, dict.words, lang, max)
+}
+
+// ---- building a sentence word by word from Vietnamese (asked: think in Vietnamese, look each word up, put them together) ----
+
+const VI_MARK = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i
+
+/**
+ * The Vietnamese words at the end of the input, after what is already written in the language ("我 想 cô ấy" → "我 想 ",
+ * "cô ấy"; "yo pienso cô ấy" → "yo pienso ", "cô ấy"): the longest run of words that carry Vietnamese marks or are words of
+ * the list. Spanish and French are Latin too, so a word without marks counts only when the list knows it as Vietnamese.
+ */
+export function vietnameseTail(input: string, vietnamese: Set<string>): { head: string; tail: string } {
+    const text = input ?? ''
+    // words split at spaces and where the script changes: after a word written at the space, the next Vietnamese word is typed
+    // right after the characters ("逆该冷静lại": reported, it was not found and the whole input was looked up)
+    const parts = [...text.matchAll(/\p{Script=Latin}+|[^\s\p{Script=Latin}]+/gu)]
+    let k = parts.length
+    while (k > 0) {
+        const word = parts[k - 1][0].toLowerCase()
+        if (!/^\p{Script=Latin}+$/u.test(word) || !(VI_MARK.test(word) || vietnamese.has(word))) break
+        k--
+    }
+    if (k === parts.length) return { head: text, tail: '' }
+    const at = parts[k].index!
+    return { head: text.slice(0, at), tail: text.slice(at).trim() }
+}
+
+const plainWord = (text: string) => stripReadings(text).replace(/[«»]/g, '').trim()
+
+/**
+ * Chips that write the Vietnamese at the end of the input in the language and keep what is before it: the whole run word by
+ * word, then each meaning of its first word (the rest stays Vietnamese, to go on with). Chinese and Japanese join without
+ * spaces, the others with one.
+ */
+export function composeSuggestions(input: string, dict: Dictionary | null, lang: LearningLang, max = 6): Suggestion[] {
+    if (!dict) return []
+    const { head: rawHead, tail } = vietnameseTail(input, new Set(Object.keys(dict.words)))
+    if (!tail) return []
+    const joiner = lang === 'zh' || lang === 'ja' ? '' : ' '
+    const head = joiner === '' ? rawHead.replace(/(?<=[぀-ヿ㐀-鿿])\s+$/, '') : rawHead
+    const parts = segment(tail, dict.words)
+    if (!parts.length) return []
+    if (lang === 'es' || lang === 'fr') setLatinLanguage(lang)
+    const out: Suggestion[] = []
+    const seen = new Set<string>()
+    // the reading comes from the list's own form (我[wǒ]): the plain characters alone have none
+    const chip = (text: string, source: string, meaning: string, replace: string) => {
+        const vietji = phraseVietji(`«${source}»`) ?? ''
+        if (seen.has(replace) || out.length >= max) return
+        seen.add(replace)
+        out.push({ text, vietji, meaning, source: 'dict', replace })
+    }
+    const syl = syllables(tail)
+    if (parts.length > 1) {
+        const whole = parts.map((p) => plainWord(p.fr[0])).join(joiner)
+        chip(whole, parts.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`, head + whole)
+    }
+    const first = parts[0]
+    const n = first.vi.split(' ').length
+    if (syl.slice(0, n).join(' ') === first.vi) {                // the run starts with a known word
+        const rest = tail.split(/\s+/).slice(n).join(' ')
+        for (const fr of first.fr) chip(plainWord(fr), fr, first.vi, head + plainWord(fr) + (rest ? ' ' + rest : ''))
+    }
+    return out
 }

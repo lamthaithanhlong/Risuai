@@ -4,7 +4,7 @@
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
 import { addReadings, addSayButtons, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
-import { addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult } from './learningMemory'
+import { addGrammar, addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult, type Fix } from './learningMemory'
 import { migrateChat, readNotebook, writeNotebook } from './learningStore'
 
 /** "? cái muối này bao nhiêu": the learner asks how to say something (also after a name prefix such as "Kenji: ?"). */
@@ -96,7 +96,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     const lang = (db.learningLang ?? 'ja') as LearningLang
     if (chat) migrateChat(db, lang, chat)
     const nb = readNotebook(db, lang)
-    const memory = memoryNote(nb.vocab, nb.mistakes, nb.history, now)
+    const memory = memoryNote(nb.vocab, nb.mistakes, nb.history, now, { grammarLater: db.learningGrammarLater !== false, grammar: nb.grammar })
         + (chat?.scriptstate?.[CHECK_MISSED_LAST_VAR] === '1' ? '\nYour previous reply forgot the [[CHECK]] line. Do not forget it this time.' : '')
     const note = { role: 'system', content: learningNote((db.learningLang ?? 'ja') as LearningLang) + '\n' + memory } as T
     let lastUser = -1
@@ -116,7 +116,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     // the language in 2 of 2. Only the request carries it; the stored message is unchanged.
     const last = typed.map((m) => m.role).lastIndexOf('user')
     if (last < 0 || typeof typed[last].content !== 'string') return typed
-    return typed.map((m, i) => (i === last ? { ...m, content: m.content + learningReminder(lang) } : m))
+    return typed.map((m, i) => (i === last ? { ...m, content: m.content + learningReminder(lang, db.learningGrammarLater !== false) } : m))
 }
 
 // how the line is written, in the reminder too: a Chinese line came back as 快开门！ with no pinyin, so it had no reading
@@ -128,8 +128,12 @@ const REMIND_WRITING: Partial<Record<LearningLang, string>> = {
 }
 
 /** The short reminder put after the player's last message in the request (see learningRequest). */
-export function learningReminder(lang: LearningLang): string {
-    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, then the [[CHECK]] line if the player wrote in that language.]`
+export function learningReminder(lang: LearningLang, grammarLater = false): string {
+    // the check's exact forms, here too: with them only in the note, the model wrote "[[CHECK]]" and "[[CHECK: …]]" (2026-10-15)
+    const check = grammarLater
+        ? 'then, if the player wrote in that language, one check line: [[CHECK ok]] when it was right, [[CHECK grammar <what they wrote> → <the natural sentence> | <one grammar point in a few Vietnamese words>]] when the words were right and only the order or grammar was off, or [[CHECK <wrong word> → <right word> | <why in Vietnamese>]] when a word was wrong'
+        : 'then the [[CHECK]] line if the player wrote in that language'
+    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, ${check}.]`
 }
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */
@@ -174,7 +178,13 @@ function rememberReply(chat: Chat | undefined, now: number): void {
         console.warn('[learning] the reply has no [[CHECK]] line; grading only an exact known phrase')
         check = selfCheck(userLine, nb.vocab)
     }
-    if (check) {
+    if (check && !check.ok && (check as Fix).grammar) {
+        // the words were right, only the grammar was off: counted right, and the grammar point goes into the notebook
+        chat.scriptstate[GRADED_FOR_VAR] = lineKey
+        nb.vocab = gradeUse(nb.vocab, userLine, { ok: true }, now)
+        nb.grammar = addGrammar(nb.grammar ?? [], check as Fix, now)
+        nb.history = [...nb.history, true]
+    } else if (check) {
         chat.scriptstate[GRADED_FOR_VAR] = lineKey
         nb.vocab = gradeUse(nb.vocab, userLine, check, now)
         nb.mistakes = addMistake(nb.mistakes, check, now)

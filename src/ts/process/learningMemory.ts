@@ -15,7 +15,10 @@ const DAY = 24 * 60 * 60 * 1000
 /** A phrase with its SM-2 state: ease factor, interval (days), successful repetitions in a row, next review time, counts. */
 export type VocabItem = SuggestedReply & { ef?: number; iv?: number; reps?: number; due?: number; ok?: number; bad?: number }
 export type Mistake = { wrong: string; right: string; why: string; count: number; last: number }
-export type Fix = { ok: false; wrong: string; right: string; why: string }
+/** grammar: every word was a right word for what the learner meant, only the order or the grammar words were off */
+export type Fix = { ok: false; wrong: string; right: string; why: string; grammar?: boolean }
+/** A grammar point the learner has been shown, with the example it came with. */
+export type GrammarPoint = { point: string; wrong: string; right: string; count: number; last: number }
 export type CheckResult = { ok: true } | Fix
 
 /** SM-2: quality 0-5 (5 perfect, 3 recalled with effort, below 3 a failure that starts the item over). */
@@ -41,12 +44,14 @@ export function sm2(item: VocabItem, quality: number, now: number): VocabItem {
 export function parseCheck(reply: string): CheckResult | null {
     const m = /\[\[CHECK\s+([\s\S]*?)\]\]/.exec(reply ?? '')
     if (!m) return null
-    const body = m[1].trim()
+    let body = m[1].trim()
     if (/^ok\b/i.test(body)) return { ok: true }
+    const grammar = /^(?:grammar|ngữ pháp)\b[:\s]*/i.exec(body)
+    if (grammar) body = body.slice(grammar[0].length)
     const [pair, why = ''] = body.split('|').map((s) => s.trim())
     const [wrong, right] = pair.split(/\s*(?:→|->)\s*/)
     if (!wrong || !right) return null
-    return { ok: false, wrong, right, why }
+    return grammar ? { ok: false, wrong, right, why, grammar: true } : { ok: false, wrong, right, why }
 }
 
 /** The reply without its check block (a block still streaming is cut off), and the "Sửa:" line for a fix. */
@@ -56,9 +61,21 @@ export function splitCheck(reply: string): { main: string; note: string } {
     if (!check || check.ok) return { main, note: '' }
     const fix = check as Fix                                    // the project does not narrow unions (strict is off)
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
-    const note = `\n\n<div style="margin-top:.4em;font-size:.9em;opacity:.9"><span style="color:#e0a46b;font-weight:600">Sửa:</span> `
+    const label = fix.grammar ? '<span style="color:#8fb8ff;font-weight:600">Ngữ pháp:</span>' : '<span style="color:#e0a46b;font-weight:600">Sửa:</span>'
+    const note = `\n\n<div style="margin-top:.4em;font-size:.9em;opacity:.9">${label} `
         + `<s style="opacity:.7">${esc(fix.wrong)}</s> → <b>${esc(fix.right)}</b>${fix.why ? ` <span style="opacity:.75">(${esc(fix.why)})</span>` : ''}</div>`
     return { main, note }
+}
+
+/** Counts a grammar point the learner was shown (the same point again: one more time, newest example kept). */
+export function addGrammar(points: GrammarPoint[], fix: Fix, now: number): GrammarPoint[] {
+    const key = fix.why.trim().toLowerCase()
+    if (!key) return points
+    const out = points.map((p) => ({ ...p }))
+    const same = out.find((p) => p.point.trim().toLowerCase() === key)
+    if (same) { same.count += 1; same.last = now; same.wrong = fix.wrong; same.right = fix.right }
+    else out.push({ point: fix.why.trim(), wrong: fix.wrong, right: fix.right, count: 1, last: now })
+    return out.sort((a, b) => b.last - a.last).slice(0, 40)
 }
 
 /** The phrases the learner used in a message: typed by sound (Việt-ji) or in the language's own writing. */
@@ -104,11 +121,18 @@ export function recentAccuracy(history: boolean[], window = 10): number | null {
 }
 
 /** One paragraph for the format note: what to bring back, what to practise, and how fast to go (aiming at 60-70% right). */
-export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boolean[], now: number): string {
+export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boolean[], now: number,
+    opts: { grammarLater?: boolean; grammar?: GrammarPoint[] } = {}): string {
     // the check comes first and is required: placed last, the model skipped it (measured 2026-10-15)
     const lines: string[] = [
         'REQUIRED whenever the player\'s last message has words in the foreign language: the very last line of your reply is a check of that line, after the REPLIES block: [[CHECK ok]] when it was right, or [[CHECK <what they wrote> → <the right form> | <the reason in a few Vietnamese words>]] when it needed fixing. The story text can still show the speaker repeating it correctly.',
     ]
+    if (opts.grammarLater) {
+        // words first, grammar a little at a time (asked: think in Vietnamese, put the words together, be corrected slowly)
+        lines.push('The player learns words first: they think in Vietnamese and put the foreign words together in Vietnamese word order (我 想 她 有点 傻 for "tôi nghĩ cô ấy hơi ngốc"). Answer what they meant. When every word is a right word for what they meant and only the order, a particle or a grammar word is off, the check is [[CHECK grammar <what they wrote> → <the natural sentence> | <ONE grammar point, the most useful one, explained in a few simple Vietnamese words>]]: never more than one point a reply, and nothing else is marked wrong. Use the plain [[CHECK <wrong> → <right> | why]] only when a word itself is wrong.')
+        const seen = (opts.grammar ?? []).slice(0, 12)
+        if (seen.length) lines.push(`Grammar points the player has already been shown (newest first, how many times): ${seen.map((g) => `${g.point} (${g.count})`).join('; ')}. When one of these comes up again, remind it in a few words; otherwise teach a new point, simplest first.`)
+    }
     const known = vocab.filter((v) => (v.ok ?? 0) > 0 || (v.reps ?? 0) > 0).slice(0, 40)
     if (known.length) lines.push(`Words and phrases the player already knows (build the "workaround" answers from these): ${known.map((v) => stripReadings(v.text)).join('; ')}.`)
     const due = dueItems(vocab, now)

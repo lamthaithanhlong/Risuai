@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dictSuggestions, foldVietnamese, loadWordList, makeAsker, needsModel, segment, toneless, type WordList } from './vietjiDict'
+import { composeSuggestions, dictSuggestions, foldVietnamese, loadWordList, makeAsker, needsModel, segment, toneless, vietnameseTail, type WordList } from './vietjiDict'
 import { suggest, suggestionPool } from './vietjiSuggest'
 
 const words: WordList = {
@@ -138,5 +138,53 @@ describe('typed without marks (the bug: "tui" in Chinese showed nothing)', () =>
     it('no list, or nothing it knows: nothing', () => {
         expect(toneless('tui', null, 'zh')).toEqual([])
         expect(toneless('xyzzy', zh, 'zh')).toEqual([])
+    })
+})
+
+describe('building a sentence word by word from Vietnamese (reported: picking 该 for "我 nên" removed 我)', () => {
+    const zh = { words: { 'nên': ['该[gāi]', '变成[biànchéng]'], 'cô ấy': ['她[tā]'], 'hơi': ['有点[yǒudiǎn]'], 'ngốc': ['傻[shǎ]'], 'nghĩ': ['想[xiǎng]'] } as WordList, unsure: new Set<string>() }
+    it('only the Vietnamese at the end is replaced, and Chinese joins without a space', () => {
+        const chips = composeSuggestions('我 nên', zh, 'zh')
+        expect(chips[0]).toMatchObject({ text: '该', replace: '我该' })
+        expect(chips.map((c) => c.replace)).toContain('我变成')
+    })
+    it('a run of Vietnamese words: the whole run word by word, then the first word with the rest left to go on with', () => {
+        const chips = composeSuggestions('我 想 cô ấy hơi ngốc', zh, 'zh')
+        expect(chips[0]).toMatchObject({ text: '她有点傻', replace: '我 想她有点傻' })          // the learner's own spaces stay
+        expect(chips[0].vietji).toBeTruthy()                                               // read from 她[tā] 有点[yǒudiǎn] 傻[shǎ]
+        expect(chips.find((c) => c.text === '她')?.replace).toBe('我 想她 hơi ngốc')
+    })
+    it('Spanish: the foreign words before are kept, with spaces', () => {
+        const es = { words: { 'cô ấy': ['ella'], 'nghĩ': ['pensar'] } as WordList, unsure: new Set<string>() }
+        expect(vietnameseTail('yo pienso cô ấy', new Set(Object.keys(es.words)))).toEqual({ head: 'yo pienso ', tail: 'cô ấy' })
+        expect(composeSuggestions('yo pienso cô ấy', es, 'es')[0].replace).toBe('yo pienso ella')
+    })
+    it('a Vietnamese word typed right after the characters, with no space, is found (逆该冷静lại)', () => {
+        expect(vietnameseTail('逆该冷静lại', new Set(['lại']))).toEqual({ head: '逆该冷静', tail: 'lại' })
+        const chips = composeSuggestions('我该冷静lại', { words: { 'lại': ['来[lái]'] }, unsure: new Set<string>() }, 'zh')
+        expect(chips[0].replace).toBe('我该冷静来')
+    })
+    it('nothing to compose when the input is all Vietnamese, or ends in the language', () => {
+        expect(vietnameseTail('cô ấy nên', new Set(['nên'])).head).toBe('')
+        expect(composeSuggestions('我 想', zh, 'zh')).toEqual([])
+    })
+})
+
+describe('Vietnamese pronouns (reported: "cô" gave 我; es "i", fr "sourcils" for mày)', () => {
+    const list = (l: string) => JSON.parse(require('fs').readFileSync(`public/dict/vi-${l}.json`, 'utf8')).words as WordList
+    const bare = (t?: string) => (t ?? '').replace(/\[[^\]]*\]/g, '')
+    it.each([
+        ['zh', { 'cô': '你', 'chị': '你', 'anh': '你', 'ông': '您', 'mình': '我', 'cô ấy': '她', 'tao': '我' }],
+        ['ja', { 'cô': 'あなた', 'anh': 'あなた', 'mình': '私', 'cô ấy': '彼女', 'mày': 'お前' }],
+        ['ko', { 'cô': '당신', 'chị': '당신', 'em': '너', 'mình': '나', 'cô ấy': '그녀' }],
+        ['es', { 'cô': 'usted', 'chị': 'tú', 'mình': 'yo', 'mày': 'tú', 'cô ấy': 'ella' }],
+        ['fr', { 'cô': 'vous', 'mày': 'tu', 'tớ': 'je', 'mình': 'je', 'cô ấy': 'elle' }],
+    ] as [string, Record<string, string>][])('%s: spoken to, a kin word is "you"; with ấy, the third person', (l, want) => {
+        const w = list(l)
+        for (const [vi, first] of Object.entries(want)) expect(bare(w[vi]?.[0]), `${l} ${vi}`).toBe(first)
+    })
+    it.each(['es', 'fr'])('%s: no English "i" left as a translation', (l) => {
+        const w = list(l)
+        expect(Object.entries(w).filter(([, picks]) => picks.includes('i')).map(([vi]) => vi)).toEqual([])
     })
 })

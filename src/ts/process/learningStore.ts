@@ -4,10 +4,10 @@
 
 import type { Chat } from '../storage/database.svelte'
 import { readVocab } from './vietji'
-import type { Mistake, VocabItem } from './learningMemory'
+import type { GrammarPoint, Mistake, VocabItem } from './learningMemory'
 
-export type Notebook = { vocab: VocabItem[]; mistakes: Mistake[]; history: boolean[] }
-type Stored = { vocab?: string; mistakes?: string; history?: string }
+export type Notebook = { vocab: VocabItem[]; mistakes: Mistake[]; history: boolean[]; grammar?: GrammarPoint[] }
+type Stored = { vocab?: string; mistakes?: string; history?: string; grammar?: string }
 export type NotebookHost = { learningNotebook?: { [lang: string]: Stored } }
 
 const list = <T>(raw: string | undefined): T[] => {
@@ -16,7 +16,7 @@ const list = <T>(raw: string | undefined): T[] => {
 
 export function readNotebook(db: NotebookHost, lang: string): Notebook {
     const s = db.learningNotebook?.[lang] ?? {}
-    return { vocab: readVocab<VocabItem>(s.vocab), mistakes: list<Mistake>(s.mistakes), history: list<boolean>(s.history) }
+    return { vocab: readVocab<VocabItem>(s.vocab), mistakes: list<Mistake>(s.mistakes), history: list<boolean>(s.history), grammar: list<GrammarPoint>(s.grammar) }
 }
 
 export function writeNotebook(db: NotebookHost, lang: string, nb: Notebook): void {
@@ -25,6 +25,7 @@ export function writeNotebook(db: NotebookHost, lang: string, nb: Notebook): voi
         vocab: JSON.stringify(nb.vocab.slice(0, 600)),
         mistakes: JSON.stringify(nb.mistakes.slice(0, 60)),
         history: JSON.stringify(nb.history.slice(-60)),
+        grammar: JSON.stringify((nb.grammar ?? []).slice(0, 40)),
     }
 }
 
@@ -49,6 +50,7 @@ export function migrateChat(db: NotebookHost, lang: string, chat: Chat | undefin
         if (same) { same.count += m.count; same.last = Math.max(same.last, m.last) } else mistakes.push(m)
     }
     writeNotebook(db, lang, {
+        grammar: nb.grammar,
         vocab: [...byText.values()],
         mistakes: mistakes.sort((a, b) => b.count - a.count || b.last - a.last),
         history: [...nb.history, ...list<boolean>(ss[keys.history] as string)],

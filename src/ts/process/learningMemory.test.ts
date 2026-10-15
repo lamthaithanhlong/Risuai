@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addMistake, dueItems, gradeUse, itemsUsed, memoryNote, parseCheck, recentAccuracy, sm2, splitCheck, type VocabItem } from './learningMemory'
+import { addGrammar, addMistake, dueItems, gradeUse, itemsUsed, memoryNote, parseCheck, recentAccuracy, sm2, splitCheck, type VocabItem } from './learningMemory'
 import { mergeVocab } from './vietji'
 
 const DAY = 86_400_000
@@ -97,5 +97,29 @@ describe('mistakes, due items, accuracy, the note', () => {
         expect(note).toMatch(/already knows.*いくら ですか/)
         expect(note).not.toMatch(/already knows[^\n]*はい/)
         expect(memoryNote([met], [], [], NOW)).not.toContain('already knows')
+    })
+})
+
+describe('words first, grammar a little at a time', () => {
+    it('reads a grammar check: right words, only the order was off', () => {
+        const c = parseCheck('…\n[[CHECK grammar 我 想 她 有点 傻 → 我觉得她有点傻 | "nghĩ là" dùng 觉得]]') as any
+        expect(c).toMatchObject({ ok: false, grammar: true, wrong: '我 想 她 有点 傻', right: '我觉得她有点傻' })
+        expect(parseCheck('[[CHECK 她 → 他 | sai từ]]')).not.toHaveProperty('grammar')
+    })
+    it('shows it as "Ngữ pháp:", not "Sửa:"', () => {
+        expect(splitCheck('x\n[[CHECK grammar a → b | trật tự]]').note).toContain('Ngữ pháp:')
+        expect(splitCheck('x\n[[CHECK a → b | sai]]').note).toContain('Sửa:')
+    })
+    it('keeps each point once, counting how often it came back', () => {
+        const fix = { ok: false as const, wrong: 'a', right: 'b', why: 'trật tự', grammar: true }
+        const g = addGrammar(addGrammar([], fix, 1), { ...fix, wrong: 'c' }, 2)
+        expect(g).toEqual([{ point: 'trật tự', wrong: 'c', right: 'b', count: 2, last: 2 }])
+    })
+    it('the note asks for one grammar point at a time and lists the ones shown', () => {
+        const note = memoryNote([], [], [], NOW, { grammarLater: true, grammar: [{ point: 'trật tự', wrong: 'a', right: 'b', count: 2, last: NOW }] })
+        expect(note).toContain('[[CHECK grammar')
+        expect(note).toContain('never more than one point')
+        expect(note).toContain('trật tự (2)')
+        expect(memoryNote([], [], [], NOW)).not.toContain('[[CHECK grammar')
     })
 })

@@ -103,7 +103,7 @@ describe('learning mode on', () => {
         const out = learningRequest(input)
         const users = out.filter((m: any) => m.role === 'user')
         expect(users[0].content).toBe('a')
-        expect(users[1].content).toBe('我 有 问题' + learningReminder('zh'))
+        expect(users[1].content).toBe('我 有 问题' + learningReminder('zh', true))     // words first is on by default
         expect(learningReminder('zh')).toContain('Chinese')
         expect(learningReminder('zh')).toContain('pinyin')                 // 快开门！ came back without brackets
         expect(learningReminder('ja')).toContain('hiragana')
@@ -128,6 +128,13 @@ describe('learning mode on', () => {
         expect(p).toMatch(/easy[\s\S]*stretch[\s\S]*workaround/)
         expect(p).toContain('Merci')
         expect(howToSayPrompt('nước', 'ja')).toContain('hiragana')
+    })
+    it('a grammar check counts the words right, saves the point, and is not a mistake', () => {
+        const chat: any = { message: [{ role: 'user', data: '我 想 她 有点 傻' }, { role: 'char', data: 'Haru cười.\n[[CHECK grammar 我 想 她 有点 傻 → 我觉得她有点傻 | "nghĩ là" dùng 觉得]]' }], scriptstate: {} }
+        noteLearningVocab(chat, 1_800_000_000_000)
+        expect(nb().history).toEqual([true])
+        expect(nb().mistakes).toEqual([])
+        expect(nb().grammar?.[0]).toMatchObject({ point: '"nghĩ là" dùng 觉得', right: '我觉得她有点傻' })
     })
     it('a "? ..." line is a question, not a try: it is not graded', () => {
         const chat: any = { message: [{ role: 'user', data: '? ca ra' }, { role: 'char', data: 'Haru cười.\n[[CHECK ca ra → から | sai]]' }], scriptstate: {} }

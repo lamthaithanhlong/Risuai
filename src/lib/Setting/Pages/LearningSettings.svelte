@@ -38,6 +38,7 @@
                 <Check bind:check={DBState.db.learningTyping} name={language.learningTyping}/>
             {/if}
             <Check bind:check={DBState.db.learningSuggest} name={language.learningSuggest}/>
+            <Check bind:check={DBState.db.learningGrammarLater} name={language.learningGrammarLater}/>
             {#if DBState.db.learningLang === 'zh' || DBState.db.learningLang === 'ja' || DBState.db.learningLang === 'ko'}
                 <Check bind:check={DBState.db.learningAutoWrite} name={language.learningAutoWrite}/>
             {/if}

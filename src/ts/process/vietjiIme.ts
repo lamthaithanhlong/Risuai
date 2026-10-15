@@ -128,7 +128,10 @@ export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf:
     const whole = convert(idx, sound)
     if (whole && typed.length > 1 && whole.known) chip(whole.text, typed.join(' '), head + whole.text, `${typed.join(' ')} · cả câu`)
     for (let n = Math.min(MAX_SYLLABLES, typed.length); n >= 1 && out.length < max; n--) {
-        for (const p of ranked(idx, typed, folded, 0, n).slice(0, 3)) {
+        const picks = ranked(idx, typed, folded, 0, n)
+        // the most used word with this sound, whatever its tone, is always offered (你 for "nì", where 逆 matches the tone)
+        const common = [...picks].sort((a, b) => a.entry.rank - b.entry.rank)[0]
+        for (const p of [...picks.slice(0, 3), ...(common ? [common] : [])]) {
             const rest = typed.slice(n).join(' ')
             chip(p.entry.word, p.entry.vietji.join('-'), head + p.entry.word + (rest ? ' ' + rest : ''), meaningOf(p.entry.word))
             if (out.length >= max) break
@@ -243,6 +246,11 @@ export function jaSuggestions(input: string, idx: KanaIndex | null, max = 6): Su
     return out
 }
 
+/** The typed sound without its tone marks (hats kept: they are letters): "nì" → "ni", "trư-tào" → "trư-tao". */
+function toneless(s: string): string {
+    return s.normalize('NFD').replace(/[\u0300\u0301\u0303\u0309\u0323]/g, '').normalize('NFC')
+}
+
 // ---- typed right: the word becomes characters at the space -------------------------------------------------------------------
 
 /**
@@ -261,7 +269,11 @@ export function commitOnSpace(value: string, lang: string, ctx: { zh?: SoundInde
     const before = value.slice(0, value.length - word.length - 1)
     const glue = (text: string) => (/[\u3040-\u30ff\u3400-\u9fff]\s$/.test(before) && lang !== 'ko' ? before.trimEnd() : before) + text
     if (lang === 'zh' && ctx.zh) {
-        return isSoundTyping(word, ctx.zh) ? glue(convert(ctx.zh, word)!.text) : null
+        if (!isSoundTyping(word, ctx.zh)) return null
+        // written at once only when the word with that tone is also the most used one with that sound: "nì" (a tone off for
+        // 你 nǐ) was written 逆, reported. Otherwise the chips offer both.
+        const exact = convert(ctx.zh, word)!.text
+        return exact === convert(ctx.zh, toneless(word))?.text ? glue(exact) : null
     }
     if (lang === 'ko' && ctx.ko) {
         const c = convert(ctx.ko, word)
