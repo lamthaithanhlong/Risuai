@@ -5,7 +5,7 @@
 import type { LearningLang, SuggestedReply } from './vietji'
 import { parseReplies, phraseVietji, readVocab, setLatinLanguage, stripReadings } from './vietji'
 
-export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' | 'asked' }
+export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' | 'asked' | 'dict' }
 
 /**
  * Typed with Vietnamese marks ("có", "bao nhiêu", "đi"): the learner is writing what they mean, not the sound, so the bar looks
@@ -77,7 +77,7 @@ export function starterSet(lang: LearningLang): Suggestion[] {
 }
 
 /** Every phrase the bar can offer, newest first, without repeats: the last reply's answers, the vocabulary list, the starter set. */
-export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang: LearningLang; asked?: SuggestedReply[] }): Suggestion[] {
+export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang: LearningLang; asked?: SuggestedReply[]; dict?: Suggestion[] }): Suggestion[] {
     const pool: Suggestion[] = []
     const seen = new Set<string>()
     const add = (s: Suggestion) => {
@@ -86,6 +86,7 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
         seen.add(key)
         pool.push(s)
     }
+    for (const r of opts.dict ?? []) add({ ...r, source: 'dict' })
     for (const r of opts.asked ?? []) add({ ...r, source: 'asked' })
     for (const r of parseReplies(opts.lastReply ?? '')) add({ ...r, source: 'reply' })
     for (const v of readVocab(opts.vocab)) add({ text: v.text, vietji: v.vietji, meaning: v.meaning ?? '', source: 'heard' })
@@ -104,7 +105,7 @@ export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[
     if (looksVietnamese(typed)) {
         // what the learner means, in Vietnamese: by meaning only (the sound of "có" says nothing about "oui")
         pool.forEach((s, i) => {
-            const score = s.source === 'asked' ? 4 : meaningScore(typed, s.meaning)
+            const score = s.source === 'asked' || s.source === 'dict' ? 4 : meaningScore(typed, s.meaning)
             if (score) scored.push([score, i, s])
         })
         return scored.sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, max).map((x) => x[2])

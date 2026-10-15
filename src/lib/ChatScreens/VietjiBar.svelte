@@ -9,6 +9,7 @@
     import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
+    import { dictSuggestions, loadWordList, type WordList } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
 
@@ -31,7 +32,18 @@
     let asked = $state<SuggestedReply[]>([])
     let asking = $state(false)
     let typedViet = $derived(enabled && looksVietnamese(value ?? '') ? (value ?? '').trim() : '')
-    let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, asked: askedFor === typedViet ? asked : [] }) : [])
+    // the offline word list (French for now) answers first, at once; the model is asked only when it has nothing
+    let wordList = $state<WordList | null>(null)
+    let wordListLang = $state('')
+    $effect(() => {
+        if (!typedViet || wordListLang === lang) return
+        const want = lang
+        wordListLang = want
+        wordList = null
+        loadWordList(want).then((w) => { if (lang === want) wordList = w })
+    })
+    let fromList = $derived(typedViet && wordListLang === lang ? dictSuggestions(typedViet, wordList, lang) : [])
+    let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])
     let items = $derived(enabled ? suggest(value ?? '', pool) : [])
     // what the notebook alone offers for it: two or more fitting phrases and the model is not asked
     let foundInBook = $derived(typedViet ? suggest(typedViet, suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang })).length : 0)
@@ -39,7 +51,7 @@
 
     $effect(() => {
         const viet = typedViet
-        if (!viet || viet.length < 2 || viet.length > 120 || foundInBook >= 2) { asking = false; return }
+        if (!viet || viet.length < 2 || viet.length > 120 || foundInBook >= 2 || fromList.length) { asking = false; return }
         const key = `${lang}|${viet}`
         if (askCache.has(key)) { asked = askCache.get(key); askedFor = viet; return }
         let live = true
