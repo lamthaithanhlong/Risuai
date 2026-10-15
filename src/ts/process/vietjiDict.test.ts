@@ -188,3 +188,21 @@ describe('Vietnamese pronouns (reported: "cô" gave 我; es "i", fr "sourcils" f
         expect(Object.entries(w).filter(([, picks]) => picks.includes('i')).map(([vi]) => vi)).toEqual([])
     })
 })
+
+describe('reported: "thế cái đó là cái quái gì vậy" became 그렇게 개 거기 이다 개 이상하다뭐 그렇다 (cái = dog, đó = there)', () => {
+    const list = (l: string) => JSON.parse(require('fs').readFileSync(`public/dict/vi-${l}.json`, 'utf8')).words as WordList
+    it('the sentence is read in Vietnamese phrases, in every language', () => {
+        const parts = segment('thế cái đó là cái quái gì vậy', list('ko')).map((p) => p.vi)
+        expect(parts).toEqual(['thế', 'cái đó', 'là', 'cái quái gì', 'vậy'])
+        const first = (l: string) => segment('thế cái đó là cái quái gì vậy', list(l)).map((p) => p.fr[0])
+        expect(first('ko')).toEqual(['그럼', '그거', '이다', '도대체 뭐', '그럼'])
+        expect(first('zh')).toContain('那个[nàge]')
+        expect(first('ja')).toContain('一体何[いったいなに]')
+        expect(first('es')).toContain('qué demonios')
+        expect(first('fr')).toContain('ça')
+    })
+    it('cái alone is a thing, never a dog', () => {
+        expect(list('ko')['cái'][0]).toBe('것')
+        expect(list('fr')['cái'][0]).not.toBe('femelle')
+    })
+})
