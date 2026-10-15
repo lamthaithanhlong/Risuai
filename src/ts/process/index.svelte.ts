@@ -10,6 +10,7 @@ import { language } from "../../lang";
 import { alertError, alertToast } from "../alert";
 import { TRANSIENT_RETRY_DELAYS_MS, isTransientFailure } from "./transientRetry";
 import { genStatus, genStatusEvents } from "./genStatus.svelte";
+import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -1844,7 +1845,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
         DBState.db.characters[sel.char].chats[sel.chat] = runCurrentChatFunction(DBState.db.characters[sel.char].chats[sel.chat])
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]        
-        const triggerResult = await runTrigger(currentChar, 'output', {chat:currentChat})
+        const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
+        const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
         if(triggerResult && triggerResult.chat){
             currentChat = triggerResult.chat
         }
@@ -1952,7 +1954,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         DBState.db.characters[sel.char].chats[sel.chat] = runCurrentChatFunction(DBState.db.characters[sel.char].chats[sel.chat])
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]        
 
-        const triggerResult = await runTrigger(currentChar, 'output', {chat:currentChat})
+        const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
+        const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
         if(triggerResult && triggerResult.chat){
             DBState.db.characters[sel.char].chats[sel.chat] = triggerResult.chat
         }

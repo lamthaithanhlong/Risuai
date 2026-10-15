@@ -9,6 +9,7 @@ import { alertSelect, alertError, alertInput, alertNormal, alertConfirm } from "
 import { HypaProcesser } from "./memory/hypamemory";
 import { generateAIImage } from "./stableDiff";
 import { writeInlayImage, getInlayAsset } from "./files/inlays";
+import { GENERATED_INLAY_MAX_SIDE } from "./files/inlaySize";
 import type { OpenAIChat, MultiModal } from "./index.svelte";
 import { requestChatData, type StreamResponseChunk } from "./request/request";
 import { v4 } from "uuid";
@@ -399,7 +400,7 @@ export async function runScripted(code:string, arg:{
                 }
                 const imgHTML = new Image()
                 imgHTML.src = gen
-                const inlay = await writeInlayImage(imgHTML)
+                const inlay = await writeInlayImage(imgHTML, { maxSide: GENERATED_INLAY_MAX_SIDE })
                 return `{{inlay::${inlay}}}`
             })
 

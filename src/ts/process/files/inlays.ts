@@ -80,7 +80,10 @@ export async function postInlayAsset(img:{
     return null
 }
 
-export async function writeInlayImage(imgObj:HTMLImageElement, arg:{name?:string, ext?:string, id?:string} = {}) {
+export { GENERATED_INLAY_MAX_SIDE, fitInlaySize } from './inlaySize'
+import { fitInlaySize } from './inlaySize'
+
+export async function writeInlayImage(imgObj:HTMLImageElement, arg:{name?:string, ext?:string, id?:string, maxSide?:number} = {}) {
 
     let drawHeight = 0
     let drawWidth = 0
@@ -88,18 +91,10 @@ export async function writeInlayImage(imgObj:HTMLImageElement, arg:{name?:string
     const ctx = canvas.getContext('2d')
     await new Promise((resolve) => {
         imgObj.onload = () => {
-            drawHeight = imgObj.height
-            drawWidth = imgObj.width
-
-            //resize image to fit inlay, if total pixels exceed 1024*1024
-            const maxPixels = 1024 * 1024
-            const currentPixels = drawHeight * drawWidth
-            
-            if(currentPixels > maxPixels){
-                const scaleFactor = Math.sqrt(maxPixels / currentPixels)
-                drawWidth = Math.floor(drawWidth * scaleFactor)
-                drawHeight = Math.floor(drawHeight * scaleFactor)
-            }
+            //resize image to fit inlay: at most 1024*1024 pixels in total, and at most arg.maxSide on the long side when it is given
+            const fitted = fitInlaySize(imgObj.width, imgObj.height, { maxSide: arg.maxSide })
+            drawWidth = fitted.width
+            drawHeight = fitted.height
 
             canvas.width = drawWidth
             canvas.height = drawHeight

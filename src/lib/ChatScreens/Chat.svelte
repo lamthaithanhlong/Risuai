@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { ArrowLeft, ArrowLeftRightIcon, ArrowRight, BookmarkIcon, BotIcon, CopyIcon, PowerOff, GitBranch, HamburgerIcon, LanguagesIcon, MenuIcon, PencilIcon, RefreshCcwIcon, SplitIcon, TrashIcon, UserIcon, Volume2Icon, Scissors } from "@lucide/svelte"
+    import { ArrowLeft, ArrowLeftRightIcon, ArrowRight, BookmarkIcon, BotIcon, CopyIcon, PowerOff, GitBranch, HamburgerIcon, LanguagesIcon, MenuIcon, PencilIcon, RefreshCcwIcon, SplitIcon, TrashIcon, UserIcon, Volume2Icon, Scissors, ImageIcon, ImagePlayIcon, LoaderCircleIcon } from "@lucide/svelte"
     import { aiLawApplies, changeChatTo, foldChatToMessage, getFileSrc, createChatCopyName } from "src/ts/globalApi.svelte"
     import { ColorSchemeTypeStore } from "src/ts/gui/colorscheme"
     import { longpress } from "src/ts/gui/longtouch"
@@ -15,7 +15,7 @@
     import { type Unsubscriber } from "svelte/store"
     import { v4 as uuidv4, v4 } from 'uuid'
     import { language } from "../../lang"
-    import { alertClear, alertConfirm, alertInput, alertNormal, alertRequestData, alertWait } from "../../ts/alert"
+    import { alertClear, alertConfirm, alertError, alertInput, alertNormal, alertRequestData, alertWait } from "../../ts/alert"
     import { ParseMarkdown, type CbsConditions, type simpleCharacterArgument } from "../../ts/parser/parser.svelte"
     import { getCurrentCharacter, getCurrentChat, setCurrentChat, type MessageGenerationInfo, type StreamingDisplayOptimizationMode } from "../../ts/storage/database.svelte"
     import { selectedCharID } from "../../ts/stores.svelte"
@@ -27,8 +27,33 @@
     import PopupButton from "../UI/PopupButton.svelte";
     import PartialEditController from './PartialEditController.svelte';
     import { getLLMCache, setLLMCache } from "../../ts/translator/translator"
+    import { withIllustrating } from "../../ts/process/illustrateStatus.svelte"
 
     let translating = $state(false)
+    // "Illustrate this reply": the story's own script (onButtonClick "illustrate:<index>") describes the scene and draws it. The button
+    // shows only for a story whose script has that handler, so other characters are untouched.
+    let illustrating = $state(false)
+    const canIllustrate = $derived.by(() => {
+        const c = DBState.db.characters[selIdState.selId]
+        if(!c || c.type === 'group') return false
+        return (c.triggerscript ?? []).some((t) => t?.effect?.[0]?.type === 'triggerlua' && ((t.effect[0] as { code?: string }).code ?? '').includes('illustrate:'))
+    })
+    async function illustrate() {
+        if(illustrating || idx < 0) return
+        illustrating = true
+        try {
+            const result = await withIllustrating(() => runLuaButtonTrigger(getCurrentCharacter(), 'illustrate:' + idx))
+            if(result?.chat) setCurrentChat(result.chat)
+            ReloadChatPointer.update((v) => {
+                v[idx] = (v[idx] ?? 0) + 1
+                return v
+            })
+        } catch (error) {
+            alertError(error)
+        } finally {
+            illustrating = false
+        }
+    }
     let editMode = $state(false)
     let statusMessage:string = $state('')
     let retranslate = $state(false)
@@ -87,6 +112,9 @@
         streamingOptimizationMode = 'off',
         rawStreamingText = message,
     }: Props = $props();
+
+    // a reply that already has a picture: the same button redraws it and the new picture replaces the old one
+    const hasPicture = $derived((message ?? '').includes('{{inlay::'))
 
     let msgDisplay = $state('')
     let translated = $state(false)
@@ -889,6 +917,26 @@
 
             {#if showNames}
                 <span class="ml-1">{language.edit}</span>
+            {/if}
+        </button>
+    {/if}
+    {#if idx > -1 && role !== 'user' && canIllustrate && !isOptimizedStreamingMessage}
+        <button
+            class={"flex items-center transition-colors button-icon-illustrate " + (illustrating ? 'text-blue-400 cursor-wait' : 'hover:text-blue-500')}
+            disabled={illustrating}
+            title={hasPicture ? language.redrawPicture : language.illustrate}
+            aria-label={hasPicture ? language.redrawPicture : language.illustrate}
+            onclick={illustrate}
+        >
+            {#if illustrating}
+                <LoaderCircleIcon size={20} class="animate-spin" />
+            {:else if hasPicture}
+                <ImagePlayIcon size={20} />
+            {:else}
+                <ImageIcon size={20} />
+            {/if}
+            {#if showNames}
+                <span class="ml-1">{hasPicture ? language.redrawPicture : language.illustrate}</span>
             {/if}
         </button>
     {/if}

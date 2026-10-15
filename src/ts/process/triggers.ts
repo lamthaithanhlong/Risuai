@@ -13,6 +13,7 @@ import { HypaProcesser } from "./memory/hypamemory";
 import { requestChatData } from "./request/request";
 import { generateAIImage } from "./stableDiff";
 import { writeInlayImage } from "./files/inlays";
+import { GENERATED_INLAY_MAX_SIDE } from "./files/inlaySize";
 import { runScripted } from "./scriptings";
 import { calcString } from "./infunctions";
 
@@ -1550,7 +1551,7 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
                     }
                     const imgHTML = new Image()
                     imgHTML.src = gen
-                    const inlay = await writeInlayImage(imgHTML)
+                    const inlay = await writeInlayImage(imgHTML, { maxSide: GENERATED_INLAY_MAX_SIDE })
                     const res = `{{inlay::${inlay}}}`
                     setVar(effect.inputVar, res)
                     break
@@ -1888,7 +1889,7 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
                     }
                     let imgHTML = new Image()
                     imgHTML.src = gen
-                    let inlay = await writeInlayImage(imgHTML)
+                    let inlay = await writeInlayImage(imgHTML, { maxSide: GENERATED_INLAY_MAX_SIDE })
                     let res = `{{inlay::${inlay}}}`
                     setVar(risuChatParser(effect.outputVar, {chara:char}), res)
                     break
