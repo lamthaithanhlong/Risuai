@@ -7,7 +7,8 @@ import { buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSou
 import { mixChips } from './vietjiSuggest'
 import { filledHtml, parseDetail, readInline, parseLesson, lessonHtml } from './grammarCoach'
 import { setHanReadings } from './vietji'
-import { imperative } from './vietjiImperative'
+import { imperative, prohibitive } from './vietjiImperative'
+import { phraseVietji } from './vietji'
 
 const json = (f: string) => JSON.parse(readFileSync(f, 'utf8'))
 const LANGS = ['ko', 'zh', 'ja', 'es', 'fr'] as const
@@ -51,6 +52,27 @@ describe('sweep: the 300 most used Vietnamese words', () => {
                 sample: ordered.slice(0, 12).map((w) => `${w}→${dictSuggestions(`${w} đi`, words, l, 6, lists[l].verbs)[0].text}`) }
         }
         report.orders = orders
+        // đừng + verb: a "do not" first for the verbs, never for the rest; and no form is silently dropped for want of a reading
+        const nots: Record<string, unknown> = {}
+        for (const l of LANGS) {
+            const words = lists[l].words, verbs = lists[l].verbs
+            const sug = (t: string) => dictSuggestions(t, words, l, 6, verbs)
+            const single = top.filter((w) => words[w] && !w.includes(' ') && w !== 'đừng')
+            const isNot = (w: string) => (sug(`đừng ${w}`)[0]?.meaning ?? '').includes('cấm')
+            const verbsTop = single.filter((w) => verbs.has(w))
+            const withForm = verbsTop.filter((w) => words[w].some((x: string) => prohibitive(x, l).length))
+            const missing = withForm.filter((w) => !isNot(w))
+            const wrongNot = single.filter((w) => !verbs.has(w)).filter(isNot)
+            // a form the chip builder drops: dictSuggestions keeps a chip only when the text has a reading
+            const noReading = withForm.flatMap((w) => words[w].map((x: string) => prohibitive(x, l)).find((f: string[]) => f.length) ?? [])
+                .concat(verbsTop.flatMap((w) => words[w].map((x: string) => imperative(x, l)).find((f: string[]) => f.length) ?? []))
+                .filter((f: string) => !phraseVietji(`«${f}»`))
+            nots[l] = { verbs: verbsTop.length, withForm: withForm.length, missingN: missing.length, missing: missing.slice(0, 8), wrongNotN: wrongNot.length,
+                wrongNot: wrongNot.slice(0, 8), noReadingN: noReading.length, noReading: noReading.slice(0, 8),
+                sample: withForm.slice(0, 10).map((w) => `đừng ${w}→${sug(`đừng ${w}`)[0]?.text}`) }
+        }
+        report.nots = nots
+        if (process.env.VJ_SWEEP_OUT) require('fs').writeFileSync(process.env.VJ_SWEEP_OUT, JSON.stringify(report, null, 1))
         // every invariant holds over every word: what the learner typed is offered, never eaten, never taken for sound, and
         // only a verb before đi is turned into an order (measured 2026-10-15: all 0 after the fixes of that day)
         for (const l of LANGS) {
@@ -58,6 +80,8 @@ describe('sweep: the 300 most used Vietnamese words', () => {
             expect({ l, noChip: r.noChipN, headEaten: r.headEatenN, soundFirst: r.soundFirstN, soundShown: r.soundShownN, eaten: r.eatenN, wrongOrder: o.wrongOrderN })
                 .toEqual({ l, noChip: 0, headEaten: 0, soundFirst: 0, soundShown: 0, eaten: 0, wrongOrder: 0 })
             expect(o.ordered).toBeGreaterThan(40)                           // and the orders are there for the verbs
+            const n = nots[l] as any                                        // đừng: every verb, nothing else, nothing dropped
+            expect({ l, missing: n.missingN, wrongNot: n.wrongNotN, noReading: n.noReadingN }).toEqual({ l, missing: 0, wrongNot: 0, noReading: 0 })
         }
     })
     it('fuzz: model text never reaches the page as markup', () => {
