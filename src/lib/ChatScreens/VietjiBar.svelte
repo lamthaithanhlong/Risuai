@@ -11,10 +11,10 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
-    import { allowCoach, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
+    import { allowCoach, filledHtml, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
     import { phraseVietji } from "src/ts/process/vietji";
     import { mixChips } from "src/ts/process/vietjiSuggest";
-    import { rememberThought } from "src/ts/process/learningThought";
+    import { rememberThought, thoughtFor } from "src/ts/process/learningThought";
     import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
@@ -207,7 +207,7 @@
     const detailAsker = makeAsker<Detail | null>(async (key) => {
         const [l, fix, wrote] = JSON.parse(key) as [string, string, string]
         const { requestChatData } = await import("src/ts/process/request/request")
-        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(fix, wrote, l) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(fix, wrote, l, thoughtFor(wrote) ?? '') }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
         return res.type === 'success' && typeof res.result === 'string' ? parseDetail(res.result) : null
     })
     $effect(() => {
@@ -273,27 +273,42 @@
                 </div>
                 {#if detail.wrote}<div class="text-xs text-textcolor2 mb-1">bạn viết: <s>{detail.wrote}</s> <span style="color:#f2c76b;font-weight:600">{phraseVietji(detail.wrote) ?? ''}</span></div>{/if}
                 {#if detail.loading}
-                    <div class="text-xs text-textcolor2">đang phân tích từng chữ…</div>
+                    <div class="text-xs text-textcolor2">đang phân tích câu của bạn…</div>
                 {:else if detail.error}
                     <div class="text-xs text-textcolor2">{detail.error}</div>
                 {:else if detail.data}
-                    {#if detail.data.pattern}<div class="text-xs mb-1"><span style="color:#8fb8ff">Mẫu câu:</span> {@html readInline(detail.data.pattern)}</div>{/if}
+                    {@const d = detail.data}
+                    <div class="text-xs mt-1" style="color:#8fb8ff;font-weight:600">① Câu bạn viết — người bản xứ nghe từng chỗ</div>
                     <table class="w-full text-xs">
                         <tbody>
-                        {#each detail.data.words as w, k (w.word + '#' + k)}
+                        {#each d.pieces as p, k (p.piece + '#' + k)}
                             <tr class="border-b border-darkborderc/40 align-top">
-                                <td class="py-0.5 pr-2 text-base font-semibold text-textcolor whitespace-nowrap">{w.word}</td>
-                                <td class="py-0.5 pr-2 whitespace-nowrap" style="color:#f2c76b;font-weight:600">{phraseVietji(w.word) ?? ''}</td>
-                                <td class="py-0.5 pr-2 text-textcolor2 whitespace-nowrap">{w.role}</td>
-                                <td class="py-0.5 pr-2 text-textcolor">{@html readInline(w.meaning)}{#if w.note}<span class="text-textcolor2"> · {@html readInline(w.note)}</span>{/if}</td>
+                                <td class="py-0.5 pr-1 w-4">{p.ok ? '✓' : '✗'}</td>
+                                <td class="py-0.5 pr-2 text-base font-semibold whitespace-nowrap" style={p.ok ? '' : 'color:#e0a46b'}>{p.piece}</td>
+                                <td class="py-0.5 pr-2 whitespace-nowrap" style="color:#f2c76b;font-weight:600">{phraseVietji(p.piece) ?? ''}</td>
+                                <td class="py-0.5 pr-2 text-textcolor">nghe ra: {@html readInline(p.heard)}{#if !p.ok && p.why}<span style="color:#e0a46b"> · sai: {@html readInline(p.why)}</span>{/if}</td>
                             </tr>
                         {/each}
                         </tbody>
                     </table>
-                    {#if detail.data.changes.length}
-                        <div class="text-xs mt-1" style="color:#8fb8ff">Vì sao đổi</div>
-                        {#each detail.data.changes as c, k (k)}<div class="text-xs">• {@html readInline(c)}</div>{/each}
+                    {#if d.heard}<div class="text-xs mt-1">→ Cả câu, người ta sẽ hiểu là: <i>«{d.heard}»</i></div>{/if}
+                    {#if d.frame}
+                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">② Sườn câu đúng</div>
+                        <div class="text-sm">{@html readInline(d.frame)}</div>
                     {/if}
+                    {#if d.filled}
+                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">③ Bỏ chữ đúng của bạn vào sườn (chỗ trống là còn thiếu)</div>
+                        <div class="text-sm">{@html filledHtml(d.filled)}</div>
+                    {/if}
+                    {#if d.adds.length}
+                        <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">④ Thêm vào cho đủ</div>
+                        {#each d.adds as x, k (k)}
+                            <div class="text-xs">+ <b class="text-sm">{@html readInline(x.add)}</b>{#if x.why} — {@html readInline(x.why)}{/if}</div>
+                        {/each}
+                    {/if}
+                    <div class="text-xs mt-2" style="color:#8fb8ff;font-weight:600">⑤ Câu hoàn chỉnh</div>
+                    <div class="text-base font-semibold">{d.final} <span class="text-xs" style="color:#f2c76b;font-weight:600">{phraseVietji(d.final) ?? ''}</span></div>
+                    {#if d.meaning}<div class="text-xs text-textcolor2">= {d.meaning}</div>{/if}
                 {/if}
             </div>
         {/if}

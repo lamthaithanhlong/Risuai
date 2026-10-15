@@ -64,31 +64,61 @@ export function lessonHtml(l: Lesson): string {
 // Measured on the story model (2026-10-15): 5.8-6.8 s, well-formed JSON for Korean and Chinese (다시 침착하게 생각하자: 침착하게
 // "trạng từ chỉ cách thức", 자 "đuôi câu rủ rê", and each change from what was written, with why).
 
-export type DetailWord = { word: string; role: string; meaning: string; note: string }
-export type Detail = { pattern: string; words: DetailWord[]; changes: string[] }
+// Shown as steps (asked 2026-10-15: "đưa câu tui dùng dịch từng chỗ… người ta đọc câu bạn sẽ hiểu bạn đang nói thế này nhưng
+// sai rồi, chỗ sai ở đâu, sườn ngữ pháp đúng là gì, câu bạn nói chỗ nào đúng bỏ vào sườn, thiếu chỗ nào… rồi cuối cùng 1 câu
+// hoàn chỉnh"): the learner's own pieces and how a native hears each, what that whole sounds like, the right frame, their right
+// pieces put in it with the gaps left open, what fills each gap, and the finished sentence.
+
+export type DetailPiece = { piece: string; heard: string; ok: boolean; why: string }
+export type DetailAdd = { add: string; why: string }
+export type Detail = { pieces: DetailPiece[]; heard: string; frame: string; filled: string; adds: DetailAdd[]; final: string; meaning: string }
 
 const NAMES: Record<string, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin)', ko: 'Korean', es: 'Spanish', fr: 'French' }
 
-export function detailPrompt(fix: string, wrote: string, lang: string): string {
-    return `Explain the grammar of this ${NAMES[lang] ?? lang} sentence to a Vietnamese learner, word by word: "${fix}". They had written "${wrote}", word by word from Vietnamese; if the sentence drops an idea of theirs (I think, should) or reads Vietnamese lại after a verb as again (bình tĩnh lại is calm down), say so in changes and give the better sentence. `
-        + 'Answer with only JSON: {"pattern": "<the sentence pattern, e.g. Chủ ngữ + 很 + tính từ>", '
-        + '"words": [{"word": "<word or ending as written in the sentence>", "role": "<its role, in Vietnamese: chủ ngữ, động từ, đuôi câu…>", '
-        + '"meaning": "<its meaning, in Vietnamese>", "note": "<a short note in Vietnamese, or empty>"}], '
-        + '"changes": ["<each change from what they wrote, and why, in simple Vietnamese>"]}. Every word of the sentence, in order.'
+export function detailPrompt(fix: string, wrote: string, lang: string, meant = ''): string {
+    return `A Vietnamese learner of ${NAMES[lang] ?? lang} put a sentence together word by word from Vietnamese: "${wrote}".`
+        + (meant ? ` What they meant, in Vietnamese: "${meant}".` : '')
+        + ` The natural sentence is "${fix}" (give a better one as final if it drops an idea of theirs, such as I think or should; Vietnamese lại after a verb is usually not again: bình tĩnh lại is calm down).`
+        + ' Teach it in steps, all explanations in short simple Vietnamese. Answer with only JSON:'
+        + ' {"pieces": [{"piece": "<each piece of what THEY wrote, in their order>", "heard": "<what a native hears from this piece as written>", "ok": <true if the piece can stay as it is>, "why": "<if not ok: what is wrong, in a few words>"}],'
+        + ' "heard": "<what a native would understand from their whole sentence, in Vietnamese, word for word>",'
+        + ' "frame": "<the right grammar frame, slots in brackets, e.g. [Chủ ngữ]는 + [tân ngữ]을 + [động từ]고 + [nơi] 위로 + [động từ]>",'
+        + ' "filled": "<the frame with THEIR right pieces put in, each gap written as ___>",'
+        + ' "adds": [{"add": "<what goes into a gap or must change, in the language>", "why": "<why, in Vietnamese>"}],'
+        + ' "final": "<the finished natural sentence>", "meaning": "<its meaning in Vietnamese>"}'
 }
+
+const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v))
 
 export function parseDetail(answer: string): Detail | null {
     const m = /\{[\s\S]*\}/.exec(answer ?? '')
     if (!m) return null
     try {
         const j = JSON.parse(m[0])
-        const words: DetailWord[] = (Array.isArray(j.words) ? j.words : []).filter((w: any) => w && typeof w.word === 'string')
-            .map((w: any) => ({ word: w.word, role: String(w.role ?? ''), meaning: String(w.meaning ?? ''), note: String(w.note ?? '') }))
-        if (!words.length) return null
-        return { pattern: String(j.pattern ?? ''), words, changes: (Array.isArray(j.changes) ? j.changes : []).map(String).slice(0, 8) }
+        const pieces: DetailPiece[] = (Array.isArray(j.pieces) ? j.pieces : []).filter((p: any) => p && typeof p.piece === 'string' && p.piece.trim())
+            .map((p: any) => ({ piece: p.piece.trim(), heard: str(p.heard), ok: p.ok === true, why: str(p.why) }))
+        const adds: DetailAdd[] = (Array.isArray(j.adds) ? j.adds : []).filter((a: any) => a && typeof a.add === 'string')
+            .map((a: any) => ({ add: a.add, why: str(a.why) })).slice(0, 8)
+        const final = str(j.final).trim()
+        if (!pieces.length || !final) return null
+        return { pieces, heard: str(j.heard), frame: str(j.frame), filled: str(j.filled), adds, final, meaning: str(j.meaning) }
     } catch {
         return null
     }
+}
+
+/** The filled frame: each word with its Việt-ji under it, each gap an empty dashed slot (a reading after a word ran into the
+ *  gap next to it: "나는 그na-nưn cư ___ 의 손을 잡고ưi sô-nưl…"). */
+const GAP = '<span style="display:inline-block;min-width:2.4em;border-bottom:2px dashed #e0a46b;margin:0 .2em;vertical-align:top">&nbsp;</span>'
+export function filledHtml(filled: string): string {
+    return (filled ?? '').split(/(_{2,}|\s+)/).filter((t) => t !== '').map((t) => {
+        if (/^_{2,}$/.test(t)) return GAP
+        if (/^\s+$/.test(t)) return ' '
+        const v = FOREIGN_RUN.test(t) ? readAloud(t) : null
+        FOREIGN_RUN.lastIndex = 0
+        return v ? `<span style="display:inline-flex;flex-direction:column;align-items:center;vertical-align:top;margin:0 .1em">`
+            + `<span>${esc(t)}</span><span style="font-size:.7em;color:#f2c76b;font-weight:600">${esc(v)}</span></span>` : esc(t)
+    }).join('')
 }
 
 export const DETAIL_BUTTON = '<span title="Chi tiết ngữ pháp" style="cursor:pointer;margin-left:.5em;padding:0 .4em;border:1px solid #8fb8ff66;border-radius:.6em;font-size:.9em;user-select:none">🔍 Chi tiết</span>'

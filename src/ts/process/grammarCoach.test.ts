@@ -32,10 +32,23 @@ describe('the grammar lesson under a reply (asked: after sending, how it should 
     })
 })
 
-// the answer the story model gave for the detail button (measured 2026-10-15, Korean, 6.8 s)
-const KO_DETAIL = 'Đây: {"pattern":"Trạng từ + động từ + 자","words":[{"word":"다시","role":"trạng từ","meaning":"lại, lần nữa","note":""},'
-    + '{"word":"침착하게","role":"trạng từ chỉ cách thức","meaning":"một cách bình tĩnh","note":"침착하다 + 게"},{"word":"생각하자","role":"động từ + đuôi câu rủ rê","meaning":"hãy nghĩ","note":"-자 = cùng làm"}],'
-    + '"changes":["침착하다 → 침착하게: cần trạng từ để bổ nghĩa cho động từ"]}'
+// the answer the story model gave for the step-by-step detail (measured 2026-10-15, Korean, 14 s, the owner's 나 잡다 손 그 넘다 오르다)
+const KO_DETAIL = 'Đây: ' + JSON.stringify({
+    pieces: [
+        { piece: '나', heard: 'tôi', ok: false, why: 'Thiếu 는 để đánh dấu chủ ngữ.' },
+        { piece: '잡다', heard: 'nắm', ok: false, why: 'Cần 잡고 để nối với hành động sau.' },
+        { piece: '손', heard: 'tay', ok: false, why: 'Cần 손을 để làm tân ngữ.' },
+        { piece: '그', heard: 'đó, người đó', ok: true, why: '' },
+        { piece: '넘다', heard: 'vượt qua', ok: false, why: 'Cần 넘어 để nối với hành động sau.' },
+        { piece: '오르다', heard: 'leo lên', ok: false, why: 'Cuối câu cần chia động từ.' },
+    ],
+    heard: 'Tôi, nắm, tay, đó, vượt qua, leo lên. Người nghe chưa rõ tay của ai và vượt qua, leo lên đâu.',
+    frame: '[tôi]는 + 그 [người]의 [tay]을 + [nắm]고 + [ngưỡng cửa]을 + [vượt]어 + [mái nhà] 위로 + [leo lên, chia ở cuối câu]',
+    filled: '나는 그 ___의 손을 잡고 ___을 넘어 ___ 위로 올라간다.',
+    adds: [{ add: '나 → 나는', why: 'Đánh dấu chủ ngữ: tôi.' }, { add: '그 + 여자 → 그 여자의', why: 'Nói rõ: của người phụ nữ đó.' }],
+    final: '나는 그 여자의 손을 잡고 문턱을 넘어 지붕 위로 올라간다.',
+    meaning: 'Tôi nắm tay người phụ nữ đó, bước qua ngưỡng cửa rồi leo lên mái nhà.',
+}) + ' Hết.'
 
 describe('the lesson shows the Việt-ji and a "Chi tiết" button (asked: thêm phiên âm tiếng Việt, nút chi tiết)', () => {
     it('the natural sentence and each part carry their reading', () => {
@@ -48,14 +61,28 @@ describe('the lesson shows the Việt-ji and a "Chi tiết" button (asked: thêm
         expect(html).toContain('f2c76b')
         expect(html).toContain('🔍 Chi tiết')
     })
-    it('reads the measured detail answer, prose around it or not', () => {
+    it('reads the measured step-by-step answer, prose around it or not', () => {
         const d = parseDetail(KO_DETAIL)!
-        expect(d.words.map((w) => w.word)).toEqual(['다시', '침착하게', '생각하자'])
-        expect(d.words[1].role).toBe('trạng từ chỉ cách thức')
-        expect(d.changes).toHaveLength(1)
+        expect(d.pieces.map((p) => p.piece)).toEqual(['나', '잡다', '손', '그', '넘다', '오르다'])
+        expect(d.pieces.filter((p) => p.ok).map((p) => p.piece)).toEqual(['그'])
+        expect(d.final).toBe('나는 그 여자의 손을 잡고 문턱을 넘어 지붕 위로 올라간다.')
+        expect(d.adds).toHaveLength(2)
         expect(parseDetail('không có json')).toBe(null)
-        expect(parseDetail('{"words":[]}')).toBe(null)
-        expect(parseDetail('{"words": [ broken')).toBe(null)
+        expect(parseDetail('{"pieces":[], "final":"x"}')).toBe(null)
+        expect(parseDetail('{"pieces":[{"piece":"나"}]}')).toBe(null)          // no finished sentence: nothing to teach toward
+        expect(parseDetail('{"pieces": [ broken')).toBe(null)
+    })
+    it('the filled frame keeps its gaps open and puts the Việt-ji under each word', async () => {
+        const { filledHtml } = await import('./grammarCoach')
+        const html = filledHtml(parseDetail(KO_DETAIL)!.filled)
+        expect(html.match(/dashed/g)).toHaveLength(3)
+        expect(html).toContain('<span>나는</span><span style="font-size:.7em;color:#f2c76b;font-weight:600">na-nưn</span>')
+        expect(html).not.toContain('___')
+        expect(filledHtml('<b>___</b>')).not.toContain('<b>')
+    })
+    it('the prompt carries what they meant when the bar knows it', () => {
+        expect(detailPrompt('나는…', '나 잡다', 'ko', 'tui nắm tay cô ấy')).toContain('What they meant, in Vietnamese: "tui nắm tay cô ấy"')
+        expect(detailPrompt('나는…', '나 잡다', 'ko')).not.toContain('What they meant')
     })
     it('pressing the button hands over the sentence and what was written', () => {
         const div = document.createElement('div')
