@@ -30,8 +30,9 @@ def main(src, out, top=30000):
         if simp not in best or score > best[simp][0]:
             best[simp] = (score, ''.join(tone_mark(p) for p in pin.split()))
     words = sorted((w for w in best if len(w) > 1), key=lambda w: -freq.get(w, 0))[:top]
-    keep = {w: best[w][1] for w in words if freq.get(w, 0) > 0}
-    keep.update({w: p for w, (_, p) in best.items() if len(w) == 1})
+    chosen = {w for w in words if freq.get(w, 0) > 0} | {w for w in best if len(w) == 1}
+    # most used first: the bar's sound typing (vietjiIme.ts) ranks words that sound alike by this order
+    keep = {w: best[w][1] for w in sorted(chosen, key=lambda w: -freq.get(w, 0))}
     json.dump({'_source': 'CC-CEDICT (CC BY-SA 4.0), ranked with wordfreq; scripts/build_pinyin.py', 'words': keep},
               open(out, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print(f'{len(keep)} entries -> {out}')

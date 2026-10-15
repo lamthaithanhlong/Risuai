@@ -11,6 +11,7 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
+    import { buildSoundIndex, imeSuggestions, isSoundTyping, type SoundIndex } from "src/ts/process/vietjiIme";
     import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
@@ -35,7 +36,10 @@
     let asking = $state(false)
     // what is on offer before any lookup: the sound of one of these, even with tone marks, is not Vietnamese to look up
     let offered = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang }) : [])
-    let typedViet = $derived(enabled && looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) ? (value ?? '').trim() : '')
+    // Chinese sound typing, word by word (vietjiIme.ts): the index is built from the pinyin list once it has loaded
+    let soundIndex = $state<SoundIndex | null>(null)
+    let soundTyping = $derived(lang === 'zh' && isSoundTyping(value ?? '', soundIndex))
+    let typedViet = $derived(enabled && looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) && !soundTyping ? (value ?? '').trim() : '')
     // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
     let wordList = $state<Dictionary | null>(null)
     let wordListLang = $state('')
@@ -52,10 +56,31 @@
     })
     // the sound of an offered answer is not a word to look up, with or without tone marks (喜欢 再 增加 蚊帐 for "ùa lái tảng mẩn")
     let fromList = $derived(wordListLang !== lang ? [] : typedViet ? dictSuggestions(typedViet, wordList?.words ?? null, lang)
-        : typedAny && !soundMatch(typedAny, offered) ? toneless(typedAny, wordList, lang) : [])
+        : typedAny && !soundMatch(typedAny, offered) && !soundTyping ? toneless(typedAny, wordList, lang) : [])
     let listSure = $derived(fromList.length > 0 && !needsModel(typedViet, wordList))
     let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])
-    let items = $derived(enabled ? suggest(value ?? '', pool) : [])
+    // a Chinese word's Vietnamese meaning, from the word list read backwards (我 → tôi), for the sound-typing chips
+    let meaningOfZh = $derived.by(() => {
+        // the most used Vietnamese word wins (我 → tôi, not "bản thân"), by the list's everyday order
+        const back = new Map<string, string>()
+        if (lang === 'zh' && wordList) {
+            const rank = new Map((wordList.order ?? []).map((w, i) => [w, i]))
+            const vis = Object.keys(wordList.words).sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9))
+            for (const vi of vis) {
+                const w = stripReadings(wordList.words[vi][0] ?? '')
+                if (w && !back.has(w)) back.set(w, vi)
+            }
+        }
+        return (w: string) => back.get(w) ?? ''
+    })
+    let imeItems = $derived(enabled && lang === 'zh' && soundIndex ? imeSuggestions(value ?? '', soundIndex, meaningOfZh) : [])
+    let items = $derived.by(() => {
+        if (!enabled) return []
+        const rest = suggest(value ?? '', pool)
+        const both = soundTyping ? [...imeItems, ...rest] : [...rest, ...imeItems]   // sound first only when it is clearly sound
+        const seen = new Set<string>()
+        return both.filter((s) => !seen.has(s.replace ?? s.text) && !!seen.add(s.replace ?? s.text)).slice(0, 6)
+    })
     // what the notebook alone offers for it: two or more fitting phrases and the model is not asked
     let foundInBook = $derived(typedViet ? suggest(typedViet, suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang })).length : 0)
     const asker = makeAsker<SuggestedReply[]>(async (key) => {
@@ -128,6 +153,7 @@
         }
         readingLists.get(want)!.then((words) => {
             if (words && lang === want) { list.set(words); ReloadGUIPointer.update((v) => v + 1) }
+            if (words && want === 'zh' && !soundIndex) setTimeout(() => { soundIndex = buildSoundIndex(words) }, 0)
         })
     })
 

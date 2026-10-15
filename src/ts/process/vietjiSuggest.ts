@@ -5,7 +5,8 @@
 import type { LearningLang, SuggestedReply } from './vietji'
 import { parseReplies, phraseVietji, readVocab, setLatinLanguage, stripReadings } from './vietji'
 
-export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' | 'asked' | 'dict' }
+/** replace: the whole new input when the chip is picked (sound typing turns its syllables into characters, vietjiIme.ts). */
+export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' | 'asked' | 'dict' | 'ime'; replace?: string }
 
 /**
  * Typed with Vietnamese marks ("có", "bao nhiêu", "đi"): the learner is writing what they mean, not the sound, so the bar looks
@@ -141,5 +142,6 @@ export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[
  * only understood loosely.
  */
 export function insertText(s: Suggestion, lang: LearningLang): string {
+    if (s.replace !== undefined) return s.replace
     return lang === 'ja' ? s.vietji.replace(/-/g, ' ') : stripReadings(s.text)
 }
