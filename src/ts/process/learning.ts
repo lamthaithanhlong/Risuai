@@ -4,11 +4,14 @@
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
 import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, readVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
-import { addMistake, gradeUse, memoryNote, parseCheck, splitCheck, type Mistake, type VocabItem } from './learningMemory'
+import { addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult, type Mistake, type VocabItem } from './learningMemory'
 
 export const VOCAB_VAR = '$vj_vocab'
 export const MISTAKES_VAR = '$vj_mistakes'
 export const HISTORY_VAR = '$vj_history'
+/** How many replies forgot the check although the learner tried the language, and whether the last one did. */
+export const CHECK_MISSED_VAR = '$vj_check_missed'
+export const CHECK_MISSED_LAST_VAR = '$vj_check_missed_last'
 
 function readList<T>(chat: Chat | undefined, key: string): T[] {
     try { const v = JSON.parse((chat?.scriptstate?.[key] as string) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
@@ -69,6 +72,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     if (!db.learningMode) return formated
     // the format note goes right before the last user message, where the model weighs it most; it carries what to review
     const memory = memoryNote(readVocab<VocabItem>(chat?.scriptstate?.[VOCAB_VAR] as string), readList<Mistake>(chat, MISTAKES_VAR), readList<boolean>(chat, HISTORY_VAR), now)
+        + (chat?.scriptstate?.[CHECK_MISSED_LAST_VAR] === '1' ? '\nYour previous reply forgot the [[CHECK]] line. Do not forget it this time.' : '')
     const note = { role: 'system', content: learningNote((db.learningLang ?? 'ja') as LearningLang) + '\n' + memory } as T
     let lastUser = -1
     formated.forEach((m, i) => { if (m.role === 'user') lastUser = i })
@@ -100,12 +104,22 @@ function rememberReply(chat: Chat | undefined, now: number): void {
     if (!last || last.role !== 'char') return
     setLatinLanguage(getDatabase().learningLang)
     chat.scriptstate ??= {}
+    // the stored list is written back in its clean form every time, so rows saved in an older shape do not linger
     const found = collectVocab(last.data)
-    if (found.length) chat.scriptstate[VOCAB_VAR] = mergeVocab(chat.scriptstate[VOCAB_VAR] as string, found)
+    chat.scriptstate[VOCAB_VAR] = found.length
+        ? mergeVocab(chat.scriptstate[VOCAB_VAR] as string, found)
+        : JSON.stringify(readVocab(chat.scriptstate[VOCAB_VAR] as string))
     // the speaker's check of the learner's line: review the phrases they used, keep the mistake, count right and wrong
-    const check = parseCheck(last.data)
-    if (!check) return
     const userLine = chat.message.slice(0, -1).findLast((m) => m.role === 'user')?.data ?? ''
+    let check: CheckResult | null = parseCheck(last.data)
+    const missed = !check && triedForeign(userLine)
+    chat.scriptstate[CHECK_MISSED_LAST_VAR] = missed ? '1' : '0'
+    if (missed) {
+        chat.scriptstate[CHECK_MISSED_VAR] = String(Number(chat.scriptstate[CHECK_MISSED_VAR] ?? 0) + 1)
+        console.warn('[learning] the reply has no [[CHECK]] line; grading only an exact known phrase')
+        check = selfCheck(userLine, readVocab<VocabItem>(chat.scriptstate[VOCAB_VAR] as string))
+    }
+    if (!check) return
     chat.scriptstate[VOCAB_VAR] = JSON.stringify(gradeUse(readVocab<VocabItem>(chat.scriptstate[VOCAB_VAR] as string), userLine, check, now))
     chat.scriptstate[MISTAKES_VAR] = JSON.stringify(addMistake(readList<Mistake>(chat, MISTAKES_VAR), check, now))
     chat.scriptstate[HISTORY_VAR] = JSON.stringify([...readList<boolean>(chat, HISTORY_VAR), check.ok].slice(-30))

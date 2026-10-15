@@ -39,6 +39,9 @@ describe('typing', () => {
         expect(fromVietji('oa ca ri ma xi ta')).toBe('わかりました')
         expect(fromVietji('kit te')).toBe('きって')
         expect(fromVietji('ddai giou bu')).toBe('だいじょうぶ')
+        expect(fromVietji('i i ê, i ri ma sên')).toBe('いいえ、いりません')
+        expect(fromVietji('i cu ra đê sư ca?')).toBe('いくらですか？')
+        expect(fromVietji('ha i.')).toBe('はい。')
     })
     it('da and dda stay apart', () => {
         expect(fromVietji('da')).toBe('や')

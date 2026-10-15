@@ -70,12 +70,17 @@ function reverseTable(): Map<string, string> {
 }
 
 /** Việt-ji -> kana ("da me te" -> "やめて"), or null when the text is not entirely Việt-ji. */
+const JA_PUNCT: Record<string, string> = { ',': '、', '.': '。', '?': '？', '!': '！' }
+
 export function fromVietji(text: string): string | null {
     const rev = reverseTable()
-    const words = text.split(/[\s\-]+/).filter(Boolean)
+    // punctuation typed between words ("i i ê, i ri ma sên") is kept as Japanese punctuation, not a reason to give up
+    const tokens = text.split(/([,.?!]+)|[\s\-]+/).filter((t) => t !== undefined && t !== '')
+    const words = tokens.filter((t) => !/^[,.?!]+$/.test(t))
     if (words.length === 0) return null
     const out: string[] = []
-    for (const word of words) {
+    for (const word of tokens) {
+        if (/^[,.?!]+$/.test(word)) { out.push([...word].map((c) => JA_PUNCT[c]).join('')); continue }
         const f = [...fold(word)]
         let i = 0
         while (i < f.length) {

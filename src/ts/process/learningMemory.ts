@@ -8,7 +8,7 @@
 // The block is never shown as is: a fix becomes one short "Sửa:" line under the reply.
 
 import { foldTyping } from './vietjiSuggest'
-import { stripReadings, type SuggestedReply } from './vietji'
+import { fromVietji, hasForeign, stripReadings, type SuggestedReply } from './vietji'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -117,4 +117,26 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     if (acc !== null && acc > 0.8) lines.push('The player is getting almost everything right: you may add up to three new words this reply.')
     else if (acc !== null && acc < 0.5) lines.push('The player is struggling: no new words this reply, shorter and simpler sentences, reuse what they know.')
     return lines.join('\n')
+}
+
+const PUNCT = /[\s。、！？!?.,«»¿¡「」]/g
+
+/** True when the learner's line holds a try at the foreign language (its own writing, or Japanese typed in Việt-ji). */
+export function triedForeign(userLine: string): boolean {
+    return hasForeign(userLine ?? '') || fromVietji((userLine ?? '').trim()) !== null
+}
+
+/**
+ * Risu's own check when the speaker forgot one: a line that is, word for word, a phrase the learner already met (typed in its
+ * own writing, in Việt-ji, or as kana after conversion) was right. Anything else is not judged here: only the speaker can tell
+ * a wrong sentence from a new one.
+ */
+export function selfCheck(userLine: string, known: VocabItem[]): CheckResult | null {
+    const line = (userLine ?? '').trim()
+    if (!line) return null
+    const asKana = fromVietji(line)
+    const plain = (asKana ?? line).replace(PUNCT, '').toLowerCase()
+    const sound = foldTyping(line)
+    const hit = known.some((v) => stripReadings(v.text).replace(PUNCT, '').toLowerCase() === plain || (sound.length >= 3 && foldTyping(v.vietji) === sound))
+    return hit ? { ok: true } : null
 }
