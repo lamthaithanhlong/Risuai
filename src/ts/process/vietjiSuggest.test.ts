@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fromVietji } from './vietji'
-import { foldTyping, insertText, starterSet, suggest, suggestionPool } from './vietjiSuggest'
+import { foldTyping, insertText, looksVietnamese, starterSet, suggest, suggestionPool } from './vietjiSuggest'
 
 const lastReply = 'Haru: 「ふたつ です。」 (Hai đồng.)\n\n[[REPLIES\nふたつ ですか | Hai đồng à?\nいいえ、 だいじょうぶ です | Không, tôi không cần.\n]]'
 const vocab = JSON.stringify([{ text: 'しお です。', vietji: 'xi-ô đê-sư', meaning: 'Đây là muối.' }, { text: 'いくら ですか', vietji: 'i-cư-ra đê-sư-ca', meaning: 'Bao nhiêu tiền?' }])
@@ -33,6 +33,12 @@ describe('suggest', () => {
     const pool = suggestionPool({ lastReply, vocab, lang: 'ja' })
     it('nothing typed: the speaker’s suggested answers', () => {
         expect(suggest('', pool).map((s) => s.text)).toEqual(['ふたつ ですか', 'いいえ、 だいじょうぶ です'])
+    })
+    it('nothing typed: all six answers, each keeping its kind', () => {
+        const six = '[[REPLIES\nはい | Vâng | easy\nいいえ | Không | easy\nいくら ですか | Bao nhiêu? | stretch\nもう いちど | Lần nữa | stretch\nください | Cho tôi | workaround\nさようなら | Tạm biệt | workaround\n]]'
+        const shown = suggest('', suggestionPool({ lastReply: six, lang: 'ja' }))
+        expect(shown).toHaveLength(6)
+        expect(shown.map((s) => s.kind)).toEqual(['easy', 'easy', 'stretch', 'stretch', 'workaround', 'workaround'])
     })
     it('matches the sound from the start, typed without marks', () => {
         expect(suggest('i cu', pool)[0].text).toBe('いくら ですか')
@@ -70,5 +76,31 @@ describe('choosing a suggestion', () => {
     it('other languages put the phrase itself, without readings', () => {
         const s = suggest('ni hao', suggestionPool({ lang: 'zh' }))[0]
         expect(insertText(s, 'zh')).toBe('你好')
+    })
+})
+
+describe('typed in Vietnamese: looked up by meaning', () => {
+    it('marks or đ mean Vietnamese; plain letters stay sound typing', () => {
+        expect(looksVietnamese('có')).toBe(true)
+        expect(looksVietnamese('đi')).toBe(true)
+        expect(looksVietnamese('bao nhiêu')).toBe(true)
+        expect(looksVietnamese('co')).toBe(false)
+        expect(looksVietnamese('oa ca ri')).toBe(false)
+    })
+    const fr = suggestionPool({ lang: 'fr' })
+    it('finds the phrase by what it means, not by its sound', () => {
+        expect(suggest('bao nhiêu', fr).map((s) => s.text)).toEqual(['Combien ça coûte ?'])
+        expect(suggest('không hiểu', fr).map((s) => s.text)).toEqual(['Je ne comprends pas'])
+        expect(suggest('tạm bi', fr).map((s) => s.text)).toEqual(['Au revoir'])           // the last word may be cut short
+    })
+    it('"có" is not "cô": the same word with other marks does not count as exact', () => {
+        // "có" folds to "co", the sound of "Combien" starts with "cô": sound typing would offer it, meaning lookup does not
+        expect(suggest('có', fr)).toEqual([])
+        expect(suggest('co', fr)[0].text).toBe('Combien ça coûte ?')
+    })
+    it('what the model was asked comes first', () => {
+        const asked = [{ text: '«Oui»', vietji: 'uy', meaning: 'Có', kind: 'easy' as const }]
+        const s = suggest('có', suggestionPool({ lang: 'fr', asked }))
+        expect(s[0]).toMatchObject({ text: '«Oui»', source: 'asked', kind: 'easy' })
     })
 })

@@ -5,7 +5,37 @@
 import type { LearningLang, SuggestedReply } from './vietji'
 import { parseReplies, phraseVietji, readVocab, setLatinLanguage, stripReadings } from './vietji'
 
-export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' }
+export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' | 'asked' }
+
+/**
+ * Typed with Vietnamese marks ("có", "bao nhiêu", "đi"): the learner is writing what they mean, not the sound, so the bar looks
+ * the meaning up. Plain letters ("co", "oa ca") stay sound typing.
+ */
+export function looksVietnamese(s: string): boolean {
+    const t = (s ?? '').normalize('NFD')
+    return /[đĐ]/.test(t) || /[\u0300-\u0309\u031b\u0323]/.test(t) || /[ăâêôơư]/i.test(s ?? '')
+}
+
+/** The meaning's words, folded: "Bao nhiêu tiền?" → ["bao", "nhieu", "tien"]. */
+const meaningWords = (s: string) => (s ?? '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+const foldWord = (w: string) => foldTyping(w)
+
+/** How well a meaning fits what was typed in Vietnamese: every typed word is one of its words (the last one may be cut short). */
+function meaningScore(typed: string, meaning: string): number {
+    const want = meaningWords(typed)
+    if (!want.length) return 0
+    const have = meaningWords(meaning)
+    const haveFolded = have.map(foldWord)
+    let exact = true
+    for (const [i, w] of want.entries()) {
+        const last = i === want.length - 1
+        if (have.includes(w)) continue                           // same word, same marks: "có" is not "cô"
+        exact = false
+        const f = foldWord(w)
+        if (!haveFolded.some((h) => h === f || (last && h.startsWith(f)))) return 0
+    }
+    return exact ? 3 : 2
+}
 
 /** Lower case, no tone marks, ê/ô/ơ/ư/ă/â as plain letters, đ and "dd" as d, no spaces or hyphens: what the learner can type. */
 export function foldTyping(s: string): string {
@@ -47,7 +77,7 @@ export function starterSet(lang: LearningLang): Suggestion[] {
 }
 
 /** Every phrase the bar can offer, newest first, without repeats: the last reply's answers, the vocabulary list, the starter set. */
-export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang: LearningLang }): Suggestion[] {
+export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang: LearningLang; asked?: SuggestedReply[] }): Suggestion[] {
     const pool: Suggestion[] = []
     const seen = new Set<string>()
     const add = (s: Suggestion) => {
@@ -56,6 +86,7 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
         seen.add(key)
         pool.push(s)
     }
+    for (const r of opts.asked ?? []) add({ ...r, source: 'asked' })
     for (const r of parseReplies(opts.lastReply ?? '')) add({ ...r, source: 'reply' })
     for (const v of readVocab(opts.vocab)) add({ text: v.text, vietji: v.vietji, meaning: v.meaning ?? '', source: 'heard' })
     for (const s of starterSet(opts.lang)) add(s)
@@ -66,10 +97,18 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
  * The best matches for what is typed: the sound from its start (strongest), the sound anywhere, then the meaning. Nothing typed:
  * the speaker's suggested answers. At most `max`.
  */
-export function suggest(typed: string, pool: Suggestion[], max = 5): Suggestion[] {
+export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[] {
     const q = foldTyping(typed)
     if (!q) return pool.filter((s) => s.source === 'reply').slice(0, max)
     const scored: [number, number, Suggestion][] = []
+    if (looksVietnamese(typed)) {
+        // what the learner means, in Vietnamese: by meaning only (the sound of "có" says nothing about "oui")
+        pool.forEach((s, i) => {
+            const score = s.source === 'asked' ? 4 : meaningScore(typed, s.meaning)
+            if (score) scored.push([score, i, s])
+        })
+        return scored.sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, max).map((x) => x[2])
+    }
     pool.forEach((s, i) => {
         const sound = foldTyping(s.vietji)
         const meaning = foldTyping(s.meaning)

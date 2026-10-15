@@ -112,7 +112,8 @@ let latinReader: (word: string) => string | null = spanishToVietji
 export function setLatinLanguage(lang: string | undefined): void {
     latinReader = lang === 'fr' ? frenchToVietji : spanishToVietji
 }
-const LATIN_WORD = /[A-Za-zÀ-ÖØ-öø-ÿœŒ]+/g
+// a French elision (c'est, qu'il) is one word: its consonant is heard with what follows
+const LATIN_WORD = /(?:[QqKk]u['’]|[CcDdJjLlMmNnSsTt]['’])?[A-Za-zÀ-ÖØ-öø-ÿœŒ]+/g
 
 const KANA = /[ぁ-ゖァ-ヺ]/
 const HAN = '一-鿿㐀-䶿々〆'
@@ -210,7 +211,7 @@ export function phraseVietji(text: string): string | null {
     for (const m of t.matchAll(new RegExp(`${CJK_WORD.source}|[\\uAC00-\\uD7A3]+|${LATIN_WORD.source}`, 'g'))) {
         const w = m[0]
         if (HANGUL.test(w)) { const v = hangulToVietji(w); if (v) out.push(v); continue }
-        if (/^[A-Za-zÀ-ÖØ-öø-ÿœŒ]+$/.test(w)) { const v = latinReader(w); if (v) out.push(v); continue }
+        if (/^[A-Za-zÀ-ÖØ-öø-ÿœŒ'’]+$/.test(w)) { const v = latinReader(w); if (v) out.push(v); continue }
         const html = cjkWord(w)
         const v = /<span style="[^"]*white-space:nowrap">([^<]*)<\/span><\/span>$/.exec(html)?.[1]
         if (v) out.push(v.replace(/&amp;/g, '&'))
@@ -231,19 +232,29 @@ export function stripReadings(text: string): string {
  *   ]]
  * It is shown as a short list with readings, and the parsed list feeds the typing suggestions. A block still streaming is hidden.
  */
-export type SuggestedReply = { text: string; vietji: string; meaning: string }
+/** kind: 'easy' a plain answer, 'stretch' one that reaches a little higher, 'workaround' the idea said with words already known. */
+export type ReplyKind = 'easy' | 'stretch' | 'workaround'
+export type SuggestedReply = { text: string; vietji: string; meaning: string; kind?: ReplyKind }
+
+const KIND_WORDS: Record<string, ReplyKind> = {
+    easy: 'easy', 'dễ': 'easy', simple: 'easy',
+    stretch: 'stretch', 'nâng': 'stretch', 'nang': 'stretch', rich: 'stretch',
+    workaround: 'workaround', 'vòng': 'workaround', 'vong': 'workaround', 'known words': 'workaround',
+}
+export const KIND_LABEL: Record<ReplyKind, string> = { easy: 'dễ', stretch: 'nâng', workaround: 'nói vòng' }
 
 export function parseReplies(message: string): SuggestedReply[] {
     const m = /\[\[REPLIES\s*\n([\s\S]*?)\]\]/.exec(message ?? '')
     if (!m) return []
     const out: SuggestedReply[] = []
     for (const line of m[1].split('\n')) {
-        const [text, meaning = ''] = line.split('|').map((s) => s.trim())
+        const [text, meaning = '', tag = ''] = line.split('|').map((s) => s.trim())
         if (!text) continue
         const vietji = phraseVietji(text)
-        if (vietji) out.push({ text, vietji, meaning })
+        const kind = KIND_WORDS[tag.toLowerCase()]
+        if (vietji) out.push(kind ? { text, vietji, meaning, kind } : { text, vietji, meaning })
     }
-    return out.slice(0, 4)
+    return out.slice(0, 6)
 }
 
 /** The message without its replies block (a block still streaming is cut off too), and the box that shows the replies. */
@@ -253,7 +264,8 @@ export function splitReplies(message: string, withReadings = true): { main: stri
     if (!replies.length) return { main, box: '' }
     const line = (r: SuggestedReply) => {
         const shown = /[«\uAC00-\uD7A3\u3041-\u30FA\u4E00-\u9FFF]/.test(r.text) ? r.text : `«${r.text}»`
-        return `<div>${withReadings ? readText(shown) : esc(stripReadings(shown))} <span style="opacity:.75">— ${esc(r.meaning)}</span></div>`
+        const tag = r.kind ? ` <span style="font-size:.75em;padding:0 .35em;border:1px solid #f2c76b55;border-radius:.6em;opacity:.8">${KIND_LABEL[r.kind]}</span>` : ''
+        return `<div>${withReadings ? readText(shown) : esc(stripReadings(shown))} <span style="opacity:.75">— ${esc(r.meaning)}</span>${tag}</div>`
     }
     const box = '\n\n<div style="margin-top:.6em;padding:.4em .7em;border-left:3px solid #f2c76b;opacity:.92"><div style="font-size:.8em;opacity:.7">Bạn có thể đáp</div>'
         + replies.map(line).join('') + '</div>'

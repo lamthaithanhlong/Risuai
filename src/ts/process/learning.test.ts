@@ -4,7 +4,7 @@ const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
 import { readNotebook } from './learningStore'
-import { CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
+import { howToSayPrompt, CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content
 
@@ -46,6 +46,8 @@ describe('learning mode on', () => {
         expect(userOf(learningRequest(req('Kenji: oa ca ri ma xi ta')))).toBe('Kenji: わかりました')
         expect(userOf(learningRequest(req('Tôi đi ra chợ.')))).toBe('Tôi đi ra chợ.')
         expect(userOf(learningRequest(req('da me te', 'assistant')))).toBe('da me te')
+        expect(userOf(learningRequest(req('? cái muối này bao nhiêu')))).toBe('? cái muối này bao nhiêu')   // asking how to say it
+        expect(userOf(learningRequest(req('Kenji: ? ca ra')))).toBe('Kenji: ? ca ra')
         db.learningTyping = false
         expect(userOf(learningRequest(req('da me te')))).toBe('da me te')
     })
@@ -92,6 +94,27 @@ describe('learning mode on', () => {
         const fix = learningDisplay('Haru cười.\n[[CHECK はい → はい、ください | thiếu ください]]')
         expect(fix).toContain('Sửa:')
         expect(fix).not.toContain('[[CHECK')
+    })
+    it('the note asks for four to six answers of three kinds, and explains "?"', () => {
+        const note = learningRequest(req('x')).find((m: any) => m.role === 'system').content
+        expect(note).toContain('four to six')
+        expect(note).toContain('workaround')
+        expect(note).toContain('"?"')
+    })
+    it('the how-to-say request asks for three kinds in the REPLIES format, in the language\'s own writing', () => {
+        const p = howToSayPrompt('có', 'fr', ['Merci'])
+        expect(p).toContain('"có"')
+        expect(p).toContain('French')
+        expect(p).toContain('[[REPLIES')
+        expect(p).toMatch(/easy[\s\S]*stretch[\s\S]*workaround/)
+        expect(p).toContain('Merci')
+        expect(howToSayPrompt('nước', 'ja')).toContain('hiragana')
+    })
+    it('a "? ..." line is a question, not a try: it is not graded', () => {
+        const chat: any = { message: [{ role: 'user', data: '? ca ra' }, { role: 'char', data: 'Haru cười.\n[[CHECK ca ra → から | sai]]' }], scriptstate: {} }
+        noteLearningVocab(chat, 1_800_000_000_000)
+        expect(nb().history).toEqual([])
+        expect(nb().mistakes).toEqual([])
     })
     it('the request note carries the phrases due for review', () => {
         const chat: any = { scriptstate: { [VOCAB_VAR]: JSON.stringify([{ text: 'はい', vietji: 'ha-i', meaning: 'Vâng', due: 1 }]) } }

@@ -261,8 +261,18 @@ const FR_NASALS: [string, string][] = [
 const FR_LETTER_VOWEL = /[aàâeéèêëiîïoôuûüyœə]/
 const FR_SPECIAL: Record<string, string> = { monsieur: 'mơ-xi-ơ', et: 'ê', est: 'e', oui: 'uy' }
 
+const FR_ELIDED: Record<string, string> = { c: 'x', s: 'x', d: 'đ', j: 'gi', l: 'l', m: 'm', n: 'n', t: 't', qu: 'k' }
+
 /** One French word → Việt-ji ("bonjour" → "bông-giu", "merci" → "mec-xi", "croissant" → "croa-xăng"); null when no letter. */
 export function frenchToVietji(word: string): string | null {
+    // c'est, j'ai, l'eau, qu'il: the cut-off consonant opens the next word's first syllable (xê, gie, lô, kin)
+    const elided = /^(qu|[cdjlmnst])['’](.+)$/i.exec(word)
+    if (elided) {
+        const rest = frenchToVietji(elided[2])
+        if (!rest) return null
+        const c = FR_ELIDED[elided[1].toLowerCase()]
+        return /^[aeiouy]/.test(rest.normalize('NFD')) ? c + rest : `${c}ơ-${rest}`
+    }
     let w = word.toLowerCase().replace(/[^a-zàâçéèêëîïôûüÿœ]/g, '')
     if (!w) return null
     if (FR_SPECIAL[w]) return FR_SPECIAL[w]

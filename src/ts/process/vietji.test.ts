@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import TABLE from './vietjiTable.json'
-import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
+import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, phraseVietji, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
 import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji, toneSyllable } from './vietjiLang'
 
 const fold = (s: string) => s.toLowerCase().replace(/ê/g, 'e').replace(/ô/g, 'o').replace(/ư/g, 'u').replace(/ơ/g, 'o')
@@ -124,6 +124,17 @@ describe('readings by rule', () => {
         ['garçon', 'gac-xông'], ['beaucoup', 'bô-cu'], ['madame', 'ma-đam'], ['soupe', 'xup'], ['chocolat', 'sô-cô-la'],
         ['gâteau', 'ga-tô'], ['fromage', 'phrô-ma-giơ'], ['bien', 'biêng'], ['plaît', 'plê'], ['appelle', 'a-pel'],
     ])('French %s → %s', (w, v) => expect(frenchToVietji(w)).toBe(v))
+    it('French elisions keep their consonant: c\'est ça is not "e xa"', () => {
+        for (const w of ["C'est", "c’est", "J'ai", "L'eau", "qu'il", "d'accord", "n'est"]) {
+            expect(frenchToVietji(w), w).toMatch(/^(x|gi|l|k|đ|n)/i)
+        }
+        expect(frenchToVietji("C'est")).toBe('xe')
+        setLatinLanguage('fr')
+        const cest = phraseVietji("«C'est ça.»"), jai = phraseVietji("«J'ai faim»")
+        setLatinLanguage('es')                                     // the other tests read Spanish
+        expect(cest).toBe('xe xa')
+        expect(jai).toMatch(/^gi\S* /)
+    })
     it('tone marks land on the main vowel', () => {
         expect(toneSyllable('hao', 'hoi')).toBe('hảo')
         expect(toneSyllable('trung', 'sac')).toBe('trúng')
@@ -139,6 +150,15 @@ describe('suggested replies and vocabulary', () => {
             { text: 'はい', vietji: 'ha-i', meaning: 'Vâng' },
             { text: 'いくら ですか', vietji: 'i-cư-ra đê-sư-ca', meaning: 'Bao nhiêu tiền?' },
         ])
+    })
+    it('reads up to six replies with their kind, and shows the kind in the box', () => {
+        const six = '[[REPLIES\nはい | Vâng | easy\nいいえ | Không | dễ\nいくら ですか | Bao nhiêu? | stretch\nもう いちど | Lần nữa | nói vòng\nください | Cho tôi\nさようなら | Tạm biệt | vong\nありがとう | Cảm ơn | easy\n]]'
+        const r = parseReplies(six)
+        expect(r).toHaveLength(6)
+        expect(r.map((x) => x.kind)).toEqual(['easy', 'easy', 'stretch', undefined, undefined, 'workaround'])
+        expect('kind' in r[4]).toBe(false)                         // no tag: no kind key, old replies read as before
+        expect(renderReplies(six)).toContain('nói vòng')
+        expect(renderReplies(six)).toContain('>nâng<')
     })
     it('reads replies in kanji, hangul and Spanish', () => {
         const r = parseReplies('[[REPLIES\n大丈夫[だいじょうぶ] です | Không sao\n네 | Vâng\n«Sí, por favor» | Vâng, làm ơn\n]]')

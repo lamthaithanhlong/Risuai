@@ -90,4 +90,12 @@ describe('mistakes, due items, accuracy, the note', () => {
         expect(note).toContain('[[CHECK ok]]')
         expect(memoryNote([], [], [false, false, false, true], NOW)).toContain('no new words')
     })
+    it('the note lists the words already known, for the "workaround" answers, and only those', () => {
+        const known = { ...ikura, ok: 1 }
+        const met = { text: 'はい', vietji: 'ha-i', meaning: 'Vâng' }
+        const note = memoryNote([known, met], [], [], NOW)
+        expect(note).toMatch(/already knows.*いくら ですか/)
+        expect(note).not.toMatch(/already knows[^\n]*はい/)
+        expect(memoryNote([met], [], [], NOW)).not.toContain('already knows')
+    })
 })

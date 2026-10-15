@@ -1,12 +1,14 @@
 <script lang="ts">
-    // Learning mode: phrases the learner can say, above the chat input. Typing the sound in Vietnamese letters (or a few words of
-    // the meaning) narrows them; ↑/↓ move the choice, Tab (or a tap) puts it in the input, Esc hides the bar until the next key.
+    // Learning mode: phrases the learner can say, above the chat input, each as its Vietnamese meaning over the foreign phrase and
+    // its reading. Typing the sound in Vietnamese letters narrows them; typing in Vietnamese with marks ("có") looks the meaning up,
+    // and when the notebook has nothing for it the model is asked for three ways to say it; ↑/↓ move the choice, Tab (or a tap) puts it in the input, Esc hides the bar until the next key.
     // 📖 opens the notebook: every phrase met in this language, the hard ones (often wrong, or close in sound to a mistake) first.
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
     import { DBState } from "src/ts/stores.svelte";
     import type { Chat } from "src/ts/storage/database.svelte";
-    import { stripReadings, type LearningLang } from "src/ts/process/vietji";
-    import { insertText, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
+    import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
+    import { howToSayPrompt } from "src/ts/process/learning";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
 
@@ -24,8 +26,40 @@
     let hard = $derived(flagged(notebook.vocab, notebook.mistakes))
     let hardTexts = $derived(new Set(hard.map((h) => h.text)))
     let lastReply = $derived(chat?.message?.findLast((m) => m.role === 'char')?.data ?? '')
-    let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang }) : [])
+    // typed in Vietnamese and nothing in the notebook fits: the model is asked for three ways to say it (after a pause in typing)
+    let askedFor = $state('')
+    let asked = $state<SuggestedReply[]>([])
+    let asking = $state(false)
+    let typedViet = $derived(enabled && looksVietnamese(value ?? '') ? (value ?? '').trim() : '')
+    let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, asked: askedFor === typedViet ? asked : [] }) : [])
     let items = $derived(enabled ? suggest(value ?? '', pool) : [])
+    // what the notebook alone offers for it: two or more fitting phrases and the model is not asked
+    let foundInBook = $derived(typedViet ? suggest(typedViet, suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang })).length : 0)
+    const askCache = new Map<string, SuggestedReply[]>()
+
+    $effect(() => {
+        const viet = typedViet
+        if (!viet || viet.length < 2 || viet.length > 120 || foundInBook >= 2) { asking = false; return }
+        const key = `${lang}|${viet}`
+        if (askCache.has(key)) { asked = askCache.get(key); askedFor = viet; return }
+        let live = true
+        const timer = setTimeout(async () => {
+            asking = true
+            try {
+                const { requestChatData } = await import("src/ts/process/request/request")
+                const known = notebook.vocab.filter((v) => (v.ok ?? 0) > 0).map((v) => stripReadings(v.text))
+                const res = await requestChatData({ formated: [{ role: 'user', content: howToSayPrompt(viet, lang, known) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+                const got = res.type === 'success' && typeof res.result === 'string' ? parseReplies(res.result) : []
+                askCache.set(key, got)
+                if (live) { asked = got; askedFor = viet }
+            } catch (e) {
+                console.warn('[vietji] how-to-say request failed', e)
+            } finally {
+                if (live) asking = false
+            }
+        }, 900)
+        return () => { live = false; clearTimeout(timer) }
+    })
     let selected = $state(0)
     let hidden = $state(false)
     let bookOpen = $state(false)
@@ -110,11 +144,16 @@
                         title={i === selected ? 'Tab' : ''}
                         onclick={() => choose(s)}
                     >
-                        <span class="text-xs leading-tight" style="color:#f2c76b;font-weight:600">{hardTexts.has(s.text) ? '⚑ ' : ''}{s.vietji}</span>
-                        <span class="text-sm leading-tight text-textcolor">{lang === 'es' || lang === 'fr' ? s.text : stripReadings(s.text)}</span>
-                        <span class="text-xs leading-tight text-textcolor2">{s.meaning}</span>
+                        <span class="text-sm leading-tight text-textcolor">{hardTexts.has(s.text) ? '⚑ ' : ''}{s.meaning}{#if s.kind}<span class="text-xs text-textcolor2"> · {KIND_LABEL[s.kind]}</span>{/if}</span>
+                        <span class="text-sm leading-tight text-textcolor font-semibold">{lang === 'es' || lang === 'fr' ? s.text.replace(/[«»]/g, '').trim() : stripReadings(s.text)}</span>
+                        <span class="text-xs leading-tight" style="color:#f2c76b;font-weight:600">{s.vietji}</span>
                     </button>
                 {/each}
+                {#if asking}
+                    <span class="shrink-0 self-center text-xs text-textcolor2 px-2">đang tìm cách nói “{typedViet}”…</span>
+                {:else if typedViet && !items.length}
+                    <span class="shrink-0 self-center text-xs text-textcolor2 px-2">gõ tiếp hoặc dừng tay để tìm cách nói</span>
+                {/if}
             {/if}
         </div>
     </div>

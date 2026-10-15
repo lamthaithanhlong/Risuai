@@ -109,6 +109,8 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     const lines: string[] = [
         'REQUIRED whenever the player\'s last message has words in the foreign language: the very last line of your reply is a check of that line, after the REPLIES block: [[CHECK ok]] when it was right, or [[CHECK <what they wrote> → <the right form> | <the reason in a few Vietnamese words>]] when it needed fixing. The story text can still show the speaker repeating it correctly.',
     ]
+    const known = vocab.filter((v) => (v.ok ?? 0) > 0 || (v.reps ?? 0) > 0).slice(0, 40)
+    if (known.length) lines.push(`Words and phrases the player already knows (build the "workaround" answers from these): ${known.map((v) => stripReadings(v.text)).join('; ')}.`)
     const due = dueItems(vocab, now)
     if (due.length) lines.push(`Bring back these phrases naturally in the scene, the player is due to review them: ${due.map((v) => `${stripReadings(v.text)} (${v.meaning})`).join('; ')}.`)
     const hard = flagged(vocab, mistakes).slice(0, 4)

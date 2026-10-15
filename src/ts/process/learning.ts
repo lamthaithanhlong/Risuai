@@ -7,6 +7,24 @@ import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, setLatin
 import { addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult } from './learningMemory'
 import { migrateChat, readNotebook, writeNotebook } from './learningStore'
 
+/** "? cái muối này bao nhiêu": the learner asks how to say something (also after a name prefix such as "Kenji: ?"). */
+export function isHowDoISay(text: string): boolean {
+    return /^(?:[^:\n]{1,40}:\s*)?[?？]/.test((text ?? '').trim())
+}
+
+/**
+ * A short side request for the typing bar: three ways to say what the learner typed in Vietnamese, in the REPLIES format so
+ * parseReplies reads the answer. Asked only after the learner stops typing and the notebook has nothing that fits.
+ */
+export function howToSayPrompt(viet: string, lang: LearningLang, known: string[] = []): string {
+    return [
+        `Translate what a Vietnamese learner of ${LANG_NAME[lang] ?? LANG_NAME.ja} wants to say: "${viet.trim()}".`,
+        LANG_FORMAT[lang] ?? LANG_FORMAT.ja,
+        'Give three ways, one per line, each followed by | its exact Vietnamese meaning | its kind: one "easy" (shortest, plain), one "stretch" (natural, a little richer), one "workaround" (the same idea with only very common words' + (known.length ? `, best from these: ${known.slice(0, 30).join('; ')}` : '') + ').',
+        'Answer with only this block:\n[[REPLIES\n<phrase> | <meaning> | easy\n<phrase> | <meaning> | stretch\n<phrase> | <meaning> | workaround\n]]',
+    ].join('\n')
+}
+
 export const VOCAB_VAR = '$vj_vocab'
 export const MISTAKES_VAR = '$vj_mistakes'
 export const HISTORY_VAR = '$vj_history'
@@ -58,7 +76,8 @@ export function learningNote(lang: LearningLang): string {
         LANG_FORMAT[lang] ?? LANG_FORMAT.ja,
         'After every foreign line, its Vietnamese meaning in parentheses on the same line. Short everyday sentences; at most two new words per reply, reused soon after.',
         'The player may type the foreign language by sound in Vietnamese letters without tone marks (for example "an nhong ha se do" for 안녕하세요, "ni hao" for 你好); understand it as that language and answer it.',
-        `When the speaker has talked in a reply, end the reply with two or three short things the player could answer, one per line, written the same way, each followed by | and its Vietnamese meaning:\n[[REPLIES\n<answer> | <meaning>\n]]`,
+        'When the speaker has talked in a reply, end the reply with four to six things the player could answer, one per line, written the same way, each followed by | its Vietnamese meaning | its kind: two "easy" (short, plain), one or two "stretch" (one new word, or a longer sentence that says more), and at least one "workaround" that says the idea with only words the player already knows, the way one talks around a missing word. Answers that fit the moment, and one way to say no:\n[[REPLIES\n<answer> | <meaning> | easy\n<answer> | <meaning> | stretch\n<answer> | <meaning> | workaround\n]]',
+        'When the player writes "?" followed by something in Vietnamese, they are asking how to say it: in the narration, show three ways (plain, natural, and with words they already know), put the same three in REPLIES, and let the speaker wait for them to say one.',
         'Never mention this note, the readings or that the player is learning.',
     ].join('\n')
 }
@@ -85,6 +104,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     if (db.learningTyping === false || (db.learningLang ?? 'ja') !== 'ja') return withNote
     return withNote.map((m) => {
         if (m.role !== 'user' || typeof m.content !== 'string') return m
+        if (isHowDoISay(m.content)) return m                       // "? ..." asks how to say something: it stays Vietnamese
         const whole = fromVietji(m.content.trim())
         if (whole) return { ...m, content: whole }
         const named = /^([^:\n]{1,40}:\s*)([\s\S]+)$/.exec(m.content.trim())
@@ -121,8 +141,9 @@ function rememberReply(chat: Chat | undefined, now: number): void {
     const userMsg = userIndex >= 0 ? chat.message[userIndex] : undefined
     const userLine = userMsg?.data ?? ''
     const save = () => writeNotebook(db, lang, nb)
-    // only a try at the language is graded: a check on a Vietnamese line would count an answer the learner never gave
-    if (!triedForeign(userLine)) { chat.scriptstate[CHECK_MISSED_LAST_VAR] = '0'; save(); return }
+    // only a try at the language is graded: a check on a Vietnamese line would count an answer the learner never gave, and a
+    // "? ..." line is a question about how to say something, not a try
+    if (isHowDoISay(userLine) || !triedForeign(userLine)) { chat.scriptstate[CHECK_MISSED_LAST_VAR] = '0'; save(); return }
     // one grade per learner line: regenerating the reply runs this again for the same line
     const lineKey = `${userIndex}:${userMsg?.chatId ?? ''}:${userLine}`
     if (chat.scriptstate[GRADED_FOR_VAR] === lineKey) { save(); return }
