@@ -130,3 +130,12 @@ describe('the sound of an offered answer, typed with its tone marks (reported: �
         expect(soundMatch('có', pool)).toBe(false)                       // too short to be a sound
     })
 })
+
+it('the whole first syllable of an offered answer is enough, however short (reported: "ủa" showed no answer)', () => {
+    const pool = suggestionPool({ lastReply: '[[REPLIES\n我[wǒ] 撑[chēng] 不住[búzhù] 了[le]! | Tôi không giữ nổi nữa! | easy\n]]', lang: 'zh' })
+    const vj = pool.find((x) => x.text.startsWith('我'))!.vietji
+    expect(vj.split(/[\s-]+/)[0]).toBe('ủa')
+    expect(soundMatch('ủa', pool)).toBe(true)
+    expect(suggest('ủa', pool)[0].text.startsWith('我')).toBe(true)
+    expect(soundMatch('u', pool)).toBe(false)                              // one letter is not a syllable
+})

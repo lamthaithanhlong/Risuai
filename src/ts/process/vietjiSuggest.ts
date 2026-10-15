@@ -24,7 +24,12 @@ export function looksVietnamese(s: string): boolean {
  */
 export function soundMatch(typed: string, pool: Suggestion[]): boolean {
     const q = foldTyping(typed)
-    return q.length >= 3 && pool.some((s) => s.source !== 'dict' && s.source !== 'asked' && foldTyping(s.vietji).startsWith(q))
+    if (!q) return false
+    // three letters or more of a phrase's sound, or its whole first syllable however short ("ủa" for 我撑不住了: two letters,
+    // reported as showing no answer at all)
+    const first = (vj: string) => foldTyping((vj ?? '').split(/[\s-]+/)[0] ?? '')
+    return pool.some((s) => s.source !== 'dict' && s.source !== 'asked' && s.source !== 'ime'
+        && foldTyping(s.vietji).startsWith(q) && (q.length >= 3 || first(s.vietji) === q))
 }
 
 /** The meaning's words, folded: "Bao nhiêu tiền?" → ["bao", "nhieu", "tien"]. */

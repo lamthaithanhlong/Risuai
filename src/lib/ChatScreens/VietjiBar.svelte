@@ -102,7 +102,10 @@
     let items = $derived.by(() => {
         if (!enabled) return []
         const rest = suggest(value ?? '', pool)
-        const both = soundTyping ? [...imeItems, ...rest] : [...rest, ...imeItems]   // sound first only when it is clearly sound
+        // an offered answer that starts with the typed sound is most likely what is being typed: it goes first
+        const offeredHit = soundMatch(value ?? '', offered) ? rest.filter((s) => s.source === 'reply' || s.source === 'heard' || s.source === 'starter') : []
+        // at most four of them, so the word-by-word chips (我 alone) still have room
+        const both = soundTyping ? [...offeredHit.slice(0, 4), ...imeItems, ...rest] : [...rest, ...imeItems]   // sound first only when it is clearly sound
         const seen = new Set<string>()
         return both.filter((s) => !seen.has(s.replace ?? s.text) && !!seen.add(s.replace ?? s.text)).slice(0, 6)
     })
