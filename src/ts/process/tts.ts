@@ -6,7 +6,7 @@ import { globalFetch, loadAsset } from "../globalApi.svelte";
 import { language } from "src/lang";
 import { sleep } from "../util";
 import { runVITS } from "./transformers";
-import { resolveTTS } from "./ttsLocal";
+import { isLocalTTS, resolveTTS } from "./ttsLocal";
 import { playUnlocked, sharedAudioContext, stopUnlocked, unlockAudio } from "./audioUnlock";
 import { brLog } from "../brLog";
 import {
@@ -196,6 +196,19 @@ export async function sayTTS(character:character,text:string) {
                 const { baseURL, apiKey, model, voice, format } = tts.openai!
                 alertToast(`TTS: ${model} / ${voice}…`)
                 brLog(`tts openai request: ${baseURL} model ${model} voice ${voice}, ${text.length} chars`)
+                // the local TTS server, from Risu on its server: streamed chunk by chunk (first sound 0.31 s instead of 12.8 s
+                // for 220 words, measured 2026-10-15); anything else, or a failure, takes the whole-file path below
+                if (isLocalTTS(baseURL) && (globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) {
+                    try {
+                        const { speakStream } = await import('./ttsStream')
+                        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+                        const r = await speakStream({ fetch: (input, init) => fetch(input, init), auth: getNodeServerProxyAuth }, { model, voice, input: text })
+                        brLog(`tts stream: first sound in ${r.first} ms`)
+                        break
+                    } catch (error) {
+                        brLog(`tts stream failed, whole file instead: ${error}`)
+                    }
+                }
 
                 const res = await globalFetch(`${baseURL}/audio/speech`, {
                     method: 'POST',

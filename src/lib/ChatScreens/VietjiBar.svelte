@@ -9,6 +9,7 @@
     import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
+    import { installTapToSpeak } from "src/ts/process/tapToSpeak";
     import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
@@ -94,6 +95,16 @@
         return last.length >= 3 ? Math.round(100 * last.filter(Boolean).length / last.length) : null
     })
     const nextReview = (due?: number) => due === undefined ? 'mới gặp' : due <= Date.now() ? 'ôn ngay' : new Date(due).toLocaleDateString()
+
+    // tap a foreign word in a message to hear it, through this Risu server's local TTS (only when Risu runs on its server)
+    $effect(() => {
+        if (!enabled || !(globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) return
+        const want = lang
+        installTapToSpeak({
+            fetch: (input, init) => fetch(input, init),
+            auth: async () => (await import('src/ts/storage/nodeStorage')).getNodeServerProxyAuth(),
+        }, () => want)
+    })
 
     // a chat from before the notebook was per language brings its phrases in as soon as it is opened
     $effect(() => { if (enabled && chat) migrateChat(DBState.db, lang, chat) })

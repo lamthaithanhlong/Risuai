@@ -70,3 +70,11 @@ export function resolveTTS(character: CharacterTTS, local: LocalTTS | undefined,
         },
     }
 }
+
+/** The pdf2mp3 TTS server on this machine (the default local endpoint), which can stream. */
+export function isLocalTTS(baseURL: string): boolean {
+    try {
+        const u = new URL(baseURL)
+        return (u.hostname === 'localhost' || u.hostname === '127.0.0.1') && u.port === '8765'
+    } catch { return false }
+}

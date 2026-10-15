@@ -1239,6 +1239,46 @@ try {
     imageJobs = null;
 }
 
+// Local TTS (pdf2mp3's API, vieneu + kokoro) streamed through this server, so a phone on the LAN reaches it too and the
+// audio is never buffered here: the TTS server sends one MP3 per chunk as soon as it is ready (0.31 s to the first sound of a
+// 220-word message, against 12.8 s for the whole file; measured 2026-10-15). The target is fixed to this machine.
+const LOCAL_TTS_URL = (process.env.RISU_TTS_URL || 'http://127.0.0.1:8765/v1').replace(/\/+$/, '');
+async function pipeLocalTTS(req, res, path, body) {
+    const ctrl = new AbortController();
+    res.on('close', () => { if (!res.writableFinished) ctrl.abort(); });   // the page stopped listening: stop synthesis
+    try {
+        const upstream = await fetch(LOCAL_TTS_URL + path, {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal,
+        });
+        res.status(upstream.status);
+        for (const h of ['content-type', 'x-cache', 'retry-after']) {
+            const v = upstream.headers.get(h);
+            if (v) res.setHeader(h, v);
+        }
+        res.setHeader('cache-control', 'no-store');
+        res.flushHeaders?.();
+        if (!upstream.body) { res.end(); return; }
+        for await (const piece of upstream.body) {
+            if (!res.write(Buffer.from(piece))) await new Promise((r) => res.once('drain', r));
+        }
+        res.end();
+    } catch (error) {
+        if (ctrl.signal.aborted) return;
+        if (!res.headersSent) res.status(502).send({ error: { message: 'local TTS unreachable: ' + String(error?.message || error) } });
+        else res.end();
+    }
+}
+app.post('/api/tts/speech', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    const { model, voice, input } = req.body ?? {};
+    if (typeof input !== 'string' || !input.trim()) { res.status(400).send({ error: { message: 'input is empty' } }); return; }
+    await pipeLocalTTS(req, res, '/audio/speech', { model, voice, input, stream: true });
+});
+app.post('/api/tts/warm', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    await pipeLocalTTS(req, res, '/audio/warm', { model: req.body?.model, voice: req.body?.voice });
+});
+
 app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
     if (!imageJobs) { res.status(503).send({ error: 'image jobs unavailable' }); return; }
