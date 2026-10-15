@@ -100,7 +100,12 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
  */
 export function suggest(typed: string, pool: Suggestion[], max = 6): Suggestion[] {
     const q = foldTyping(typed)
-    if (!q) return pool.filter((s) => s.source === 'reply').slice(0, max)
+    if (!q) {
+        // the speaker's answers; a reply without them (the model forgot, or the story's opening message) still offers
+        // something to say: the phrases met before, then the starter set
+        const replies = pool.filter((s) => s.source === 'reply')
+        return (replies.length ? replies : [...pool.filter((s) => s.source === 'heard'), ...pool.filter((s) => s.source === 'starter')]).slice(0, max)
+    }
     const scored: [number, number, Suggestion][] = []
     if (looksVietnamese(typed)) {
         // what the learner means, in Vietnamese: by meaning only (the sound of "có" says nothing about "oui")

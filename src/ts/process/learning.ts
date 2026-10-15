@@ -72,11 +72,12 @@ const LANG_FORMAT: Record<LearningLang, string> = {
 export function learningNote(lang: LearningLang): string {
     const name = LANG_NAME[lang] ?? LANG_NAME.ja
     return [
-        `LEARNING FORMAT. The player is learning ${name} from zero. The foreign speaker in this story (Haru, if the story has one) speaks ${name}; everyone else keeps the story's own language.`,
+        `LEARNING FORMAT. The player is learning ${name} from zero. The foreign speaker in this story (Haru, if the story has one) speaks ${name}; everyone else keeps the story's own language, except that in EVERY reply the character who speaks to the player says one short line of their dialogue in ${name} (the rest of what they say stays in the story's language). If no one speaks to the player in a reply, the narration shows one short ${name} phrase that fits the scene (a sign, a word someone mutters).`,
         LANG_FORMAT[lang] ?? LANG_FORMAT.ja,
         'After every foreign line, its Vietnamese meaning in parentheses on the same line. Short everyday sentences; at most two new words per reply, reused soon after.',
+        'When the player writes in the foreign language, the character understands it and answers that line in the foreign language too.',
         'The player may type the foreign language by sound in Vietnamese letters without tone marks (for example "an nhong ha se do" for 안녕하세요, "ni hao" for 你好); understand it as that language and answer it.',
-        'When the speaker has talked in a reply, end the reply with four to six things the player could answer, one per line, written the same way, each followed by | its Vietnamese meaning | its kind: two "easy" (short, plain), one or two "stretch" (one new word, or a longer sentence that says more), and at least one "workaround" that says the idea with only words the player already knows, the way one talks around a missing word. Answers that fit the moment, and one way to say no:\n[[REPLIES\n<answer> | <meaning> | easy\n<answer> | <meaning> | stretch\n<answer> | <meaning> | workaround\n]]',
+        'EVERY reply, without exception, ends with four to six things the player could answer next, one per line, written the same way, each followed by | its Vietnamese meaning | its kind: two "easy" (short, plain), one or two "stretch" (one new word, or a longer sentence that says more), and at least one "workaround" that says the idea with only words the player already knows, the way one talks around a missing word. Answers that fit the moment, and one way to say no:\n[[REPLIES\n<answer> | <meaning> | easy\n<answer> | <meaning> | stretch\n<answer> | <meaning> | workaround\n]]',
         'When the player writes "?" followed by something in Vietnamese, they are asking how to say it: in the narration, show three ways (plain, natural, and with words they already know), put the same three in REPLIES, and let the speaker wait for them to say one.',
         'Never mention this note, the readings or that the player is learning.',
     ].join('\n')
@@ -101,8 +102,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     let lastUser = -1
     formated.forEach((m, i) => { if (m.role === 'user') lastUser = i })
     const withNote = lastUser >= 0 ? [...formated.slice(0, lastUser), note, ...formated.slice(lastUser)] : [...formated, note]
-    if (db.learningTyping === false || (db.learningLang ?? 'ja') !== 'ja') return withNote
-    return withNote.map((m) => {
+    const typed = db.learningTyping === false || lang !== 'ja' ? withNote : withNote.map((m) => {
         if (m.role !== 'user' || typeof m.content !== 'string') return m
         if (isHowDoISay(m.content)) return m                       // "? ..." asks how to say something: it stays Vietnamese
         const whole = fromVietji(m.content.trim())
@@ -111,6 +111,17 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
         const after = named ? fromVietji(named[2]) : null
         return after ? { ...m, content: named![1] + after } : m
     })
+    // Measured on the story model (2026-10-15), a Haru-less Shadow Slave scene: with the note alone, 0 lines in the language
+    // and no [[REPLIES]] in 2 of 2 replies; with this reminder at the end of the player's message, 4-5 answers and a line in
+    // the language in 2 of 2. Only the request carries it; the stored message is unchanged.
+    const last = typed.map((m) => m.role).lastIndexOf('user')
+    if (last < 0 || typeof typed[last].content !== 'string') return typed
+    return typed.map((m, i) => (i === last ? { ...m, content: m.content + learningReminder(lang) } : m))
+}
+
+/** The short reminder put after the player's last message in the request (see learningRequest). */
+export function learningReminder(lang: LearningLang): string {
+    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, then the [[CHECK]] line if the player wrote in that language.]`
 }
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */

@@ -4,9 +4,10 @@ const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
 import { readNotebook } from './learningStore'
-import { howToSayPrompt, CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
+import { howToSayPrompt, learningReminder, CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
-const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content
+// the player's text as sent, without the format reminder learningRequest puts after the last one
+const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content.split('\n\n[Format for this reply')[0]
 
 const nb = () => readNotebook(db, 'ja')
 
@@ -59,7 +60,7 @@ describe('learning mode on', () => {
         db.learningLang = 'zh'
         expect(learningRequest(req('x')).find((m: any) => m.role === 'system').content).toContain('pinyin')
         db.learningLang = 'ko'
-        expect(learningRequest(req('an nhong')).find((m: any) => m.role === 'user').content).toBe('an nhong')   // no kana typing outside Japanese
+        expect(userOf(learningRequest(req('an nhong')))).toBe('an nhong')   // no kana typing outside Japanese
         db.learningLang = 'es'
         expect(learningRequest(req('x')).find((m: any) => m.role === 'system').content).toContain('«»')
         db.learningLang = 'fr'
@@ -94,6 +95,21 @@ describe('learning mode on', () => {
         const fix = learningDisplay('Haru cười.\n[[CHECK はい → はい、ください | thiếu ください]]')
         expect(fix).toContain('Sửa:')
         expect(fix).not.toContain('[[CHECK')
+    })
+    it('the reminder goes after the last player message only, in the request only', () => {
+        db.learningLang = 'zh'
+        const input = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: '我 有 问题' }] as any
+        const out = learningRequest(input)
+        const users = out.filter((m: any) => m.role === 'user')
+        expect(users[0].content).toBe('a')
+        expect(users[1].content).toBe('我 有 问题' + learningReminder('zh'))
+        expect(learningReminder('zh')).toContain('Chinese')
+        expect(input[2].content).toBe('我 有 问题')                      // what is stored is never changed
+    })
+    it('a story without a foreign speaker still teaches: one line in the language and the answers in EVERY reply', () => {
+        const note = learningRequest(req('x')).find((m: any) => m.role === 'system').content
+        expect(note).toMatch(/EVERY reply[^\n]*one short line/)
+        expect(note).toMatch(/EVERY reply, without exception, ends with four to six/)
     })
     it('the note asks for four to six answers of three kinds, and explains "?"', () => {
         const note = learningRequest(req('x')).find((m: any) => m.role === 'system').content

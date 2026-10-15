@@ -104,3 +104,13 @@ describe('typed in Vietnamese: looked up by meaning', () => {
         expect(s[0]).toMatchObject({ text: '«Oui»', source: 'asked', kind: 'easy' })
     })
 })
+
+describe('nothing typed and no answers in the last reply (reported: many replies with nothing to learn)', () => {
+    it('offers the phrases met before, then the starter set, never nothing', () => {
+        const noReplies = suggestionPool({ lastReply: 'Ông lão nhìn Kenji rồi im lặng.', vocab, lang: 'ja' })
+        const shown = suggest('', noReplies)
+        expect(shown.length).toBeGreaterThan(0)
+        expect(shown[0].source).toBe('heard')
+        expect(suggest('', suggestionPool({ lang: 'zh' }))[0].source).toBe('starter')
+    })
+})
