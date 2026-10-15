@@ -67,7 +67,7 @@
         loadWordList(want).then((w) => { if (lang === want) { wordList = w; listReady = true } })
     })
     // the sound of an offered answer is not a word to look up, with or without tone marks (喜欢 再 增加 蚊帐 for "ùa lái tảng mẩn")
-    let fromList = $derived(wordListLang !== lang ? [] : typedViet ? dictSuggestions(typedViet, wordList?.words ?? null, lang)
+    let fromList = $derived(wordListLang !== lang ? [] : typedViet ? dictSuggestions(typedViet, wordList?.words ?? null, lang, 6, wordList?.verbs)
         : typedAny && !soundMatch(typedAny, offered) && !soundTyping ? toneless(typedAny, wordList, lang) : [])
     let listSure = $derived(fromList.length > 0 && !needsModel(typedViet, wordList))
     let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])

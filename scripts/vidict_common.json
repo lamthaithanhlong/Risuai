@@ -1,5 +1,5 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15).",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep).",
  "ja": {
   "tôi": [
    "私[わたし]",
@@ -230,6 +230,18 @@
   ],
   "vậy thì": [
    "それなら"
+  ],
+  "ăn": [
+   "食べる[たべる]",
+   "食う[くう]"
+  ],
+  "sống": [
+   "生きる[いきる]",
+   "住む[すむ]"
+  ],
+  "về": [
+   "帰る[かえる]",
+   "戻る[もどる]"
   ]
  },
  "zh": {
@@ -442,6 +454,10 @@
   ],
   "vậy thì": [
    "那么[nàme]"
+  ],
+  "về": [
+   "回去[huíqù]",
+   "回[huí]"
   ]
  },
  "ko": {
@@ -683,6 +699,15 @@
   "vậy thì": [
    "그럼",
    "그러면"
+  ],
+  "bình tĩnh": [
+   "침착하다",
+   "진정하다",
+   "차분하다"
+  ],
+  "về": [
+   "돌아가다",
+   "돌아오다"
   ]
  },
  "es": {
@@ -889,6 +914,15 @@
   ],
   "vậy thì": [
    "entonces"
+  ],
+  "đi": [
+   "ir",
+   "irse",
+   "andar"
+  ],
+  "về": [
+   "volver",
+   "regresar"
   ]
  },
  "fr": {
@@ -941,6 +975,10 @@
   ],
   "vậy thì": [
    "alors"
+  ],
+  "về": [
+   "rentrer",
+   "revenir"
   ]
  }
 }

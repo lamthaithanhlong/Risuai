@@ -7,9 +7,10 @@
 import type { LearningLang } from './vietji'
 import { phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
+import { IMPERATIVE_VI, PERSON_VI, imperative } from './vietjiImperative'
 
 export type WordList = Record<string, string[]>
-export type Dictionary = { words: WordList; unsure: Set<string>; order?: string[] }
+export type Dictionary = { words: WordList; unsure: Set<string>; order?: string[]; verbs?: Set<string> }
 
 export const DICT_LANGS: LearningLang[] = ['fr', 'ja', 'zh', 'ko', 'es']
 const MAX_SYLLABLES = 4
@@ -23,7 +24,8 @@ export function loadWordList(lang: LearningLang, fetchImpl: typeof fetch = (i, o
         loaded.set(lang, fetchImpl(`/dict/vi-${lang}.json`)
             .then((r) => r.ok ? r.json() : null)
             .then((d) => (d && typeof d.words === 'object'
-                ? { words: d.words as WordList, unsure: new Set<string>(Array.isArray(d.unsure) ? d.unsure : []), order: Array.isArray(d.order) ? d.order : [] }
+                ? { words: d.words as WordList, unsure: new Set<string>(Array.isArray(d.unsure) ? d.unsure : []), order: Array.isArray(d.order) ? d.order : [],
+                    verbs: Array.isArray(d.verbs) ? new Set<string>(d.verbs) : undefined }
                 : null))
             .catch(() => { loaded.delete(lang); return null }))
     }
@@ -52,7 +54,7 @@ export function segment(text: string, words: WordList): { vi: string; fr: string
  * Suggestions from the list: one word typed → each of its meanings; several → the words in order, then each word alone. The
  * Vietnamese is the chip's top line, the foreign word under it, its reading last (same as every other chip).
  */
-export function dictSuggestions(typed: string, words: WordList | null, lang: LearningLang, max = 6): Suggestion[] {
+export function dictSuggestions(typed: string, words: WordList | null, lang: LearningLang, max = 6, verbs?: Set<string>): Suggestion[] {
     if (!words) return []
     if (lang === 'es' || lang === 'fr') setLatinLanguage(lang)
     const chip = (text: string, meaning: string): Suggestion | null => {
@@ -64,6 +66,7 @@ export function dictSuggestions(typed: string, words: WordList | null, lang: Lea
     if (parts.length === 1) {
         for (const fr of parts[0].fr) out.push(chip(fr, parts[0].vi))
     } else if (parts.length > 1) {
+        for (const o of ordered(parts, lang, ' ', verbs)) out.push(chip(o.source, o.meaning))
         out.push(chip(parts.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`))
         for (const p of parts) out.push(chip(p.fr[0], p.vi))
     }
@@ -181,6 +184,39 @@ export function vietnameseTail(input: string, vietnamese: Set<string>): { head: 
 
 const plainWord = (text: string) => stripReadings(text).replace(/[«»]/g, '').trim()
 
+/** "… <verb> đi": the words before, then the verb as an order instead of verb + "go" (침착하다 가다 → 침착하세요). */
+function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, joiner: string, verbs?: Set<string>): { text: string; source: string; meaning: string }[] {
+    if (parts.length < 2 || !IMPERATIVE_VI.has(parts[parts.length - 1].vi)) return []
+    const verb = parts[parts.length - 2]
+    // only after a verb (the lists vote which Vietnamese words are: không đi gave 不吧, có đi あってください)
+    if (PERSON_VI.has(verb.vi) || (verbs && !verbs.has(verb.vi))) return []
+    const forms = verb.fr.map((w) => imperative(w, lang)).find((f) => f.length) ?? []
+    const before = parts.slice(0, -2)
+    const meaning = `${parts.map((p) => p.vi).join(' ')} · mệnh lệnh`
+    return forms.map((f) => ({
+        text: [...before.map((p) => plainWord(p.fr[0])), plainWord(f)].join(joiner),
+        source: [...before.map((p) => p.fr[0]), f].join(' '),
+        meaning,
+    }))
+}
+
+/** A word already written in the language is a verb when it translates a Vietnamese verb (the list's vote); with no vote in
+ *  the list, any word the language's own ending marks as one. */
+const foreignVerbs = new WeakMap<object, Set<string>>()
+function isForeignVerb(word: string, dict: Dictionary): boolean {
+    if (!dict.verbs) return true
+    let set = foreignVerbs.get(dict)
+    if (!set) {
+        set = new Set<string>()
+        for (const vi of dict.verbs) for (const w of dict.words[vi] ?? []) set.add(plainWord(w))
+        foreignVerbs.set(dict, set)
+    }
+    return set.has(plainWord(word))
+}
+
+/** The last word already written in the language, and what comes before it ("…, 침착하다 " → 침착하다). */
+const LAST_WORD = /([^\s,.!?;:，。！？、]+)[\s,.!?;:，。！？、]*$/
+
 /**
  * Chips that write the Vietnamese at the end of the input in the language and keep what is before it: the whole run word by
  * word, then each meaning of its first word (the rest stays Vietnamese, to go on with). Chinese and Japanese join without
@@ -205,6 +241,12 @@ export function composeSuggestions(input: string, dict: Dictionary | null, lang:
         out.push({ text, vietji, meaning, source: 'dict', replace })
     }
     const syl = syllables(tail)
+    // "… 침착하다 đi": đi after a verb already written is an order, not 가다
+    if (parts.length === 1 && IMPERATIVE_VI.has(parts[0].vi)) {
+        const m = LAST_WORD.exec(head)
+        if (m && isForeignVerb(m[1], dict)) for (const f of imperative(m[1], lang)) chip(plainWord(f), f, `${m[1]} + ${parts[0].vi} · mệnh lệnh`, head.slice(0, m.index) + plainWord(f))
+    }
+    for (const o of ordered(parts, lang, joiner, dict.verbs)) chip(o.text, o.source, o.meaning, head + o.text)
     if (parts.length > 1) {
         const whole = parts.map((p) => plainWord(p.fr[0])).join(joiner)
         chip(whole, parts.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`, head + whole)
