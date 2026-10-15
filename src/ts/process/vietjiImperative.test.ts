@@ -4,14 +4,65 @@ import { imperative, teForm } from './vietjiImperative'
 import { composeSuggestions, dictSuggestions } from './vietjiDict'
 
 // asked 2026-10-15: "sửa luôn đuôi đi thành mệnh lệnh" — 침착하다 đi gave 침착하다 가다
+describe('irregular verbs (asked: "làm bảng động từ bất quy tắc")', () => {
+    it.each([
+        // ㄷ → ㄹ; the same final in 받다, 닫다 is regular
+        ['듣다', '들으세요', '들어'], ['걷다', '걸으세요', '걸어'], ['묻다', '물으세요', '물어'], ['받다', '받으세요', '받아'],
+        // ㅂ → 우 (돕다 → 도와); 입다, 잡다 regular
+        ['돕다', '도우세요', '도와'], ['눕다', '누우세요', '누워'], ['줍다', '주우세요', '주워'], ['입다', '입으세요', '입어'],
+        // ㅅ drops; 씻다, 웃다 regular
+        ['낫다', '나으세요', '나아'], ['짓다', '지으세요', '지어'], ['씻다', '씻으세요', '씻어'],
+        // 르 → ㄹ라/ㄹ러; 따르다 is ㅡ only
+        ['부르다', '부르세요', '불러'], ['모르다', '모르세요', '몰라'], ['고르다', '고르세요', '골라'], ['서두르다', '서두르세요', '서둘러'], ['따르다', '따르세요', '따라'],
+        // ㅡ takes the vowel before it
+        ['아프다', '아프세요', '아파'], ['바쁘다', '바쁘세요', '바빠'], ['쓰다', '쓰세요', '써'], ['기쁘다', '기쁘세요', '기뻐'],
+        // 되다 → 돼; the polite verb said to someone
+        ['되다', '되세요', '돼'], ['먹다', '드세요', '먹어'], ['마시다', '드세요', '마셔'], ['자다', '주무세요', '자'], ['있다', '계세요', '있어'], ['말하다', '말씀하세요', '말해'],
+    ])('Korean %s → %s, %s', (w, polite, plain) => expect(imperative(w, 'ko')).toEqual([polite, plain]))
+    it.each([
+        ['帰る[かえる]', '帰って[かえって]'], ['切る[きる]', '切って[きって]'], ['着る[きる]', '着て[きて]'], ['走る[はしる]', '走って[はしって]'],
+        ['入る[はいる]', '入って[はいって]'], ['知る[しる]', '知って[しって]'], ['見る[みる]', '見て[みて]'], ['寝る[ねる]', '寝て[ねて]'],
+        ['出て行く[でていく]', '出て行って[でていって]'], ['持って来る[もってくる]', '持って来て[もってきて]'], ['問う[とう]', '問うて[とうて]'],
+        ['勉強する[べんきょうする]', '勉強して[べんきょうして]'], ['締め切る[しめきる]', '締め切って[しめきって]'],
+    ])('Japanese %s → %s', (w, te) => expect(imperative(w, 'ja')[1]).toBe(te))
+    it('Japanese: ある and the copula are not orders', () => {
+        for (const w of ['ある', 'です', 'でしょう']) expect(imperative(w, 'ja')).toEqual([])
+    })
+    it.each([
+        ['冷静[lěngjìng]', '冷静[lěngjìng]点[diǎn]'], ['小心[xiǎoxīn]', '小心[xiǎoxīn]点[diǎn]'], ['等[děng]', '等[děng]一下[yíxià]'],
+        ['休息[xiūxi]', '休息[xiūxi]一下[yíxià]'], ['走[zǒu]', '走[zǒu]吧[ba]'], ['吃[chī]', '吃[chī]吧[ba]'],
+    ])('Chinese %s → %s', (w, first) => expect(imperative(w, 'zh')[0]).toBe(first))
+    it.each([
+        ['ver', 've', 'vea'], ['dar', 'da', 'dé'], ['estar', 'está', 'esté'], ['saber', 'sabe', 'sepa'], ['oír', 'oye', 'oiga'], ['traer', 'trae', 'traiga'],
+        ['conocer', 'conoce', 'conozca'], ['ofrecer', 'ofrece', 'ofrezca'], ['conducir', 'conduce', 'conduzca'], ['vencer', 'vence', 'venza'],
+        ['construir', 'construye', 'construya'], ['huir', 'huye', 'huya'], ['coger', 'coge', 'coja'], ['dirigir', 'dirige', 'dirija'],
+        ['distinguir', 'distingue', 'distinga'], ['reír', 'ríe', 'ría'], ['enviar', 'envía', 'envíe'], ['continuar', 'continúa', 'continúe'],
+        ['mantener', 'mantén', 'mantenga'], ['preferir', 'prefiere', 'prefiera'], ['almorzar', 'almuerza', 'almuerce'], ['colgar', 'cuelga', 'cuelgue'],
+        ['oler', 'huele', 'huela'], ['divertirse', 'diviértete', 'diviértase'], ['despedirse', 'despídete', 'despídase'], ['ponerse', 'ponte', 'póngase'],
+        ['dormirse', 'duérmete', 'duérmase'], ['callarse', 'cállate', 'cállese'], ['hacerse', 'hazte', 'hágase'],
+    ])('Spanish %s → %s, %s', (w, tu, usted) => expect(imperative(w, 'es')).toEqual([tu, usted]))
+    it('Spanish: poder, deber are not orders', () => {
+        for (const w of ['poder', 'deber', 'gustar']) expect(imperative(w, 'es')).toEqual([])
+    })
+    it.each([
+        ['craindre', 'crains', 'craignez'], ['peindre', 'peins', 'peignez'], ['éteindre', 'éteins', 'éteignez'], ['joindre', 'joins', 'joignez'],
+        ['apprendre', 'apprends', 'apprenez'], ['comprendre', 'comprends', 'comprenez'], ['construire', 'construis', 'construisez'],
+        ['traduire', 'traduis', 'traduisez'], ['permettre', 'permets', 'permettez'], ['décrire', 'décris', 'décrivez'], ['devenir', 'deviens', 'devenez'],
+        ['obtenir', 'obtiens', 'obtenez'], ['recevoir', 'reçois', 'recevez'], ['couvrir', 'couvre', 'couvrez'], ['cueillir', 'cueille', 'cueillez'],
+        ['sentir', 'sens', 'sentez'], ['servir', 'sers', 'servez'], ['mentir', 'mens', 'mentez'], ['payer', 'paie', 'payez'], ['envoyer', 'envoie', 'envoyez'],
+        ['nettoyer', 'nettoie', 'nettoyez'], ['rappeler', 'rappelle', 'rappelez'], ['rire', 'ris', 'riez'], ['connaître', 'connais', 'connaissez'],
+        ['mourir', 'meurs', 'mourez'], ['interdire', 'interdis', 'interdisez'], ['se souvenir', 'souviens-toi', 'souvenez-vous'],
+        ["s'en aller", "va-t'en", 'allez-vous-en'], ['se taire', 'tais-toi', 'taisez-vous'], ['choisir', 'choisis', 'choisissez'], ['ralentir', 'ralentis', 'ralentissez'],
+    ])('French %s → %s, %s', (w, tu, vous) => expect(imperative(w, 'fr')).toEqual([tu, vous]))
+})
+
 describe('the order of a verb, regular forms', () => {
     it.each([
-        ['침착하다', '침착하세요', '침착해'], ['가다', '가세요', '가'], ['앉다', '앉으세요', '앉아'], ['먹다', '먹으세요', '먹어'],
-        ['마시다', '마시세요', '마셔'], ['오다', '오세요', '와'], ['보다', '보세요', '봐'], ['주다', '주세요', '줘'], ['살다', '사세요', '살아'],
+        ['침착하다', '침착하세요', '침착해'], ['가다', '가세요', '가'], ['앉다', '앉으세요', '앉아'], ['오다', '오세요', '와'], ['보다', '보세요', '봐'], ['주다', '주세요', '줘'], ['살다', '사세요', '살아'],
         ['쓰다', '쓰세요', '써'], ['서다', '서세요', '서'], ['기다리다', '기다리세요', '기다려'], ['진정하다', '진정하세요', '진정해'],
     ])('Korean %s → %s, %s', (w, polite, plain) => expect(imperative(w, 'ko')).toEqual([polite, plain]))
     it('Korean: not a verb, or the copula, gives nothing', () => {
-        for (const w of ['나', '이다', '아니다', '있다', '집']) expect(imperative(w, 'ko')).toEqual([])
+        for (const w of ['나', '이다', '아니다', '없다', '집']) expect(imperative(w, 'ko')).toEqual([])
     })
     it.each([
         ['おちつく', 'おちついて'], ['すわる', 'すわって'], ['たべる', 'たべて'], ['かえる', 'かえって'], ['いく', 'いって'], ['はなす', 'はなして'],
@@ -46,7 +97,7 @@ describe('the order of a verb, regular forms', () => {
         expect(imperative('gustar', 'es')).toEqual([])
     })
     it('Chinese urges with 吧, never after a person', () => {
-        expect(imperative('冷静[lěngjìng]', 'zh')).toEqual(['冷静[lěngjìng]吧[ba]'])
+        expect(imperative('坐[zuò]', 'zh')).toEqual(['坐[zuò]吧[ba]', '请[qǐng]坐[zuò]'])
         expect(imperative('我[wǒ]', 'zh')).toEqual([])
     })
 })
@@ -66,6 +117,10 @@ describe('in the bar', () => {
         expect(dictSuggestions('ngồi đi', list('zh').words, 'zh')[0].text).toBe('坐[zuò]吧[ba]')
         expect(dictSuggestions('chạy đi', list('es').words, 'es')[0].text).toBe('corre')
         expect(dictSuggestions('ăn đi', list('fr').words, 'fr')[0].text).toBe('mange')
+        // irregular and honorific in the bar (2026-10-15): nghe đi → 들으세요 (ㄷ), ăn đi → 드세요, giúp đi → 도와주세요 (was 지원하세요)
+        expect(dictSuggestions('nghe đi', list('ko').words, 'ko')[0].text).toBe('들으세요')
+        expect(dictSuggestions('ăn đi', list('ko').words, 'ko')[0].text).toBe('드세요')
+        expect(dictSuggestions('giúp đi', list('ko').words, 'ko')[0].text).toBe('도와주세요')
     })
     it('"tôi đi" is I go: no order', () => {
         for (const l of ['ko', 'zh', 'ja', 'es', 'fr']) {

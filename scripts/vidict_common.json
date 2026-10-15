@@ -1,5 +1,5 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep).",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support).",
  "ja": {
   "tôi": [
    "私[わたし]",
@@ -708,6 +708,10 @@
   "về": [
    "돌아가다",
    "돌아오다"
+  ],
+  "giúp": [
+   "도와주다",
+   "돕다"
   ]
  },
  "es": {

@@ -1,7 +1,9 @@
 // Vietnamese "đi" at the end of a sentence, after a verb, is the imperative ("bình tĩnh đi" = calm down!, "ngồi đi" = sit),
 // not the verb "go" (asked 2026-10-15: "sửa luôn đuôi đi thành mệnh lệnh"). Word by word it gave 침착하다 가다. This turns the
-// verb before it into the language's own imperative, regular forms only: an irregular verb (듣다, 돕다, 帰る…) may come out
-// wrong, and the check after sending corrects it.
+// verb before it into the language's own imperative. Irregular verbs (asked the same day: "làm bảng động từ bất quy tắc"):
+// by class where the language has classes (Korean ㄷ/ㅂ/ㅅ/르, Japanese godan る, Spanish -zca/-uir/-ger, French -indre/-uire…),
+// a table for the ones that are their own (먹다 → 드세요, 来る, ir → ve, être → sois). A verb in neither may still come out
+// wrong; the check after sending corrects it.
 //
 // Words come in the list's own form: Chinese and Japanese carry their reading in brackets (冷静[lěngjìng], 落ち着く[おちつく]).
 
@@ -12,48 +14,72 @@ export const IMPERATIVE_VI = new Set(['đi', 'đi nào', 'đi mà'])
 /** After a person, đi is the verb: "tôi đi" is I go, not an order. */
 export const PERSON_VI = new Set(['tôi', 'tui', 'tao', 'mình', 'ta', 'bạn', 'cậu', 'mày', 'anh', 'chị', 'em', 'cô', 'chú', 'bác', 'ông', 'bà',
     'nó', 'họ', 'hắn', 'chúng tôi', 'chúng ta', 'chúng mình', 'tụi mình', 'cô ấy', 'anh ấy', 'ai'])
-const PERSON_ZH = /^(?:我|你|您|他|她|它|我们|你们|他们|她们|咱们|大家)$/
-
 // ---- Korean -------------------------------------------------------------------------------------------------------------------
 const H0 = 0xac00
 const syl = (c: string) => { const n = c.charCodeAt(0) - H0; return n >= 0 && n < 11172 ? { l: Math.floor(n / 588), v: Math.floor((n % 588) / 28), t: n % 28 } : null }
 const make = (l: number, v: number, t: number) => String.fromCharCode(H0 + l * 588 + v * 28 + t)
-const V = { a: 0, ae: 1, ya: 2, eo: 4, e: 5, yeo: 6, o: 8, wa: 9, u: 13, wo: 14, eu: 18, i: 20 }
-const T_RIEUL = 8
-const NOT_ORDERS = new Set(['이다', '아니다', '있다', '없다'])
+const V = { a: 0, ae: 1, ya: 2, eo: 4, e: 5, yeo: 6, o: 8, wa: 9, wae: 10, oe: 11, u: 13, wo: 14, eu: 18, i: 20 }
+const T = { d: 7, l: 8, b: 17, s: 19 }
+const NOT_ORDERS = new Set(['이다', '아니다', '없다'])
+// what is said to someone politely is another verb: 먹다 → 드세요, 자다 → 주무세요
+const KO_HONOR: Record<string, string> = { 먹다: '드세요', 마시다: '드세요', 자다: '주무세요', 있다: '계세요', 말하다: '말씀하세요' }
+// the classes: the same final consonant is regular in other verbs (받다 받아, 입다 입어, 웃다 웃어), so they are listed
+const KO_D = new Set(['듣다', '걷다', '묻다', '싣다', '깨닫다', '붇다', '긷다', '알아듣다'])                         // ㄷ → ㄹ: 들어
+const KO_B = new Set(['돕다', '눕다', '굽다', '줍다', '춥다', '덥다', '쉽다', '어렵다', '가깝다', '무섭다', '귀엽다', '아름답다',
+    '즐겁다', '반갑다', '고맙다', '부럽다', '더럽다', '가볍다', '무겁다', '두렵다', '괴롭다', '외롭다', '곱다', '밉다', '맵다', '시끄럽다', '부끄럽다'])  // ㅂ → 우: 누워
+const KO_S = new Set(['낫다', '짓다', '붓다', '잇다', '젓다', '긋다'])                                               // ㅅ drops: 나아
+const KO_REU = new Set(['부르다', '모르다', '고르다', '자르다', '오르다', '서두르다', '누르다', '흐르다', '기르다', '마르다', '다르다',
+    '빠르다', '구르다', '가르다', '바르다', '지르다', '찌르다', '머무르다', '두르다', '게으르다'])          // 르 → ㄹ라/ㄹ러: 불러
+const bright = (v: number) => v === V.a || v === V.o || v === V.ya
 
 function koImperative(word: string): string[] {
-    if (!/^[가-힣]+다$/.test(word) || word.length < 2 || NOT_ORDERS.has(word)) return []
-    const stem = word.slice(0, -1)
-    const last = syl(stem.at(-1)!)!
-    const before = stem.slice(0, -1)
-    // the polite order: stem + (으)세요; a final ㄹ drops (살다 → 사세요)
-    const polite = last.t === 0 ? stem + '세요' : last.t === T_RIEUL ? before + make(last.l, last.v, 0) + '세요' : stem + '으세요'
-    // the plain one: stem + 아/어, the vowels joined when there is no final consonant
-    let plain: string
-    if (stem.endsWith('하')) plain = before + '해'
-    else if (last.t !== 0) plain = stem + (last.v === V.a || last.v === V.o ? '아' : '어')
-    else {
-        const join: Record<number, number> = { [V.a]: V.a, [V.o]: V.wa, [V.u]: V.wo, [V.i]: V.yeo, [V.eu]: V.eo, [V.eo]: V.eo, [V.e]: V.e, [V.ae]: V.ae, [V.yeo]: V.yeo }
-        const v = join[last.v]
-        plain = v === undefined ? stem + '어' : before + make(last.l, v, 0)
-    }
-    return [polite, plain]
+    if (KO_HONOR[word]) return [KO_HONOR[word], koPlain(word)]
+    if (!/^[\uAC00-\uD7A3]+다$/.test(word) || word.length < 2 || NOT_ORDERS.has(word)) return []
+    return [koPolite(word), koPlain(word)]
+}
+/** stem + (으)세요; ㄹ drops (살다 → 사세요), ㄷ → ㄹ (들으세요), ㅂ → 우 (도우세요), ㅅ drops (나으세요). */
+function koPolite(word: string): string {
+    const stem = word.slice(0, -1), last = syl(stem.at(-1)!)!, before = stem.slice(0, -1)
+    if (KO_D.has(word)) return before + make(last.l, last.v, T.l) + '으세요'
+    if (KO_B.has(word)) return before + make(last.l, last.v, 0) + '우세요'
+    if (KO_S.has(word)) return before + make(last.l, last.v, 0) + '으세요'
+    return last.t === 0 ? stem + '세요' : last.t === T.l ? before + make(last.l, last.v, 0) + '세요' : stem + '으세요'
+}
+/** stem + 아/어, the vowels joined when there is no final consonant. */
+function koPlain(word: string): string {
+    const stem = word.slice(0, -1), last = syl(stem.at(-1)!)!, before = stem.slice(0, -1)
+    const prev = before ? syl(before.at(-1)!) : null
+    if (stem.endsWith('하')) return before + '해'
+    if (KO_D.has(word)) return before + make(last.l, last.v, T.l) + (bright(last.v) ? '아' : '어')
+    if (KO_B.has(word)) return before + (word === '돕다' || word === '곱다' ? make(last.l, last.v, 0) + '와' : make(last.l, last.v, 0) + '워')
+    if (KO_S.has(word)) return before + make(last.l, last.v, 0) + (bright(last.v) ? '아' : '어')
+    if (KO_REU.has(word) && prev) return before.slice(0, -1) + make(prev.l, prev.v, T.l) + (bright(prev.v) ? '라' : '러')
+    if (last.t !== 0) return stem + (bright(last.v) ? '아' : '어')
+    // ㅡ goes, taking the vowel before it: 아프다 → 아파, 바쁘다 → 바빠, 쓰다 → 써
+    if (last.v === V.eu) return before + make(last.l, prev && bright(prev.v) ? V.a : V.eo, 0)
+    const join: Record<number, number> = { [V.a]: V.a, [V.o]: V.wa, [V.u]: V.wo, [V.i]: V.yeo, [V.eo]: V.eo, [V.e]: V.e, [V.ae]: V.ae, [V.yeo]: V.yeo, [V.oe]: V.wae }
+    const v = join[last.v]
+    return v === undefined ? stem + '어' : before + make(last.l, v, 0)
 }
 
 // ---- Japanese: the te-form, then ください -----------------------------------------------------------------------------------------
-// る after an i/e sound is usually ichidan (食べる → 食べて); these godan ones look the same (帰る → 帰って). いる and きる stay
-// ichidan (居る, 着る: the more used readings).
+// る after an i/e sound is usually ichidan (食べる → 食べて); these godan ones look the same (帰る → 帰って). By the kanji where
+// the reading is shared (切る 切って, 着る 着て; 要る 要って, 居る 居て), by the reading for a word in kana.
+const GODAN_RU_KANJI = ['帰る', '入る', '走る', '知る', '切る', '要る', '減る', '滑る', '喋る', '限る', '蹴る', '焦る', '参る', '握る', '散る',
+    '弄る', '照る', '練る', '遮る', '茂る', '湿る', '陥る', '翻る', '罵る', '蘇る', '甦る', '捻る', '混じる', '交じる', '覆る', '嘲る']
 const GODAN_RU = ['かえる', 'はいる', 'はしる', 'しる', 'へる', 'すべる', 'しゃべる', 'かぎる', 'ける', 'あせる', 'まいる', 'にぎる', 'ちる', 'いじる']
 const I_E_ROW = /[いきぎしじちぢにひびぴみりえけげせぜてでねへべぺめれ]$/
 const TE: Record<string, string> = { う: 'って', つ: 'って', る: 'って', む: 'んで', ぶ: 'んで', ぬ: 'んで', く: 'いて', ぐ: 'いで', す: 'して' }
+/** Not given as orders: ある (there is), the copula and the polite endings. */
+const JA_NOT = /(?:^ある|です|ます|だろう|でしょう)$/
 
-export function teForm(kana: string): string | null {
+export function teForm(kana: string, surface = kana): string | null {
     if (kana.endsWith('する')) return kana.slice(0, -2) + 'して'
-    if (kana.endsWith('くる') && kana.length === 2) return 'きて'
-    if (kana === 'いく' || kana.endsWith('にいく') || kana === 'ゆく') return kana.slice(0, -1) + 'って'
+    if (surface.endsWith('来る') || kana === 'くる') return kana.slice(0, -2) + 'きて'
+    if (surface.endsWith('行く') || kana === 'いく' || kana === 'ゆく') return kana.slice(0, -1) + 'って'
+    if (surface.endsWith('問う') || surface.endsWith('請う') || kana === 'とう' || kana === 'こう') return kana + 'て'   // 問うて, not 問って
     const stem = kana.slice(0, -1), end = kana.at(-1)!
-    const godanRu = GODAN_RU.some((g) => kana === g || (kana.endsWith(g) && g.length >= 3))
+    const godanRu = surface !== kana ? GODAN_RU_KANJI.some((g) => surface.endsWith(g)) : GODAN_RU.some((g) => kana === g || (kana.endsWith(g) && g.length >= 3))
     if (end === 'る' && !godanRu && I_E_ROW.test(stem)) return stem + 'て'
     return TE[end] ? stem + TE[end] : null
 }
@@ -62,31 +88,61 @@ function jaImperative(word: string): string[] {
     const m = /^([^[\]]+)(?:\[([^\]]+)\])?$/.exec(word)
     if (!m) return []
     const surface = m[1], reading = m[2] ?? surface
-    if (!/[うくぐすつぬぶむる]$/.test(surface)) return []
-    if (surface === '来る') return ['来て[きて]ください', '来て[きて]']
-    const te = teForm(reading)
+    if (!/[うくぐすつぬぶむる]$/.test(surface) || JA_NOT.test(reading)) return []
+    const te = teForm(reading, surface)
     if (!te) return []
-    let p = 0
-    while (p < reading.length && reading[p] === te[p]) p++
-    const changed = reading.slice(p)                    // the kana at the end that change (る, く, する…)
-    if (!changed || !surface.endsWith(changed)) return []
-    const s = surface.slice(0, surface.length - changed.length) + te.slice(p)
+    let s: string
+    if (surface.endsWith('来る')) s = surface.slice(0, -2) + '来て'          // 持って来る → 持って来て: the kanji stays, the reading changes
+    else {
+        let p = 0
+        while (p < reading.length && reading[p] === te[p]) p++
+        const changed = reading.slice(p)                    // the kana at the end that change (る, く, する…); none for 問う → 問うて
+        if (changed && !surface.endsWith(changed)) return []
+        s = surface.slice(0, surface.length - changed.length) + te.slice(p)
+    }
     const form = s === te ? s : `${s}[${te}]`
     return [form + 'ください', form]
 }
 
+// ---- Chinese: no ending; the word that fits after it -------------------------------------------------------------------------
+// 吧 urges (坐吧, 走吧); 请 asks politely (请坐); a state is told with 点 (冷静点, 小心点); a short action with 一下 (等一下).
+const ZH_DIAN = new Set(['冷静', '安静', '小心', '快', '慢', '认真', '耐心', '大声', '小声', '勇敢', '坚强', '乖', '专心', '轻', '仔细', '清醒', '镇定', '放松', '高兴', '开心'])
+const ZH_YIXIA = new Set(['等', '看', '听', '试', '休息', '想', '帮', '问', '介绍', '说明', '检查', '准备', '解释', '尝', '停'])
+const PERSON_ZH = /^(?:我|你|您|他|她|它|我们|你们|他们|她们|咱们|大家)$/
+
+function zhImperative(word: string): string[] {
+    const plain = word.replace(/\[[^\]]*\]/g, '')
+    if (!/[\u3400-\u9fff]/.test(plain) || plain.includes('吧') || PERSON_ZH.test(plain)) return []
+    if (ZH_DIAN.has(plain)) return [word + '点[diǎn]', word + '一点[yìdiǎn]']
+    if (ZH_YIXIA.has(plain)) return [word + '一下[yíxià]', word + '吧[ba]']
+    return [word + '吧[ba]', '请[qǐng]' + word]
+}
+
 // ---- Spanish: tú, then usted --------------------------------------------------------------------------------------------------
-const ES_TU: Record<string, string> = { seguir: 'sigue', elegir: 'elige', tener: 'ten', venir: 'ven', poner: 'pon', salir: 'sal', hacer: 'haz', decir: 'di', ir: 've', ser: 'sé' }
+// verbs that are their own (tú, usted); the -se forms are built from them (ponte, póngase; vete, váyase)
+const ES_OWN: Record<string, [string, string]> = {
+    tener: ['ten', 'tenga'], venir: ['ven', 'venga'], poner: ['pon', 'ponga'], salir: ['sal', 'salga'], hacer: ['haz', 'haga'],
+    decir: ['di', 'diga'], ir: ['ve', 'vaya'], ser: ['sé', 'sea'], ver: ['ve', 'vea'], dar: ['da', 'dé'], estar: ['está', 'esté'],
+    saber: ['sabe', 'sepa'], oír: ['oye', 'oiga'], traer: ['trae', 'traiga'], caer: ['cae', 'caiga'], reír: ['ríe', 'ría'],
+    sonreír: ['sonríe', 'sonría'], freír: ['fríe', 'fría'], seguir: ['sigue', 'siga'], conseguir: ['consigue', 'consiga'],
+    elegir: ['elige', 'elija'], corregir: ['corrige', 'corrija'], enviar: ['envía', 'envíe'], confiar: ['confía', 'confíe'],
+    guiar: ['guía', 'guíe'], esquiar: ['esquía', 'esquíe'], continuar: ['continúa', 'continúe'], actuar: ['actúa', 'actúe'],
+    mantener: ['mantén', 'mantenga'], obtener: ['obtén', 'obtenga'], detener: ['detén', 'detenga'], contener: ['contén', 'contenga'],
+    suponer: ['supón', 'suponga'], componer: ['compón', 'componga'], deshacer: ['deshaz', 'deshaga'], satisfacer: ['satisface', 'satisfaga'],
+    prevenir: ['prevén', 'prevenga'], oler: ['huele', 'huela'], jugar: ['juega', 'juegue'],
+}
 // stem-changing verbs: the stressed stem vowel changes (pensar → piensa, dormir → duerme, pedir → pide)
 const ES_STEM: Record<string, string> = {
-    pensar: 'piens', cerrar: 'cierr', empezar: 'empiez', sentar: 'sient', despertar: 'despiert', entender: 'entiend', perder: 'pierd',
-    querer: 'quier', sentir: 'sient', mentir: 'mient', dormir: 'duerm', volver: 'vuelv', contar: 'cuent', mostrar: 'muestr',
-    acostar: 'acuest', encontrar: 'encuentr', recordar: 'recuerd', mover: 'muev', jugar: 'jueg', probar: 'prueb', soñar: 'sueñ',
-    pedir: 'pid', repetir: 'repit', servir: 'sirv', vestir: 'vist',
+    pensar: 'piens', cerrar: 'cierr', empezar: 'empiez', comenzar: 'comienz', sentar: 'sient', despertar: 'despiert', calentar: 'calient',
+    confesar: 'confies', negar: 'nieg', regar: 'rieg', entender: 'entiend', perder: 'pierd', encender: 'enciend', defender: 'defiend',
+    querer: 'quier', sentir: 'sient', mentir: 'mient', preferir: 'prefier', divertir: 'diviert', convertir: 'conviert',
+    dormir: 'duerm', morir: 'muer', volver: 'vuelv', devolver: 'devuelv', resolver: 'resuelv', mover: 'muev', contar: 'cuent',
+    mostrar: 'muestr', acostar: 'acuest', encontrar: 'encuentr', recordar: 'recuerd', acordar: 'acuerd', probar: 'prueb', soñar: 'sueñ',
+    volar: 'vuel', sonar: 'suen', colgar: 'cuelg', soltar: 'suelt', almorzar: 'almuerz', costar: 'cuest',
+    pedir: 'pid', repetir: 'repit', servir: 'sirv', vestir: 'vist', despedir: 'despid', medir: 'mid', impedir: 'impid',
 }
 /** Verbs that are not given as orders: gustar is said of the thing liked (me gusta), not told to someone. */
-const ES_NO_ORDER = new Set(['gustar', 'parecer', 'doler', 'importar', 'faltar', 'haber'])
-const ES_USTED: Record<string, string> = { seguir: 'siga', elegir: 'elija', tener: 'tenga', venir: 'venga', poner: 'ponga', salir: 'salga', hacer: 'haga', decir: 'diga', ir: 'vaya', ser: 'sea' }
+const ES_NO_ORDER = new Set(['gustar', 'parecer', 'doler', 'importar', 'faltar', 'haber', 'poder', 'deber', 'soler', 'encantar', 'llover', 'nevar'])
 const STRONG: Record<string, string> = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' }
 
 /** A pronoun put on the end moves the stress back: calma + te → cálmate (the vowel of the stressed syllable gets its mark). */
@@ -100,43 +156,74 @@ function accentForClitic(form: string): string {
 }
 
 function esImperative(word: string): string[] {
-    const m = /^([a-zñ]*?)(ar|er|ir)(se)?$/.exec(word.toLowerCase())
+    const m = /^([a-zñáéíóú]*?)(ar|er|ir|ír)(se)?$/.exec(word.toLowerCase())
     if (!m) return []
     const [, plainStem, end, se] = m
     const inf = plainStem + end
     if (ES_NO_ORDER.has(inf)) return []
-    const stem = ES_STEM[inf] ?? plainStem
-    // -ar keeps its sound before the usted e: buscar → busque, jugar → juegue, empezar → empiece
-    const ustedStem = end !== 'ar' ? stem : stem.endsWith('c') ? stem.slice(0, -1) + 'qu' : stem.endsWith('g') ? stem + 'u' : stem.endsWith('z') ? stem.slice(0, -1) + 'c' : stem
-    const tu = ES_TU[inf] ?? stem + (end === 'ar' ? 'a' : 'e')
-    const usted = ES_USTED[inf] ?? ustedStem + (end === 'ar' ? 'e' : 'a')
-    return se ? [accentForClitic(tu) + 'te', accentForClitic(usted) + 'se'] : [tu, usted]
+    let pair = ES_OWN[inf]
+    if (!pair) {
+        const stem = ES_STEM[inf] ?? plainStem
+        const ar = end === 'ar'
+        let usted: string
+        if (ar) usted = (stem.endsWith('c') ? stem.slice(0, -1) + 'qu' : stem.endsWith('g') ? stem + 'u' : stem.endsWith('z') ? stem.slice(0, -1) + 'c' : stem) + 'e'
+        else if (/[aeiou]c$/.test(stem)) usted = stem.slice(0, -1) + 'zca'               // conocer → conozca, conducir → conduzca
+        else if (stem.endsWith('c')) usted = stem.slice(0, -1) + 'za'                    // vencer → venza
+        else if (stem.endsWith('gu')) usted = stem.slice(0, -1) + 'a'                    // distinguir → distinga
+        else if (stem.endsWith('g')) usted = stem.slice(0, -1) + 'ja'                    // coger → coja, dirigir → dirija
+        else if (/[^gq]u$/.test(stem)) usted = stem + 'ya'                               // construir → construya
+        else usted = stem + 'a'
+        const tu = ar ? stem + 'a' : /[^gq]u$/.test(stem) && end === 'ir' ? stem + 'ye' : stem + 'e'
+        pair = [tu, usted]
+    }
+    return se ? [accentForClitic(pair[0]) + 'te', accentForClitic(pair[1]) + 'se'] : [...pair]
 }
 
 // ---- French: tu, then vous ----------------------------------------------------------------------------------------------------
+// verbs that are their own; the families below are built by rule (-indre, -uire, -ttre, -prendre, -venir/-tenir, -crire, -cevoir,
+// -vrir/-frir/-llir, partir/dormir…, -yer, -eler/-eter)
 const FR: Record<string, [string, string]> = {
-    aller: ['va', 'allez'], être: ['sois', 'soyez'], avoir: ['aie', 'ayez'], faire: ['fais', 'faites'], venir: ['viens', 'venez'],
-    partir: ['pars', 'partez'], sortir: ['sors', 'sortez'], dormir: ['dors', 'dormez'], courir: ['cours', 'courez'],
-    tenir: ['tiens', 'tenez'], dire: ['dis', 'dites'], prendre: ['prends', 'prenez'], mettre: ['mets', 'mettez'],
-    voir: ['vois', 'voyez'], écrire: ['écris', 'écrivez'], lire: ['lis', 'lisez'], asseoir: ['assieds', 'asseyez'], taire: ['tais', 'taisez'],
-    appeler: ['appelle', 'appelez'], jeter: ['jette', 'jetez'], boire: ['bois', 'buvez'], croire: ['crois', 'croyez'], conduire: ['conduis', 'conduisez'],
-    battre: ['bats', 'battez'], suivre: ['suis', 'suivez'], vivre: ['vis', 'vivez'], ouvrir: ['ouvre', 'ouvrez'], offrir: ['offre', 'offrez'],
-    savoir: ['sache', 'sachez'], vouloir: ['veuille', 'veuillez'], devenir: ['deviens', 'devenez'], revenir: ['reviens', 'revenez'],
+    aller: ['va', 'allez'], être: ['sois', 'soyez'], avoir: ['aie', 'ayez'], faire: ['fais', 'faites'], dire: ['dis', 'dites'],
+    courir: ['cours', 'courez'], mourir: ['meurs', 'mourez'], voir: ['vois', 'voyez'], lire: ['lis', 'lisez'], asseoir: ['assieds', 'asseyez'],
+    taire: ['tais', 'taisez'], plaire: ['plais', 'plaisez'], boire: ['bois', 'buvez'], croire: ['crois', 'croyez'], suivre: ['suis', 'suivez'],
+    vivre: ['vis', 'vivez'], rire: ['ris', 'riez'], sourire: ['souris', 'souriez'], savoir: ['sache', 'sachez'], vouloir: ['veuille', 'veuillez'],
+    connaître: ['connais', 'connaissez'], reconnaître: ['reconnais', 'reconnaissez'], paraître: ['parais', 'paraissez'],
+    interdire: ['interdis', 'interdisez'], prédire: ['prédis', 'prédisez'], vaincre: ['vaincs', 'vainquez'], convaincre: ['convaincs', 'convainquez'],
+    rompre: ['romps', 'rompez'], interrompre: ['interromps', 'interrompez'],
 }
+const FR_DOUBLE = new Set(['appeler', 'rappeler', 'épeler', 'renouveler', 'jeter', 'rejeter', 'projeter', 'feuilleter'])
+const FR_TIR = /(?:partir|sortir|sentir|mentir|dormir|servir)$/                // 3rd group: pars, dors, sers (not finir's -is)
 /** e or é before the last consonant opens to è in the tu form: acheter → achète, lever → lève, préférer → préfère. */
 const openE = (stem: string) => stem.replace(/[eé]([bcdfghjklmnpqrstvz])$/, 'è$1')
+
+function frForms(inf: string): [string, string] | null {
+    if (FR[inf]) return FR[inf]
+    const cut = (n: number) => inf.slice(0, -n)
+    if (/(?:ai|ei|oi)ndre$/.test(inf)) return [cut(3) + 's', cut(4) + 'gnez']              // crains, craignez
+    if (inf.endsWith('prendre')) return [cut(2) + 's', cut(3) + 'ez']                       // apprends, apprenez
+    if (inf.endsWith('uire')) return [cut(2) + 's', cut(2) + 'sez']                         // construis, construisez
+    if (inf.endsWith('ttre')) return [cut(3) + 's', cut(2) + 'ez']                          // bats, battez; mets, mettez
+    if (inf.endsWith('crire')) return [cut(2) + 's', cut(2) + 'vez']                        // écris, écrivez
+    if (/[vt]enir$/.test(inf)) return [cut(4) + 'iens', cut(4) + 'enez']                    // viens, venez; tiens, tenez
+    if (inf.endsWith('cevoir')) return [cut(6) + 'çois', cut(6) + 'cevez']                  // reçois, recevez
+    if (/(?:vrir|frir|llir)$/.test(inf)) return [cut(2) + 'e', cut(2) + 'ez']               // ouvre, cueille
+    if (FR_TIR.test(inf)) return [cut(3) + 's', cut(2) + 'ez']                             // pars, partez
+    if (inf.endsWith('yer')) return [cut(3) + 'ie', cut(2) + 'ez']                          // paie, payez; envoie, envoyez
+    if (FR_DOUBLE.has(inf)) return [cut(2) + inf.at(-3) + 'e', cut(2) + 'ez']              // appelle, jette
+    if (inf.endsWith('er')) return [openE(cut(2)) + 'e', cut(2) + 'ez']
+    if (inf.endsWith('ir')) return [cut(2) + 'is', cut(2) + 'issez']                       // finis, finissez
+    if (inf.endsWith('dre')) return [cut(2) + 's', cut(2) + 'ez']                          // attends; only -dre: sincère, libre are not verbs
+    return null
+}
+
 function frImperative(word: string): string[] {
-    const m = /^(?:(?:se |s[’'])?)([a-zàâçéèêëîïôûùüÿœ]+)$/.exec(word.toLowerCase())
+    const w = word.toLowerCase().replace(/’/g, "'")
+    if (w === "s'en aller") return ["va-t'en", 'allez-vous-en']
+    const m = /^(?:se |s')?([a-zàâçéèêëîïôûùüÿœ]+)$/.exec(w)
     if (!m) return []
-    const reflexive = /^(se |s[’'])/.test(word.toLowerCase())
-    const inf = m[1]
-    let forms: [string, string] | null = FR[inf] ?? null
-    if (!forms && inf.endsWith('er')) forms = [openE(inf.slice(0, -2)) + 'e', inf.slice(0, -2) + 'ez']
-    else if (!forms && inf.endsWith('ir')) forms = [inf.slice(0, -2) + 'is', inf.slice(0, -2) + 'issez']
-    // only -dre is a regular -re verb (attendre, répondre): sincère, libre, rouge… end the same way and are not verbs
-    else if (!forms && inf.endsWith('dre')) forms = [inf.slice(0, -2) + 's', inf.slice(0, -2) + 'ez']
+    const forms = frForms(m[1])
     if (!forms) return []
-    return reflexive ? [`${forms[0]}-toi`, `${forms[1]}-vous`] : forms
+    return /^(?:se |s')/.test(w) ? [`${forms[0]}-toi`, `${forms[1]}-vous`] : [...forms]
 }
 
 /** The verb in the list's own form made an order: the polite or usual one first. Not a verb (or unsure): []. */
@@ -147,7 +234,6 @@ export function imperative(word: string, lang: LearningLang): string[] {
     if (lang === 'ja') return jaImperative(w)
     if (lang === 'es') return esImperative(w)
     if (lang === 'fr') return frImperative(w)
-    // Chinese has no verb ending: 吧 after it makes it an urging (冷静吧, 坐吧)
-    if (lang === 'zh') return /[\u3400-\u9fff]/.test(w) && !w.includes('吧') && !PERSON_ZH.test(w.replace(/\[[^\]]*\]/g, '')) ? [w + '吧[ba]'] : []
+    if (lang === 'zh') return zhImperative(w)
     return []
 }
