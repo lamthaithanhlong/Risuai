@@ -11,7 +11,7 @@
 // ん closes the syllable before it with "n" (かん = can), っ with "t" (きって = kit-tê), ー repeats the vowel before it.
 
 import TABLE from './vietjiTable.json'
-import { hangulToVietji, pinyinToVietji, spanishToVietji } from './vietjiLang'
+import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji } from './vietjiLang'
 
 const VJ: Record<string, string> = TABLE.table
 const ALIAS: Record<string, string> = TABLE.alias
@@ -100,7 +100,14 @@ export function fromVietji(text: string): string | null {
 }
 
 
-export type LearningLang = 'ja' | 'zh' | 'ko' | 'es'
+export type LearningLang = 'ja' | 'zh' | 'ko' | 'es' | 'fr'
+
+// Spanish and French lines both sit inside «»; which reader they get follows the language being learned.
+let latinReader: (word: string) => string | null = spanishToVietji
+export function setLatinLanguage(lang: string | undefined): void {
+    latinReader = lang === 'fr' ? frenchToVietji : spanishToVietji
+}
+const LATIN_WORD = /[A-Za-zÀ-ÖØ-öø-ÿœŒ]+/g
 
 const KANA = /[ぁ-ゖァ-ヺ]/
 const HAN = '一-鿿㐀-䶿々〆'
@@ -164,9 +171,9 @@ function cjkWord(word: string): string {
 
 function readText(text: string): string {
     return text
-        // «Spanish line»: every word gets its reading underneath
+        // «Spanish or French line»: every word gets its reading underneath
         .replace(/«([^»]{1,400})»/g, (_, line: string) =>
-            '«' + line.replace(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/g, (w) => wordUnit(w, spanishToVietji(w))) + '»')
+            '«' + line.replace(LATIN_WORD, (w) => wordUnit(w, latinReader(w))) + '»')
         .replace(/[가-힣]+/g, (w) => wordUnit(w, hangulToVietji(w)))
         .replace(CJK_WORD, (w) => cjkWord(w))
 }
@@ -195,10 +202,10 @@ export function addReadings(message: string): string {
 export function phraseVietji(text: string): string | null {
     const out: string[] = []
     const t = text.replace(/[«»「」『』“”"()（）]/g, ' ')
-    for (const m of t.matchAll(new RegExp(`${CJK_WORD.source}|[\\uAC00-\\uD7A3]+|[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+`, 'g'))) {
+    for (const m of t.matchAll(new RegExp(`${CJK_WORD.source}|[\\uAC00-\\uD7A3]+|${LATIN_WORD.source}`, 'g'))) {
         const w = m[0]
         if (HANGUL.test(w)) { const v = hangulToVietji(w); if (v) out.push(v); continue }
-        if (/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+$/.test(w)) { const v = spanishToVietji(w); if (v) out.push(v); continue }
+        if (/^[A-Za-zÀ-ÖØ-öø-ÿœŒ]+$/.test(w)) { const v = latinReader(w); if (v) out.push(v); continue }
         const html = cjkWord(w)
         const v = /<span style="[^"]*white-space:nowrap">([^<]*)<\/span><\/span>$/.exec(html)?.[1]
         if (v) out.push(v.replace(/&amp;/g, '&'))

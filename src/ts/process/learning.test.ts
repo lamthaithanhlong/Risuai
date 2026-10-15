@@ -57,6 +57,10 @@ describe('learning mode on', () => {
         expect(learningRequest(req('an nhong')).find((m: any) => m.role === 'user').content).toBe('an nhong')   // no kana typing outside Japanese
         db.learningLang = 'es'
         expect(learningRequest(req('x')).find((m: any) => m.role === 'system').content).toContain('«»')
+        db.learningLang = 'fr'
+        const fr = learningRequest(req('x')).find((m: any) => m.role === 'system').content
+        expect(fr).toContain('French')
+        expect(fr).toContain('« Bonjour, ça coûte combien ? »')
     })
     it('keeps Japanese messages out of auto-translate', () => {
         expect(learningKeepsOriginal('Ông nói 「はい」')).toBe(true)

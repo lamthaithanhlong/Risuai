@@ -3,7 +3,7 @@
 // match, newest first: the speaker's suggested answers, then what the speaker said, then a small starter set per language.
 
 import type { LearningLang, SuggestedReply } from './vietji'
-import { parseReplies, phraseVietji, stripReadings } from './vietji'
+import { parseReplies, phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 
 export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' }
 
@@ -34,10 +34,16 @@ const STARTER: Record<LearningLang, [string, string][]> = {
         ['Hola', 'Xin chào'], ['Gracias', 'Cảm ơn'], ['Sí', 'Vâng'], ['No', 'Không'], ['Perdón', 'Xin lỗi'], ['No entiendo', 'Tôi không hiểu'],
         ['¿Cuánto cuesta?', 'Bao nhiêu tiền?'], ['Por favor', 'Làm ơn'], ['No pasa nada', 'Không sao'], ['Adiós', 'Tạm biệt'],
     ],
+    fr: [
+        ['Bonjour', 'Xin chào'], ['Merci', 'Cảm ơn'], ['Oui', 'Vâng'], ['Non', 'Không'], ['Pardon', 'Xin lỗi'],
+        ['Je ne comprends pas', 'Tôi không hiểu'], ['Combien ça coûte ?', 'Bao nhiêu tiền?'], ["S'il vous plaît", 'Làm ơn'],
+        ['Ce n’est pas grave', 'Không sao'], ['Au revoir', 'Tạm biệt'],
+    ],
 }
 
 export function starterSet(lang: LearningLang): Suggestion[] {
-    return (STARTER[lang] ?? STARTER.ja).map(([text, meaning]) => ({ text, meaning, vietji: phraseVietji(lang === 'es' ? `«${text}»` : text) ?? '', source: 'starter' as const }))
+    setLatinLanguage(lang)
+    return (STARTER[lang] ?? STARTER.ja).map(([text, meaning]) => ({ text, meaning, vietji: phraseVietji(lang === 'es' || lang === 'fr' ? `«${text}»` : text) ?? '', source: 'starter' as const }))
 }
 
 /** Every phrase the bar can offer, newest first, without repeats: the last reply's answers, the vocabulary list, the starter set. */

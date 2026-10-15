@@ -4,15 +4,17 @@
     import OptionInput from "src/lib/UI/GUI/OptionInput.svelte";
     import { language } from "src/lang";
     import { DBState } from "src/ts/stores.svelte";
-    import { addReadings } from "src/ts/process/vietji";
+    import { addReadings, setLatinLanguage } from "src/ts/process/vietji";
 
     const SAMPLES: Record<string, [string, string]> = {
         ja: ['今日[きょう]は いい 天気[てんき] です。', 'Hôm nay trời đẹp.'],
         zh: ['你好[nǐhǎo]，我[wǒ] 是[shì] 学生[xuéshēng]。', 'Xin chào, tôi là học sinh.'],
         ko: ['안녕하세요. 감사합니다.', 'Xin chào. Cảm ơn.'],
         es: ['«Hola, ¿cuánto cuesta?»', 'Xin chào, giá bao nhiêu?'],
+        fr: ['« Bonjour, un croissant, s’il vous plaît. »', 'Xin chào, cho một bánh sừng bò.'],
     }
     let sample = $derived(SAMPLES[DBState.db.learningLang ?? 'ja'] ?? SAMPLES.ja)
+    let sampleHtml = $derived.by(() => { setLatinLanguage(DBState.db.learningLang); return addReadings(sample[0]) })
 </script>
 
 <h2 class="mb-2 text-2xl font-bold mt-2">{language.learning}</h2>
@@ -29,6 +31,7 @@
                 <OptionInput value="zh">中文 — tiếng Trung</OptionInput>
                 <OptionInput value="ko">한국어 — tiếng Hàn</OptionInput>
                 <OptionInput value="es">Español — tiếng Tây Ban Nha</OptionInput>
+                <OptionInput value="fr">Français — tiếng Pháp</OptionInput>
             </SelectInput>
             <Check bind:check={DBState.db.learningReadings} name={language.learningReadings}/>
             {#if (DBState.db.learningLang ?? 'ja') === 'ja'}
@@ -37,7 +40,7 @@
             <Check bind:check={DBState.db.learningSuggest} name={language.learningSuggest}/>
         </div>
         <div class="mt-2 p-3 rounded-md bg-darkbg">
-            {@html addReadings(sample[0])}
+            {@html sampleHtml}
             <span class="text-textcolor2 ml-2">({sample[1]})</span>
         </div>
     {/if}

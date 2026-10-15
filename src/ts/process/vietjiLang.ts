@@ -240,3 +240,104 @@ export function spanishToVietji(word: string): string | null {
         return v
     }).join('-')
 }
+
+// ---- French -----------------------------------------------------------------------------------------------------------------
+//
+// French spelling hides its sound in silent letters and letter groups, so the word is first cut into sound units (eau → ô,
+// oi → oa, on → ông, ch → s, gn → nh...), silent endings are dropped (plural s, final e, final t/d/p/x), and the units are
+// grouped into Vietnamese syllables. Vietnamese already writes old French loans this way: café → ca-phê, garçon → ga-xông.
+
+const FR_VOWELS: [string, string][] = [
+    ['oui', 'uy'], ['aî', 'ê'], ['eau', 'ô'], ['œu', 'ơ'], ['au', 'ô'], ['ou', 'u'], ['où', 'u'], ['oi', 'oa'], ['ai', 'ê'], ['ei', 'ê'], ['eu', 'ơ'], ['ui', 'uy'],
+    ['é', 'ê'], ['è', 'e'], ['ê', 'e'], ['ë', 'e'], ['a', 'a'], ['à', 'a'], ['â', 'a'], ['i', 'i'], ['î', 'i'], ['ï', 'i'], ['y', 'i'],
+    ['o', 'ô'], ['ô', 'ô'], ['u', 'uy'], ['û', 'uy'], ['ü', 'uy'], ['e', 'ơ'],
+]
+// nasal vowels: only when the n/m is not followed by a vowel or another n/m
+const FR_NASALS: [string, string][] = [
+    ['ain', 'anh'], ['aim', 'anh'], ['ein', 'anh'], ['ien', 'iêng'], ['oin', 'oanh'], ['an', 'ăng'], ['am', 'ăng'], ['en', 'ăng'],
+    ['em', 'ăng'], ['on', 'ông'], ['om', 'ông'], ['in', 'anh'], ['im', 'anh'], ['yn', 'anh'], ['un', 'anh'], ['um', 'anh'],
+]
+// ə marks a silent final e: it still makes the consonant before it heard (madame, soupe) and soft (fromage)
+const FR_LETTER_VOWEL = /[aàâeéèêëiîïoôuûüyœə]/
+const FR_SPECIAL: Record<string, string> = { monsieur: 'mơ-xi-ơ', et: 'ê', est: 'e', oui: 'uy' }
+
+/** One French word → Việt-ji ("bonjour" → "bông-giu", "merci" → "mec-xi", "croissant" → "croa-xăng"); null when no letter. */
+export function frenchToVietji(word: string): string | null {
+    let w = word.toLowerCase().replace(/[^a-zàâçéèêëîïôûüÿœ]/g, '')
+    if (!w) return null
+    if (FR_SPECIAL[w]) return FR_SPECIAL[w]
+    // silent endings
+    if (w.length > 3 && /(er|ez)$/.test(w)) w = w.slice(0, -2) + 'é'          // parler → parlé
+    w = w.replace(/(?<=.)[sx]$/, '')                                            // plural s / x
+    if (w.length > 2 && /[^aàâeéèêëiîïoôuûüy]e$/.test(w)) w = w.slice(0, -1) + 'ə'   // final e: silent, its consonant heard
+    else if (w.length > 2) w = w.replace(/[tdpzs]$/, '')                        // final t d p z s are silent
+    // sound units, longest first
+    type Unit = { v: boolean; s: string }
+    const units: Unit[] = []
+    let i = 0
+    const at = (k: number) => w[k] ?? ''
+    while (i < w.length) {
+        const rest = w.slice(i)
+        const nasal = FR_NASALS.find(([f]) => rest.startsWith(f) && !FR_LETTER_VOWEL.test(at(i + f.length)) && !'nm'.includes(at(i + f.length) || '#'))
+        if (nasal) { units.push({ v: true, s: nasal[1] }); i += nasal[0].length; continue }
+        // e before two consonants or a final consonant is an open e (appelle → a-pel), elsewhere a schwa
+        if (w[i] === 'e' && !FR_VOWELS.some(([f]) => f.length > 1 && rest.startsWith(f))) {
+            const c1 = at(i + 1), c2 = at(i + 2)
+            const closed = (c1 && !FR_LETTER_VOWEL.test(c1)) && (!c2 || !FR_LETTER_VOWEL.test(c2))
+            units.push({ v: true, s: closed ? 'e' : 'ơ' }); i++; continue
+        }
+        const vowel = FR_VOWELS.find(([f]) => rest.startsWith(f))
+        if (vowel) { units.push({ v: true, s: vowel[1] }); i += vowel[0].length; continue }
+        if (w[i] === 'ə') { i++; continue }
+        const c = w[i], n = at(i + 1)
+        const front = /[eéèêëiîïyə]/.test(n)
+        const pair = c + n
+        if (pair === 'ch') { units.push({ v: false, s: 's' }); i += 2; continue }
+        if (pair === 'gn') { units.push({ v: false, s: 'nh' }); i += 2; continue }
+        if (pair === 'ph') { units.push({ v: false, s: 'ph' }); i += 2; continue }
+        if (pair === 'qu') { units.push({ v: false, s: 'k' }); i += 2; continue }
+        if (pair === 'th') { units.push({ v: false, s: 't' }); i += 2; continue }
+        if (pair === 'ss') { units.push({ v: false, s: 'x' }); i += 2; continue }
+        if (c === n && 'bcdfglmnprtv'.includes(c)) { i++; continue }           // a double consonant is said once
+        if (c === 'h') { i++; continue }
+        // an s between two vowels is said z (d); not after a nasal vowel (bonsoir), nor before a silent e
+        const prevV = units.length > 0 && units[units.length - 1].v && !/(ng|nh)$/.test(units[units.length - 1].s)
+        const map: Record<string, string> = {
+            c: front ? 'x' : 'c', ç: 'x', g: front ? 'gi' : 'g', j: 'gi', s: prevV && FR_LETTER_VOWEL.test(n) ? 'd' : 'x', z: 'd',
+            d: 'đ', f: 'ph', x: 'x', w: 'v', k: 'k',
+        }
+        units.push({ v: false, s: map[c] ?? c })
+        i++
+    }
+    // group: each vowel unit is a syllable; one consonant between vowels starts the next syllable, two split (unless the
+    // second is r/l after a stop: croissant → croa-xăng), consonants before the first vowel and after the last stay with them
+    const syll: { onset: string; nucleus: string; coda: string }[] = []
+    let pending: string[] = []
+    for (const u of units) {
+        if (!u.v) { pending.push(u.s); continue }
+        if (syll.length > 0 && pending.length > 0) {
+            const cluster = pending.length >= 2 && 'rl'.includes(pending[pending.length - 1]) && ['b', 'c', 'đ', 'ph', 'g', 'k', 'p', 't', 'v'].includes(pending[pending.length - 2])
+            const keep = cluster ? 2 : 1
+            syll[syll.length - 1].coda += pending.slice(0, pending.length - keep).join('')
+            pending = pending.slice(pending.length - keep)
+        }
+        syll.push({ onset: pending.join(''), nucleus: u.s, coda: '' })
+        pending = []
+    }
+    if (syll.length === 0) return null
+    syll[syll.length - 1].coda += pending.join('')
+    return syll.map((s, k) => {
+        const last = k === syll.length - 1
+        let coda = s.coda
+        if (/ng$|nh$/.test(s.nucleus)) coda = ''                                // a nasal vowel already closes the syllable
+        if (coda.startsWith('r')) coda = last ? '' : 'c'                        // merci → mec-xi; bonsoir → bông-xoa
+        let tail = ''
+        if (last && coda === 'gi') { coda = ''; tail = '-giơ' }                 // fromage → phrô-ma-giơ
+        coda = coda.replace(/^x$/, 't').slice(0, 2)
+        let onset = s.onset
+        if (onset === 'c' && /^[eêi]/.test(s.nucleus)) onset = 'k'
+        if (onset === 'g' && /^[eêi]/.test(s.nucleus)) onset = 'gh'
+        if (onset.endsWith('gi') && s.nucleus.startsWith('i')) onset = onset.slice(0, -1)
+        return onset + s.nucleus + coda + tail
+    }).join('-')
+}

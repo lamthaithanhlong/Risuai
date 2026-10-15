@@ -3,7 +3,7 @@
 
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
-import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, splitReplies, type LearningLang } from './vietji'
+import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
 
 export const VOCAB_VAR = '$vj_vocab'
 
@@ -16,6 +16,7 @@ export function learningDisplay(text: string): string {
     const db = getDatabase()
     if (!db.learningMode || !text) return text
     // the replies box is read on its own, after the body: reading the whole message again would put a second reading on it
+    setLatinLanguage(db.learningLang)
     const readings = db.learningReadings !== false
     const { main, box } = splitReplies(text, readings)
     return (readings ? addReadings(main) : main) + box
@@ -26,13 +27,15 @@ export function learningKeepsOriginal(text: string): boolean {
     return learningOn() && hasForeign(text)
 }
 
-const LANG_NAME: Record<LearningLang, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin, simplified characters)', ko: 'Korean', es: 'Spanish' }
+const LANG_NAME: Record<LearningLang, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin, simplified characters)', ko: 'Korean', es: 'Spanish', fr: 'French' }
 
 const LANG_FORMAT: Record<LearningLang, string> = {
     ja: 'Write Japanese the way a Japanese adult writes it: kanji wherever kanji is normal (二つ, 塩, 今日, 天気), kana for particles and endings. Right after every word that contains kanji, put its reading in hiragana in square brackets: 塩[しお]は 二つ[ふたつ] です。 今日[きょう]は いい 天気[てんき] です。 Words written only in kana need no brackets. Leave a space between words. Never romaji.',
     zh: 'Write simplified Chinese characters. Right after every word, put its pinyin with tone marks in square brackets: 你好[nǐhǎo]，我[wǒ] 是[shì] 学生[xuéshēng]。 Leave a space between words.',
     ko: 'Write Korean in hangul only, with normal spacing between words. No hanja and no romanization.',
     es: 'Put every Spanish line inside «» guillemets: «Hola, ¿cuánto cuesta?» Use simple present-tense Spanish.',
+    // French typography after the Imprimerie nationale rules: a space inside guillemets and before ? ! : ;
+    fr: 'Put every French line inside « » guillemets, with French typography (a space inside the guillemets and before ? ! : ;): « Bonjour, ça coûte combien ? » Use simple present-tense French, with the vous form for strangers.',
 }
 
 /** The note that tells the model how to write the language being learned, so the display can show its reading. */
@@ -77,6 +80,7 @@ export function noteLearningVocab(chat: Chat | undefined): void {
     if (!chat || !learningOn()) return
     const last = chat.message?.at(-1)
     if (!last || last.role !== 'char') return
+    setLatinLanguage(getDatabase().learningLang)
     const found = collectVocab(last.data)
     if (found.length === 0) return
     chat.scriptstate ??= {}

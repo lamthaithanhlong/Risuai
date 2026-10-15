@@ -897,7 +897,7 @@ export interface Database{
     learningReadings?: boolean
     learningTyping?: boolean
     learningSuggest?: boolean
-    /** The language being learned: 'ja' | 'zh' | 'ko' | 'es'. */
+    /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     fullScreen:boolean
     playMessage:boolean

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import TABLE from './vietjiTable.json'
-import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, renderReplies, stripReadings, toVietji } from './vietji'
-import { hangulToVietji, pinyinToVietji, spanishToVietji, toneSyllable } from './vietjiLang'
+import { addReadings, collectVocab, fromVietji, hasKana, mergeVocab, parseReplies, renderReplies, setLatinLanguage, stripReadings, toVietji } from './vietji'
+import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji, toneSyllable } from './vietjiLang'
 
 const fold = (s: string) => s.toLowerCase().replace(/ê/g, 'e').replace(/ô/g, 'o').replace(/ư/g, 'u').replace(/ơ/g, 'o')
 
@@ -83,6 +83,12 @@ describe('display', () => {
         expect(r).toContain('rồi cười.')
         expect(r).not.toMatch(/>ông<\/span>/i)
     })
+    it('French lines in « » get the French reader, Spanish lines the Spanish one', () => {
+        setLatinLanguage('fr')
+        expect(addReadings('« Bonjour, merci. »')).toContain('>bông-giu</span>')
+        setLatinLanguage('es')
+        expect(addReadings('«Hola»')).toContain('>ô-la</span>')
+    })
     it('leaves tags, styles and an existing ruby alone', () => {
         const html = '<style>.a{content:"やめて"}</style><span title="はい">x</span><ruby>はい<rt>ha-i</rt></ruby> はい'
         const r = addReadings(html)
@@ -110,6 +116,11 @@ describe('readings by rule', () => {
         ['hola', 'ô-la'], ['gracias', 'gra-xi-at'], ['días', 'đi-at'], ['cuánto', 'cuan-tô'], ['señor', 'xê-nhôr'],
         ['calle', 'ca-dê'], ['gente', 'khên-tê'], ['queso', 'kê-xô'], ['mañana', 'ma-nha-na'], ['adiós', 'a-đi-ôt'],
     ])('Spanish %s → %s', (w, v) => expect(spanishToVietji(w)).toBe(v))
+    it.each([
+        ['bonjour', 'bông-giu'], ['merci', 'mec-xi'], ['café', 'ca-phê'], ['croissant', 'croa-xăng'], ['oui', 'uy'], ['bonsoir', 'bông-xoa'],
+        ['garçon', 'gac-xông'], ['beaucoup', 'bô-cu'], ['madame', 'ma-đam'], ['soupe', 'xup'], ['chocolat', 'sô-cô-la'],
+        ['gâteau', 'ga-tô'], ['fromage', 'phrô-ma-giơ'], ['bien', 'biêng'], ['plaît', 'plê'], ['appelle', 'a-pel'],
+    ])('French %s → %s', (w, v) => expect(frenchToVietji(w)).toBe(v))
     it('tone marks land on the main vowel', () => {
         expect(toneSyllable('hao', 'hoi')).toBe('hảo')
         expect(toneSyllable('trung', 'sac')).toBe('trúng')

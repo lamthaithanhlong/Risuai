@@ -55,6 +55,8 @@ describe('suggest', () => {
         expect(suggest('an niong', suggestionPool({ lang: 'ko' }))[0].text).toBe('안녕하세요')
         expect(suggest('ni hao', suggestionPool({ lang: 'zh' }))[0].text).toBe('你好[nǐhǎo]')
         expect(suggest('gra', suggestionPool({ lang: 'es' }))[0].text).toBe('Gracias')
+        expect(suggest('bong giu', suggestionPool({ lang: 'fr' }))[0].text).toBe('Bonjour')
+        expect(suggest('mec', suggestionPool({ lang: 'fr' }))[0].text).toBe('Merci')
     })
 })
 
