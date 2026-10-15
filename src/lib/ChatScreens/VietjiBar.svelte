@@ -1,6 +1,6 @@
 <script lang="ts">
-    // Learning mode: phrases the learner can say, above the chat input, each as its Vietnamese meaning over the foreign phrase and
-    // its reading. Typing the sound in Vietnamese letters narrows them; typing in Vietnamese with marks ("có") looks the meaning up,
+    // Learning mode: phrases the learner can say, above the chat input, each as its Vietnamese meaning (small) over the foreign
+    // phrase (large) and its reading. Typing the sound in Vietnamese letters narrows them; typing in Vietnamese with marks ("có") looks the meaning up,
     // and when the notebook has nothing for it the model is asked for three ways to say it; ↑/↓ move the choice, Tab (or a tap) puts it in the input, Esc hides the bar until the next key.
     // 📖 opens the notebook: every phrase met in this language, the hard ones (often wrong, or close in sound to a mistake) first.
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
@@ -38,7 +38,8 @@
     let listReady = $state(false)
     let typedAny = $derived(enabled && /\p{L}/u.test(value ?? '') ? (value ?? '').trim() : '')
     $effect(() => {
-        if (!typedAny || wordListLang === lang) return            // without marks too: "tui" is a Vietnamese word as well
+        // loaded as soon as the bar shows, not on the first key: a 1-2 MB list took longer than the first word to arrive
+        if (!enabled || wordListLang === lang) return
         const want = lang
         wordListLang = want
         wordList = null
@@ -163,8 +164,9 @@
                         title={i === selected ? 'Tab' : ''}
                         onclick={() => choose(s)}
                     >
-                        <span class="text-sm leading-tight text-textcolor">{hardTexts.has(s.text) ? '⚑ ' : ''}{s.meaning}{#if s.kind}<span class="text-xs text-textcolor2"> · {KIND_LABEL[s.kind]}</span>{/if}</span>
-                        <span class="text-sm leading-tight text-textcolor font-semibold">{lang === 'es' || lang === 'fr' ? s.text.replace(/[«»]/g, '').trim() : stripReadings(s.text)}</span>
+                        <!-- the learner reads Vietnamese natively: it is the small hint, the foreign word is what they look at -->
+                        <span class="text-xs leading-tight text-textcolor2">{hardTexts.has(s.text) ? '⚑ ' : ''}{s.meaning}{#if s.kind}<span> · {KIND_LABEL[s.kind]}</span>{/if}</span>
+                        <span class={"leading-snug text-textcolor font-semibold " + (lang === 'es' || lang === 'fr' ? 'text-base' : 'text-xl')}>{lang === 'es' || lang === 'fr' ? s.text.replace(/[«»]/g, '').trim() : stripReadings(s.text)}</span>
                         <span class="text-xs leading-tight" style="color:#f2c76b;font-weight:600">{s.vietji}</span>
                     </button>
                 {/each}
