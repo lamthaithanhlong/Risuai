@@ -8,6 +8,57 @@
     import { getRisuHub, hubAdditionalHTML } from "src/ts/characterCards";
     import RisuHubIcon from "./Realm/RealmHubIcon.svelte";
     import Title from "./Title.svelte";
+    import { ChevronDownIcon, ChevronRightIcon } from "@lucide/svelte";
+    import { changeChar, getCharImage } from "src/ts/characters";
+    import { getCharacterIndexObject } from "src/ts/util";
+    import { CharEmotion, settingsOpen } from "src/ts/stores.svelte";
+
+    // The stories the user actually plays come first. RisuRealm's feed is a separate section, folded until it is opened, so the Home page
+    // no longer starts with strangers' cards and the feed is not fetched until someone asks for it.
+    type Story = { index: number, name: string, image: string, chats: number, last: number }
+
+    function myStories(): Story[] {
+      const out: Story[] = []
+      const idObject = getCharacterIndexObject()
+      const add = (id: string) => {
+        const index = idObject[id] ?? -1
+        if(index === -1) return
+        const cha = DBState.db.characters[index]
+        if(!cha || cha.trashTime) return
+        out.push({
+          index,
+          name: cha.name || '?',
+          image: cha.image ?? '',
+          chats: cha.chats?.length ?? 0,
+          last: cha.lastInteraction ?? 0,
+        })
+      }
+      for(const entry of DBState.db.characterOrder){
+        if(typeof entry === 'string') add(entry)
+        else for(const id of entry.data) add(id)
+      }
+      // most recently played first; characters never opened keep the order the sidebar shows
+      return out.map((v, i) => ({ v, i })).sort((a, b) => (b.v.last - a.v.last) || (a.i - b.i)).map((x) => x.v)
+    }
+
+    const REALM_KEY = 'risu-home-realm-open'
+    let realmOpen = $state(false)
+    try { realmOpen = localStorage.getItem(REALM_KEY) === '1' } catch (e) { /* private window: stays folded */ }
+    function toggleRealm() {
+      realmOpen = !realmOpen
+      try { localStorage.setItem(REALM_KEY, realmOpen ? '1' : '0') } catch (e) { /* ignore */ }
+    }
+
+    function openStory(index: number) {
+      changeChar(index, { reseter: () => { settingsOpen.set(false); CharEmotion.set({}) } })
+    }
+
+    function lastPlayed(ts: number): string {
+      if(!ts) return ''
+      const days = Math.floor((Date.now() - ts) / 86400000)
+      if(days <= 0) return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return days === 1 ? '1 d' : days + ' d'
+    }
 
     type RelatedLink = {
       title: string;
@@ -54,35 +105,69 @@
     <div class="w-full flex p-4 flex-col text-textcolor max-w-4xl">
       {#if !$OpenRealmStore}
       <div class="mt-4 mb-4 w-full border-t border-t-selected"></div>
-      <h1 class="text-2xl font-bold">Recently Uploaded<button class="text-base font-medium float-right p-1 bg-darkbg rounded-md hover:ring-3" onclick={() => {
-        $OpenRealmStore = true
-      }}>Get More</button></h1>
-          {#if !DBState.db.hideRealm}
-            {#await getRisuHub({
-                  search: '',
-                  page: 0,
-                  nsfw: false,
-                  sort: 'recommended'
-              }) then charas}
-            {#if charas.length > 0}
-              {@html hubAdditionalHTML}
-              <div class="w-full flex gap-4 p-2 flex-wrap justify-center">
-                  {#each charas as chara}
-                      <RisuHubIcon onClick={() => {
-                        $OpenRealmStore = true
-                        if(DBState.db.realmDirectOpen){
-                            $RealmInitialOpenChar = chara
-                        }
-                      }} chara={chara} />
-                  {/each}
+      <h1 class="text-2xl font-bold mb-3">{language.myStories}</h1>
+      {#key DBState.db.characters.length}
+      {@const stories = myStories()}
+      {#if stories.length === 0}
+        <div class="text-textcolor2">{language.myStoriesEmpty}</div>
+      {:else}
+        <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+          {#each stories as story (story.index)}
+            <button
+              class="flex items-center gap-3 rounded-xl border border-borderc/10 bg-darkbg p-3 text-left transition-colors hover:bg-selected/50"
+              onclick={() => openStory(story.index)}
+            >
+              {#await getCharImage(story.image, 'css') then css}
+                <div class="h-14 w-14 shrink-0 rounded-lg bg-selected" style={css}></div>
+              {/await}
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-lg font-semibold text-textcolor">{story.name}</div>
+                <div class="text-sm text-textcolor2">{language.chatsCount}: {story.chats}{story.last ? ' · ' + lastPlayed(story.last) : ''}</div>
               </div>
-            {:else}
-              <div class="text-textcolor2">Failed to load {language.hub}...</div>
-            {/if}
-          {/await}
-        {:else}
-          <div class="text-textcolor2">{language.hideRealm}</div>
-        {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {/key}
+
+      <div class="mt-6 mb-4 w-full border-t border-t-selected"></div>
+      <div class="flex items-center justify-between">
+        <button class="flex items-center gap-2 text-xl font-bold text-textcolor" aria-expanded={realmOpen} onclick={toggleRealm}>
+          {#if realmOpen}<ChevronDownIcon size={20} />{:else}<ChevronRightIcon size={20} />{/if}
+          {language.discoverRealm}
+        </button>
+        <button class="text-base font-medium p-1 bg-darkbg rounded-md hover:ring-3" onclick={() => {
+          $OpenRealmStore = true
+        }}>Get More</button>
+      </div>
+      {#if realmOpen}
+        {#if !DBState.db.hideRealm}
+          {#await getRisuHub({
+                search: '',
+                page: 0,
+                nsfw: false,
+                sort: 'recommended'
+            }) then charas}
+          {#if charas.length > 0}
+            {@html hubAdditionalHTML}
+            <div class="w-full flex gap-4 p-2 flex-wrap justify-center">
+                {#each charas as chara}
+                    <RisuHubIcon onClick={() => {
+                      $OpenRealmStore = true
+                      if(DBState.db.realmDirectOpen){
+                          $RealmInitialOpenChar = chara
+                      }
+                    }} chara={chara} />
+                {/each}
+            </div>
+          {:else}
+            <div class="text-textcolor2">Failed to load {language.hub}...</div>
+          {/if}
+        {/await}
+      {:else}
+        <div class="text-textcolor2">{language.hideRealm}</div>
+      {/if}
+      {/if}
       <div class="mt-4 mb-4 w-full border-t border-t-selected"></div>
       <h1 class="text-2xl font-bold mb-4">
         Related Links
