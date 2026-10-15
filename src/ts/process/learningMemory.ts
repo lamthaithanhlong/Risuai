@@ -7,6 +7,7 @@
 //   [[CHECK <what was written> → <right form> | <why, in Vietnamese>]]   it needed fixing
 // The block is never shown as is: a fix becomes one short "Sửa:" line under the reply.
 
+import { lessonHtml, parseLesson, type CoachPart } from './grammarCoach'
 import { foldTyping } from './vietjiSuggest'
 import { fromVietji, hasForeign, phraseVietji, stripReadings, type SuggestedReply } from './vietji'
 
@@ -16,7 +17,7 @@ const DAY = 24 * 60 * 60 * 1000
 export type VocabItem = SuggestedReply & { ef?: number; iv?: number; reps?: number; due?: number; ok?: number; bad?: number }
 export type Mistake = { wrong: string; right: string; why: string; count: number; last: number }
 /** grammar: every word was a right word for what the learner meant, only the order or the grammar words were off */
-export type Fix = { ok: false; wrong: string; right: string; why: string; grammar?: boolean }
+export type Fix = { ok: false; wrong: string; right: string; why: string; grammar?: boolean; parts?: CoachPart[] }
 /** A grammar point the learner has been shown, with the example it came with. */
 export type GrammarPoint = { point: string; wrong: string; right: string; count: number; last: number }
 export type CheckResult = { ok: true } | Fix
@@ -47,7 +48,13 @@ export function parseCheck(reply: string): CheckResult | null {
     let body = m[1].trim()
     if (/^ok\b/i.test(body)) return { ok: true }
     const grammar = /^(?:grammar|ngữ pháp)\b[:\s]*/i.exec(body)
-    if (grammar) body = body.slice(grammar[0].length)
+    if (grammar) {
+        // the lesson form: sentence pair | parts with why | the point to remember (grammarCoach.ts)
+        const lesson = parseLesson(body.slice(grammar[0].length))
+        if (!lesson) return null
+        const why = lesson.point || lesson.parts[0]?.why || ''
+        return { ok: false, wrong: lesson.wrote, right: lesson.fix, why, grammar: true, parts: lesson.parts }
+    }
     const [pair, why = ''] = body.split('|').map((s) => s.trim())
     const [wrong, right] = pair.split(/\s*(?:→|->)\s*/)
     if (!wrong || !right) return null
@@ -61,7 +68,8 @@ export function splitCheck(reply: string): { main: string; note: string } {
     if (!check || check.ok) return { main, note: '' }
     const fix = check as Fix                                    // the project does not narrow unions (strict is off)
     const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
-    const label = fix.grammar ? '<span style="color:#8fb8ff;font-weight:600">Ngữ pháp:</span>' : '<span style="color:#e0a46b;font-weight:600">Sửa:</span>'
+    if (fix.grammar) return { main, note: lessonHtml({ wrote: fix.wrong, fix: fix.right, parts: fix.parts ?? [], point: fix.why }) }
+    const label = '<span style="color:#e0a46b;font-weight:600">Sửa:</span>'
     const note = `\n\n<div style="margin-top:.4em;font-size:.9em;opacity:.9">${label} `
         + `<s style="opacity:.7">${esc(fix.wrong)}</s> → <b>${esc(fix.right)}</b>${fix.why ? ` <span style="opacity:.75">(${esc(fix.why)})</span>` : ''}</div>`
     return { main, note }
@@ -129,7 +137,7 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     ]
     if (opts.grammarLater) {
         // words first, grammar a little at a time (asked: think in Vietnamese, put the words together, be corrected slowly)
-        lines.push('The player learns words first: they think in Vietnamese and put the foreign words together in Vietnamese word order (我 想 她 有点 傻 for "tôi nghĩ cô ấy hơi ngốc"). Answer what they meant. When every word is a right word for what they meant and only the order, a particle or a grammar word is off, the check is [[CHECK grammar <what they wrote> → <the natural sentence> | <ONE grammar point, the most useful one, explained in a few simple Vietnamese words>]]: never more than one point a reply, and nothing else is marked wrong. Use the plain [[CHECK <wrong> → <right> | why]] only when a word itself is wrong.')
+        lines.push('The player learns words first: they think in Vietnamese and put the foreign words together in Vietnamese word order (我 想 她 有点 傻 for "tôi nghĩ cô ấy hơi ngốc"). Answer what they meant. When every word is a right word for what they meant and only the order, a particle or a grammar word is off, the check teaches like a kind teacher: [[CHECK grammar <what they wrote> → <the natural sentence> | <part they wrote> → <what to write>: <why, in a few simple Vietnamese words>; <next part> → <what to write>: <why> | <the ONE grammar point to remember, in Vietnamese>]], at most three parts, the most useful first, and one point a reply; nothing else is marked wrong. Use the plain [[CHECK <wrong> → <right> | why]] only when a word itself is wrong.')
         const seen = (opts.grammar ?? []).slice(0, 12)
         if (seen.length) lines.push(`Grammar points the player has already been shown (newest first, how many times): ${seen.map((g) => `${g.point} (${g.count})`).join('; ')}. When one of these comes up again, remind it in a few words; otherwise teach a new point, simplest first.`)
     }

@@ -117,6 +117,8 @@
         const offeredHit = soundMatch(value ?? '', offered) ? rest.filter((s) => s.source === 'reply' || s.source === 'heard' || s.source === 'starter') : []
         // at most four of them, so the word-by-word chips (我 alone) still have room
         const both = soundTyping ? [...offeredHit.slice(0, 4), ...imeItems, ...rest] : [...rest, ...imeItems]   // sound first only when it is clearly sound
+        // one chip per outcome: the same characters can come from two places (冷静 from the compose chips and the list), and the
+        // each block is keyed by this (reported: Svelte each_key_duplicate when it was keyed by the text)
         const seen = new Set<string>()
         return both.filter((s) => !seen.has(s.replace ?? s.text) && !!seen.add(s.replace ?? s.text)).slice(0, 6)
     })
@@ -236,7 +238,7 @@
                     <span>Sổ từ · {notebook.vocab.length} cụm{hard.length ? ` · ⚑ ${hard.length} cần luyện` : ''}</span>
                     {#if recent !== null}<span>đúng {recent}% trong 10 lần gần nhất</span>{/if}
                 </div>
-                {#each book as v (v.text)}
+                {#each book as v, k (v.text + '#' + k)}
                     <button class="w-full text-left flex items-baseline gap-2 py-0.5 border-b border-darkborderc/40 hover:bg-selected" onclick={() => choose({ ...v, source: 'heard' })}>
                         <span class="w-4 shrink-0" title={v.confusedWith.length ? `dễ nhầm với: ${v.confusedWith.join(', ')}` : v.rate >= 1 / 3 ? 'hay sai' : ''}>{v.weight > 0 ? '⚑' : ''}</span>
                         <span class="text-textcolor">{lang === 'es' || lang === 'fr' ? v.text : stripReadings(v.text)}</span>
@@ -247,7 +249,7 @@
                 {/each}
                 {#if notebook.mistakes.length}
                     <div class="text-xs text-textcolor2 mt-2">Lỗi hay gặp</div>
-                    {#each notebook.mistakes.slice(0, 8) as m (m.wrong + m.right)}
+                    {#each notebook.mistakes.slice(0, 8) as m, k (m.wrong + '→' + m.right + '#' + k)}
                         <div class="text-xs"><s class="opacity-70">{m.wrong}</s> → <b>{m.right}</b> <span class="text-textcolor2">×{m.count}{m.why ? ` · ${m.why}` : ''}</span></div>
                     {/each}
                 {/if}
@@ -257,7 +259,7 @@
             <button class="shrink-0 px-2 rounded-md border border-darkborderc bg-darkbg hover:border-textcolor" title="Sổ từ" aria-pressed={bookOpen}
                 onclick={() => { bookOpen = !bookOpen }}>📖{hard.length ? ' ⚑' : ''}</button>
             {#if !hidden}
-                {#each items as s, i (s.text)}
+                {#each items as s, i (s.replace ?? s.text)}
                     <button
                         class={"shrink-0 flex flex-col items-start px-2 py-1 rounded-md border bg-darkbg hover:border-textcolor text-left " + (i === selected ? 'border-textcolor' : 'border-darkborderc')}
                         role="option"

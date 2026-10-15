@@ -131,7 +131,7 @@ const REMIND_WRITING: Partial<Record<LearningLang, string>> = {
 export function learningReminder(lang: LearningLang, grammarLater = false): string {
     // the check's exact forms, here too: with them only in the note, the model wrote "[[CHECK]]" and "[[CHECK: …]]" (2026-10-15)
     const check = grammarLater
-        ? 'then, if the player wrote in that language, one check line: [[CHECK ok]] when it was right, [[CHECK grammar <what they wrote> → <the natural sentence> | <one grammar point in a few Vietnamese words>]] when the words were right and only the order or grammar was off, or [[CHECK <wrong word> → <right word> | <why in Vietnamese>]] when a word was wrong'
+        ? 'then, if the player wrote in that language, one check line: [[CHECK ok]] when it was right, [[CHECK grammar <what they wrote> → <the natural sentence> | <part> → <right>: <why in simple Vietnamese>; <part> → <right>: <why> | <the one point to remember, in Vietnamese>]] when the words were right and only the order or grammar was off, or [[CHECK <wrong word> → <right word> | <why in Vietnamese>]] when a word was wrong'
         : 'then the [[CHECK]] line if the player wrote in that language'
     return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, ${check}.]`
 }

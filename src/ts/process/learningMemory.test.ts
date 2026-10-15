@@ -107,7 +107,7 @@ describe('words first, grammar a little at a time', () => {
         expect(parseCheck('[[CHECK 她 → 他 | sai từ]]')).not.toHaveProperty('grammar')
     })
     it('shows it as "Ngữ pháp:", not "Sửa:"', () => {
-        expect(splitCheck('x\n[[CHECK grammar a → b | trật tự]]').note).toContain('Ngữ pháp:')
+        expect(splitCheck('x\n[[CHECK grammar a → b | trật tự]]').note).toContain('Ngữ pháp · nên nói:')
         expect(splitCheck('x\n[[CHECK a → b | sai]]').note).toContain('Sửa:')
     })
     it('keeps each point once, counting how often it came back', () => {
@@ -118,7 +118,7 @@ describe('words first, grammar a little at a time', () => {
     it('the note asks for one grammar point at a time and lists the ones shown', () => {
         const note = memoryNote([], [], [], NOW, { grammarLater: true, grammar: [{ point: 'trật tự', wrong: 'a', right: 'b', count: 2, last: NOW }] })
         expect(note).toContain('[[CHECK grammar')
-        expect(note).toContain('never more than one point')
+        expect(note).toContain('one point a reply')
         expect(note).toContain('trật tự (2)')
         expect(memoryNote([], [], [], NOW)).not.toContain('[[CHECK grammar')
     })
