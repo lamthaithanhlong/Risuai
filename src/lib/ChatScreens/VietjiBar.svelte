@@ -44,11 +44,11 @@
     let soundIndex = $state<SoundIndex | null>(null)
     let koIndex = $state<SoundIndex | null>(null)
     let kanaIndex = $state<KanaIndex | null>(null)
-    let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex)))
     let wordList = $state<Dictionary | null>(null)
     // building a sentence: words already written in the language, then Vietnamese at the end ("我 想 cô ấy"): only that end is
     // looked up (and asked about), and its chips keep what is before it
     let vietSet = $derived(new Set(Object.keys(wordList?.words ?? {})))
+    let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex, vietSet)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex, vietSet)))
     let composing = $derived(enabled ? vietnameseTail(value ?? '', vietSet) : { head: '', tail: '' })
     let composeMode = $derived(!!composing.head.trim() && !!composing.tail)
     let typedViet = $derived(!enabled || soundTyping ? '' : composeMode ? composing.tail

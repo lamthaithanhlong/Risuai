@@ -141,9 +141,13 @@ export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf:
 }
 
 /** True when the sound at the end of the input reads fully as words with every tone as typed: sound typing, not Vietnamese. */
-export function isSoundTyping(input: string, idx: SoundIndex | null): boolean {
+export function isSoundTyping(input: string, idx: SoundIndex | null, vietnamese?: Set<string>): boolean {
     if (!idx) return false
     const { sound } = soundTail(input)
+    // all Vietnamese words, no hyphen: Vietnamese, even when it also reads exactly as sound ("침착하다 đi" gave 디 first;
+    // docs/specs/VietjiInputMode.als VietnameseWordsFirst). A hyphen joins one word's syllables: always sound.
+    const words = sound.trim().split(/\s+/).filter(Boolean)
+    if (vietnamese && !sound.includes('-') && words.length && words.every((w) => vietnamese.has(w.toLowerCase()))) return false
     const c = convert(idx, sound)
     return !!c && c.known && c.tones === c.syllables && c.syllables > 0
 }

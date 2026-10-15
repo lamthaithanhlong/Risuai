@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
-import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, convert, imeSuggestions, jaConvert, jaSuggestions } from './vietjiIme'
+import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, convert, imeSuggestions, isSoundTyping, jaConvert, jaSuggestions } from './vietjiIme'
 import { fromVietji } from './vietji'
 import { hangulToVietji } from './vietjiLang'
 
@@ -87,5 +87,26 @@ describe('reported: typing "hết sức" in Korean gave 매우 아주 지극히 
         expect(words).toContain('매우')
         expect(words.some((w) => ['했 숙', '햇', '헷', '했'].includes(w))).toBe(false)
         expect(mixChips([], imeSuggestions('an-niơng', ko), [], { soundTyping: true, listSure: false }).length).toBeGreaterThan(0)
+    })
+})
+
+describe('reported: "… 침착하다 đi" showed 디 first (đi reads exactly as 디), the meaning chips after', () => {
+    const vi = new Set(Object.keys(json('public/dict/vi-ko.json').words))
+    it('Vietnamese words are not sound typing, hyphenated sound still is', () => {
+        expect(isSoundTyping('나 와 고 일다 당안전하다, 침착하다 đi', ko)).toBe(true)           // what the bar did
+        expect(isSoundTyping('나 와 고 일다 당안전하다, 침착하다 đi', ko, vi)).toBe(false)
+        expect(isSoundTyping('an-niơng', ko, vi)).toBe(isSoundTyping('an-niơng', ko))
+        expect(isSoundTyping(hangulToVietji('감사합니다')!, ko, vi)).toBe(true)
+    })
+    it('so the bar offers what đi means, with no 디 chip', async () => {
+        const { dictSuggestions, needsModel } = await import('./vietjiDict')
+        const { mixChips } = await import('./vietjiSuggest')
+        const v = json('public/dict/vi-ko.json')
+        const dict = { words: v.words, unsure: new Set<string>(v.unsure ?? []), order: v.order ?? [] } as any
+        const rest = dictSuggestions('đi', dict.words, 'ko')
+        const soundTyping = isSoundTyping('침착하다 đi', ko, vi)
+        const chips = mixChips(rest, imeSuggestions('침착하다 đi', ko), [], { soundTyping, listSure: rest.length > 0 && !needsModel('đi', dict) }).map((c) => c.text)
+        expect(chips[0]).toBe('가다')
+        expect(chips).not.toContain('디')
     })
 })
