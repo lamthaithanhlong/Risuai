@@ -30,6 +30,9 @@ export class FrameParser {
     }
 }
 
+/** Korean voices a phone or Mac ships with that are women's (Yuna, Sora on Apple; Heami, SunHi on Windows; Google 한국의). */
+export const FEMALE_VOICE = /yuna|sora|heami|sunhi|jimin|seoyeon|female|여성|google 한국/i
+
 /** The voice that reads a learning language (kokoro has no Korean voice: Korean uses the device's own voice). */
 export const FOREIGN_VOICE: Record<string, { model: 'kokoro'; voice: string } | { device: string }> = {
     ja: { model: 'kokoro', voice: 'jf_alpha' },
@@ -118,6 +121,11 @@ export async function speakForeign(deps: StreamDeps, text: string, lang: string)
         stopSpeaking()
         const u = new SpeechSynthesisUtterance(text)
         u.lang = v.device
+        // a woman's voice when the device has one (asked: female voices wherever there is one); kokoro's are already
+        const voices = globalThis.speechSynthesis?.getVoices?.() ?? []
+        const own = voices.filter((x) => x.lang?.toLowerCase().startsWith(v.device.slice(0, 2).toLowerCase()))
+        const female = own.find((x) => FEMALE_VOICE.test(x.name)) ?? own.find((x) => !/male|남/i.test(x.name))
+        if (female) u.voice = female
         globalThis.speechSynthesis?.speak(u)
         return
     }

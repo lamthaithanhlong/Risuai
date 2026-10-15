@@ -7,7 +7,7 @@
 //   [[CHECK <what was written> → <right form> | <why, in Vietnamese>]]   it needed fixing
 // The block is never shown as is: a fix becomes one short "Sửa:" line under the reply.
 
-import { lessonHtml, parseLesson, type CoachPart } from './grammarCoach'
+import { DETAIL_BUTTON, readInline, lessonHtml, parseLesson, setReader, type CoachPart } from './grammarCoach'
 import { foldTyping } from './vietjiSuggest'
 import { fromVietji, hasForeign, phraseVietji, stripReadings, type SuggestedReply } from './vietji'
 
@@ -61,6 +61,10 @@ export function parseCheck(reply: string): CheckResult | null {
     return grammar ? { ok: false, wrong, right, why, grammar: true } : { ok: false, wrong, right, why }
 }
 
+// the Việt-ji line next to a fixed sentence (asked: the fix should show how it is read too)
+const sayReading = (t: string) => { const v = phraseVietji(t); return v ? `<span style="font-size:.85em;color:#f2c76b;font-weight:600;margin-left:.35em">${v.replace(/[&<>"]/g, '')}</span>` : '' }
+setReader(phraseVietji)
+
 /** The reply without its check block (a block still streaming is cut off), and the "Sửa:" line for a fix. */
 export function splitCheck(reply: string): { main: string; note: string } {
     const check = parseCheck(reply)
@@ -71,7 +75,7 @@ export function splitCheck(reply: string): { main: string; note: string } {
     if (fix.grammar) return { main, note: lessonHtml({ wrote: fix.wrong, fix: fix.right, parts: fix.parts ?? [], point: fix.why }) }
     const label = '<span style="color:#e0a46b;font-weight:600">Sửa:</span>'
     const note = `\n\n<div style="margin-top:.4em;font-size:.9em;opacity:.9">${label} `
-        + `<s style="opacity:.7">${esc(fix.wrong)}</s> → <b>${esc(fix.right)}</b>${fix.why ? ` <span style="opacity:.75">(${esc(fix.why)})</span>` : ''}</div>`
+        + `<s style="opacity:.7">${esc(fix.wrong)}</s> → <b>${esc(fix.right)}</b>${sayReading(fix.right)}${fix.why ? ` <span style="opacity:.75">(${readInline(fix.why)})</span>` : ''}${DETAIL_BUTTON}</div>`
     return { main, note }
 }
 
@@ -137,7 +141,7 @@ export function memoryNote(vocab: VocabItem[], mistakes: Mistake[], history: boo
     ]
     if (opts.grammarLater) {
         // words first, grammar a little at a time (asked: think in Vietnamese, put the words together, be corrected slowly)
-        lines.push('The player learns words first: they think in Vietnamese and put the foreign words together in Vietnamese word order (我 想 她 有点 傻 for "tôi nghĩ cô ấy hơi ngốc"). Answer what they meant. When every word is a right word for what they meant and only the order, a particle or a grammar word is off, the check teaches like a kind teacher: [[CHECK grammar <what they wrote> → <the natural sentence> | <part they wrote> → <what to write>: <why, in a few simple Vietnamese words>; <next part> → <what to write>: <why> | <the ONE grammar point to remember, in Vietnamese>]], at most three parts, the most useful first, and one point a reply; nothing else is marked wrong. Use the plain [[CHECK <wrong> → <right> | why]] only when a word itself is wrong.')
+        lines.push('The player learns words first: they think in Vietnamese and put the foreign words together in Vietnamese word order (我 想 她 有点 傻 for "tôi nghĩ cô ấy hơi ngốc"). Answer what they meant. When every word is a right word for what they meant and only the order, a particle or a grammar word is off, the check teaches like a kind teacher: [[CHECK grammar <what they wrote> → <the natural sentence> | <part they wrote> → <what to write>: <why, in a few simple Vietnamese words>; <next part> → <what to write>: <why> | <the ONE grammar point to remember, in Vietnamese>]], at most three parts, the most useful first, and one point a reply; nothing else is marked wrong. Use the plain [[CHECK <wrong> → <right> | why]] only when a word itself is wrong. The natural sentence keeps every idea they wrote (if they wrote I think or should, it stays), and reads their words as the Vietnamese they came from: after a verb, Vietnamese lại is usually not again (bình tĩnh lại = calm down, ngồi lại = sit back down), so 다시/又/また/otra vez/encore picked for it become the language\'s own way to say calm down.')
         const seen = (opts.grammar ?? []).slice(0, 12)
         if (seen.length) lines.push(`Grammar points the player has already been shown (newest first, how many times): ${seen.map((g) => `${g.point} (${g.count})`).join('; ')}. When one of these comes up again, remind it in a few words; otherwise teach a new point, simplest first.`)
     }

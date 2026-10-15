@@ -11,6 +11,10 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
+    import { allowCoach, readInline, detailPrompt, installDetailButton, parseDetail, type Detail } from "src/ts/process/grammarCoach";
+    import { phraseVietji } from "src/ts/process/vietji";
+    import { mixChips } from "src/ts/process/vietjiSuggest";
+    import { rememberThought } from "src/ts/process/learningThought";
     import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
@@ -116,7 +120,7 @@
         // an offered answer that starts with the typed sound is most likely what is being typed: it goes first
         const offeredHit = soundMatch(value ?? '', offered) ? rest.filter((s) => s.source === 'reply' || s.source === 'heard' || s.source === 'starter') : []
         // at most four of them, so the word-by-word chips (我 alone) still have room
-        const both = soundTyping ? [...offeredHit.slice(0, 4), ...imeItems, ...rest] : [...rest, ...imeItems]   // sound first only when it is clearly sound
+        const both = mixChips(rest, imeItems, offeredHit, { soundTyping, listSure })
         // one chip per outcome: the same characters can come from two places (冷静 from the compose chips and the list), and the
         // each block is keyed by this (reported: Svelte each_key_duplicate when it was keyed by the text)
         const seen = new Set<string>()
@@ -198,13 +202,40 @@
         })
     })
 
+    // "🔍 Chi tiết" under a reply's grammar note: the sentence word by word, asked of the model once per sentence when pressed
+    let detail = $state<{ fix: string; wrote: string; data: Detail | null; loading: boolean; error: string } | null>(null)
+    const detailAsker = makeAsker<Detail | null>(async (key) => {
+        const [l, fix, wrote] = JSON.parse(key) as [string, string, string]
+        const { requestChatData } = await import("src/ts/process/request/request")
+        const res = await requestChatData({ formated: [{ role: 'user', content: detailPrompt(fix, wrote, l) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+        return res.type === 'success' && typeof res.result === 'string' ? parseDetail(res.result) : null
+    })
+    $effect(() => {
+        if (!enabled) return
+        return installDetailButton((fix, wrote) => {
+            const key = JSON.stringify([lang, fix, wrote])
+            const cached = detailAsker.cached(key)
+            detail = { fix, wrote, data: cached ?? null, loading: !cached, error: '' }
+            if (cached) return
+            if (!allowCoach()) { detail = { ...detail, loading: false, error: 'Bấm nhiều quá, đợi chút rồi bấm lại.' }; return }
+            detailAsker.ask(key).then((d) => {
+                if (detail?.fix === fix) detail = { ...detail, data: d, loading: false, error: d ? '' : 'Chưa phân tích được câu này.' }
+            }).catch(() => { if (detail?.fix === fix) detail = { ...detail, loading: false, error: 'Không gọi được model.' } })
+        })
+    })
+
     // a chat from before the notebook was per language brings its phrases in as soon as it is opened
     $effect(() => { if (enabled && chat) migrateChat(DBState.db, lang, chat) })
     $effect(() => { items; selected = 0 })
     $effect(() => { value; hidden = false })
 
+    // the Vietnamese behind each picked word, so the check after sending corrects toward what was meant (learningThought.ts)
+    let thought: string[] = []
     function choose(s: Suggestion) {
+        const viet = typedViet || (s.source === 'reply' || s.source === 'heard' || s.source === 'starter' ? s.meaning ?? '' : '')
+        if (!composeMode) thought = []
         value = insertText(s, lang)
+        if (viet) { thought.push(viet); rememberThought(value ?? '', thought.join(' ')) }
         input?.focus()
     }
 
@@ -232,6 +263,40 @@
 
 {#if enabled}
     <div class={"flex flex-col shrink-0 px-4 pb-1 gap-1 " + (floating ? 'absolute bottom-full left-0 right-0 pt-1 bg-bgcolor' : 'mb-1')}>
+        {#if detail}
+            <div class="max-h-80 overflow-y-auto rounded-md border border-darkborderc bg-darkbg p-2 text-sm" aria-label="Ngữ pháp chi tiết">
+                <div class="flex justify-between items-baseline gap-2 mb-1">
+                    <div><span class="text-xs" style="color:#8fb8ff;font-weight:600">Ngữ pháp chi tiết</span>
+                        <span class="text-lg font-semibold ml-2">{stripReadings(detail.fix)}</span>
+                        <span class="text-xs ml-1" style="color:#f2c76b;font-weight:600">{phraseVietji(detail.fix) ?? ''}</span></div>
+                    <button class="text-textcolor2 hover:text-textcolor" title="Đóng" onclick={() => { detail = null }}>✕</button>
+                </div>
+                {#if detail.wrote}<div class="text-xs text-textcolor2 mb-1">bạn viết: <s>{detail.wrote}</s> <span style="color:#f2c76b;font-weight:600">{phraseVietji(detail.wrote) ?? ''}</span></div>{/if}
+                {#if detail.loading}
+                    <div class="text-xs text-textcolor2">đang phân tích từng chữ…</div>
+                {:else if detail.error}
+                    <div class="text-xs text-textcolor2">{detail.error}</div>
+                {:else if detail.data}
+                    {#if detail.data.pattern}<div class="text-xs mb-1"><span style="color:#8fb8ff">Mẫu câu:</span> {@html readInline(detail.data.pattern)}</div>{/if}
+                    <table class="w-full text-xs">
+                        <tbody>
+                        {#each detail.data.words as w, k (w.word + '#' + k)}
+                            <tr class="border-b border-darkborderc/40 align-top">
+                                <td class="py-0.5 pr-2 text-base font-semibold text-textcolor whitespace-nowrap">{w.word}</td>
+                                <td class="py-0.5 pr-2 whitespace-nowrap" style="color:#f2c76b;font-weight:600">{phraseVietji(w.word) ?? ''}</td>
+                                <td class="py-0.5 pr-2 text-textcolor2 whitespace-nowrap">{w.role}</td>
+                                <td class="py-0.5 pr-2 text-textcolor">{@html readInline(w.meaning)}{#if w.note}<span class="text-textcolor2"> · {@html readInline(w.note)}</span>{/if}</td>
+                            </tr>
+                        {/each}
+                        </tbody>
+                    </table>
+                    {#if detail.data.changes.length}
+                        <div class="text-xs mt-1" style="color:#8fb8ff">Vì sao đổi</div>
+                        {#each detail.data.changes as c, k (k)}<div class="text-xs">• {@html readInline(c)}</div>{/each}
+                    {/if}
+                {/if}
+            </div>
+        {/if}
         {#if bookOpen}
             <div class="max-h-72 overflow-y-auto rounded-md border border-darkborderc bg-darkbg p-2 text-sm" aria-label="Sổ từ">
                 <div class="flex justify-between text-xs text-textcolor2 mb-1">
