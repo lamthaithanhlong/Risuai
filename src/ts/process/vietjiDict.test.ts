@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dictSuggestions, loadWordList, segment, type WordList } from './vietjiDict'
+import { dictSuggestions, loadWordList, makeAsker, needsModel, segment, type WordList } from './vietjiDict'
 import { suggest, suggestionPool } from './vietjiSuggest'
 
 const words: WordList = {
@@ -39,23 +39,72 @@ describe('the offline word list', () => {
         const calls: string[] = []
         let ok = false
         const f = (async (url: string) => { calls.push(url); return ok ? { ok: true, json: async () => ({ words }) } : Promise.reject(new Error('offline')) }) as any
-        expect(await loadWordList('ja', f)).toBe(null)
+        expect(await loadWordList('ru' as any, f)).toBe(null)                // no list for that language: not even fetched
         expect(await loadWordList('fr', f)).toBe(null)
         ok = true
-        expect((await loadWordList('fr', f))?.['có']).toEqual(['avoir', 'il y a', 'oui'])
+        expect((await loadWordList('fr', f))?.words['có']).toEqual(['avoir', 'il y a', 'oui'])
         await loadWordList('fr', f)
         expect(calls).toEqual(['/dict/vi-fr.json', '/dict/vi-fr.json'])
     })
+    it('asks the model only for what the list does not have or only guessed', () => {
+        const dict = { words, unsure: new Set(['nước']) }
+        expect(needsModel('tôi đói', dict)).toBe(false)
+        expect(needsModel('tôi uống nước', dict)).toBe(true)             // one guessed word is enough
+        expect(needsModel('xyz', dict)).toBe(true)                       // nothing known
+        expect(needsModel('có', null)).toBe(true)                        // no list
+        expect(needsModel('tôi xyz đói', dict)).toBe(true)               // a word the list lacks is not dropped silently
+        expect(needsModel('Tôi đói!', dict)).toBe(false)                 // case and punctuation are not words
+    })
+    it('what the model answered goes before a guess from the list', () => {
+        const pool = suggestionPool({ lang: 'fr', dict: dictSuggestions('có', words, 'fr'), asked: [{ text: '«Oui»', vietji: 'uy', meaning: 'Có' }] })
+        expect(suggest('có', pool)[0].text).toBe('«Oui»')
+    })
 })
 
-describe('the built French list (public/dict/vi-fr.json)', async () => {
+describe('the built lists (public/dict/vi-*.json)', async () => {
     const { readFileSync } = await import('fs')
-    const real: WordList = JSON.parse(readFileSync('public/dict/vi-fr.json', 'utf8')).words
+    const list = (l: string) => JSON.parse(readFileSync(`public/dict/vi-${l}.json`, 'utf8'))
+    const real: WordList = list('fr').words
+    it.each([
+        ['ja', 'uống', '飲む'], ['ja', 'nước', '水'], ['ja', 'tôi', '私'], ['ja', 'cá', '魚'],
+        ['zh', 'uống', '喝'], ['zh', 'nước', '水'], ['zh', 'tôi', '我'], ['zh', 'cá', '鱼'],
+        ['ko', 'uống', '마시다'], ['ko', 'nước', '물'], ['ko', 'tôi', '저'], ['ko', 'có', '있다'],
+        ['es', 'uống', 'beber'], ['es', 'nước', 'agua'], ['es', 'tôi', 'yo'], ['es', 'cá', 'pescado'],
+    ])('%s: %s → %s first', (l, vi, want) => expect(list(l).words[vi]?.[0]?.replace(/\[[^\]]*\]/g, '')).toBe(want))
+    it.each(['ja', 'zh', 'ko', 'es'])('%s: every word has a reading in the bar, and "unsure" lists only words of the list', (l) => {
+        const d = list(l)
+        const sample = Object.keys(d.words).filter((_, i) => i % 400 === 0)
+        for (const vi of sample) expect(dictSuggestions(vi, d.words, l as any).length, `${l} ${vi}`).toBeGreaterThan(0)
+        expect(d.unsure.every((w: string) => w in d.words)).toBe(true)
+    })
+    it.each(['fr', 'ja', 'zh', 'ko', 'es'])('%s stays under 2 MB', (l) => {
+        expect(readFileSync(`public/dict/vi-${l}.json`).length).toBeLessThan(2_000_000)
+    })
     it.each([
         ['có', 'avoir'], ['tôi', 'je'], ['không', 'non'], ['bao nhiêu', 'combien'], ['cảm ơn', 'merci'], ['đói', 'avoir faim'],
         ['uống', 'boire'], ['nước', 'eau'], ['ở đâu', 'où'], ['xin chào', 'bonjour'],
     ])('%s → %s first', (vi, fr) => expect(real[vi]?.[0]).toBe(fr))
-    it('stays small enough to load on a phone', () => {
-        expect(readFileSync('public/dict/vi-fr.json').length).toBeLessThan(800_000)
+})
+
+describe('asking the model (docs/specs/VietjiBar.tla)', () => {
+    it('a request still out is shared: typing away and back does not ask again', async () => {
+        let calls = 0, release!: (v: string) => void
+        const asker = makeAsker((k: string) => { calls++; return new Promise<string>((r) => { release = r }) })
+        const a1 = asker.ask('fr|có')
+        expect(asker.pending('fr|có')).toBe(true)
+        const a2 = asker.ask('fr|có')                                // back to the same text while it is out
+        release('oui')
+        expect(await a1).toBe('oui'); expect(await a2).toBe('oui')
+        expect(calls).toBe(1)
+        expect(asker.cached('fr|có')).toBe('oui')
+        await asker.ask('fr|có'); expect(calls).toBe(1)              // answered: kept
+    })
+    it('a failed request is forgotten, so the next pause asks again', async () => {
+        let calls = 0
+        const asker = makeAsker(async () => { calls++; if (calls === 1) throw new Error('down'); return 'ok' })
+        await expect(asker.ask('k')).rejects.toThrow('down')
+        expect(asker.pending('k')).toBe(false)
+        expect(await asker.ask('k')).toBe('ok')
+        expect(calls).toBe(2)
     })
 })

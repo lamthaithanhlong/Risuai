@@ -86,8 +86,8 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
         seen.add(key)
         pool.push(s)
     }
+    for (const r of opts.asked ?? []) add({ ...r, source: 'asked' })        // asked only when the list had nothing or guessed
     for (const r of opts.dict ?? []) add({ ...r, source: 'dict' })
-    for (const r of opts.asked ?? []) add({ ...r, source: 'asked' })
     for (const r of parseReplies(opts.lastReply ?? '')) add({ ...r, source: 'reply' })
     for (const v of readVocab(opts.vocab)) add({ text: v.text, vietji: v.vietji, meaning: v.meaning ?? '', source: 'heard' })
     for (const s of starterSet(opts.lang)) add(s)

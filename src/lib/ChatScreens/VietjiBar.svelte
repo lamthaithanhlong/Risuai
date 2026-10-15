@@ -9,7 +9,7 @@
     import { KIND_LABEL, parseReplies, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { insertText, looksVietnamese, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
-    import { dictSuggestions, loadWordList, type WordList } from "src/ts/process/vietjiDict";
+    import { dictSuggestions, loadWordList, makeAsker, needsModel, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
 
@@ -32,44 +32,49 @@
     let asked = $state<SuggestedReply[]>([])
     let asking = $state(false)
     let typedViet = $derived(enabled && looksVietnamese(value ?? '') ? (value ?? '').trim() : '')
-    // the offline word list (French for now) answers first, at once; the model is asked only when it has nothing
-    let wordList = $state<WordList | null>(null)
+    // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
+    let wordList = $state<Dictionary | null>(null)
     let wordListLang = $state('')
+    let listReady = $state(false)
     $effect(() => {
         if (!typedViet || wordListLang === lang) return
         const want = lang
         wordListLang = want
         wordList = null
-        loadWordList(want).then((w) => { if (lang === want) wordList = w })
+        listReady = false
+        loadWordList(want).then((w) => { if (lang === want) { wordList = w; listReady = true } })
     })
-    let fromList = $derived(typedViet && wordListLang === lang ? dictSuggestions(typedViet, wordList, lang) : [])
+    let fromList = $derived(typedViet && wordListLang === lang ? dictSuggestions(typedViet, wordList?.words ?? null, lang) : [])
+    let listSure = $derived(fromList.length > 0 && !needsModel(typedViet, wordList))
     let pool = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang, dict: fromList, asked: askedFor === typedViet ? asked : [] }) : [])
     let items = $derived(enabled ? suggest(value ?? '', pool) : [])
     // what the notebook alone offers for it: two or more fitting phrases and the model is not asked
     let foundInBook = $derived(typedViet ? suggest(typedViet, suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang })).length : 0)
-    const askCache = new Map<string, SuggestedReply[]>()
+    const asker = makeAsker<SuggestedReply[]>(async (key) => {
+        const [askLang, viet] = [key.slice(0, key.indexOf('|')) as LearningLang, key.slice(key.indexOf('|') + 1)]
+        const { requestChatData } = await import("src/ts/process/request/request")
+        const known = notebook.vocab.filter((v) => (v.ok ?? 0) > 0).map((v) => stripReadings(v.text))
+        const res = await requestChatData({ formated: [{ role: 'user', content: howToSayPrompt(viet, askLang, known) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
+        return res.type === 'success' && typeof res.result === 'string' ? parseReplies(res.result) : []
+    })
 
+    // docs/specs/VietjiBar.tla: wait for the word list before the pause timer (else a text the list knows is asked when the
+    // list is slow), and share a request still out instead of asking again
     $effect(() => {
         const viet = typedViet
-        if (!viet || viet.length < 2 || viet.length > 120 || foundInBook >= 2 || fromList.length) { asking = false; return }
+        if (!viet || viet.length < 2 || viet.length > 120 || foundInBook >= 2 || !listReady || listSure) { asking = false; return }
         const key = `${lang}|${viet}`
-        if (askCache.has(key)) { asked = askCache.get(key); askedFor = viet; return }
+        const hit = asker.cached(key)
+        if (hit) { asked = hit; askedFor = viet; return }
         let live = true
-        const timer = setTimeout(async () => {
+        const show = (p: Promise<SuggestedReply[]>) => {
             asking = true
-            try {
-                const { requestChatData } = await import("src/ts/process/request/request")
-                const known = notebook.vocab.filter((v) => (v.ok ?? 0) > 0).map((v) => stripReadings(v.text))
-                const res = await requestChatData({ formated: [{ role: 'user', content: howToSayPrompt(viet, lang, known) }], bias: {}, useStreaming: false, noMultiGen: true }, 'model')
-                const got = res.type === 'success' && typeof res.result === 'string' ? parseReplies(res.result) : []
-                askCache.set(key, got)
-                if (live) { asked = got; askedFor = viet }
-            } catch (e) {
-                console.warn('[vietji] how-to-say request failed', e)
-            } finally {
-                if (live) asking = false
-            }
-        }, 900)
+            p.then((got) => { if (live) { asked = got; askedFor = viet } })
+                .catch((e) => console.warn('[vietji] how-to-say request failed', e))
+                .finally(() => { if (live) asking = false })
+        }
+        if (asker.pending(key)) { show(asker.ask(key)); return () => { live = false } }
+        const timer = setTimeout(() => show(asker.ask(key)), 900)
         return () => { live = false; clearTimeout(timer) }
     })
     let selected = $state(0)
