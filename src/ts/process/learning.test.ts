@@ -268,3 +268,12 @@ describe('the Vietnamese thought survives a reload', () => {
         forgetThoughts()
     })
 })
+
+describe('reported: 😨 “아직 안전하지 않아요…” — no one could tell who said it', () => {
+    it('the note and the reminder ask for the speaker name before every foreign line', () => {
+        Object.assign(db, { learningLang: 'ko' })
+        const out = learningRequest(req('안녕'))
+        expect(out.find((m: any) => m.role === 'system').content).toContain('Every foreign line starts with who says it')
+        expect(out.filter((m: any) => m.role === 'user').pop().content).toContain('starting with their name (Name: “…”)')
+    })
+})

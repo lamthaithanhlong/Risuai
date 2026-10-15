@@ -75,7 +75,7 @@ export function learningNote(lang: LearningLang): string {
     return [
         `LEARNING FORMAT. The player is learning ${name} from zero. The foreign speaker in this story (Haru, if the story has one) speaks ${name}; everyone else keeps the story's own language, except that in EVERY reply the character who speaks to the player says one short line of their dialogue in ${name} (the rest of what they say stays in the story's language). If no one speaks to the player in a reply, the narration shows one short ${name} phrase that fits the scene (a sign, a word someone mutters).`,
         LANG_FORMAT[lang] ?? LANG_FORMAT.ja,
-        'After every foreign line, its Vietnamese meaning in parentheses on the same line. Short everyday sentences; at most two new words per reply, reused soon after.',
+        'Every foreign line starts with who says it, named the way the story names them (Người phụ nữ: “…”, Haru: “…”), so the player knows whether it is theirs or someone else\'s; never a line with only an emoji before it. After every foreign line, its Vietnamese meaning in parentheses on the same line. Short everyday sentences; at most two new words per reply, reused soon after.',
         'When the player writes in the foreign language, the character understands it and answers that line in the foreign language too.',
         'The player may type the foreign language by sound in Vietnamese letters without tone marks (for example "an nhong ha se do" for 안녕하세요, "ni hao" for 你好); understand it as that language and answer it.',
         'EVERY reply, without exception, ends with four to six things the player could answer next, one per line, written the same way, each followed by | its Vietnamese meaning | its kind: two "easy" (short, plain), one or two "stretch" (one new word, or a longer sentence that says more), and at least one "workaround" that says the idea with only words the player already knows, the way one talks around a missing word. Answers that fit the moment, and one way to say no:\n[[REPLIES\n<answer> | <meaning> | easy\n<answer> | <meaning> | stretch\n<answer> | <meaning> | workaround\n]]',
@@ -136,7 +136,7 @@ export function learningReminder(lang: LearningLang, grammarLater = false): stri
     const check = grammarLater
         ? 'then, if the player wrote in that language, one check line: [[CHECK ok]] when it was right, [[CHECK grammar <what they wrote> → <the natural sentence> | <part> → <right>: <why in simple Vietnamese>; <part> → <right>: <why> | <the one point to remember, in Vietnamese>]] when the words were right and only the order or grammar was off, or [[CHECK <wrong word> → <right word> | <why in Vietnamese>]] when a word was wrong'
         : 'then the [[CHECK]] line if the player wrote in that language'
-    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''} with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, ${check}.]`
+    return `\n\n[Format for this reply: the character speaking to the player says one short line in ${LANG_NAME[lang] ?? LANG_NAME.ja}${REMIND_WRITING[lang] ?? ''}, starting with their name (Name: “…”), with its Vietnamese meaning in parentheses, and the reply ends with the [[REPLIES ...]] block of four to six answers, ${check}.]`
 }
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */
