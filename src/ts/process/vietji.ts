@@ -274,10 +274,22 @@ export function collectVocab(message: string): SuggestedReply[] {
     return [...out, ...parseReplies(message)]
 }
 
+/**
+ * A stored vocabulary list as a clean array. Rows saved before the four-language version have `kana` instead of `text`; rows
+ * without a phrase or a reading are dropped. A bad value gives an empty list.
+ */
+export function readVocab<T extends SuggestedReply>(stored: string | null | undefined): T[] {
+    let raw: any[] = []
+    try { const p = JSON.parse(stored || '[]'); if (Array.isArray(p)) raw = p } catch { /* a bad value starts a new list */ }
+    return raw
+        .map((v) => (v && typeof v === 'object' ? { ...v, text: v.text ?? v.kana } : null))
+        .filter((v) => v && typeof v.text === 'string' && typeof v.vietji === 'string')
+        .map(({ kana, ...v }) => v as T)
+}
+
 /** Adds new phrases to a stored list (JSON), newest first, no repeats, at most `max`. */
 export function mergeVocab(stored: string | null | undefined, found: SuggestedReply[], max = 300): string {
-    let list: SuggestedReply[] = []
-    try { const p = JSON.parse(stored || '[]'); if (Array.isArray(p)) list = p } catch { /* a bad value starts a new list */ }
+    let list: SuggestedReply[] = readVocab(stored)
     for (const item of found) {
         // a phrase met again keeps its review state (learningMemory.ts) and moves to the front
         const old = list.find((x) => x.text === item.text)

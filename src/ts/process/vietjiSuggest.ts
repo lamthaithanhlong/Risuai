@@ -3,7 +3,7 @@
 // match, newest first: the speaker's suggested answers, then what the speaker said, then a small starter set per language.
 
 import type { LearningLang, SuggestedReply } from './vietji'
-import { parseReplies, phraseVietji, setLatinLanguage, stripReadings } from './vietji'
+import { parseReplies, phraseVietji, readVocab, setLatinLanguage, stripReadings } from './vietji'
 
 export type Suggestion = SuggestedReply & { source: 'reply' | 'heard' | 'starter' }
 
@@ -57,10 +57,7 @@ export function suggestionPool(opts: { lastReply?: string; vocab?: string; lang:
         pool.push(s)
     }
     for (const r of parseReplies(opts.lastReply ?? '')) add({ ...r, source: 'reply' })
-    try {
-        const list = JSON.parse(opts.vocab || '[]')
-        if (Array.isArray(list)) for (const v of list) if (v?.text && v?.vietji) add({ text: v.text, vietji: v.vietji, meaning: v.meaning ?? '', source: 'heard' })
-    } catch { /* no list yet */ }
+    for (const v of readVocab(opts.vocab)) add({ text: v.text, vietji: v.vietji, meaning: v.meaning ?? '', source: 'heard' })
     for (const s of starterSet(opts.lang)) add(s)
     return pool
 }

@@ -3,7 +3,7 @@
 
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
-import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
+import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, readVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
 import { addMistake, gradeUse, memoryNote, parseCheck, splitCheck, type Mistake, type VocabItem } from './learningMemory'
 
 export const VOCAB_VAR = '$vj_vocab'
@@ -68,7 +68,7 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     const db = getDatabase()
     if (!db.learningMode) return formated
     // the format note goes right before the last user message, where the model weighs it most; it carries what to review
-    const memory = memoryNote(readList<VocabItem>(chat, VOCAB_VAR), readList<Mistake>(chat, MISTAKES_VAR), readList<boolean>(chat, HISTORY_VAR), now)
+    const memory = memoryNote(readVocab<VocabItem>(chat?.scriptstate?.[VOCAB_VAR] as string), readList<Mistake>(chat, MISTAKES_VAR), readList<boolean>(chat, HISTORY_VAR), now)
     const note = { role: 'system', content: learningNote((db.learningLang ?? 'ja') as LearningLang) + '\n' + memory } as T
     let lastUser = -1
     formated.forEach((m, i) => { if (m.role === 'user') lastUser = i })
@@ -86,6 +86,15 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */
 export function noteLearningVocab(chat: Chat | undefined, now = Date.now()): void {
+    // never let the learning notes break a reply, but never fail silently either (a bad stored row once stopped all grading)
+    try {
+        rememberReply(chat, now)
+    } catch (e) {
+        console.warn('[learning] could not update the vocabulary', e)
+    }
+}
+
+function rememberReply(chat: Chat | undefined, now: number): void {
     if (!chat || !learningOn()) return
     const last = chat.message?.at(-1)
     if (!last || last.role !== 'char') return
@@ -97,7 +106,7 @@ export function noteLearningVocab(chat: Chat | undefined, now = Date.now()): voi
     const check = parseCheck(last.data)
     if (!check) return
     const userLine = chat.message.slice(0, -1).findLast((m) => m.role === 'user')?.data ?? ''
-    chat.scriptstate[VOCAB_VAR] = JSON.stringify(gradeUse(readList<VocabItem>(chat, VOCAB_VAR), userLine, check, now))
+    chat.scriptstate[VOCAB_VAR] = JSON.stringify(gradeUse(readVocab<VocabItem>(chat.scriptstate[VOCAB_VAR] as string), userLine, check, now))
     chat.scriptstate[MISTAKES_VAR] = JSON.stringify(addMistake(readList<Mistake>(chat, MISTAKES_VAR), check, now))
     chat.scriptstate[HISTORY_VAR] = JSON.stringify([...readList<boolean>(chat, HISTORY_VAR), check.ok].slice(-30))
 }

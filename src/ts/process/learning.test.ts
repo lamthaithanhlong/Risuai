@@ -95,4 +95,20 @@ describe('learning mode on', () => {
         const out = learningRequest(req('x'), chat, 1_800_000_000_000)
         expect(out.find((m: any) => m.role === 'system').content).toContain('はい (Vâng)')
     })
+    it('still grades with rows saved in the old format (kana instead of text)', () => {
+        const chat: any = {
+            message: [{ role: 'user', data: 'phu ta tsu dde su ca' }, { role: 'char', data: 'Haru gật đầu.\n[[CHECK ok]]' }],
+            scriptstate: { [VOCAB_VAR]: JSON.stringify([
+                { kana: 'ふたつ ですか。', vietji: 'phư-ta-tsư đê-sư-ca', meaning: 'Hai đồng à?' },
+                { text: 'はい', vietji: 'ha-i', meaning: 'Vâng' },
+                'junk', { text: 'no reading' },
+            ]) },
+        }
+        noteLearningVocab(chat, 1_800_000_000_000)
+        const vocab = JSON.parse(chat.scriptstate[VOCAB_VAR])
+        expect(vocab.map((v: any) => v.text)).toEqual(['ふたつ ですか。', 'はい'])
+        expect(vocab[0].reps).toBe(1)
+        expect(vocab[0].kana).toBeUndefined()
+        expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([true])
+    })
 })
