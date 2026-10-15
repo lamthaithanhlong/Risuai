@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { AccessibilityIcon, ActivityIcon, PackageIcon, BotIcon, BoxIcon, CodeIcon, ContactIcon, LanguagesIcon, MonitorIcon, Sailboat, UserIcon, CircleXIcon, KeyboardIcon, SparkleIcon } from "@lucide/svelte";
+    import { AccessibilityIcon, ActivityIcon, PackageIcon, BotIcon, BoxIcon, CodeIcon, ContactIcon, LanguagesIcon, MonitorIcon, Sailboat, UserIcon, CircleXIcon, KeyboardIcon, SparkleIcon, GraduationCapIcon } from "@lucide/svelte";
     import { language } from "src/lang";
     import DisplaySettings from "./Pages/DisplaySettings.svelte";
     import UserSettings from "./Pages/UserSettings.svelte";
@@ -22,6 +22,7 @@
     import ModuleSettings from "./Pages/Module/ModuleSettings.svelte";
   import { isLite } from "src/ts/lite";
     import HotkeySettings from "./Pages/HotkeySettings.svelte";
+    import LearningSettings from "./Pages/LearningSettings.svelte";
     import PluginDefinedIcon from "../Others/PluginDefinedIcon.svelte";
 
     let openLoreList = $state(false)
@@ -95,6 +96,15 @@
                     }}>
                         <AccessibilityIcon />
                         <span>{language.accessibility}</span>
+                    </button>
+                    <button class="flex gap-2 items-center hover:text-textcolor"
+                        class:text-textcolor={$SettingsMenuIndex === 18}
+                        class:text-textcolor2={$SettingsMenuIndex !== 18}
+                        onclick={() => {
+                            $SettingsMenuIndex = 18
+                    }}>
+                        <GraduationCapIcon />
+                        <span>{language.learning}</span>
                     </button>
                     <button class="flex gap-2 items-center hover:text-textcolor"
                         class:text-textcolor={$SettingsMenuIndex === 14}
@@ -221,6 +231,8 @@
                         <AccessibilitySettings/>
                     {:else if $SettingsMenuIndex === 12}
                         <PersonaSettings/>
+                    {:else if $SettingsMenuIndex === 18}
+                        <LearningSettings/>
                     {:else if $SettingsMenuIndex === 14}
                         <ModuleSettings/>
                     {:else if $SettingsMenuIndex === 13}

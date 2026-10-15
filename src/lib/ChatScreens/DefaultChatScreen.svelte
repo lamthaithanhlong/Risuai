@@ -1,4 +1,5 @@
 <script lang="ts">
+    import VietjiBar from "./VietjiBar.svelte";
     import { NO_REPLY_NOTE, shouldRetryEmptyReply, visibleReply } from "src/ts/process/emptyReply";
     import { jevCheck } from "src/ts/process/jevGuard";
     import { untrack } from "svelte";
@@ -711,6 +712,9 @@
                     class="{DBState.db.fixedChatTextarea ? 'sticky pt-2 pb-2 right-0 bottom-0 bg-bgcolor' : 'mt-2 mb-2'} flex items-stretch w-full"
                     style="{DBState.db.fixedChatTextarea ? 'z-index:29;' : ''}"
             >
+                {#if DBState.db.fixedChatTextarea}
+                    <VietjiBar floating bind:value={messageInput} chat={currentCharacter?.chats?.[currentCharacter.chatPage]} input={inputEle} />
+                {/if}
                 {#if DBState.db.useChatSticker && currentCharacter.type !== 'group'}
                     <div onclick={()=>{toggleStickers = !toggleStickers}}
                          class={"ml-4 bg-textcolor2 flex justify-center items-center  w-12 h-12 rounded-md hover:bg-blue-500 transition-colors "+(toggleStickers ? 'text-green-500':'text-textcolor')}>
@@ -823,6 +827,11 @@
                     </div>
                 {/if}
             </div>
+            <!-- the list is column-reverse: placed after the input row, the bar shows above it. With a fixed textarea it rides inside
+                 the sticky row instead (the scroll handler above counts this container's children). -->
+            {#if !DBState.db.fixedChatTextarea}
+                <VietjiBar bind:value={messageInput} chat={currentCharacter?.chats?.[currentCharacter.chatPage]} input={inputEle} />
+            {/if}
             {#if DBState.db.useAutoTranslateInput && DBState.db.characters[$selectedCharID]?.chaId !== '§playground'}
                 <div class="flex items-center mt-2 mb-2">
                     <label for='messageInputTranslate' class="text-textcolor ml-4">

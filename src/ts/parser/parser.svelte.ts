@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify';
 import markdownit from 'markdown-it'
 import { appVer, getCurrentCharacter, getDatabase, type Database, type character, type customscript, type groupChat, type triggerscript } from '../storage/database.svelte';
 import { DBState, selIdState } from '../stores.svelte';
+import { learningDisplay } from '../process/learning';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getChatVar, setChatVar, getGlobalChatVar } from './chatVar.svelte';
@@ -743,6 +744,9 @@ export async function ParseMarkdown(
     if(char){
         data = (await processScriptFull(char, data, 'editdisplay', chatID, cbsConditions)).data
     }
+
+    // Settings → Learning: Việt-ji readings over kana, suggested replies as a list (no-op when learning mode is off)
+    data = learningDisplay(data)
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {

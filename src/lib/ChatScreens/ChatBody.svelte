@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { learningKeepsOriginal } from "src/ts/process/learning";
     import isEqual from "lodash/isEqual"
     import { DBState } from 'src/ts/stores.svelte'
     import { sleep } from "src/ts/util"
@@ -91,7 +92,7 @@
                 lastChatId = chatID
                 let translateText = false
                 try {
-                    if(DBState.db.autoTranslate){
+                    if(DBState.db.autoTranslate && !learningKeepsOriginal(data)){
                         if(DBState.db.autoTranslateCachedOnly && DBState.db.translatorType === 'llm'){
                             const cache = DBState.db.translateBeforeHTMLFormatting
                             ? await getLLMCache(data)

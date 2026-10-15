@@ -130,6 +130,12 @@ export function setDatabase(data:Database){
     if(checkNullish(data.autoTranslate)){
         data.autoTranslate = false
     }
+    // Learning mode (Việt-ji): off until the learner turns it on; its parts start on
+    data.learningMode ??= false
+    data.learningReadings ??= true
+    data.learningTyping ??= true
+    data.learningSuggest ??= true
+    data.learningLang ??= 'ja'
     if(checkNullish(data.fullScreen)){
         data.fullScreen = false
     }
@@ -886,6 +892,13 @@ export interface Database{
     textgenWebUIStreamURL:string
     textgenWebUIBlockingURL:string
     autoTranslate: boolean
+    /** Learning mode: Japanese kana shown with Việt-ji readings, Việt-ji typing turned into kana for the model (src/ts/process/vietji.ts). */
+    learningMode?: boolean
+    learningReadings?: boolean
+    learningTyping?: boolean
+    learningSuggest?: boolean
+    /** The language being learned: 'ja' | 'zh' | 'ko' | 'es'. */
+    learningLang?: string
     fullScreen:boolean
     playMessage:boolean
     iconsize:number
