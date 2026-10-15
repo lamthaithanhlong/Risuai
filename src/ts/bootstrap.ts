@@ -45,7 +45,7 @@ import {
     setUsingSw,
     checkCharOrder
 } from "./globalApi.svelte";
-import { isTauri } from "./platform";
+import { isNodeServer, isTauri } from "./platform";
 import { registerModelDynamic } from "./model/modellist";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
@@ -161,6 +161,13 @@ export async function loadData() {
                 // chat pictures this browser has and the server lacks go up in the background, and again every few minutes
                 // while the app stays open (files/inlaySync.ts)
                 void import('./process/files/inlays').then((m) => m.startInlaySync()).catch((e) => console.warn('[inlay] sync failed', e))
+                // pictures drawn by the server while this page was closed go into the messages they were for (imageJobClient.ts)
+                if (isNodeServer) {
+                    void Promise.all([import('./process/imageJobClient'), import('./storage/nodeStorage')])
+                        .then(([jobs, node]) => jobs.recoverImageJobs({ fetch: (input, init) => fetch(input, init), auth: node.getNodeServerProxyAuth }, getDatabase()))
+                        .then((r) => { if (r.placed.length || r.skipped.length) console.log(`[image] recovered ${r.placed.length} picture(s), ${r.skipped.length} without a message`) })
+                        .catch((e) => console.warn('[image] could not check the server picture jobs', e))
+                }
 
                 if (await forageStorage.checkAccountSync()) {
                     LoadingStatusState.text = "Checking Account Sync..."
@@ -635,8 +642,41 @@ async function cleanChunks(options:{
         for (const asset of sweep.remove) {
             await forageStorage.removeItem(asset)
         }
+        // chat pictures nothing uses any more (deleted chats, redrawn pictures): same two strikes (files/inlaySweep.ts)
+        if (isNodeServer) {
+            try {
+                const [{ sweepInlays, loadSeen, saveSeen }, inlays, { getColdStorageItem }] = await Promise.all([
+                    import('./process/files/inlaySweep'), import('./process/files/inlays'), import('./process/coldstorage.svelte'),
+                ])
+                await sweepInlays({
+                    referenceTexts: async () => {
+                        const texts: string[] = [JSON.stringify({ ...db, characters: undefined })]
+                        for (const cha of db.characters) {
+                            let full: unknown = cha
+                            if (cha?.coldstorage) {
+                                // a chat moved to cold storage still uses its pictures; if it cannot be read, keep everything
+                                const cold = await getColdStorageItem(cha.coldstorage)
+                                if (!cold) throw new Error(`cold storage ${cha.coldstorage} unreadable; picture sweep skipped`)
+                                full = cold
+                            }
+                            texts.push(JSON.stringify(full))
+                        }
+                        return texts
+                    },
+                    serverIds: async () => indexes.filter((k) => k.startsWith('inlays/')).map((k) => k.slice('inlays/'.length)),
+                    localIds: async () => (await inlays.listInlayAssets()).filter(([, a]) => a.type !== 'signature').map(([id]) => id),
+                    removeServer: (id) => forageStorage.removeItem(`inlays/${id}`),
+                    removeLocal: (id) => inlays.removeInlayAsset(id),
+                    seen: { load: () => loadSeen(), save: (s) => saveSeen(s) },
+                    now: () => Date.now(),
+                    log: (m) => console.log(m),
+                })
+            } catch (error) {
+                console.warn('[inlay] picture sweep skipped', error)
+            }
+        }
         for (const asset of indexes) {
-            if (asset.startsWith('assets/')) {
+            if (asset.startsWith('assets/') || asset.startsWith('inlays/')) {
                 continue
             }
             if (asset.endsWith('.meta')){

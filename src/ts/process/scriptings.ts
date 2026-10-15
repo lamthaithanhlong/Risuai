@@ -7,7 +7,8 @@ import { get } from "svelte/store";
 import { DBState, ReloadChatPointer, ReloadGUIPointer, selectedCharID } from "../stores.svelte";
 import { alertSelect, alertError, alertInput, alertNormal, alertConfirm } from "../alert";
 import { HypaProcesser } from "./memory/hypamemory";
-import { generateAIImage } from "./stableDiff";
+import { generateAIImage, openaiCompatImageRequest } from "./stableDiff";
+import { drawOnServer } from "./imageJobClient";
 import { writeInlayImage, getInlayAsset } from "./files/inlays";
 import { GENERATED_INLAY_MAX_SIDE } from "./files/inlaySize";
 import type { OpenAIChat, MultiModal } from "./index.svelte";
@@ -390,9 +391,36 @@ export async function runScripted(code:string, arg:{
                 }
             })
 
-            declareAPI('generateImage', async (id:string, value:string, negValue:string = '') => {
+            declareAPI('generateImage', async (id:string, value:string, negValue:string = '', index?:number) => {
                 if(!ScriptingLowLevelIds.has(id)){
                     return
+                }
+                // On the Node server the picture is drawn as a server job (imageJobClient.ts): it is finished and saved even if
+                // this page is closed meanwhile, and put in its message at the next start. `index` is the message it is for
+                // (negative counts from the end, as in getChat); without it, the last message.
+                const db = getDatabase()
+                // the same flag as platform.ts isNodeServer, read here because platform.ts touches `window` when it loads
+                const onNodeServer = !!(globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__
+                if(onNodeServer && db.sdProvider === 'openai-compat' && db.openaiCompatImage?.url){
+                    const msgs = ScriptingEngineState.chat?.message ?? []
+                    const at = typeof index === 'number' ? (index < 0 ? msgs.length + index : index) : msgs.length - 1
+                    const target = {
+                        charId: (char as character).chaId, chatId: ScriptingEngineState.chat?.id, chatIndex: (char as character).chatPage,
+                        messageId: msgs[at]?.chatId, messageIndex: at,
+                    }
+                    const { url, key, body, models } = openaiCompatImageRequest(value)
+                    try {
+                        // loaded here: the node storage module touches `window` when it loads, which scripts tests run without
+                        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+                        const out = await drawOnServer({ fetch: (input, init) => fetch(input, init), auth: getNodeServerProxyAuth }, { url, key, models, body }, target)
+                        if(out.inlayId){
+                            return `{{inlay::${out.inlayId}}}`
+                        }
+                        alertError(out.error ?? 'Image generation failed')
+                        return 'Error: ' + (out.error ?? 'Image generation failed')
+                    } catch (e) {
+                        console.warn('[image] server job unavailable, drawing in the page', e)
+                    }
                 }
                 const gen = await generateAIImage(value, char as character, negValue, 'inlay')
                 if(!gen){

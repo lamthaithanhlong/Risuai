@@ -62,6 +62,31 @@ export async function stableDiff(currentChar:character,prompt:string){
     return await generateAIImage(genPrompt, currentChar, neg, '')
 }
 
+/**
+ * The OpenAI-compatible picture request (Settings → Other Bots → Image Generation): body without a model, headers, and the models
+ * to try in order (the configured one, then the fallbacks). Shared by the page and the server job (imageJobClient.ts).
+ */
+export function openaiCompatImageRequest(genPrompt: string) {
+    const config = getDatabase().openaiCompatImage
+    const style = config.style?.trim()
+    const body: {[key:string]: any} = {
+        "prompt": style ? `${style}. ${genPrompt}` : genPrompt,
+        "n": 1,
+        "response_format": "b64_json",
+        "output_format": "png",
+        "background": "auto",
+        "size": config.size || "1024x1024",
+        "quality": config.quality || "auto"
+    }
+    const headers: {[key:string]: string} = { "Content-Type": "application/json" }
+    if(config.key){
+        headers["Authorization"] = "Bearer " + config.key
+    }
+    // The configured model first, then the fallback models in order, so one model that fails ("terminated", "not supported with this
+    // account") does not end the picture. A temporary failure of every model waits and goes round once more (imageRetry.ts).
+    return { url: config.url, key: config.key, body, headers, models: modelChain(config.model ?? '', config.fallbackModels) }
+}
+
 export async function generateAIImage(genPrompt:string, currentChar:character, neg:string, returnSdData:string):Promise<string|false>{
     const db = getDatabase()
     console.log(db.sdProvider)
@@ -732,32 +757,8 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
             return false
         }
 
-        const style = config.style?.trim()
-        const body: {[key:string]: any} = {
-            "prompt": style ? `${style}. ${genPrompt}` : genPrompt,
-            "n": 1,
-            "response_format": "b64_json",
-            "output_format": "png",
-            "background": "auto",
-            "size": config.size || "1024x1024",
-            "quality": config.quality || "auto"
-        }
+        const { body, headers, models: chain } = openaiCompatImageRequest(genPrompt)
 
-        if(config.model){
-            body.model = config.model
-        }
-
-        const headers: {[key:string]: string} = {
-            "Content-Type": "application/json"
-        }
-
-        if(config.key){
-            headers["Authorization"] = "Bearer " + config.key
-        }
-
-        // The configured model first, then the fallback models in order, so one model that fails ("terminated", "not supported with this
-        // account") does not end the picture. A temporary failure of every model waits and goes round once more (imageRetry.ts).
-        const chain = modelChain(config.model ?? '', config.fallbackModels)
         // Asked as a stream: the router then sends progress every few seconds while the model draws, so the connection is never silent
         // for the 30-60 s a picture takes (a silent one is what got cut off as "terminated"). parseImageStream reads the final picture.
         const streamHeaders = { ...headers, "Accept": "text/event-stream" }

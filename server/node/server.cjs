@@ -1224,6 +1224,52 @@ app.get('/hub-proxy/*', authenticatedRouteLimiter, hubProxyFunc);
 app.post('/proxy', authenticatedRouteLimiter, reverseProxyFunc);
 app.post('/proxy2', authenticatedRouteLimiter, reverseProxyFunc);
 app.post('/hub-proxy/*', authenticatedRouteLimiter, hubProxyFunc);
+// Chat pictures drawn on the server (imageJobs.cjs): the picture lands in inlays/<id> even when the page that asked is closed.
+let imageJobs = null;
+try {
+    const imageDb = path.join(path.dirname(process.env.RISU_JOBS_DB || path.join(require('os').homedir(), '.risu-lan', 'jobs.sqlite')), 'image-jobs.sqlite');
+    imageJobs = require('./imageJobs.cjs').openImageJobs({
+        dbFile: imageDb,
+        writeInlay: async (id, bytes) => { saveQueue.enqueueWrite(Buffer.from(`inlays/${id}`, 'utf-8').toString('hex'), bytes); },
+    });
+    console.log(`[Server] Image jobs ready (${imageDb}); pruned ${imageJobs.prune()}`);
+    setInterval(() => { try { imageJobs.prune(); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
+} catch (error) {
+    console.error('[Server] Image jobs unavailable, pictures are drawn by the page:', error?.message || error);
+    imageJobs = null;
+}
+
+app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    if (!imageJobs) { res.status(503).send({ error: 'image jobs unavailable' }); return; }
+    const request = req.body?.request;
+    const url = typeof request?.url === 'string' ? sanitizeTargetUrl(request.url) : null;
+    if (!url) { res.status(400).send({ error: 'Invalid target URL. Only local/private network http(s) endpoints are allowed.' }); return; }
+    try {
+        const id = imageJobs.submit({ ...request, url }, req.body?.target ?? null);
+        res.send({ id });
+    } catch (error) {
+        res.status(400).send({ error: String(error?.message || error) });
+    }
+});
+
+app.get('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.send({ jobs: imageJobs ? imageJobs.unacked() : [] });
+});
+
+app.get('/api/image-jobs/:id', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    const job = imageJobs?.get(req.params.id);
+    if (!job) { res.status(404).send({ error: 'no such job' }); return; }
+    res.send(job);
+});
+
+app.post('/api/image-jobs/:id/ack', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.send({ acked: imageJobs ? imageJobs.ack(req.params.id) : false });
+});
+
 app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkProxyAuth(req, res)) {
         return;
