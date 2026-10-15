@@ -5,6 +5,7 @@ vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
 import { readNotebook } from './learningStore'
 import { SAY_BUTTON } from './vietji'
+import { forgetThoughts, rememberThought } from './learningThought'
 import { howToSayPrompt, learningReminder, CHECK_MISSED_LAST_VAR, CHECK_MISSED_VAR, GRADED_FOR_VAR, HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 // the player's text as sent, without the format reminder learningRequest puts after the last one
@@ -241,3 +242,17 @@ describe('learning mode on', () => {
     })
 })
 
+
+describe('reported: "hết sức bình sinh tui leo lên được", built word by word, was coached as 병 → 아파요 (sick)', () => {
+    it('the Vietnamese behind the picked words goes with the message, only the request carries it', () => {
+        Object.assign(db, { learningLang: 'ko' })
+        forgetThoughts()
+        rememberThought('매우', 'hết sức')
+        rememberThought('매우 병 태어나다 나 빨리 위 이기다', 'hết sức bình sinh tui leo lên được')
+        const out = learningRequest(req('매우 병 태어나다 나 빨리 위 이기다'))
+        const sent = out.filter((m: any) => m.role === 'user').pop().content
+        expect(sent).toContain('«hết sức bình sinh tui leo lên được»')
+        expect(learningRequest(req('안녕하세요')).filter((m: any) => m.role === 'user').pop().content).not.toContain('What the player meant')
+        forgetThoughts()
+    })
+})

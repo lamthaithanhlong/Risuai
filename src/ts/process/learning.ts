@@ -6,6 +6,7 @@ import type { OpenAIChat } from './index.svelte'
 import { addReadings, addSayButtons, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
 import { addGrammar, addMistake, gradeUse, memoryNote, parseCheck, selfCheck, splitCheck, triedForeign, type CheckResult, type Fix } from './learningMemory'
 import { migrateChat, readNotebook, writeNotebook } from './learningStore'
+import { thoughtFor, thoughtNote } from './learningThought'
 
 /** "? cái muối này bao nhiêu": the learner asks how to say something (also after a name prefix such as "Kenji: ?"). */
 export function isHowDoISay(text: string): boolean {
@@ -116,7 +117,9 @@ export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat
     // the language in 2 of 2. Only the request carries it; the stored message is unchanged.
     const last = typed.map((m) => m.role).lastIndexOf('user')
     if (last < 0 || typeof typed[last].content !== 'string') return typed
-    return typed.map((m, i) => (i === last ? { ...m, content: m.content + learningReminder(lang, db.learningGrammarLater !== false) } : m))
+    const meant = thoughtFor(typed[last].content as string)
+    const add = (meant ? thoughtNote(meant) : '') + learningReminder(lang, db.learningGrammarLater !== false)
+    return typed.map((m, i) => (i === last ? { ...m, content: m.content + add } : m))
 }
 
 // how the line is written, in the reminder too: a Chinese line came back as 快开门！ with no pinyin, so it had no reading
