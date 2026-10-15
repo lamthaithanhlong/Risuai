@@ -24,6 +24,7 @@ def main(src, out):
     from wordfreq import get_frequency_dict
     freq = get_frequency_dict('ja')
     best = {}                                                   # key -> (frequency, reading)
+    kana_words = {}                                             # words usually written in kana -> frequency
 
     def offer(key, reading, f):
         if key and reading and HAN.search(key) and (key not in best or f > best[key][0]):
@@ -33,6 +34,14 @@ def main(src, out):
         for _, el in ET.iterparse(fh, events=('end',)):
             if el.tag != 'entry':
                 continue
+            senses = el.findall('sense')
+            if senses and any('usually written using kana' in (m.text or '') for m in senses[0].findall('misc')):
+                # こと, もの, いくら: written in kana, never offered as kanji, but known as words, so the sound typing keeps
+                # them whole instead of cutting a kanji out of them (いくら gave 行くら)
+                if any(p.text in COMMON for r in el.findall('r_ele') for p in r.findall('re_pri')) or any(p.text in COMMON for k in el.findall('k_ele') for p in k.findall('ke_pri')):
+                    r0 = kata_to_hira(el.findtext('r_ele/reb') or '')
+                    if r0: kana_words[r0] = max(kana_words.get(r0, 0.0), freq.get(r0, 0.0) + 1e-9)
+                el.clear(); continue
             rebs = [(r.findtext('reb'), {p.text for p in r.findall('re_pri')}, [x.text for x in r.findall('re_restr')], r.find('re_nokanji') is not None) for r in el.findall('r_ele')]
             for k in el.findall('k_ele'):
                 keb, kpri = k.findtext('keb'), {p.text for p in k.findall('ke_pri')}
@@ -51,8 +60,10 @@ def main(src, out):
                         offer(keb[:-1], reb[:-1], f * 0.9)                    # 開け → あけ (開ける)
                     offer(keb[:-len(t)], reb[:-len(t)], f * 0.8)              # 開 → ひら (開く)
             el.clear()
-    words = {k: r for k, (_, r) in best.items()}
-    json.dump({'_source': 'JMdict (EDRDG, CC BY-SA 4.0), common entries, ranked with wordfreq; scripts/build_kanji.py', 'words': words},
+    # most used first: the bar's sound typing (vietjiIme.ts) ranks kanji that read alike by this order
+    words = {k: r for k, (_, r) in sorted(best.items(), key=lambda x: -x[1][0])}
+    kana = [w for w, _ in sorted(kana_words.items(), key=lambda x: -x[1])]
+    json.dump({'_source': 'JMdict (EDRDG, CC BY-SA 4.0), common entries, ranked with wordfreq; scripts/build_kanji.py', 'words': words, 'kana': kana},
               open(out, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print(f'{len(words)} keys -> {out}')
 

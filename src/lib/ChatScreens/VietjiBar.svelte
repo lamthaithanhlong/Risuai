@@ -11,7 +11,7 @@
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
     import { installTapToSpeak } from "src/ts/process/tapToSpeak";
-    import { buildSoundIndex, imeSuggestions, isSoundTyping, type SoundIndex } from "src/ts/process/vietjiIme";
+    import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { dictSuggestions, loadWordList, makeAsker, needsModel, toneless, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
@@ -38,7 +38,9 @@
     let offered = $derived(enabled ? suggestionPool({ lastReply, vocab: JSON.stringify(notebook.vocab), lang }) : [])
     // Chinese sound typing, word by word (vietjiIme.ts): the index is built from the pinyin list once it has loaded
     let soundIndex = $state<SoundIndex | null>(null)
-    let soundTyping = $derived(lang === 'zh' && isSoundTyping(value ?? '', soundIndex))
+    let koIndex = $state<SoundIndex | null>(null)
+    let kanaIndex = $state<KanaIndex | null>(null)
+    let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex)))
     let typedViet = $derived(enabled && looksVietnamese(value ?? '') && !soundMatch(value ?? '', offered) && !soundTyping ? (value ?? '').trim() : '')
     // the offline word list answers first, at once; the model is asked only when it has nothing or only guessed a word
     let wordList = $state<Dictionary | null>(null)
@@ -73,7 +75,30 @@
         }
         return (w: string) => back.get(w) ?? ''
     })
-    let imeItems = $derived(enabled && lang === 'zh' && soundIndex ? imeSuggestions(value ?? '', soundIndex, meaningOfZh) : [])
+    let imeItems = $derived(!enabled ? [] : lang === 'zh' ? imeSuggestions(value ?? '', soundIndex, meaningOfZh)
+        : lang === 'ko' ? imeSuggestions(value ?? '', koIndex) : lang === 'ja' ? jaSuggestions(value ?? '', kanaIndex) : [])
+
+    // the Korean and Japanese sound typing: built once the lists are here (Korean: the word list plus the dictionary's words,
+    // so dictionary forms like 먹다 are known; Japanese: the kanji list and its kana words)
+    $effect(() => {
+        if (!enabled || lang !== 'ko' || koIndex || !wordList) return
+        const more = Object.values(wordList.words).flat()
+        fetch('/dict/ko-words.json').then((r) => r.ok ? r.json() : null).then((d) => { if (d?.words) koIndex = buildKoreanIndex(d.words, more) }).catch(() => {})
+    })
+    $effect(() => {
+        if (!enabled || lang !== 'ja' || kanaIndex) return
+        fetch('/dict/ja-kanji.json').then((r) => r.ok ? r.json() : null)
+            .then((d) => { if (d?.words) kanaIndex = buildKanaIndex(d.words, d.kana ?? []) }).catch(() => {})
+    })
+
+    // typed right, written at once: at the space, a word whose sound reads exactly as one word becomes its characters
+    let vietnameseWords = $derived(new Set(Object.keys(wordList?.words ?? {})))
+    $effect(() => {
+        const v = value ?? ''
+        if (!enabled || DBState.db.learningAutoWrite === false || !v.endsWith(' ')) return
+        const next = commitOnSpace(v, lang, { zh: soundIndex, ko: koIndex, ja: kanaIndex, vietnamese: vietnameseWords })
+        if (next !== null && next !== v) value = next
+    })
     let items = $derived.by(() => {
         if (!enabled) return []
         const rest = suggest(value ?? '', pool)

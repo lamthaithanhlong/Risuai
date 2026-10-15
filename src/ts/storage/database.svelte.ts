@@ -135,6 +135,7 @@ export function setDatabase(data:Database){
     data.learningReadings ??= true
     data.learningTyping ??= true
     data.learningSuggest ??= true
+    data.learningAutoWrite ??= true
     data.learningLang ??= 'ja'
     if(checkNullish(data.fullScreen)){
         data.fullScreen = false
@@ -897,6 +898,8 @@ export interface Database{
     learningReadings?: boolean
     learningTyping?: boolean
     learningSuggest?: boolean
+    /** a word typed in Việt-ji becomes characters at the space when its sound reads exactly as one word (vietjiIme.ts) */
+    learningAutoWrite?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */

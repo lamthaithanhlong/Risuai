@@ -783,6 +783,7 @@ export const languageEnglish = {
     learningReadings: "Show the readings (kana / pinyin above, Việt-ji below)",
     learningTyping: "Turn what I type in Việt-ji into Japanese for the model (da me te → やめて)",
     learningSuggest: "Suggest words while I type",
+    learningAutoWrite: "Write the characters when a typed sound is exact (at the space; join a word's syllables with -)",
     learningLang: "Language to learn",
     redrawPicture: "Redraw the picture (replaces the current one)",
     illustrating: "Drawing the picture, it can take a minute or two",

@@ -1496,6 +1496,7 @@ export const languageVietnamese = {
     "learningReadings": "Hiện cách đọc (kana / pinyin ở trên, Việt-ji ở dưới)",
     "learningTyping": "Đổi chữ Việt-ji mình gõ thành tiếng Nhật cho model (da me te → やめて)",
     "learningSuggest": "Gợi ý từ khi đang gõ",
+    "learningAutoWrite": "Gõ đúng âm là ra chữ (khi gõ dấu cách; nối các âm của một từ bằng -, ví dụ trư-tào)",
     "learningLang": "Ngôn ngữ muốn học",
     "redrawPicture": "Vẽ lại ảnh (thay ảnh đang có)",
     "illustrating": "Đang vẽ ảnh, có thể mất một hai phút",
