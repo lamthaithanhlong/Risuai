@@ -4,8 +4,15 @@
 import { getDatabase, type Chat } from '../storage/database.svelte'
 import type { OpenAIChat } from './index.svelte'
 import { addReadings, collectVocab, fromVietji, hasForeign, mergeVocab, setLatinLanguage, splitReplies, type LearningLang } from './vietji'
+import { addMistake, gradeUse, memoryNote, parseCheck, splitCheck, type Mistake, type VocabItem } from './learningMemory'
 
 export const VOCAB_VAR = '$vj_vocab'
+export const MISTAKES_VAR = '$vj_mistakes'
+export const HISTORY_VAR = '$vj_history'
+
+function readList<T>(chat: Chat | undefined, key: string): T[] {
+    try { const v = JSON.parse((chat?.scriptstate?.[key] as string) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
 
 export function learningOn(): boolean {
     return !!getDatabase().learningMode
@@ -18,8 +25,9 @@ export function learningDisplay(text: string): string {
     // the replies box is read on its own, after the body: reading the whole message again would put a second reading on it
     setLatinLanguage(db.learningLang)
     const readings = db.learningReadings !== false
-    const { main, box } = splitReplies(text, readings)
-    return (readings ? addReadings(main) : main) + box
+    const { main: body, note } = splitCheck(text)
+    const { main, box } = splitReplies(body, readings)
+    return (readings ? addReadings(main) : main) + box + note
 }
 
 /** A message with a foreign line is not auto-translated while learning: the translation would replace the line the learner reads. */
@@ -56,11 +64,12 @@ export function learningNote(lang: LearningLang): string {
  * Việt-ji goes to the model as kana. "Kenji: da me te" (a name prefix some
  * prompt formats add) keeps its prefix. The chat itself keeps what the learner typed.
  */
-export function learningRequest<T extends OpenAIChat>(formated: T[]): T[] {
+export function learningRequest<T extends OpenAIChat>(formated: T[], chat?: Chat, now = Date.now()): T[] {
     const db = getDatabase()
     if (!db.learningMode) return formated
-    // the format note goes right before the last user message, where the model weighs it most
-    const note = { role: 'system', content: learningNote((db.learningLang ?? 'ja') as LearningLang) } as T
+    // the format note goes right before the last user message, where the model weighs it most; it carries what to review
+    const memory = memoryNote(readList<VocabItem>(chat, VOCAB_VAR), readList<Mistake>(chat, MISTAKES_VAR), readList<boolean>(chat, HISTORY_VAR), now)
+    const note = { role: 'system', content: learningNote((db.learningLang ?? 'ja') as LearningLang) + '\n' + memory } as T
     let lastUser = -1
     formated.forEach((m, i) => { if (m.role === 'user') lastUser = i })
     const withNote = lastUser >= 0 ? [...formated.slice(0, lastUser), note, ...formated.slice(lastUser)] : [...formated, note]
@@ -76,13 +85,19 @@ export function learningRequest<T extends OpenAIChat>(formated: T[]): T[] {
 }
 
 /** After a reply: what the speaker said (with its meaning) and the suggested replies go into the chat's vocabulary list. */
-export function noteLearningVocab(chat: Chat | undefined): void {
+export function noteLearningVocab(chat: Chat | undefined, now = Date.now()): void {
     if (!chat || !learningOn()) return
     const last = chat.message?.at(-1)
     if (!last || last.role !== 'char') return
     setLatinLanguage(getDatabase().learningLang)
-    const found = collectVocab(last.data)
-    if (found.length === 0) return
     chat.scriptstate ??= {}
-    chat.scriptstate[VOCAB_VAR] = mergeVocab(chat.scriptstate[VOCAB_VAR] as string, found)
+    const found = collectVocab(last.data)
+    if (found.length) chat.scriptstate[VOCAB_VAR] = mergeVocab(chat.scriptstate[VOCAB_VAR] as string, found)
+    // the speaker's check of the learner's line: review the phrases they used, keep the mistake, count right and wrong
+    const check = parseCheck(last.data)
+    if (!check) return
+    const userLine = chat.message.slice(0, -1).findLast((m) => m.role === 'user')?.data ?? ''
+    chat.scriptstate[VOCAB_VAR] = JSON.stringify(gradeUse(readList<VocabItem>(chat, VOCAB_VAR), userLine, check, now))
+    chat.scriptstate[MISTAKES_VAR] = JSON.stringify(addMistake(readList<Mistake>(chat, MISTAKES_VAR), check, now))
+    chat.scriptstate[HISTORY_VAR] = JSON.stringify([...readList<boolean>(chat, HISTORY_VAR), check.ok].slice(-30))
 }

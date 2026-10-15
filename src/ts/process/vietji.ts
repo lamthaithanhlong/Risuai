@@ -279,7 +279,9 @@ export function mergeVocab(stored: string | null | undefined, found: SuggestedRe
     let list: SuggestedReply[] = []
     try { const p = JSON.parse(stored || '[]'); if (Array.isArray(p)) list = p } catch { /* a bad value starts a new list */ }
     for (const item of found) {
-        list = [item, ...list.filter((x) => x.text !== item.text)]
+        // a phrase met again keeps its review state (learningMemory.ts) and moves to the front
+        const old = list.find((x) => x.text === item.text)
+        list = [{ ...old, ...item }, ...list.filter((x) => x.text !== item.text)]
     }
     return JSON.stringify(list.slice(0, max))
 }

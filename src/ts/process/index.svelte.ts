@@ -1512,7 +1512,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
     formated = await brTimed('lua editRequest', () => runLuaEditTrigger(currentChar, 'editRequest', formated), 0)
     // Settings → Learning: what the learner typed in Việt-ji reaches the model as kana
-    formated = learningRequest(formated)
+    formated = learningRequest(formated, currentChat)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)

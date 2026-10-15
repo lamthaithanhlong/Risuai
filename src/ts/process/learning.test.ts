@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db: any = {}
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
-import { learningDisplay, learningKeepsOriginal, learningRequest, noteLearningVocab, VOCAB_VAR } from './learning'
+import { HISTORY_VAR, learningDisplay, learningKeepsOriginal, learningRequest, MISTAKES_VAR, noteLearningVocab, VOCAB_VAR } from './learning'
 
 const userOf = (out: any[]) => out.find((m) => m.role === 'user' || m.role === 'assistant').content
 
@@ -70,5 +70,29 @@ describe('learning mode on', () => {
         const chat: any = { message: [{ role: 'user', data: 'x' }, { role: 'char', data: '「しお です。」 (Đây là muối.)' }] }
         noteLearningVocab(chat)
         expect(JSON.parse(chat.scriptstate[VOCAB_VAR])[0]).toMatchObject({ text: 'しお です。', vietji: 'xi-ô đê-sư' })
+    })
+    it('grades the learner’s line from the speaker’s check, keeps the mistake, counts right and wrong', () => {
+        const chat: any = { message: [
+            { role: 'char', data: '「いくら ですか」 (Bao nhiêu tiền?)' },
+            { role: 'user', data: 'i cu ra dde su' },
+            { role: 'char', data: 'Haru cười.\n[[CHECK いくら です → いくら ですか | thiếu か]]' },
+        ] }
+        noteLearningVocab({ ...chat, message: chat.message.slice(0, 1) })   // the first reply adds the phrase
+        chat.scriptstate = { [VOCAB_VAR]: JSON.stringify([{ text: 'いくら ですか', vietji: 'i-cư-ra đê-sư-ca', meaning: 'Bao nhiêu tiền?' }]) }
+        noteLearningVocab(chat, 1_800_000_000_000)
+        expect(JSON.parse(chat.scriptstate[MISTAKES_VAR])[0]).toMatchObject({ wrong: 'いくら です', right: 'いくら ですか', count: 1 })
+        expect(JSON.parse(chat.scriptstate[HISTORY_VAR])).toEqual([false])
+    })
+    it('shows a fix as one Sửa line and never the raw check block', () => {
+        const out = learningDisplay('Haru cười.\n[[CHECK ok]]')
+        expect(out).not.toContain('CHECK')
+        const fix = learningDisplay('Haru cười.\n[[CHECK はい → はい、ください | thiếu ください]]')
+        expect(fix).toContain('Sửa:')
+        expect(fix).not.toContain('[[CHECK')
+    })
+    it('the request note carries the phrases due for review', () => {
+        const chat: any = { scriptstate: { [VOCAB_VAR]: JSON.stringify([{ text: 'はい', vietji: 'ha-i', meaning: 'Vâng', due: 1 }]) } }
+        const out = learningRequest(req('x'), chat, 1_800_000_000_000)
+        expect(out.find((m: any) => m.role === 'system').content).toContain('はい (Vâng)')
     })
 })
