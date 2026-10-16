@@ -5,7 +5,7 @@ import { get } from 'svelte/store'
 import { getDatabase, type character, type Chat, type groupChat } from '../storage/database.svelte'
 import { selectedCharID } from '../stores.svelte'
 import { checkPersonaBinded, getPersonaPrompt, getUserName } from '../util'
-import { adoptFromSiblings, adoptHandAssets, portraitReminder, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
+import { adoptFromSiblings, adoptHandAssets, portraitReminder, storyStyle, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
 import type { OpenAIChat } from './index.svelte'
 
 /** The player's character as the chat sees it: the bound persona, else the selected one. */
@@ -61,10 +61,12 @@ export function notePortraits(charIndex: number, chat: Chat | undefined): void {
     // the picture settings of a character: the card itself, or in a group its first member
     const char = (card.type === 'group' ? db.characters.find((c) => c.chaId === (card as groupChat).characters?.[0]) : card) as character
     const reply = [...(chat.message ?? [])].reverse().find((m) => m.role === 'char')?.data ?? ''
-    if (!reply.includes('[[LOOK')) return
+    // every reply: a new LOOK is drawn, and a portrait of ours drawn in an older style is drawn again when its character is named
     const save = () => { db.characters[charIndex] = card }
     drawNewPortraits(card, reply, {
         now: () => Date.now(),
+        // the story's own picture style (its Lua's STYLE), the card's or in a group its first member's
+        style: storyStyle((card.type === 'group' ? char : card) as character),
         draw: async (prompt) => {
             const { openaiCompatImageRequest, generateAIImage } = await import('./stableDiff')
             if (referencesOn() && (globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) {

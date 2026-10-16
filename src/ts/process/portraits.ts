@@ -10,7 +10,9 @@
 
 export type Look = { name: string; look: string }
 export type PortraitStatus = 'pending' | 'done' | 'error'
-export type PortraitEntry = { name: string; look: string; status: PortraitStatus; at: number; asset?: string; error?: string }
+export type PortraitEntry = { name: string; look: string; status: PortraitStatus; at: number; asset?: string; error?: string
+    /** the style it was drawn in (styleKey), to draw it again when the story's style changes; hand: a picture the learner added */
+    style?: string; hand?: boolean }
 export type PortraitState = Record<string, PortraitEntry>
 
 const LOOK = /\[\[LOOK\s+([^|\]\n]{1,40}?)\s*\|\s*([^\]\n]{1,500}?)\s*\]\]/g
@@ -81,9 +83,33 @@ export function portraitReminder(state: PortraitState): string {
         + ', add one hidden line at the very end: [[LOOK <name> | <hair, eyes, face, build, age, clothes, in English>]].]'
 }
 
+/** Without a style of the story's own: anime, like the scene pictures of the owner's stories. */
+export const DEFAULT_PORTRAIT_STYLE = 'Anime-style illustration: clean line art, cel shading, anime proportions, detailed anime art. '
+
+/**
+ * The story's own picture style: the STYLE its Lua gives every scene picture (local STYLE = "…" .. "…"). Reported
+ * 2026-10-15: Elise's portrait came out photographic, because the portrait prompt carried no style at all while the scenes
+ * get theirs from the card's Lua (Risu's global style field stays empty on purpose).
+ */
+export function storyStyle(card: { triggerscript?: unknown[] } | undefined): string {
+    for (const t of (card?.triggerscript ?? []) as { effect?: { code?: string }[] }[]) {
+        for (const e of t?.effect ?? []) {
+            const m = /local\s+STYLE\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*(?:\.\.\s*)?)+)/.exec(e.code ?? '')
+            if (m) {
+                const parts = [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((x) => x[1].replace(/\\"/g, '"').replace(/\\n/g, ' '))
+                const style = parts.join('').trim()
+                if (style) return style.endsWith(' ') ? style : style + ' '
+            }
+        }
+    }
+    return DEFAULT_PORTRAIT_STYLE
+}
+/** A short key of a style, kept with a portrait to know when it is out of date. */
+export const styleKey = (style: string) => { let h = 0; for (const c of style) h = (h * 31 + c.charCodeAt(0)) | 0; return (h >>> 0).toString(36) }
+
 /** What is asked of the picture model for a portrait. */
-export function portraitPrompt(l: Look): string {
-    return `Character portrait of ${l.name}, head and shoulders, facing the viewer, plain dark background, no text. ${l.name}: ${l.look}`
+export function portraitPrompt(l: Look, style = DEFAULT_PORTRAIT_STYLE): string {
+    return `${style}Character portrait of ${l.name}, head and shoulders, facing the viewer, plain dark background, no text. ${l.name}: ${l.look}`
 }
 
 /**
@@ -150,6 +176,8 @@ export function castStrip(card: CardLike, text: string, max = 4): string {
 export interface PortraitDeps {
     /** Draws a picture: an inlay id (server queue) or a data URL (drawn in the page). */
     draw(prompt: string): Promise<{ inlayId?: string; dataUrl?: string; error?: string }>
+    /** The story's picture style (storyStyle); portraits drawn in another style are drawn again when next named. */
+    style?: string
     /** The picture's bytes as an asset: its path, or null. */
     keep(picture: { inlayId?: string; dataUrl?: string }): Promise<{ path: string; ext: string } | null>
     now(): number
@@ -170,23 +198,33 @@ export function stateOf(card: CardLike): PortraitState {
  */
 export async function drawNewPortraits(card: CardLike, reply: string, deps: PortraitDeps, save: () => void = () => {}, player?: Player): Promise<string[]> {
     const state = stateOf(card)
+    const style = deps.style ?? DEFAULT_PORTRAIT_STYLE
+    const key = styleKey(style)
     const todo = newLooks(withPlayer(state, player), parseLooks(reply), deps.now())
-    if (!todo.length) return []
-    for (const l of todo) state[keyOf(l.name)] = { name: l.name, look: l.look, status: 'pending', at: deps.now() }
+    // ours, drawn in another style, and named in this reply: drawn again in the story's style (never one the learner added)
+    const restyle = referencesFor(state, stripLooks(reply), '', 99)
+        .filter((e) => !e.hand && e.look && e.style !== key && !todo.some((l) => keyOf(l.name) === keyOf(e.name)))
+        .map((e) => ({ name: e.name, look: e.look }))
+    const all = [...todo, ...restyle]
+    if (!all.length) return []
+    const oldAsset = new Map(restyle.map((l) => [keyOf(l.name), state[keyOf(l.name)].asset]))
+    for (const l of all) state[keyOf(l.name)] = { ...state[keyOf(l.name)], name: l.name, look: l.look, status: 'pending', at: deps.now() }
     save()
     const made: string[] = []
-    await Promise.all(todo.map(async (l) => {
+    await Promise.all(all.map(async (l) => {
         const k = keyOf(l.name)
         try {
-            const pic = await deps.draw(portraitPrompt(l))
+            const pic = await deps.draw(portraitPrompt(l, style))
             if (pic.error || (!pic.inlayId && !pic.dataUrl)) throw new Error(pic.error ?? 'no picture')
             const kept = await deps.keep(pic)
             if (!kept) throw new Error('could not keep the picture')
             card.additionalAssets ??= []
             const existing = card.additionalAssets.find((a) => keyOf(a[0]) === k)
-            const path = existing ? existing[1] : kept.path
+            let path = kept.path
             if (!existing) card.additionalAssets.push([l.name, kept.path, kept.ext])
-            state[k] = { ...state[k], status: 'done', at: deps.now(), asset: path }
+            else if (oldAsset.has(k) && existing[1] === oldAsset.get(k)) { existing[1] = kept.path; existing[2] = kept.ext }   // our own, redrawn
+            else path = existing[1]                                                                                       // the learner's: kept
+            state[k] = { ...state[k], status: 'done', at: deps.now(), asset: path, style: key }
             made.push(l.name)
         } catch (e) {
             state[k] = { ...state[k], status: 'error', at: deps.now(), error: String((e as Error)?.message ?? e).slice(0, 200) }
@@ -221,6 +259,6 @@ export function adoptHandAssets(card: CardLike): void {
     const state = stateOf(card)
     for (const [name, path] of card.additionalAssets ?? []) {
         const e = state[keyOf(name)]
-        if (e && e.status !== 'done') state[keyOf(name)] = { ...e, status: 'done', asset: path }
+        if (e && e.status !== 'done') state[keyOf(name)] = { ...e, status: 'done', asset: path, hand: true }
     }
 }

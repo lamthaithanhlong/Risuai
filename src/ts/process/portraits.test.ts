@@ -186,3 +186,31 @@ describe('reported: Elise\'s portrait was drawn but shown nowhere', async () => 
         expect(castStrip({ ...card, extentions: { vjPortraits: { 'elise moreau': { ...card.extentions.vjPortraits['elise moreau'], status: 'pending' } } } }, 'Elise đứng đó.')).toBe('')
     })
 })
+
+describe('reported: Elise\'s portrait came out photographic; the Shadow Slave rule is anime', async () => {
+    const { storyStyle, styleKey, drawNewPortraits, DEFAULT_PORTRAIT_STYLE, adoptHandAssets, stateOf } = await import('./portraits')
+    const SS = { triggerscript: [{ effect: [{ type: 'triggerlua', code: 'local x = 1\nlocal STYLE = "Anime-style illustration with a Western dark fantasy flavor: " ..\n    "clean line art, cel shading. "\nreturn' }] }] }
+    it('the portrait uses the story\'s own STYLE from its Lua, else anime', () => {
+        expect(storyStyle(SS)).toBe('Anime-style illustration with a Western dark fantasy flavor: clean line art, cel shading. ')
+        expect(storyStyle({})).toBe(DEFAULT_PORTRAIT_STYLE)
+    })
+    const deps = (drawn: string[]) => ({ now: () => 5, style: storyStyle(SS), draw: async (p: string) => { drawn.push(p); return { inlayId: 'n' + drawn.length } }, keep: async (pic: any) => ({ path: `assets/${pic.inlayId}.webp`, ext: 'webp' }) })
+    it('a portrait of ours in another style is drawn again in this one when named, its asset replaced', async () => {
+        const card: any = { additionalAssets: [['Elise Moreau', 'assets/old.webp', 'webp']], extentions: { vjPortraits: { 'elise moreau': { name: 'Elise Moreau', look: 'grey eyes', status: 'done', at: 1, asset: 'assets/old.webp' } } } }
+        const drawn: string[] = []
+        expect(await drawNewPortraits(card, 'Elise hạ tay xuống.', deps(drawn))).toEqual(['Elise Moreau'])
+        expect(drawn[0].startsWith('Anime-style illustration with a Western dark fantasy flavor')).toBe(true)
+        expect(card.additionalAssets).toEqual([['Elise Moreau', 'assets/n1.webp', 'webp']])
+        expect(stateOf(card)['elise moreau'].style).toBe(styleKey(storyStyle(SS)))
+        expect(await drawNewPortraits(card, 'Elise lại nói.', deps(drawn))).toEqual([])          // up to date: not again
+        expect(await drawNewPortraits(card, 'Mưa.', deps([]))).toEqual([])
+    })
+    it('a picture the learner added is never redrawn', async () => {
+        const card: any = { additionalAssets: [['Elise', 'assets/mine.png', 'png']], extentions: { vjPortraits: { elise: { name: 'Elise', look: 'x', status: 'pending', at: 1 } } } }
+        adoptHandAssets(card)
+        const drawn: string[] = []
+        await drawNewPortraits(card, 'Elise cười.', deps(drawn))
+        expect(drawn).toEqual([])
+        expect(card.additionalAssets).toEqual([['Elise', 'assets/mine.png', 'png']])
+    })
+})
