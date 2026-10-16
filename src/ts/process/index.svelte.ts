@@ -15,6 +15,7 @@ import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
 import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
+import { shapeRequest } from "./replyFormat";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
@@ -1526,6 +1527,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = scenePictureRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // natural Vietnamese prose for a story told in Vietnamese (proseVi.ts): speaker before every spoken line, and the rest
     formated = viProseRequest(formated, DBState.db.viProseGuard !== false, wantsVietnameseProse(currentChat?.message ?? [], currentChar?.firstMessage ?? '', DBState.db.translator), getUserName())
+    // the shape the story's replies keep (its panels at either end), after the opening (replyFormat.ts)
+    if(!isOpening(currentChat?.message)){
+        formated = shapeRequest(formated, currentChat?.message)
+    }
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1601,8 +1606,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
-        // a card that asks for full reasoning on every turn is treated as an opening (storyEffort.ts)
-        storyOpening: isOpening(currentChat?.message) || !!currentChar?.fullReasoning,
+        storyOpening: isOpening(currentChat?.message),
     }, 'model', abortSignal), 0)
     genStatusEvents.send()
     let req = await requestModelOnce()

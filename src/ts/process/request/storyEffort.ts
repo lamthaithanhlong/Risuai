@@ -6,9 +6,9 @@
 // So the opening keeps the default and every later turn of the story asks for low effort. A reasoning_effort set by hand
 // in Additional Parameters always wins.
 // Then judged against the full lore and state (asked: does the thinking keep the story true to its lore?): lore and state
-// faults the same in total (default 12, low 10 over 12 replies), but on Alternate Hunters, a card with required blocks in a
-// fixed order, low put the "[💡Request Profile|…]" line last 2 of 6 times against 5 of 6 and changed EXP 50/200 twice. Such
-// a card keeps the default on every turn with its own switch (character.fullReasoning).
+// faults the same in total (default 12, low 10 over 12 replies). On Alternate Hunters, a card with required blocks, low kept
+// the chat's own ending (profile line, then status line) 4 of 6 times, the default 1 of 6; with the shape reminder
+// (replyFormat.ts, for every story) 6 of 6 at low. So no card needs the default effort after its opening.
 
 /** The opening: the chat has no reply yet (the first message is not one of its messages; a reroll removes the reply first).
  *  Counted on the chat, not on the request, where a card's example dialogue also comes as assistant messages. */
