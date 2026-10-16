@@ -50,6 +50,8 @@ interface requestDataArgument{
     staticModel?: string
     escape?:boolean
     tools?: MCPTool[]
+    /** a story turn: true for the chat's opening reply (storyEffort.ts) */
+    storyOpening?: boolean
     rememberToolUsage?: boolean
     blockPlugins?:boolean
 }

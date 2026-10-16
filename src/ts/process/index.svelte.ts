@@ -14,6 +14,7 @@ import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
 import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
+import { isOpening } from "./request/storyEffort";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
@@ -1600,6 +1601,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
+        storyOpening: isOpening(currentChat?.message),
     }, 'model', abortSignal), 0)
     genStatusEvents.send()
     let req = await requestModelOnce()
