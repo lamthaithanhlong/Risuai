@@ -1521,7 +1521,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // Settings → Image generation: the story describes each named character once, for their portrait
     formated = portraitRequest(formated, DBState.db.characters[sel.char] ?? currentChar)
     // natural Vietnamese prose for a story told in Vietnamese (proseVi.ts): speaker before every spoken line, and the rest
-    formated = viProseRequest(formated, DBState.db.viProseGuard !== false, storyInVietnamese(currentChat?.message ?? [], currentChar?.firstMessage ?? ''))
+    formated = viProseRequest(formated, DBState.db.viProseGuard !== false, storyInVietnamese(currentChat?.message ?? [], currentChar?.firstMessage ?? ''), getUserName())
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
