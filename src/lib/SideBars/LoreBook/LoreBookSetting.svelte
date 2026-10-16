@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { estTokens } from "src/ts/process/loreIndex";
     
     import { DBState } from 'src/ts/stores.svelte';
     import { language } from "../../../lang";
@@ -50,6 +51,9 @@
             book.alwaysActive = !allActive;
         });
     }
+    // what the always-on entries take of the budget: the one part of the lore Risu cannot choose for a card (loreIndex.ts)
+    let loreBudget = $derived((DBState.db.characters[$selectedCharID] as any)?.loreSettings?.tokenBudget ?? DBState.db.loreBookToken)
+    let alwaysTokens = $derived(((DBState.db.characters[$selectedCharID] as any)?.globalLore ?? []).filter((l: any) => l.alwaysActive).reduce((n: number, l: any) => n + estTokens(l.content ?? ''), 0))
 </script>
 
 {#if !globalMode}
@@ -110,6 +114,9 @@
     {/if}
     <div class="flex flex-col mt-4 gap-1">
         <Check check={DBState.db.characters[$selectedCharID].loreIndexPick !== false} onChange={(v) => { DBState.db.characters[$selectedCharID].loreIndexPick = v }} name="Chọn lore theo mục lục"/>
+        {#if alwaysTokens > 0}
+            <span class="text-xs {alwaysTokens > loreBudget * 0.6 ? 'text-red-500' : 'text-textcolor2'}">Mục luôn bật: ~{alwaysTokens} / {loreBudget} token ngân sách{alwaysTokens > loreBudget * 0.6 ? ' — chiếm quá nửa, lore theo cảnh còn ít chỗ: chuyển bớt mục luôn bật thành mục có từ khoá' : ''}.</span>
+        {/if}
         <span class="text-textcolor2 text-xs">Mỗi lượt, model phụ đọc mục lục lore (tên từng mục) cùng vài tin nhắn gần nhất, chọn tới 8 mục cảnh tiếp theo cần, rồi nạp chúng như khi khớp từ khoá. Cần khi từ khoá viết một thứ tiếng mà truyện kể bằng thứ tiếng khác. Chỉ chạy khi thẻ có từ 20 mục trở lên.</span>
     </div>
     <div class="flex items-center mt-4">

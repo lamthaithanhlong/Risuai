@@ -66,7 +66,11 @@ export function fitPicks(index: IndexItem[], picks: number[], previous: number[]
     for (const k of [...picks, ...previous]) {
         if (out.includes(k) || !index[k - 1]) continue
         const t = index[k - 1].tokens ?? 0
-        if (used + t > room) continue
+        if (used + t > room) {
+            // a picked title bigger than what is left still goes, in part (the budget pass cuts it at a heading)
+            if (room - used >= MIN_PART_TOKENS && picks.includes(k)) { out.push(k); used = room }
+            continue
+        }
         out.push(k)
         used += t
     }
@@ -123,4 +127,57 @@ export function lorePicked(chaId: string, i: number): boolean {
 export function isLearningOnlyLore(l: LoreLike): boolean {
     return /@@learning_only\b/.test(l.content ?? '') || /^\s*MODULE\s+\d+:\s*THE\s+FOREIGN\s+SPEAKER\b/i.test(l.content ?? '')
         || /\b(?:foreign|japanese)\s+speaker\b/i.test(l.comment ?? '')
+}
+
+// ---- the budget, for every card (asked 2026-10-15: "cho này toàn risu được ko") -----------------------------------------------
+
+/** The least of a cut entry worth sending; below this the rest of the room stays empty. */
+export const MIN_PART_TOKENS = 300
+
+/**
+ * The opening of an entry that fits the room, cut at a heading or a paragraph, never mid-sentence when it can help it: an
+ * entry bigger than what is left is sent in part instead of dropped (23 of the Shadow Slave card's 237 titles pass 1,500
+ * tokens; the Lore Codex is 4,785).
+ */
+export function headOf(content: string, maxTokens: number, tokensOf: (s: string) => number = estTokens): string {
+    if (tokensOf(content) <= maxTokens) return content
+    const parts = content.split(/(?=\n#{1,6} )|\n{2,}/)
+    let out = ''
+    for (const p of parts) {
+        const next = out ? `${out}\n\n${p.replace(/^\n+/, '')}` : p
+        if (tokensOf(next) > maxTokens) break
+        out = next
+    }
+    if (out) return out
+    // one paragraph bigger than the room: whole sentences of it
+    for (const sentence of content.split(/(?<=[.!?。])\s+/)) {
+        const next = out ? `${out} ${sentence}` : sentence
+        if (tokensOf(next) > maxTokens) break
+        out = next
+    }
+    return out
+}
+
+export type Active = { tokens: number; priority: number; always?: boolean; prompt: string }
+/**
+ * The entries kept within the budget: the always-on ones first (the rules a card is built on: with a tight budget Risu used
+ * to keep whichever had the higher insert order and could drop a rule for a lore entry), then by priority; an entry that
+ * does not fit whole is sent in part when at least MIN_PART_TOKENS are left.
+ */
+export async function fitBudget<T extends Active>(actives: T[], budget: number, tokensOf: (s: string) => Promise<number> | number): Promise<T[]> {
+    const sorted = [...actives].sort((a, b) => (Number(!!b.always) - Number(!!a.always)) || (b.priority - a.priority))
+    const kept: T[] = []
+    let used = 0
+    for (const act of sorted) {
+        if (used + act.tokens <= budget) { kept.push(act); used += act.tokens; continue }
+        const left = budget - used
+        if (left < MIN_PART_TOKENS) continue
+        const prompt = headOf(act.prompt, left, estTokens)
+        if (!prompt) continue
+        const tokens = await tokensOf(prompt)
+        if (tokens > left) continue
+        kept.push({ ...act, prompt, tokens })
+        used += tokens
+    }
+    return kept
 }

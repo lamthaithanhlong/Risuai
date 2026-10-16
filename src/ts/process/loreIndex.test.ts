@@ -72,3 +72,35 @@ describe('reported: with learning mode off the story still had a foreign speaker
         expect(isLearningOnlyLore({ comment: 'White Tower Pathway', content: 'learning speed' })).toBe(false)
     })
 })
+
+// asked 2026-10-15: "cho này toàn risu được ko" (rules first, big entries in part, for every card)
+describe('the budget, for every card', async () => {
+    const { headOf, fitBudget, fitPicks, buildLoreIndex, MIN_PART_TOKENS } = await import('./loreIndex')
+    const tok = (s: string) => Math.ceil(s.length / 4)
+    it('an entry bigger than the room is cut at a heading or paragraph, else at a sentence', () => {
+        const doc = '## Overview\nThe Abyss is deep.\n\n## History\n' + 'Old tale. '.repeat(200)
+        expect(headOf(doc, 20, tok)).toBe('## Overview\nThe Abyss is deep.')
+        expect(headOf('One. Two. Three.', 3, tok)).toBe('One. Two.')
+        expect(headOf('short', 100, tok)).toBe('short')
+    })
+    it('always-on rules are kept before lore, whatever their insert order', async () => {
+        const acts = [
+            { source: 'lore', tokens: 600, priority: 900, prompt: 'x'.repeat(2400) },
+            { source: 'rules', tokens: 600, priority: 100, always: true, prompt: 'r'.repeat(2400) },
+        ]
+        expect((await fitBudget(acts, 1000, tok)).map((a) => a.source)).toEqual(['rules'])        // was: lore kept, rules dropped
+    })
+    it('what does not fit whole goes in part when enough is left', async () => {
+        const big = { source: 'codex', tokens: 2000, priority: 1, prompt: Array.from({ length: 20 }, (_, i) => `## Part ${i}\n` + 'word '.repeat(80)).join('\n') }
+        const kept = await fitBudget([{ source: 'rules', tokens: 500, priority: 1, always: true, prompt: 'r'.repeat(2000) }, big], 1200, tok)
+        expect(kept.map((a) => a.source)).toEqual(['rules', 'codex'])
+        expect(kept[1].tokens).toBeLessThanOrEqual(700)
+        expect(kept[1].prompt.startsWith('## Part 0')).toBe(true)
+        expect((await fitBudget([big], MIN_PART_TOKENS - 1, tok))).toEqual([])                     // too little left: nothing
+    })
+    it('a picked title bigger than what is left still goes, in part', () => {
+        const idx = buildLoreIndex([{ comment: 'A', content: 'a '.repeat(1950) }, { comment: 'B', content: 'b '.repeat(3900) }])   // ~1000, ~2000
+        expect(fitPicks(idx, [1, 2], [], 1600)).toEqual([1, 2])
+        expect(fitPicks(idx, [1, 2], [], 1200)).toEqual([1])
+    })
+})

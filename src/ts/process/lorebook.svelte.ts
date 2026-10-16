@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { isLearningOnlyLore, lorePicked } from "./loreIndex"
+import { fitBudget, isLearningOnlyLore, lorePicked } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -245,6 +245,7 @@ export async function loadLoreBookV3Prompt(){
         order:number
         tokens:number
         priority:number
+        always?:boolean
         source:string
         inject:{
             operation:'append'|'prepend'|'replace',
@@ -590,6 +591,7 @@ export async function loadLoreBookV3Prompt(){
                     // evaluation has no side effects like setvar.
                     tokens: await tokenize(risuChatParser(content, {chara: char})),
                     priority: priority,
+                    always: !!fullLore[i].alwaysActive,
                     source: fullLore[i].comment || `lorebook ${i}`,
                     inject: inject ?? null
                 })
@@ -620,19 +622,8 @@ export async function loadLoreBookV3Prompt(){
         }
     }
 
-    const activesSorted = actives.sort((a,b) => {
-        return b.priority - a.priority
-    })
-
-    let usedTokens = 0
-
-    const activesFiltered = activesSorted.filter((act) => {
-        if(usedTokens + act.tokens <= loreToken){
-            usedTokens += act.tokens
-            return true
-        }
-        return false
-    })
+    // within the budget: always-on entries first, then by priority; one that does not fit whole goes in part (loreIndex.ts)
+    const activesFiltered = await fitBudget(actives, loreToken, (s) => tokenize(risuChatParser(s, {chara: char})))
 
     let activesResorted = activesFiltered.sort((a,b) => {
         return b.order - a.order
