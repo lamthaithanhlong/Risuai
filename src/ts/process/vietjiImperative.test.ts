@@ -179,3 +179,33 @@ describe('do not (đừng + verb)', () => {
         for (const t of ['đừng tôi', 'đừng nhà']) expect(dictSuggestions(t, list('ko').words, 'ko', 6, v).every((c) => !c.meaning.includes('cấm'))).toBe(true)
     })
 })
+
+// asked 2026-10-15: "sửa luôn 당신 cho tự nhiên" — cô đừng khóc gave 당신 울지 마세요
+describe('the person spoken to', () => {
+    const v = (l: string) => new Set<string>(JSON.parse(readFileSync(`public/dict/vi-${l}.json`, 'utf8')).verbs)
+    const first = (t: string, l: string) => dictSuggestions(t, list(l).words, l as any, 6, v(l))[0]?.text
+    it('is left out of an order, and picks the polite or familiar form', () => {
+        expect(first('cô đừng khóc', 'ko')).toBe('울지 마세요')
+        expect(first('cô đừng khóc', 'ja')).toBe('泣かない[なかない]でください')
+        expect(first('cô đừng khóc', 'zh')).toBe('你[nǐ] 别[bié]哭[kū]')            // Chinese keeps 你: 你别哭 is natural
+        expect(first('cô đừng khóc', 'es')).toBe('no llore')                       // cô → usted
+        expect(first('em đừng khóc', 'es')).toBe('no llores')                      // em → tú
+        expect(first('cô đừng khóc', 'fr')).toBe('ne pleurez pas')                 // cô → vous
+        expect(first('bạn đừng khóc', 'fr')).toBe('ne pleure pas')
+        expect(first('cô ngồi đi', 'ko')).toBe('앉으세요')
+        expect(first('anh ngồi đi', 'es')).toBe('siéntese')
+    })
+    it('Korean and Japanese word by word leave it out at the start; alone it is still offered', () => {
+        const chips = dictSuggestions('cô có sao không', list('ko').words, 'ko', 6, v('ko'))
+        expect(chips[0].text.startsWith('당신')).toBe(false)
+        expect(chips[0].text.startsWith('그쪽')).toBe(false)
+        expect(chips[0].text).toBe('괜찮아요?')                                      // có sao không is one phrase (it gave 있다 왜 아니요)
+        expect(dictSuggestions('cô', list('ko').words, 'ko').map((c) => c.text)).not.toContain('나')
+        expect(dictSuggestions('cô', list('ko').words, 'ko')[0].text).toBe('그쪽')
+        expect(composeSuggestions('제발 cô đừng đi', list('ko'), 'ko')[0].replace).toBe('제발 가지 마세요')
+    })
+    it('a person who is not spoken to stays (cô ấy = she)', () => {
+        expect(dictSuggestions('cô ấy đẹp', list('ko').words, 'ko', 6, v('ko'))[0].meaning).toContain('cô ấy')
+        expect(dictSuggestions('tôi đi', list('ko').words, 'ko', 6, v('ko'))[0].text.startsWith('저')).toBe(true)
+    })
+})

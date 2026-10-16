@@ -142,6 +142,14 @@ function jaProhibitive(word: string): string[] {
 // 吧 urges (坐吧, 走吧); 请 asks politely (请坐); a state is told with 点 (冷静点, 小心点); a short action with 一下 (等一下).
 const ZH_DIAN = new Set(['冷静', '安静', '小心', '快', '慢', '认真', '耐心', '大声', '小声', '勇敢', '坚强', '乖', '专心', '轻', '仔细', '清醒', '镇定', '放松', '高兴', '开心'])
 const ZH_YIXIA = new Set(['等', '看', '听', '试', '休息', '想', '帮', '问', '介绍', '说明', '检查', '准备', '解释', '尝', '停'])
+/** The person spoken to ("cô đừng khóc"): Korean and Japanese leave them out (당신, あなた sound cold or rude), and an order
+ *  never names them in Spanish or French either. The polite ones ask for usted/vous, the familiar ones for tú/tu. */
+export const ADDRESSEE_POLITE = new Set(['cô', 'chú', 'bác', 'ông', 'bà', 'anh', 'chị'])
+export const ADDRESSEE_FAMILIAR = new Set(['bạn', 'cậu', 'mày', 'em'])
+export const isAddressee = (vi: string) => ADDRESSEE_POLITE.has(vi) || ADDRESSEE_FAMILIAR.has(vi)
+/** Languages that do not say the person spoken to: in an order (all but Chinese), in any sentence (Korean, Japanese). */
+export const DROPS_ADDRESSEE_IN_ORDER = new Set(['ko', 'ja', 'es', 'fr'])
+export const DROPS_ADDRESSEE = new Set(['ko', 'ja'])
 const PERSON_ZH = /^(?:我|你|您|他|她|它|我们|你们|他们|她们|咱们|大家)$/
 
 function zhImperative(word: string): string[] {

@@ -7,7 +7,7 @@
 import type { LearningLang } from './vietji'
 import { phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
-import { IMPERATIVE_VI, PERSON_VI, PROHIBIT_VI, imperative, prohibitive } from './vietjiImperative'
+import { ADDRESSEE_FAMILIAR, DROPS_ADDRESSEE, DROPS_ADDRESSEE_IN_ORDER, IMPERATIVE_VI, PERSON_VI, PROHIBIT_VI, imperative, isAddressee, prohibitive } from './vietjiImperative'
 
 export type WordList = Record<string, string[]>
 export type Dictionary = { words: WordList; unsure: Set<string>; order?: string[]; verbs?: Set<string> }
@@ -67,7 +67,8 @@ export function dictSuggestions(typed: string, words: WordList | null, lang: Lea
         for (const fr of parts[0].fr) out.push(chip(fr, parts[0].vi))
     } else if (parts.length > 1) {
         for (const o of ordered(parts, lang, ' ', verbs)) out.push(chip(o.source, o.meaning))
-        out.push(chip(parts.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`))
+        const ws = withoutAddressee(parts, lang)
+        out.push(chip(ws.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`))
         for (const p of parts) out.push(chip(p.fr[0], p.vi))
     }
     const seen = new Set<string>()
@@ -187,11 +188,18 @@ const plainWord = (text: string) => stripReadings(text).replace(/[«»]/g, '').t
 /** "… <verb> đi": the words before, then the verb as an order instead of verb + "go" (침착하다 가다 → 침착하세요). */
 function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, joiner: string, verbs?: Set<string>): { text: string; source: string; meaning: string }[] {
     const isVerb = (p: { vi: string }) => !PERSON_VI.has(p.vi) && (!verbs || verbs.has(p.vi))
+    // the person spoken to is not said in an order (cô đừng khóc → 울지 마세요, not 당신 울지 마세요), and says which form:
+    // cô/ông/bà ask for usted/vous first, bạn/em/mày for tú/tu (the forms come polite first)
+    const addressee = parts.find((p) => isAddressee(p.vi))
+    const drop = (ps: typeof parts) => (DROPS_ADDRESSEE_IN_ORDER.has(lang) ? ps.filter((p) => !isAddressee(p.vi)) : ps)
+    // Spanish and French forms come tú/tu first: a polite addressee puts usted/vous first
+    const politeFirst = !!addressee && !ADDRESSEE_FAMILIAR.has(addressee.vi) && (lang === 'es' || lang === 'fr')
+    const inOrder = (forms: string[]) => (politeFirst ? [...forms].reverse() : forms)
     // "đừng <verb> …" = do not: first, because the đi of "đừng đi" is the verb go, not the order ending
     const k = parts.findIndex((p) => PROHIBIT_VI.has(p.vi))
     if (k >= 0 && k + 1 < parts.length && isVerb(parts[k + 1])) {
-        const forms = parts[k + 1].fr.map((w) => prohibitive(w, lang)).find((f) => f.length) ?? []
-        const before = parts.slice(0, k), after = parts.slice(k + 2).filter((p) => !IMPERATIVE_VI.has(p.vi))
+        const forms = inOrder(parts[k + 1].fr.map((w) => prohibitive(w, lang)).find((f) => f.length) ?? [])
+        const before = drop(parts.slice(0, k)), after = parts.slice(k + 2).filter((p) => !IMPERATIVE_VI.has(p.vi))
         const meaning = `${parts.map((p) => p.vi).join(' ')} · cấm (đừng)`
         return forms.map((f) => ({
             text: [...before.map((p) => plainWord(p.fr[0])), plainWord(f), ...after.map((p) => plainWord(p.fr[0]))].join(joiner),
@@ -203,14 +211,20 @@ function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, join
     const verb = parts[parts.length - 2]
     // only after a verb (the lists vote which Vietnamese words are: không đi gave 不吧, có đi あってください)
     if (PERSON_VI.has(verb.vi) || (verbs && !verbs.has(verb.vi))) return []
-    const forms = verb.fr.map((w) => imperative(w, lang)).find((f) => f.length) ?? []
-    const before = parts.slice(0, -2)
+    const forms = inOrder(verb.fr.map((w) => imperative(w, lang)).find((f) => f.length) ?? [])
+    const before = drop(parts.slice(0, -2))
     const meaning = `${parts.map((p) => p.vi).join(' ')} · mệnh lệnh`
     return forms.map((f) => ({
         text: [...before.map((p) => plainWord(p.fr[0])), plainWord(f)].join(joiner),
         source: [...before.map((p) => p.fr[0]), f].join(' '),
         meaning,
     }))
+}
+
+/** Korean and Japanese do not say the person spoken to: "cô có sao không" → 괜찮아요, not 당신 괜찮아요. Only at the start and
+ *  only when more follows (cô alone is still offered as itself). */
+function withoutAddressee<P extends { vi: string }>(parts: P[], lang: LearningLang): P[] {
+    return DROPS_ADDRESSEE.has(lang) && parts.length > 1 && isAddressee(parts[0].vi) ? parts.slice(1) : parts
 }
 
 /** A word already written in the language is a verb when it translates a Vietnamese verb (the list's vote); with no vote in
@@ -261,8 +275,9 @@ export function composeSuggestions(input: string, dict: Dictionary | null, lang:
     }
     for (const o of ordered(parts, lang, joiner, dict.verbs)) chip(o.text, o.source, o.meaning, head + o.text)
     if (parts.length > 1) {
-        const whole = parts.map((p) => plainWord(p.fr[0])).join(joiner)
-        chip(whole, parts.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`, head + whole)
+        const ws = withoutAddressee(parts, lang)
+        const whole = ws.map((p) => plainWord(p.fr[0])).join(joiner)
+        chip(whole, ws.map((p) => p.fr[0]).join(' '), `${parts.map((p) => p.vi).join(' ')} · từng chữ`, head + whole)
     }
     const first = parts[0]
     const n = first.vi.split(' ').length

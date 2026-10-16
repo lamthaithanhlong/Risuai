@@ -83,7 +83,7 @@ describe('sweep: the 300 most used Vietnamese words', () => {
             const n = nots[l] as any                                        // đừng: every verb, nothing else, nothing dropped
             expect({ l, missing: n.missingN, wrongNot: n.wrongNotN, noReading: n.noReadingN }).toEqual({ l, missing: 0, wrongNot: 0, noReading: 0 })
         }
-    })
+    }, 60_000)                                                          // ~2 s alone, over 5 s inside the full suite
     it('fuzz: model text never reaches the page as markup', () => {
         const nasty = ['<img src=x onerror=alert(1)>', '"><script>x</script>', '___<b>__', '나는 <i>그</i>', '&lt;', '</span><span style="x">', '[[CHECK x]]']
         let leaks = 0

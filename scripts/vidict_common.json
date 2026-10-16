@@ -1,5 +1,5 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15).",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15). ko cô/anh/chị gave 당신 first (cold or rude spoken to someone; cô also 나): 그쪽 and the kin word; ông/bà 어르신. es ngồi was sentar (seat someone): sentarse. có sao không / không sao as said (cô có sao không gave 있다 왜 아니요).",
  "ja": {
   "tôi": [
    "私[わたし]",
@@ -259,6 +259,14 @@
    "する",
    "作る[つくる]",
    "やる"
+  ],
+  "có sao không": [
+   "大丈夫[だいじょうぶ]ですか",
+   "大丈夫[だいじょうぶ]?"
+  ],
+  "không sao": [
+   "大丈夫[だいじょうぶ]です",
+   "大丈夫[だいじょうぶ]"
   ]
  },
  "zh": {
@@ -496,6 +504,14 @@
    "进[jìn]",
    "进来[jìnlái]",
    "进入[jìnrù]"
+  ],
+  "có sao không": [
+   "没事吧[méishìba]",
+   "你还好吗[nǐháihǎoma]"
+  ],
+  "không sao": [
+   "没事[méishì]",
+   "没关系[méiguānxi]"
   ]
  },
  "ko": {
@@ -604,16 +620,17 @@
    "하지만"
   ],
   "cô": [
-   "당신",
+   "그쪽",
+   "아가씨",
    "선생님"
   ],
   "anh": [
-   "당신",
-   "형",
-   "오빠"
+   "그쪽",
+   "오빠",
+   "형"
   ],
   "chị": [
-   "당신",
+   "그쪽",
    "언니",
    "누나"
   ],
@@ -623,11 +640,11 @@
   ],
   "ông": [
    "할아버지",
-   "당신"
+   "어르신"
   ],
   "bà": [
    "할머니",
-   "당신"
+   "어르신"
   ],
   "chú": [
    "아저씨"
@@ -647,7 +664,8 @@
    "아이"
   ],
   "mày": [
-   "너"
+   "너",
+   "니"
   ],
   "tao": [
    "나"
@@ -762,6 +780,14 @@
   "đừng lo": [
    "걱정하지 마세요",
    "걱정하지 마"
+  ],
+  "có sao không": [
+   "괜찮아요?",
+   "괜찮아?"
+  ],
+  "không sao": [
+   "괜찮아요",
+   "괜찮아"
   ]
  },
  "es": {
@@ -988,6 +1014,18 @@
   "đừng lo": [
    "no te preocupes",
    "no se preocupe"
+  ],
+  "ngồi": [
+   "sentarse",
+   "sentar"
+  ],
+  "có sao không": [
+   "¿estás bien?",
+   "¿está bien?"
+  ],
+  "không sao": [
+   "no pasa nada",
+   "estoy bien"
   ]
  },
  "fr": {
@@ -1059,6 +1097,18 @@
   "làm": [
    "faire",
    "travailler"
+  ],
+  "ngồi": [
+   "s'asseoir",
+   "se placer"
+  ],
+  "có sao không": [
+   "ça va ?",
+   "vous allez bien ?"
+  ],
+  "không sao": [
+   "ça va",
+   "ce n’est rien"
   ]
  }
 }
