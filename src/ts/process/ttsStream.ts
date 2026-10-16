@@ -39,6 +39,7 @@ export const FOREIGN_VOICE: Record<string, { model: 'kokoro'; voice: string } | 
     zh: { model: 'kokoro', voice: 'zf_xiaobei' },
     es: { model: 'kokoro', voice: 'ef_dora' },
     fr: { model: 'kokoro', voice: 'ff_siwis' },
+    en: { model: 'kokoro', voice: 'af_heart' },                 // the model card's best English voice (grade A), a woman's
     ko: { device: 'ko-KR' },
 }
 

@@ -5,14 +5,14 @@
 // the model, the way it does when the list has nothing.
 
 import type { LearningLang } from './vietji'
-import { phraseVietji, setLatinLanguage, stripReadings } from './vietji'
+import { isLatinLang, phraseVietji, setLatinLanguage, stripReadings } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
 import { ADDRESSEE_FAMILIAR, DROPS_ADDRESSEE, DROPS_ADDRESSEE_IN_ORDER, IMPERATIVE_VI, PERSON_VI, PROHIBIT_VI, imperative, isAddressee, prohibitive } from './vietjiImperative'
 
 export type WordList = Record<string, string[]>
 export type Dictionary = { words: WordList; unsure: Set<string>; order?: string[]; verbs?: Set<string> }
 
-export const DICT_LANGS: LearningLang[] = ['fr', 'ja', 'zh', 'ko', 'es']
+export const DICT_LANGS: LearningLang[] = ['fr', 'ja', 'zh', 'ko', 'es', 'en']
 const MAX_SYLLABLES = 4
 
 const loaded = new Map<string, Promise<Dictionary | null>>()
@@ -56,10 +56,12 @@ export function segment(text: string, words: WordList): { vi: string; fr: string
  */
 export function dictSuggestions(typed: string, words: WordList | null, lang: LearningLang, max = 6, verbs?: Set<string>): Suggestion[] {
     if (!words) return []
-    if (lang === 'es' || lang === 'fr') setLatinLanguage(lang)
+    if (isLatinLang(lang)) setLatinLanguage(lang)
+    // a chip with no reading is dropped, except in a Latin-letter language: English is read from a list the bar loads, and
+    // until it is here (or for a word it lacks) the word is still the right word to offer
     const chip = (text: string, meaning: string): Suggestion | null => {
-        const vietji = phraseVietji(`«${text}»`)
-        return vietji ? { text, vietji, meaning, source: 'dict' } : null
+        const vietji = phraseVietji(`«${text}»`) ?? (isLatinLang(lang) ? '' : null)
+        return vietji !== null ? { text, vietji, meaning, source: 'dict' } : null
     }
     const parts = segment(typed, words)
     const out: (Suggestion | null)[] = []
@@ -224,6 +226,8 @@ function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, join
 /** Korean and Japanese do not say the person spoken to, anywhere in the sentence: "cô có sao không" → 괜찮아요?, "tôi thích
  *  cô" → 私 好き (asked for Japanese あなた in ordinary sentences, 2026-10-15). Only when more is left (cô alone is still offered). */
 function withoutAddressee<P extends { vi: string }>(parts: P[], lang: LearningLang): P[] {
+    // Spanish drops a subject pronoun (¿comes? not ¿tú comes?) but keeps an object one; Chinese, French and English need it
+    if (lang === 'es') return parts.length > 1 && isAddressee(parts[0].vi) ? parts.slice(1) : parts
     if (!DROPS_ADDRESSEE.has(lang) || parts.length < 2) return parts
     const kept = parts.filter((p) => !isAddressee(p.vi))
     return kept.length ? kept : parts
@@ -259,7 +263,7 @@ export function composeSuggestions(input: string, dict: Dictionary | null, lang:
     const head = joiner === '' ? rawHead.replace(/(?<=[぀-ヿ㐀-鿿])\s+$/, '') : rawHead
     const parts = segment(tail, dict.words)
     if (!parts.length) return []
-    if (lang === 'es' || lang === 'fr') setLatinLanguage(lang)
+    if (isLatinLang(lang)) setLatinLanguage(lang)
     const out: Suggestion[] = []
     const seen = new Set<string>()
     // the reading comes from the list's own form (我[wǒ]): the plain characters alone have none

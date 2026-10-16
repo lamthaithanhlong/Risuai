@@ -46,12 +46,12 @@ def is_verb_vote(lang: str, entry: str) -> bool:
     return False
 
 
-def verbs_of(all_words: dict) -> list:
+def verbs_of(all_words: dict, en_verbs: set = frozenset()) -> list:
     out = []
     for vi in set().union(*[set(w) for w in all_words.values()]):
         if vi in NOT_VERBS or ' ' in vi and vi.split()[0] in NOT_VERBS:
             continue
-        votes = sum(1 for lang, words in all_words.items() if words.get(vi) and is_verb_vote(lang, words[vi][0]))
+        votes = sum(1 for lang, words in all_words.items() if words.get(vi) and is_verb_vote(lang, words[vi][0])) + (vi in en_verbs)
         if votes >= 2:
             out.append(vi)
     return sorted(set(out) | {v for v in HAND_VERBS if any(v in w for w in all_words.values())})
@@ -61,9 +61,11 @@ if __name__ == '__main__':
     root = sys.argv[1] if len(sys.argv) > 1 else 'public/dict'
     common = json.load(open('scripts/vidict_common.json', encoding='utf-8'))
     datas = {}
-    for lang in ('ja', 'zh', 'ko', 'es', 'fr'):
+    for lang in ('ja', 'zh', 'ko', 'es', 'fr', 'en'):
         datas[lang] = apply(json.load(open(f'{root}/vi-{lang}.json', encoding='utf-8')), common.get(lang, {}))
-    verbs = verbs_of({l: d['words'] for l, d in datas.items()})
+    # English carries no verb ending to vote with: its list says which Vietnamese words are verbs (their first sense)
+    en_verbs = set(datas['en'].get('viVerbs', []))
+    verbs = verbs_of({l: d['words'] for l, d in datas.items() if l != 'en'}, en_verbs)
     print(len(verbs), 'Vietnamese verbs')
     for lang, data in datas.items():
         path = f'{root}/vi-{lang}.json'

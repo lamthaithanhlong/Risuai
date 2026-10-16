@@ -6,7 +6,7 @@
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
     import { DBState } from "src/ts/stores.svelte";
     import type { Chat } from "src/ts/storage/database.svelte";
-    import { KIND_LABEL, parseReplies, setHanReadings, setKanjiReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { KIND_LABEL, isLatinLang, parseReplies, setEnglishReadings, setHanReadings, setKanjiReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { ReloadGUIPointer } from "src/ts/stores.svelte";
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
@@ -185,6 +185,7 @@
     const READING_LISTS: Record<string, { file: string; set: (w: Record<string, string> | null) => void }> = {
         zh: { file: '/dict/zh-pinyin.json', set: setHanReadings },
         ja: { file: '/dict/ja-kanji.json', set: setKanjiReadings },
+        en: { file: '/dict/en-vietji.json', set: setEnglishReadings },
     }
     const readingLists = new Map<string, Promise<Record<string, string> | null>>()
     $effect(() => {
@@ -321,7 +322,7 @@
                 {#each book as v, k (v.text + '#' + k)}
                     <button class="w-full text-left flex items-baseline gap-2 py-0.5 border-b border-darkborderc/40 hover:bg-selected" onclick={() => choose({ ...v, source: 'heard' })}>
                         <span class="w-4 shrink-0" title={v.confusedWith.length ? `dễ nhầm với: ${v.confusedWith.join(', ')}` : v.rate >= 1 / 3 ? 'hay sai' : ''}>{v.weight > 0 ? '⚑' : ''}</span>
-                        <span class="text-textcolor">{lang === 'es' || lang === 'fr' ? v.text : stripReadings(v.text)}</span>
+                        <span class="text-textcolor">{isLatinLang(lang) ? v.text : stripReadings(v.text)}</span>
                         <span class="text-xs" style="color:#f2c76b;font-weight:600">{v.vietji}</span>
                         <span class="text-xs text-textcolor2 grow truncate">{v.meaning}</span>
                         <span class="text-xs text-textcolor2 shrink-0">{v.ok ?? 0}✓ {v.bad ?? 0}✗{v.rate > 0 ? ` (${Math.round(v.rate * 100)}% sai)` : ''} · {nextReview(v.due)}</span>
@@ -349,7 +350,7 @@
                     >
                         <!-- the learner reads Vietnamese natively: it is the small hint, the foreign word is what they look at -->
                         <span class="text-xs leading-tight text-textcolor2">{hardTexts.has(s.text) ? '⚑ ' : ''}{s.meaning}{#if s.kind}<span> · {KIND_LABEL[s.kind]}</span>{/if}</span>
-                        <span class={"leading-snug text-textcolor font-semibold " + (lang === 'es' || lang === 'fr' ? 'text-base' : 'text-xl')}>{lang === 'es' || lang === 'fr' ? s.text.replace(/[«»]/g, '').trim() : stripReadings(s.text)}</span>
+                        <span class={"leading-snug text-textcolor font-semibold " + (isLatinLang(lang) ? 'text-base' : 'text-xl')}>{isLatinLang(lang) ? s.text.replace(/[«»]/g, '').trim() : stripReadings(s.text)}</span>
                         <span class="text-xs leading-tight" style="color:#f2c76b;font-weight:600">{s.vietji}</span>
                     </button>
                 {/each}

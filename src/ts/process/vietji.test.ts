@@ -251,3 +251,16 @@ describe('Japanese kanji written without [reading]', () => {
         try { expect(addReadings('今日')).toContain('chưa có cách đọc') } finally { setKanjiReadings(null) }
     })
 })
+
+describe('English readings (public/dict/en-vietji.json, espeak-ng IPA respelled by pdf2mp3)', () => {
+    it('reads English inside «» word by word, contractions as one word', async () => {
+        const { setEnglishReadings, setLatinLanguage, phraseVietji, isLatinLang } = await import('./vietji')
+        setEnglishReadings(JSON.parse(require('fs').readFileSync('public/dict/en-vietji.json', 'utf8')).words)
+        setLatinLanguage('en')
+        expect(phraseVietji('«Hello, okay»')).toBe('hơ-lô ô-cây')
+        expect(phraseVietji("«don't worry»")).toBe('đôn uơ-ri')
+        expect(isLatinLang('en') && isLatinLang('es') && !isLatinLang('ko')).toBe(true)
+        setEnglishReadings(null)
+        setLatinLanguage('es')
+    })
+})

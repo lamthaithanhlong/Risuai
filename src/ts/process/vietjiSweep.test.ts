@@ -6,18 +6,19 @@ import { composeSuggestions, dictSuggestions, needsModel } from './vietjiDict'
 import { buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping } from './vietjiIme'
 import { mixChips } from './vietjiSuggest'
 import { filledHtml, parseDetail, readInline, parseLesson, lessonHtml } from './grammarCoach'
-import { setHanReadings } from './vietji'
+import { setEnglishReadings, setHanReadings } from './vietji'
 import { imperative, prohibitive } from './vietjiImperative'
 import { phraseVietji } from './vietji'
 
 const json = (f: string) => JSON.parse(readFileSync(f, 'utf8'))
-const LANGS = ['ko', 'zh', 'ja', 'es', 'fr'] as const
+const LANGS = ['ko', 'zh', 'ja', 'es', 'fr', 'en'] as const
 const lists = Object.fromEntries(LANGS.map((l) => { const d = json(`public/dict/vi-${l}.json`); return [l, { words: d.words, unsure: new Set<string>(d.unsure ?? []), order: d.order ?? [], verbs: new Set<string>(d.verbs ?? []) }] })) as any
 const top = (json('public/dict/vi-zh.json').order as string[]).slice(0, 300)
 setHanReadings(json('public/dict/zh-pinyin.json').words)
+setEnglishReadings(json('public/dict/en-vietji.json').words)
 const zhIdx = buildSoundIndex(json('public/dict/zh-pinyin.json').words)
 const koIdx = buildKoreanIndex(json('public/dict/ko-words.json').words, Object.values(lists.ko.words as Record<string, string[]>).flat())
-const HEAD: Record<string, string> = { ko: '나 ', zh: '我 ', ja: '私 ', es: 'yo ', fr: 'je ' }
+const HEAD: Record<string, string> = { ko: '나 ', zh: '我 ', ja: '私 ', es: 'yo ', fr: 'je ', en: 'I ' }
 const report: Record<string, unknown> = {}
 
 describe('sweep: the 300 most used Vietnamese words', () => {

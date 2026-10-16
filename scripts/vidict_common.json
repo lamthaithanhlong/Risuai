@@ -1,5 +1,5 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15). ko cô/anh/chị gave 당신 first (cold or rude spoken to someone; cô also 나): 그쪽 and the kin word; ông/bà 어르신. es ngồi was sentar (seat someone): sentarse. có sao không / không sao as said (cô có sao không gave 있다 왜 아니요). ja cô/anh/chị/bạn/ông/bà gave あなた first: そちら, the kin word, 君 for the familiar ones.",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15). ko cô/anh/chị gave 당신 first (cold or rude spoken to someone; cô also 나): 그쪽 and the kin word; ông/bà 어르신. es ngồi was sentar (seat someone): sentarse. có sao không / không sao as said (cô có sao không gave 있다 왜 아니요). ja cô/anh/chị/bạn/ông/bà gave あなた first: そちら, the kin word, 君 for the familiar ones. en: the English list is the pivot itself; the function words and pronouns are as spoken (cô = you, là = is) (2026-10-15). en top verbs whose first sense was another word (sống = spine, thành = into, ghét = dirt): the verb (sweep, 2026-10-15).",
  "ja": {
   "tôi": [
    "私[わたし]",
@@ -1104,6 +1104,533 @@
   "không sao": [
    "ça va",
    "ce n’est rien"
+  ]
+ },
+ "en": {
+  "tôi": [
+   "I",
+   "me"
+  ],
+  "tui": [
+   "I",
+   "me"
+  ],
+  "tao": [
+   "I",
+   "me"
+  ],
+  "tớ": [
+   "I",
+   "me"
+  ],
+  "mình": [
+   "I",
+   "me"
+  ],
+  "cháu": [
+   "I",
+   "me"
+  ],
+  "con": [
+   "I",
+   "child"
+  ],
+  "bạn": [
+   "you",
+   "friend"
+  ],
+  "cô": [
+   "you",
+   "miss"
+  ],
+  "anh": [
+   "you",
+   "brother"
+  ],
+  "chị": [
+   "you",
+   "sister"
+  ],
+  "em": [
+   "you",
+   "little sister"
+  ],
+  "ông": [
+   "you",
+   "sir",
+   "grandpa"
+  ],
+  "bà": [
+   "you",
+   "ma'am",
+   "grandma"
+  ],
+  "chú": [
+   "you",
+   "uncle"
+  ],
+  "bác": [
+   "you",
+   "uncle"
+  ],
+  "cậu": [
+   "you"
+  ],
+  "mày": [
+   "you"
+  ],
+  "nó": [
+   "it",
+   "he",
+   "she"
+  ],
+  "họ": [
+   "they",
+   "them"
+  ],
+  "cô ấy": [
+   "she",
+   "her"
+  ],
+  "chị ấy": [
+   "she",
+   "her"
+  ],
+  "bà ấy": [
+   "she",
+   "her"
+  ],
+  "anh ấy": [
+   "he",
+   "him"
+  ],
+  "ông ấy": [
+   "he",
+   "him"
+  ],
+  "chúng ta": [
+   "we",
+   "us"
+  ],
+  "chúng tôi": [
+   "we",
+   "us"
+  ],
+  "có": [
+   "have",
+   "yes",
+   "there is"
+  ],
+  "không": [
+   "no",
+   "not"
+  ],
+  "vâng": [
+   "yes"
+  ],
+  "dạ": [
+   "yes"
+  ],
+  "là": [
+   "is",
+   "am",
+   "are",
+   "be"
+  ],
+  "và": [
+   "and"
+  ],
+  "nhưng": [
+   "but"
+  ],
+  "ở đâu": [
+   "where"
+  ],
+  "gì": [
+   "what"
+  ],
+  "ai": [
+   "who"
+  ],
+  "tại sao": [
+   "why"
+  ],
+  "khi nào": [
+   "when"
+  ],
+  "bao nhiêu": [
+   "how much",
+   "how many"
+  ],
+  "cảm ơn": [
+   "thank you",
+   "thanks"
+  ],
+  "xin lỗi": [
+   "I'm sorry",
+   "sorry",
+   "excuse me"
+  ],
+  "xin chào": [
+   "hello"
+  ],
+  "chào": [
+   "hi",
+   "hello",
+   "bye"
+  ],
+  "đây": [
+   "here",
+   "this"
+  ],
+  "đó": [
+   "that",
+   "there"
+  ],
+  "cái": [
+   "thing"
+  ],
+  "cái đó": [
+   "that"
+  ],
+  "cái này": [
+   "this"
+  ],
+  "cái kia": [
+   "that"
+  ],
+  "cái gì": [
+   "what"
+  ],
+  "là gì": [
+   "what is it"
+  ],
+  "là cái gì": [
+   "what is it"
+  ],
+  "quái gì": [
+   "what the hell"
+  ],
+  "cái quái gì": [
+   "what the hell"
+  ],
+  "thế": [
+   "so",
+   "then"
+  ],
+  "vậy": [
+   "so",
+   "then"
+  ],
+  "thế thì": [
+   "then"
+  ],
+  "vậy thì": [
+   "then"
+  ],
+  "đừng": [
+   "don't"
+  ],
+  "đừng sợ": [
+   "don't be afraid",
+   "don't worry"
+  ],
+  "đừng lo": [
+   "don't worry"
+  ],
+  "có sao không": [
+   "are you okay?",
+   "are you all right?"
+  ],
+  "không sao": [
+   "it's okay",
+   "no problem"
+  ],
+  "được": [
+   "okay",
+   "can",
+   "get"
+  ],
+  "rồi": [
+   "already",
+   "okay"
+  ],
+  "nữa": [
+   "more",
+   "again"
+  ],
+  "lại": [
+   "again",
+   "back"
+  ],
+  "đi": [
+   "go",
+   "leave"
+  ],
+  "về": [
+   "go back",
+   "go home",
+   "return"
+  ],
+  "đến": [
+   "come",
+   "arrive"
+  ],
+  "giúp": [
+   "help"
+  ],
+  "bình tĩnh": [
+   "calm down",
+   "calm"
+  ],
+  "thích": [
+   "like"
+  ],
+  "yêu": [
+   "love"
+  ],
+  "muốn": [
+   "want"
+  ],
+  "cần": [
+   "need"
+  ],
+  "biết": [
+   "know"
+  ],
+  "nghĩ": [
+   "think"
+  ],
+  "nói": [
+   "say",
+   "speak",
+   "tell"
+  ],
+  "làm": [
+   "do",
+   "make"
+  ],
+  "nhìn": [
+   "look",
+   "see"
+  ],
+  "thấy": [
+   "see",
+   "feel"
+  ],
+  "nghe": [
+   "listen",
+   "hear"
+  ],
+  "đợi": [
+   "wait"
+  ],
+  "chờ": [
+   "wait"
+  ],
+  "đói": [
+   "hungry"
+  ],
+  "no": [
+   "full"
+  ],
+  "lớn": [
+   "big"
+  ],
+  "nhỏ": [
+   "small",
+   "little"
+  ],
+  "nóng": [
+   "hot"
+  ],
+  "lạnh": [
+   "cold"
+  ],
+  "đẹp": [
+   "beautiful",
+   "pretty"
+  ],
+  "nhanh": [
+   "fast",
+   "quick"
+  ],
+  "nhanh lên": [
+   "hurry up",
+   "quickly"
+  ],
+  "chậm": [
+   "slow"
+  ],
+  "ngồi": [
+   "sit",
+   "sit down"
+  ],
+  "đứng": [
+   "stand"
+  ],
+  "chạy": [
+   "run"
+  ],
+  "sợ": [
+   "afraid",
+   "scared",
+   "fear"
+  ],
+  "lo": [
+   "worry"
+  ],
+  "khóc": [
+   "cry"
+  ],
+  "cười": [
+   "laugh",
+   "smile"
+  ],
+  "ngủ": [
+   "sleep"
+  ],
+  "dậy": [
+   "get up",
+   "wake up"
+  ],
+  "mở": [
+   "open"
+  ],
+  "đóng": [
+   "close",
+   "shut"
+  ],
+  "cửa": [
+   "door"
+  ],
+  "nhà": [
+   "house",
+   "home"
+  ],
+  "nước": [
+   "water"
+  ],
+  "cây": [
+   "tree"
+  ],
+  "sống": [
+   "live"
+  ],
+  "thành": [
+   "become"
+  ],
+  "gọi": [
+   "call"
+  ],
+  "mặc": [
+   "wear",
+   "put on"
+  ],
+  "cố": [
+   "try"
+  ],
+  "ghét": [
+   "hate"
+  ],
+  "thương": [
+   "love",
+   "feel sorry for"
+  ],
+  "báo": [
+   "tell",
+   "report"
+  ],
+  "xuống": [
+   "go down",
+   "come down"
+  ],
+  "tìm": [
+   "look for",
+   "find"
+  ],
+  "bắt": [
+   "catch"
+  ],
+  "đánh": [
+   "hit",
+   "fight"
+  ],
+  "sinh": [
+   "be born",
+   "give birth"
+  ],
+  "định": [
+   "plan to",
+   "intend"
+  ],
+  "mất": [
+   "lose"
+  ],
+  "trở": [
+   "return",
+   "become"
+  ],
+  "tiếp": [
+   "continue",
+   "go on"
+  ],
+  "bỏ": [
+   "leave",
+   "quit",
+   "put down"
+  ],
+  "vô": [
+   "come in",
+   "go in"
+  ],
+  "đưa": [
+   "give",
+   "bring"
+  ],
+  "xin": [
+   "ask for",
+   "please"
+  ],
+  "trông": [
+   "look",
+   "watch"
+  ],
+  "trả": [
+   "pay",
+   "give back"
+  ],
+  "xảy": [
+   "happen"
+  ],
+  "tính": [
+   "count",
+   "plan"
+  ],
+  "hiện": [
+   "appear"
+  ],
+  "khỏi": [
+   "get well"
+  ],
+  "thử": [
+   "try"
+  ],
+  "nghỉ": [
+   "rest",
+   "take a break"
+  ],
+  "mang": [
+   "carry",
+   "bring"
+  ],
+  "lên": [
+   "go up",
+   "come up"
+  ],
+  "ra": [
+   "go out",
+   "come out"
   ]
  }
 }

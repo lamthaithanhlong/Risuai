@@ -89,7 +89,7 @@ export type DetailPiece = { piece: string; kind: string; heard: string; ok: bool
 export type DetailAdd = { add: string; why: string }
 export type Detail = { pieces: DetailPiece[]; heard: string; frame: string; filled: string; order: string; adds: DetailAdd[]; final: string; meaning: string }
 
-const NAMES: Record<string, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin)', ko: 'Korean', es: 'Spanish', fr: 'French' }
+const NAMES: Record<string, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin)', ko: 'Korean', es: 'Spanish', fr: 'French', en: 'English' }
 
 /** sent: the player's whole message; meant: the Vietnamese they typed for it (bar); hint: the reply's own check, maybe one word. */
 export function detailPrompt(sent: string, lang: string, meant = '', hint = ''): string {

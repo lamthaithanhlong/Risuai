@@ -105,15 +105,27 @@ export function fromVietji(text: string): string | null {
 }
 
 
-export type LearningLang = 'ja' | 'zh' | 'ko' | 'es' | 'fr'
+export type LearningLang = 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en'
 
-// Spanish and French lines both sit inside «»; which reader they get follows the language being learned.
+/** Languages written in Latin letters: their lines sit inside «» and are read word by word. */
+export const isLatinLang = (lang: string | undefined): boolean => lang === 'es' || lang === 'fr' || lang === 'en'
+
+// English spelling does not say its sound, so English is read from a list made at build time: each word's espeak-ng IPA
+// respelled in Vietnamese syllables (pdf2mp3's g2p, public/dict/en-vietji.json), loaded by the bar while learning English.
+let englishReadings: Record<string, string> | null = null
+export function setEnglishReadings(words: Record<string, string> | null) { englishReadings = words }
+function englishToVietji(word: string): string | null {
+    const w = word.toLowerCase().replace(/’/g, "'")
+    return englishReadings?.[w] ?? englishReadings?.[w.replace(/'.*$/, '')] ?? null
+}
+
+// Spanish, French and English lines sit inside «»; which reader they get follows the language being learned.
 let latinReader: (word: string) => string | null = spanishToVietji
 export function setLatinLanguage(lang: string | undefined): void {
-    latinReader = lang === 'fr' ? frenchToVietji : spanishToVietji
+    latinReader = lang === 'fr' ? frenchToVietji : lang === 'en' ? englishToVietji : spanishToVietji
 }
-// a French elision (c'est, qu'il) is one word: its consonant is heard with what follows
-const LATIN_WORD = /(?:[QqKk]u['’]|[CcDdJjLlMmNnSsTt]['’])?[A-Za-zÀ-ÖØ-öø-ÿœŒ]+/g
+// a French elision (c'est, qu'il) is one word: its consonant is heard with what follows; an English contraction too (don't, I'm)
+const LATIN_WORD = /(?:[QqKk]u['’]|[CcDdJjLlMmNnSsTt]['’])?[A-Za-zÀ-ÖØ-öø-ÿœŒ]+(?:['’](?:t|s|m|re|ll|ve|d)\b)?/g
 
 const KANA = /[ぁ-ゖァ-ヺ]/
 const HAN = '一-鿿㐀-䶿々〆'

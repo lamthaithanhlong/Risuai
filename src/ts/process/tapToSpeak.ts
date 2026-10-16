@@ -5,6 +5,7 @@
 // Việt-ji line under each word and furigana in <rt>.
 
 import { speakForeign, warmVoice, type StreamDeps } from './ttsStream'
+import { isLatinLang } from './vietji'
 
 const FOREIGN = /[぀-ヿ㐀-鿿豈-﫿가-힣ᄀ-ᇿ㄰-㆏々〆ー]/
 const JOINS = /[ 　、。，．！？!?・…「」『』〜~,.]/
@@ -34,7 +35,7 @@ export function foreignAt(text: string, pos: number, lang: string): { text: stri
         const runLang = HANGUL.test(run) ? 'ko' : KANA.test(run) ? 'ja' : lang === 'ja' ? 'ja' : 'zh'
         return { text: run, lang: runLang }
     }
-    if (lang === 'es' || lang === 'fr') {
+    if (isLatinLang(lang)) {
         const open = text.lastIndexOf('«', p), close = text.indexOf('»', p)
         if (open < 0 || close < 0) return null
         if (text.slice(open, p).includes('»') || text.slice(p, close).includes('«')) return null
@@ -77,7 +78,7 @@ function textAtPoint(root: Element, x: number, y: number): { text: string; pos: 
 /** The foreign phrases of the line a speaker button ends (readings left out), joined: what the button reads. */
 export function foreignOfLine(text: string, lang: string): string {
     const out: string[] = []
-    if (lang === 'es' || lang === 'fr') {
+    if (isLatinLang(lang)) {
         for (const m of text.matchAll(/«([^»]+)»/g)) out.push(m[1].trim())
     }
     for (const m of text.matchAll(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー][\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー \u3000、。，！？!?・…〜~]*/g)) {

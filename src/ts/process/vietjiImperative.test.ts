@@ -228,3 +228,48 @@ describe('Japanese (and Korean) ordinary sentences: no あなた / 당신', () =
         expect(whole('tôi thích cô', 'ja')).toMatch(/^私/)
     })
 })
+
+// asked 2026-10-15: "你 trong câu thường … tBn, pháp" — only Spanish drops the subject; Chinese, French, English need it
+describe('the person spoken to, ordinary sentences in Chinese, Spanish, French', () => {
+    const v = (l: string) => new Set<string>(JSON.parse(readFileSync(`public/dict/vi-${l}.json`, 'utf8')).verbs)
+    const whole = (t: string, l: string) => dictSuggestions(t, list(l).words, l as any, 6, v(l)).find((c) => c.meaning.includes('từng chữ'))?.text ?? ''
+    it('Spanish leaves out tú/usted as the subject, keeps it as the object', () => {
+        expect(whole('cô ăn chưa', 'es')).not.toMatch(/^usted|^tú/)
+        expect(whole('tôi thích cô', 'es')).toMatch(/usted|tú/)
+    })
+    it('Chinese and French keep it: 你/您, vous/tu', () => {
+        expect(whole('tôi thích cô', 'zh')).toContain('你')
+        expect(whole('ông ăn chưa', 'zh')).toMatch(/^您/)
+        expect(whole('cô ăn chưa', 'fr')).toMatch(/^vous/)
+    })
+})
+
+// asked 2026-10-15: "learning thêm 1 bảng tiếng anh làm tương tự mấy tiếng kia"
+describe('English', () => {
+    const v = new Set<string>(JSON.parse(readFileSync('public/dict/vi-en.json', 'utf8')).verbs)
+    const first = (t: string) => dictSuggestions(t, list('en').words, 'en', 6, v)[0]?.text
+    it('the word list reads Vietnamese the spoken way', () => {
+        const w = list('en').words
+        expect(w['tôi'][0]).toBe('I')
+        expect(w['cô'][0]).toBe('you')
+        expect(w['là'][0]).toBe('is')
+        expect(w['ăn'][0]).toBe('eat')
+        expect(w['cô ấy'][0]).toBe('she')
+    })
+    it('orders and do-nots: please first, no "you"', () => {
+        expect(first('bình tĩnh đi')).toBe('please calm down')
+        expect(first('cô đừng khóc')).toBe("please don't cry")
+        expect(first('đừng lo')).toBe("don't worry")
+        expect(first('tôi đi')?.startsWith('please')).toBe(false)
+    })
+    it('ordinary sentences keep "you"', () => {
+        expect(dictSuggestions('tôi thích cô', list('en').words, 'en', 6, v)[0].text).toBe('I like you')
+    })
+    it('the chips are there before the readings list loads, and read once it has', async () => {
+        const { setEnglishReadings } = await import('./vietji')
+        expect(dictSuggestions('ăn', list('en').words, 'en')[0]).toMatchObject({ text: 'eat', vietji: '' })
+        setEnglishReadings(JSON.parse(readFileSync('public/dict/en-vietji.json', 'utf8')).words)
+        expect(dictSuggestions('ăn', list('en').words, 'en')[0].vietji).toBe('ít')
+        setEnglishReadings(null)
+    })
+})

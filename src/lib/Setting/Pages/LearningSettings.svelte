@@ -12,6 +12,7 @@
         ko: ['안녕하세요. 감사합니다.', 'Xin chào. Cảm ơn.'],
         es: ['«Hola, ¿cuánto cuesta?»', 'Xin chào, giá bao nhiêu?'],
         fr: ['« Bonjour, un croissant, s’il vous plaît. »', 'Xin chào, cho một bánh sừng bò.'],
+        en: ['«Hello, how much is it?»', 'Xin chào, giá bao nhiêu?'],
     }
     let sample = $derived(SAMPLES[DBState.db.learningLang ?? 'ja'] ?? SAMPLES.ja)
     let sampleHtml = $derived.by(() => { setLatinLanguage(DBState.db.learningLang); return addReadings(sample[0]) })
@@ -32,6 +33,7 @@
                 <OptionInput value="ko">한국어 — tiếng Hàn</OptionInput>
                 <OptionInput value="es">Español — tiếng Tây Ban Nha</OptionInput>
                 <OptionInput value="fr">Français — tiếng Pháp</OptionInput>
+                <OptionInput value="en">English — tiếng Anh</OptionInput>
             </SelectInput>
             <Check bind:check={DBState.db.learningReadings} name={language.learningReadings}/>
             {#if (DBState.db.learningLang ?? 'ja') === 'ja'}

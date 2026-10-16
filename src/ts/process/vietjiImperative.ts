@@ -148,7 +148,7 @@ export const ADDRESSEE_POLITE = new Set(['cô', 'chú', 'bác', 'ông', 'bà', '
 export const ADDRESSEE_FAMILIAR = new Set(['bạn', 'cậu', 'mày', 'em'])
 export const isAddressee = (vi: string) => ADDRESSEE_POLITE.has(vi) || ADDRESSEE_FAMILIAR.has(vi)
 /** Languages that do not say the person spoken to: in an order (all but Chinese), in any sentence (Korean, Japanese). */
-export const DROPS_ADDRESSEE_IN_ORDER = new Set(['ko', 'ja', 'es', 'fr'])
+export const DROPS_ADDRESSEE_IN_ORDER = new Set(['ko', 'ja', 'es', 'fr', 'en'])
 export const DROPS_ADDRESSEE = new Set(['ko', 'ja'])
 const PERSON_ZH = /^(?:我|你|您|他|她|它|我们|你们|他们|她们|咱们|大家)$/
 
@@ -298,6 +298,8 @@ function frImperative(word: string): string[] {
     return /^(?:se |s')/.test(w) ? [`${forms[0]}-toi`, `${forms[1]}-vous`] : [...forms]
 }
 
+const EN_PHRASE = /^[a-z][a-z' -]*$/
+
 /** Vietnamese words that, before a verb, forbid it ("đừng đi" = do not go). */
 export const PROHIBIT_VI = new Set(['đừng', 'chớ', 'đừng có', 'không được'])
 
@@ -309,6 +311,7 @@ export function prohibitive(word: string, lang: LearningLang): string[] {
     if (lang === 'ja') return jaProhibitive(w)
     if (lang === 'es') return esProhibitive(w)
     if (lang === 'fr') return frProhibitive(w)
+    if (lang === 'en') return EN_PHRASE.test(w) ? [`please don't ${w}`, `don't ${w}`] : []
     if (lang === 'zh') {
         const plain = w.replace(/\[[^\]]*\]/g, '')
         return /[\u3400-\u9fff]/.test(plain) && !PERSON_ZH.test(plain) && !/^(?:别|不要)/.test(plain) ? ['别[bié]' + w, '不要[búyào]' + w] : []
@@ -325,5 +328,7 @@ export function imperative(word: string, lang: LearningLang): string[] {
     if (lang === 'es') return esImperative(w)
     if (lang === 'fr') return frImperative(w)
     if (lang === 'zh') return zhImperative(w)
+    // English: the verb itself is the order; please makes it polite (calm down, please calm down)
+    if (lang === 'en') return EN_PHRASE.test(w) ? [`please ${w}`, w] : []
     return []
 }
