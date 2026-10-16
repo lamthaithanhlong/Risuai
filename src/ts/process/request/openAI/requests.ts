@@ -1,4 +1,5 @@
 import { storyEffort } from '../storyEffort'
+import { oneSystemMessage } from '../oneSystem'
 import { modeAdditionalParameters, dropNeutralPenalties } from "../modeParams";
 import { createChatStreamDecoder } from './chatStreamDecoder'
 import { composeStreamChunk } from "./thoughtsStream";
@@ -218,6 +219,11 @@ export async function requestOpenAI(arg:RequestDataArgumentExtended):Promise<req
 
     if(aiModel === 'openrouter' && db.openrouterRequestModel === 'risu/free'){
         openrouterRequestModel = await getFreeOpenRouterModels()
+    }
+
+    // the Custom API (9router to Codex) reads only the first system message: one at the top, the rest as the user's (oneSystem.ts)
+    if(aiModel === 'reverse_proxy' && db.oneSystemMessage !== false){
+        formatedChat = oneSystemMessage(formatedChat, (text) => db.systemContentReplacement ? db.systemContentReplacement.replace('{{slot}}', text) : `system: ${text}`)
     }
 
     if(arg.modelInfo.flags.includes(LLMFlags.DeveloperRole)){
