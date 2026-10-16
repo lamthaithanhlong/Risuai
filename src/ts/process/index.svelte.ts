@@ -13,6 +13,7 @@ import { genStatus, genStatusEvents } from "./genStatus.svelte";
 import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
+import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
@@ -1520,6 +1521,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = learningRequest(formated, currentChat)
     // Settings → Image generation: the story describes each named character once, for their portrait
     formated = portraitRequest(formated, DBState.db.characters[sel.char] ?? currentChar)
+    // a scene picture for a story with no picture script of its own (scenePictures.ts)
+    formated = scenePictureRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // natural Vietnamese prose for a story told in Vietnamese (proseVi.ts): speaker before every spoken line, and the rest
     formated = viProseRequest(formated, DBState.db.viProseGuard !== false, wantsVietnameseProse(currentChat?.message ?? [], currentChar?.firstMessage ?? '', DBState.db.translator), getUserName())
 
@@ -1869,6 +1872,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        noteScenePicture(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
         const outputMessage = currentChat.message[inlayMessageIndex]
         if(outputMessage){
@@ -1979,6 +1983,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        noteScenePicture(sel.char, currentChat)
         if(outputMessageId){
             outputMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
             await runChatOutputListeners(currentChar, currentChat, sel.char, sel.chat, outputMessageIndex)

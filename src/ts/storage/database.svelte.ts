@@ -910,6 +910,7 @@ export interface Database{
     viProseGuard?: boolean
     /** Draw each named character's portrait once and send it as the reference of scene pictures (portraits.ts); on unless false. */
     autoPortraits?: boolean
+    autoScenePictures?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */

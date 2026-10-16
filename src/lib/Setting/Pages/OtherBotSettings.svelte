@@ -278,6 +278,7 @@
         {#if DBState.db.sdProvider}
             <div class="mb-4 flex flex-col gap-1">
                 <Check check={DBState.db.autoPortraits !== false} onChange={(v) => { DBState.db.autoPortraits = v }} name="Tự vẽ chân dung nhân vật"/>
+                <Check check={DBState.db.autoScenePictures !== false} onChange={(v) => { DBState.db.autoScenePictures = v }} name="Tự vẽ ảnh cảnh cho truyện chưa có script ảnh"/>
                 <span class="text-textcolor2 text-xs">Mọi chat, mọi nhà cung cấp ảnh: mỗi nhân vật có tên (kể cả nhân vật của bạn, lấy ảnh persona) có một chân dung, lưu vào Additional Assets và dùng chung cho các bản sao cùng tên của truyện. Ảnh cảnh có nhân vật đó được ghi ngoại hình, và với OpenAI-compatible (9router) được gửi kèm chân dung làm ảnh mẫu.</span>
             </div>
         {/if}
