@@ -107,6 +107,12 @@ export function mimeOf(b: Uint8Array): string {
     return 'image/png'
 }
 
+/** For a provider that takes no reference image: the looks in words, so each character is described the same way. */
+export function withLooksText(prompt: string, refs: PortraitEntry[]): string {
+    const looks = refs.filter((e) => e.look)
+    return looks.length ? `${prompt}\n\nCharacters: ${looks.map((e) => `${e.name}: ${e.look}`).join('; ')}.` : prompt
+}
+
 // ---- the effects, with their dependencies passed in (tested without a page) ------------------------------------------------
 
 export interface PortraitDeps {
@@ -156,6 +162,26 @@ export async function drawNewPortraits(card: CardLike, reply: string, deps: Port
         save()
     }))
     return made
+}
+
+/**
+ * Copies of the same story (cards with the same name) share their portraits: what one drew is taken by the other instead of
+ * being drawn again (the owner has two "Shadow Slave" cards).
+ */
+export function adoptFromSiblings(card: CardLike, siblings: CardLike[]): void {
+    const state = stateOf(card)
+    for (const sib of siblings) {
+        if (sib === card) continue
+        for (const [k, e] of Object.entries(sib.extentions?.vjPortraits ?? {}) as [string, PortraitEntry][]) {
+            if (e.status !== 'done' || !e.asset || state[k]?.status === 'done') continue
+            state[k] = { ...e }
+            card.additionalAssets ??= []
+            if (!card.additionalAssets.some((a) => keyOf(a[0]) === k)) {
+                const own = sib.additionalAssets?.find((a) => keyOf(a[0]) === k)
+                card.additionalAssets.push([e.name, e.asset, own?.[2] ?? 'webp'])
+            }
+        }
+    }
 }
 
 /** A portrait the learner added by hand (Additional Assets, named like a described character) counts as drawn. */

@@ -400,10 +400,10 @@ export async function runScripted(code:string, arg:{
                 // (negative counts from the end, as in getChat); without it, the last message.
                 const db = getDatabase()
                 // the portraits of the characters this picture names go with it as references (portraitsPage.ts)
-                const { sceneReferences } = await import('./portraitsPage')
+                const { sceneReferences, currentRoom } = await import('./portraitsPage')
                 const sceneMsgs = ScriptingEngineState.chat?.message ?? []
                 const sceneAt = typeof index === 'number' ? (index < 0 ? sceneMsgs.length + index : index) : sceneMsgs.length - 1
-                const scene = await sceneReferences(char as character, value, sceneMsgs[sceneAt]?.data ?? '')
+                const scene = await sceneReferences(currentRoom(char as character), value, sceneMsgs[sceneAt]?.data ?? '')
                 // the same flag as platform.ts isNodeServer, read here because platform.ts touches `window` when it loads
                 const onNodeServer = !!(globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__
                 if(onNodeServer && db.sdProvider === 'openai-compat' && db.openaiCompatImage?.url){

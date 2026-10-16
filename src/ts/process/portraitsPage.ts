@@ -1,9 +1,11 @@
 // The page's side of the portraits (portraits.ts): the note in the request, drawing after a reply, the reference images that go
 // with a scene picture. Only with the OpenAI-compatible picture setting (9router), the one whose route takes reference images.
 
-import { getDatabase, type character, type Chat } from '../storage/database.svelte'
+import { get } from 'svelte/store'
+import { getDatabase, type character, type Chat, type groupChat } from '../storage/database.svelte'
+import { selectedCharID } from '../stores.svelte'
 import { checkPersonaBinded, getPersonaPrompt, getUserName } from '../util'
-import { adoptHandAssets, drawNewPortraits, keyOf, mimeOf, withPlayer, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
+import { adoptFromSiblings, adoptHandAssets, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
 import type { OpenAIChat } from './index.svelte'
 
 /** The player's character as the chat sees it: the bound persona, else the selected one. */
@@ -12,16 +14,35 @@ export function currentPlayer(): Player {
     return { name: getUserName(), icon: bound ? bound.icon : getDatabase().userIcon, prompt: getPersonaPrompt() }
 }
 
+/** Portraits are drawn with whatever picture provider is set; only 9router (OpenAI-compatible) also takes them as references. */
 export function portraitsOn(): boolean {
     const db = getDatabase()
-    return db.autoPortraits !== false && db.sdProvider === 'openai-compat' && !!db.openaiCompatImage?.url
+    return db.autoPortraits !== false && !!db.sdProvider && (db.sdProvider !== 'openai-compat' || !!db.openaiCompatImage?.url)
+}
+const referencesOn = () => getDatabase().sdProvider === 'openai-compat'
+
+/** Where a chat's portraits live: its character card, or the group in a group chat (every member shares them), with the
+ *  same story's other copies (cards of the same name) taken in first. */
+type Room = character | groupChat
+function room(r: Room | undefined): (Room & CardLike) | null {
+    if (!r) return null
+    const card = r as Room & CardLike
+    const db = getDatabase()
+    adoptFromSiblings(card, db.characters.filter((c) => c && c !== r && c.type === r.type && c.name === r.name) as CardLike[])
+    adoptHandAssets(card)
+    return card
+}
+/** The chat being written in: its card or group (a script runs as a member, the portraits belong to the room). */
+export function currentRoom(fallback?: character): Room | undefined {
+    const db = getDatabase()
+    return (db.characters[get(selectedCharID)] as Room | undefined) ?? fallback
 }
 
 /** The note goes in as a system message right before the last user message, like the learning note. */
-export function portraitRequest<T extends OpenAIChat>(formated: T[], char: character | undefined, player: Player = currentPlayer()): T[] {
-    if (!portraitsOn() || !char || char.type !== 'character') return formated
-    adoptHandAssets(char)
-    const note = { role: 'system', content: portraitNote(withPlayer(stateOf(char), player), player.name) } as T
+export function portraitRequest<T extends OpenAIChat>(formated: T[], chatRoom: Room | undefined, player: Player = currentPlayer()): T[] {
+    const card = portraitsOn() ? room(chatRoom) : null
+    if (!card) return formated
+    const note = { role: 'system', content: portraitNote(withPlayer(stateOf(card), player), player.name) } as T
     const last = formated.map((m) => m.role).lastIndexOf('user')
     return last >= 0 ? [...formated.slice(0, last), note, ...formated.slice(last)] : [...formated, note]
 }
@@ -30,16 +51,18 @@ export function portraitRequest<T extends OpenAIChat>(formated: T[], char: chara
 export function notePortraits(charIndex: number, chat: Chat | undefined): void {
     if (!portraitsOn() || !chat) return
     const db = getDatabase()
-    const char = db.characters[charIndex] as character
-    if (!char || char.type !== 'character') return
+    const card = room(db.characters[charIndex] as Room)
+    if (!card) return
+    // the picture settings of a character: the card itself, or in a group its first member
+    const char = (card.type === 'group' ? db.characters.find((c) => c.chaId === (card as groupChat).characters?.[0]) : card) as character
     const reply = [...(chat.message ?? [])].reverse().find((m) => m.role === 'char')?.data ?? ''
     if (!reply.includes('[[LOOK')) return
-    const save = () => { db.characters[charIndex] = char }
-    drawNewPortraits(char, reply, {
+    const save = () => { db.characters[charIndex] = card }
+    drawNewPortraits(card, reply, {
         now: () => Date.now(),
         draw: async (prompt) => {
             const { openaiCompatImageRequest, generateAIImage } = await import('./stableDiff')
-            if ((globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) {
+            if (referencesOn() && (globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) {
                 const { drawOnServer } = await import('./imageJobClient')
                 const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
                 const { url, key, body, models } = openaiCompatImageRequest(prompt)
@@ -67,9 +90,9 @@ export function notePortraits(charIndex: number, chat: Chat | undefined): void {
 }
 
 /** The portraits as references: by name, from the state and from Additional Assets the learner added by hand. */
-function view(char: character): PortraitState {
-    const state: PortraitState = withPlayer({ ...stateOf(char) }, currentPlayer())
-    for (const [name, path] of char.additionalAssets ?? []) {
+function view(card: Room & CardLike): PortraitState {
+    const state: PortraitState = withPlayer({ ...stateOf(card) }, currentPlayer())
+    for (const [name, path] of card.additionalAssets ?? []) {
         const k = keyOf(name)
         if (!state[k] || state[k].status !== 'done') state[k] = { name, look: state[k]?.look ?? '', status: 'done', at: 0, asset: path }
     }
@@ -80,10 +103,13 @@ function view(char: character): PortraitState {
  * For a scene picture: the prompt told who is who, and the portraits of the characters it names (in the prompt, or in the
  * message it is for) as data URLs for 9router's `images`.
  */
-export async function sceneReferences(char: character | undefined, prompt: string, message = ''): Promise<{ prompt: string; images: string[] }> {
-    if (!portraitsOn() || !char || char.type !== 'character') return { prompt, images: [] }
-    const refs = referencesFor(view(char), prompt, message)
+export async function sceneReferences(chatRoom: Room | undefined, prompt: string, message = ''): Promise<{ prompt: string; images: string[] }> {
+    const card = portraitsOn() ? room(chatRoom) : null
+    if (!card) return { prompt, images: [] }
+    const refs = referencesFor(view(card), prompt, message)
     if (!refs.length) return { prompt, images: [] }
+    // a provider that takes no reference image still gets the looks in words: the same character described the same way
+    if (!referencesOn()) return { prompt: withLooksText(prompt, refs), images: [] }
     const { readImage } = await import('../globalApi.svelte')
     const images: string[] = []
     const used: typeof refs = []

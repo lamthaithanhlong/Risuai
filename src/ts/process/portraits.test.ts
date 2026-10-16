@@ -131,3 +131,30 @@ describe('the player\'s own character (reported: Kenji Park has a persona pictur
         expect(drawn[0]).toContain('Elise')
     })
 })
+
+// asked 2026-10-15: "cái tự generate profile character cũng cho mọi chat luôn"
+describe('every chat: copies of the same story share portraits', async () => {
+    const { adoptFromSiblings, stateOf, withLooksText, drawNewPortraits } = await import('./portraits')
+    it('a copy takes what the other drew, and does not draw it again', async () => {
+        const a = { additionalAssets: [['Elise', 'assets/e.webp', 'webp']] as [string, string, string][], extentions: { vjPortraits: { elise: { name: 'Elise', look: 'grey eyes', status: 'done', at: 1, asset: 'assets/e.webp' } } } }
+        const b: any = {}
+        adoptFromSiblings(b, [a, b])
+        expect(b.additionalAssets).toEqual([['Elise', 'assets/e.webp', 'webp']])
+        expect(stateOf(b).elise.status).toBe('done')
+        const drawn: string[] = []
+        await drawNewPortraits(b, '[[LOOK Elise | grey eyes]]', { now: () => 2, draw: async (p) => { drawn.push(p); return { inlayId: 'x' } }, keep: async () => ({ path: 'p', ext: 'webp' }) })
+        expect(drawn).toEqual([])
+    })
+    it('one not finished, or a name already kept, is not taken', () => {
+        const a = { extentions: { vjPortraits: { sunny: { name: 'Sunny', look: '', status: 'pending', at: 1 } } } }
+        const b: any = { additionalAssets: [['Elise', 'assets/mine.png', 'png']], extentions: { vjPortraits: { elise: { name: 'Elise', look: '', status: 'done', at: 1, asset: 'assets/mine.png' } } } }
+        adoptFromSiblings(b, [a, { extentions: { vjPortraits: { elise: { name: 'Elise', look: '', status: 'done', at: 1, asset: 'assets/other.png' } } } }])
+        expect(b.additionalAssets).toEqual([['Elise', 'assets/mine.png', 'png']])
+        expect(stateOf(b).sunny).toBeUndefined()
+    })
+    it('a provider without reference images still gets the looks in words', () => {
+        const refs = [{ name: 'Kenji Park', look: '25, glasses', status: 'done' as const, at: 0, asset: 'a' }]
+        expect(withLooksText('rain', refs)).toBe('rain\n\nCharacters: Kenji Park: 25, glasses.')
+        expect(withLooksText('rain', [])).toBe('rain')
+    })
+})
