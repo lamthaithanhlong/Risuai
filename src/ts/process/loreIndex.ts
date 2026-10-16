@@ -13,8 +13,6 @@ export type IndexItem = { title: string; ids: number[]; hint?: string; tokens?: 
 
 /** At most this many titles are named a turn (the budget then decides how many are loaded). */
 export const MAX_PICK = 12
-/** An index with hints longer than this falls back to titles only. */
-export const MAX_HINT_INDEX = 12_000
 /** Tokens of a text, estimated (English lore: about 4 characters a token; measured o200k on the Shadow Slave card: 3.9). */
 export const estTokens = (s: string) => Math.ceil((s ?? '').length / 3.9)
 /** The opening of an entry, as its one-line hint: measured on the live Adv1 scene, titles alone gave "none" (the model did not
@@ -41,20 +39,21 @@ export function buildLoreIndex(lore: LoreLike[]): IndexItem[] {
 }
 
 /**
- * The plan for any card, from its sizes alone (asked: one rule for every story, not these two):
+ * The plan for any card, from its sizes alone (asked: one rule for every story, and the fewest tokens for the best picks):
  *   all    the keyword lore fits in what the budget leaves after the always-on entries: load it all, no helper call
- *   hints  else the helper picks from an index of titles with a one-line hint (better picks, measured)
- *   titles else, when that index is itself too long, titles only
+ *   titles else the helper picks from an index of titles
+ * Measured 2026-10-15 on 16 Vietnamese scenes written from random canon entries of the Shadow Slave card (the entry is
+ * the answer): key words found 1/16; titles + the story model 15/16 (94%) for 3.4k tokens; titles with a 10-word hint 88%
+ * for 7.0k; a 22-word hint 81% for 10.4k; two stages 88% for 4.6k and twice the wait; the faster luna model 69-75%.
+ * The one scene where titles said "none" had no canon in it: the strong model given the real next reply said none too.
  */
-export type LorePlan = { mode: 'all' | 'hints' | 'titles'; room: number; indexTokens: number }
+export type LorePlan = { mode: 'all' | 'titles'; room: number; indexTokens: number }
 export function planLore(lore: (LoreLike & { alwaysActive?: boolean })[], budget: number): LorePlan {
     const index = buildLoreIndex(lore)
     const always = lore.filter((l) => l.alwaysActive).reduce((n, l) => n + estTokens(l.content ?? ''), 0)
     const room = Math.max(0, budget - always)
     const keyword = index.reduce((n, it) => n + (it.tokens ?? 0), 0)
     if (keyword <= room) return { mode: 'all', room, indexTokens: 0 }
-    const hints = estTokens(indexLines(index, true))
-    if (hints <= MAX_HINT_INDEX) return { mode: 'hints', room, indexTokens: hints }
     return { mode: 'titles', room, indexTokens: estTokens(indexLines(index, false)) }
 }
 export const indexLines = (index: IndexItem[], hints: boolean) =>
@@ -74,7 +73,7 @@ export function fitPicks(index: IndexItem[], picks: number[], previous: number[]
     return out
 }
 
-export function lorePickPrompt(index: IndexItem[], recent: string, max = MAX_PICK, hints = true): string {
+export function lorePickPrompt(index: IndexItem[], recent: string, max = MAX_PICK, hints = false): string {
     return 'Below is the index of a story\'s lore (one line a title), then the story\'s last messages, which may be in any language.'
         + ` Which lore does the next reply need to stay true to the canon: the places, creatures, people, powers and rules the scene is about or is about to meet? Answer with only the numbers, at most ${max}, the most needed first, comma-separated; or "none".`
         + '\n\nINDEX\n' + indexLines(index, hints)

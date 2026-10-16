@@ -17,8 +17,8 @@ describe('the lore index', () => {
     })
     it('the prompt numbers the titles and carries the last messages', () => {
         const p = lorePickPrompt(buildLoreIndex(LORE), 'STORY: Con vật nằm dưới cửa sập.')
-        expect(p).toContain('1. Ashen Barrow — A necropolis…\n2. Nightmare Creatures — Creatures…')
-        expect(lorePickPrompt(buildLoreIndex(LORE), 'x', 12, false)).toContain('1. Ashen Barrow\n2. Nightmare Creatures')
+        expect(p).toContain('1. Ashen Barrow\n2. Nightmare Creatures')                    // titles: measured best for the fewest tokens
+        expect(lorePickPrompt(buildLoreIndex(LORE), 'x', 12, true)).toContain('1. Ashen Barrow — A necropolis…')
         expect(p).toContain('Con vật nằm dưới cửa sập')
     })
     it('reads the numbers named: in range, once, at most max; none is nothing', () => {
@@ -47,10 +47,10 @@ describe('the plan for any card', () => {
     it('the lore fits what the budget leaves: all of it, no helper call', () => {
         expect(planLore([always, ...big(10, 390)], 5000)).toMatchObject({ mode: 'all' })
     })
-    it('too big: the helper picks from an index with hints; titles only when that index is too long itself', () => {
-        expect(planLore([always, ...big(200, 3900)], 14000).mode).toBe('hints')
-        const huge = Array.from({ length: 3000 }, (_, i) => ({ comment: `Title ${i}`, content: 'A long first sentence that keeps going for many words to make the hint index long. ' + 'x'.repeat(4000) }))
-        expect(planLore(huge, 14000).mode).toBe('titles')
+    it('too big: the helper picks from the titles', () => {
+        const plan = planLore([always, ...big(200, 3900)], 14000)
+        expect(plan.mode).toBe('titles')
+        expect(plan.room).toBe(14000 - estTokens(always.content))
     })
     it('the picks fill the room in the model\'s order, then last turn\'s, never past it', () => {
         const idx = buildLoreIndex(big(5, 3900))                                          // 1000 tokens each
