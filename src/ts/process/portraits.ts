@@ -68,6 +68,19 @@ export function portraitNote(state: PortraitState, player: string): string {
         + (drawn.length ? ` Already described, never again: ${drawn.join(', ')}.` : '')
 }
 
+/**
+ * The same ask, put at the end of the player's message. Reported 2026-10-15: no portrait was ever drawn. Measured on the live
+ * save: not one [[LOOK]] line in any reply, and no portrait job in the server queue. On the Adv1 chat with the story model:
+ * the system note alone, 0 of 2 replies wrote a look; with this at the end of the player's message, 2 of 2 (Elise Moreau).
+ * The learning note behaved the same way: a system note alone is not followed, the end of the player's message is.
+ */
+export function portraitReminder(state: PortraitState): string {
+    const drawn = Object.values(state).filter((e) => e.status !== 'error').map((e) => e.name)
+    return '\n\n[Also this reply: for each named character in the scene with no look yet'
+        + (drawn.length ? ` (described already, never again: ${drawn.join(', ')})` : '')
+        + ', add one hidden line at the very end: [[LOOK <name> | <hair, eyes, face, build, age, clothes, in English>]].]'
+}
+
 /** What is asked of the picture model for a portrait. */
 export function portraitPrompt(l: Look): string {
     return `Character portrait of ${l.name}, head and shoulders, facing the viewer, plain dark background, no text. ${l.name}: ${l.look}`

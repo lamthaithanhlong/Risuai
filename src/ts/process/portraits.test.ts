@@ -158,3 +158,13 @@ describe('every chat: copies of the same story share portraits', async () => {
         expect(withLooksText('rain', [])).toBe('rain')
     })
 })
+
+describe('reported: no portrait was ever drawn (the story wrote no [[LOOK]] line)', async () => {
+    const { portraitReminder, withPlayer } = await import('./portraits')
+    it('the ask goes at the end of the player\'s message too, naming who is described already', () => {
+        const r = portraitReminder(withPlayer({}, { name: 'Kenji Park', icon: 'assets/k.png' }))
+        expect(r).toContain('[[LOOK <name> |')
+        expect(r).toContain('described already, never again: Kenji Park')
+        expect(portraitReminder({})).not.toContain('described already')
+    })
+})

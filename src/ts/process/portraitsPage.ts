@@ -5,7 +5,7 @@ import { get } from 'svelte/store'
 import { getDatabase, type character, type Chat, type groupChat } from '../storage/database.svelte'
 import { selectedCharID } from '../stores.svelte'
 import { checkPersonaBinded, getPersonaPrompt, getUserName } from '../util'
-import { adoptFromSiblings, adoptHandAssets, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
+import { adoptFromSiblings, adoptHandAssets, portraitReminder, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
 import type { OpenAIChat } from './index.svelte'
 
 /** The player's character as the chat sees it: the bound persona, else the selected one. */
@@ -42,9 +42,14 @@ export function currentRoom(fallback?: character): Room | undefined {
 export function portraitRequest<T extends OpenAIChat>(formated: T[], chatRoom: Room | undefined, player: Player = currentPlayer()): T[] {
     const card = portraitsOn() ? room(chatRoom) : null
     if (!card) return formated
-    const note = { role: 'system', content: portraitNote(withPlayer(stateOf(card), player), player.name) } as T
+    const state = withPlayer(stateOf(card), player)
+    const note = { role: 'system', content: portraitNote(state, player.name) } as T
     const last = formated.map((m) => m.role).lastIndexOf('user')
-    return last >= 0 ? [...formated.slice(0, last), note, ...formated.slice(last)] : [...formated, note]
+    if (last < 0) return [...formated, note]
+    // the reminder at the end of the player's message is what the model follows (measured: 0/2 without, 2/2 with)
+    const user = formated[last]
+    const reminded = typeof user.content === 'string' ? { ...user, content: user.content + portraitReminder(state) } : user
+    return [...formated.slice(0, last), note, reminded, ...formated.slice(last + 1)]
 }
 
 /** After a reply: draw the characters it described for the first time (not awaited: the chat goes on meanwhile). */
