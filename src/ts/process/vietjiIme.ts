@@ -15,6 +15,9 @@ type Entry = { word: string; pinyin: string; vietji: string[]; rank: number }
 export type SoundIndex = Map<string, Entry[]>
 
 const MAX_SYLLABLES = 4
+// English words run longer in Việt-ji (e-lec-tri-xi-ti): at 4 they were cut into "elect tree city" (measured, 7 of the top 500)
+const MAX_ENGLISH = 7
+const maxOf = (idx: SoundIndex) => (indexMode.get(idx) === 'words' ? MAX_ENGLISH : MAX_SYLLABLES)
 
 /** A syllable without its marks: "chuỳ" → "chuy", "đổi" → "doi". */
 export function foldSyllable(s: string): string {
@@ -44,6 +47,18 @@ export function buildSoundIndex(words: Record<string, string>): SoundIndex {
 }
 
 /** The input split into what is already written and the sound being typed at its end ("我问 chuỳ" → "我问 ", "chuỳ"). */
+/** English: only the Việt-ji-looking words at the end are sound ("I hơ-lô" → "I ", "hơ-lô"); the English before them stays. */
+export function englishTail(input: string): { head: string; sound: string } {
+    const toks = (input ?? '').split(/(\s+)/)
+    let k = toks.length
+    while (k > 0 && (/^\s*$/.test(toks[k - 1]) || looksLikeVietji(toks[k - 1]))) k--
+    const head = toks.slice(0, k).join('')
+    const rest = toks.slice(k).join('')
+    const lead = /^\s*/.exec(rest)![0]
+    return { head: head + lead, sound: rest.slice(lead.length) }
+}
+const tailOf = (idx: SoundIndex, input: string) => (indexMode.get(idx) === 'words' ? englishTail(input) : soundTail(input))
+
 export function soundTail(input: string): { head: string; sound: string } {
     const m = /[\p{Script=Latin}\s-]*$/u.exec(input ?? '')
     const tail = m ? m[0] : ''
@@ -53,14 +68,16 @@ export function soundTail(input: string): { head: string; sound: string } {
 
 type Pick = { entry: Entry; tones: number }
 
-/** 'tones': Chinese, the typed tone marks are compared (when there are any); 'exact': Korean, the whole syllable is. */
-export type Compare = 'tones' | 'exact'
+/** 'tones': Chinese, the typed tone marks are compared (when there are any); 'exact': Korean, the whole syllable is;
+ *  'words': English, the whole syllable is, and the words always stand apart with a space. */
+export type Compare = 'tones' | 'exact' | 'words'
+const wholeSyllable = (idx: SoundIndex) => indexMode.get(idx) === 'exact' || indexMode.get(idx) === 'words'
 const indexMode = new WeakMap<SoundIndex, Compare>()
 
 function ranked(idx: SoundIndex, typed: string[], folded: string[], i: number, n: number): Pick[] {
     const list = idx.get(folded.slice(i, i + n).join(' '))
     if (!list) return []
-    const tones = indexMode.get(idx) === 'exact' || hasTones(typed)
+    const tones = wholeSyllable(idx) || hasTones(typed)
     return list.map((entry) => ({ entry, tones: tones ? entry.vietji.reduce((t, v, k) => t + (exact(v) === exact(typed[i + k]) ? 1 : 0), 0) : 0 }))
         .sort((a, b) => b.tones - a.tones || a.entry.rank - b.entry.rank)
 }
@@ -75,7 +92,8 @@ export function convert(idx: SoundIndex, sound: string): { text: string; tones: 
     // which syllables start a new typed word (a space before them): Korean keeps that space between its words
     const spaced: boolean[] = []
     { let k = 0; for (const m of sound.trim().matchAll(/([\s-]*)([^\s-]+)/g)) { spaced[k++] = /\s/.test(m[1]) } }
-    const keepSpaces = indexMode.get(idx) === 'exact'
+    const keepSpaces = wholeSyllable(idx)
+    const apart = indexMode.get(idx) === 'words'
     const folded = typed.map(foldSyllable)
     const best: (Plan | null)[] = Array(typed.length + 1).fill(null)
     const starts: number[][] = Array(typed.length + 1).fill(null).map(() => [])
@@ -84,7 +102,7 @@ export function convert(idx: SoundIndex, sound: string): { text: string; tones: 
         const from = best[i]
         if (!from) continue
         let any = false
-        for (let n = 1; n <= Math.min(MAX_SYLLABLES, typed.length - i); n++) {
+        for (let n = 1; n <= Math.min(maxOf(idx), typed.length - i); n++) {
             const top = ranked(idx, typed, folded, i, n)[0]
             if (!top) continue
             any = true
@@ -101,7 +119,7 @@ export function convert(idx: SoundIndex, sound: string): { text: string; tones: 
     const end = best[typed.length]!
     const at = starts[typed.length]
     const known = end.words.every((w) => typeof w !== 'string')
-    const text = end.words.map((w, k) => (keepSpaces && k > 0 && spaced[at[k]] ? ' ' : '') + (typeof w === 'string' ? w : w.word)).join('')
+    const text = end.words.map((w, k) => (k > 0 && (apart || (keepSpaces && spaced[at[k]])) ? ' ' : '') + (typeof w === 'string' ? w : w.word)).join('')
     return { text, tones: end.tones, syllables: typed.length, known }
 }
 
@@ -111,10 +129,10 @@ export function convert(idx: SoundIndex, sound: string): { text: string; tones: 
  */
 export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf: (word: string) => string = () => '', max = 6): Suggestion[] {
     if (!idx) return []
-    const tail = soundTail(input)
+    const tail = tailOf(idx, input)
     const sound = tail.sound
     // Chinese has no spaces between words: the space before the sound goes when what comes before it is a character
-    const head = /[\u3400-\u9fff]\s+$/.test(tail.head) && indexMode.get(idx) !== 'exact' ? tail.head.trimEnd() : tail.head
+    const head = /[\u3400-\u9fff]\s+$/.test(tail.head) && !wholeSyllable(idx) ? tail.head.trimEnd() : tail.head
     const typed = sound.split(/[\s-]+/).filter(Boolean)
     if (!typed.length) return []
     const folded = typed.map(foldSyllable)
@@ -127,7 +145,7 @@ export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf:
     }
     const whole = convert(idx, sound)
     if (whole && typed.length > 1 && whole.known) chip(whole.text, typed.join(' '), head + whole.text, `${typed.join(' ')} · cả câu`)
-    for (let n = Math.min(MAX_SYLLABLES, typed.length); n >= 1 && out.length < max; n--) {
+    for (let n = Math.min(maxOf(idx), typed.length); n >= 1 && out.length < max; n--) {
         const picks = ranked(idx, typed, folded, 0, n)
         // the most used word with this sound, whatever its tone, is always offered (你 for "nì", where 逆 matches the tone)
         const common = [...picks].sort((a, b) => a.entry.rank - b.entry.rank)[0]
@@ -143,7 +161,7 @@ export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf:
 /** True when the sound at the end of the input reads fully as words with every tone as typed: sound typing, not Vietnamese. */
 export function isSoundTyping(input: string, idx: SoundIndex | null, vietnamese?: Set<string>): boolean {
     if (!idx) return false
-    const { sound } = soundTail(input)
+    const { sound } = tailOf(idx, input)
     // all Vietnamese words, no hyphen: Vietnamese, even when it also reads exactly as sound ("침착하다 đi" gave 디 first;
     // docs/specs/VietjiInputMode.als VietnameseWordsFirst). A hyphen joins one word's syllables: always sound.
     const words = sound.trim().split(/\s+/).filter(Boolean)
@@ -178,6 +196,33 @@ export function buildKoreanIndex(words: string[], more: string[] = []): SoundInd
     for (const w of [...words, ...more]) for (const c of w) if (/[가-힣]/.test(c)) syllables.add(c)
     for (const c of syllables) add(c)
     return idx
+}
+
+// ---- English ------------------------------------------------------------------------------------------------------------------
+// asked 2026-10-15: "làm bộ gõ tiếng Anh tương tự". The Việt-ji of each English word (public/dict/en-vietji.json, espeak-ng
+// read, most used first) indexed like Korean: "hơ-lô" → hello, "ai lai-cơ" → I like.
+
+export function buildEnglishIndex(readings: Record<string, string>): SoundIndex {
+    const idx: SoundIndex = new Map()
+    indexMode.set(idx, 'words')
+    let rank = 0
+    for (const [word, vj] of Object.entries(readings)) {
+        rank++
+        const vietji = vj.split(/[-\s]+/).filter(Boolean)
+        if (!vietji.length || vietji.length > MAX_ENGLISH) continue
+        const key = vietji.map(foldSyllable).join(' ')
+        if (!idx.has(key)) idx.set(key, [])
+        idx.get(key)!.push({ word: word === 'i' ? 'I' : word, pinyin: '', vietji, rank })
+    }
+    return idx
+}
+
+/**
+ * English sound typing must look like Việt-ji: a hyphen, or a Vietnamese letter or mark ("hơ-lô", "uơ-ri"). Plain letters are
+ * English typed as it is ("hello", "ten") and are never rewritten: the box holds Vietnamese, Việt-ji and English at once.
+ */
+export function looksLikeVietji(sound: string): boolean {
+    return /-/.test(sound ?? '') || /[^\x00-\x7f]/.test(sound ?? '')
 }
 
 // ---- Japanese -----------------------------------------------------------------------------------------------------------------
@@ -264,7 +309,7 @@ function toneless(s: string): string {
  * Vietnamese words read as a Chinese word with their tone (là → 辣, của → 果) and 21 as a Korean one (không, em), so those are
  * left to the chips. Returns the new input, or null to leave it.
  */
-export function commitOnSpace(value: string, lang: string, ctx: { zh?: SoundIndex | null; ko?: SoundIndex | null; ja?: KanaIndex | null; vietnamese?: Set<string> }): string | null {
+export function commitOnSpace(value: string, lang: string, ctx: { zh?: SoundIndex | null; ko?: SoundIndex | null; ja?: KanaIndex | null; en?: SoundIndex | null; vietnamese?: Set<string> }): string | null {
     const m = /(^|\s)([\p{Script=Latin}-]+) $/u.exec(value ?? '')
     if (!m) return null
     const word = m[2]
@@ -281,6 +326,11 @@ export function commitOnSpace(value: string, lang: string, ctx: { zh?: SoundInde
     }
     if (lang === 'ko' && ctx.ko) {
         const c = convert(ctx.ko, word)
+        return c && c.known && c.tones === c.syllables ? glue(c.text) + ' ' : null
+    }
+    if (lang === 'en' && ctx.en) {
+        if (!looksLikeVietji(word)) return null                    // "hello " stays as typed
+        const c = convert(ctx.en, word)
         return c && c.known && c.tones === c.syllables ? glue(c.text) + ' ' : null
     }
     if (lang === 'ja' && ctx.ja) {

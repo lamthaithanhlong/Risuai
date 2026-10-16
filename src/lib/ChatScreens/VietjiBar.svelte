@@ -15,7 +15,7 @@
     import { phraseVietji } from "src/ts/process/vietji";
     import { mixChips, repliesOrThrow } from "src/ts/process/vietjiSuggest";
     import { rememberThought, thoughtFor } from "src/ts/process/learningThought";
-    import { buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
+    import { buildEnglishIndex, buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, englishTail, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
@@ -48,7 +48,10 @@
     // building a sentence: words already written in the language, then Vietnamese at the end ("我 想 cô ấy"): only that end is
     // looked up (and asked about), and its chips keep what is before it
     let vietSet = $derived(new Set(Object.keys(wordList?.words ?? {})))
-    let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex, vietSet)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex, vietSet)))
+    let enIndex = $state<SoundIndex | null>(null)
+    let enSound = $derived(lang === 'en' && !!englishTail(value ?? '').sound)
+    let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex, vietSet)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex, vietSet))
+        || (enSound && isSoundTyping(value ?? '', enIndex, vietSet)))
     let composing = $derived(enabled ? vietnameseTail(value ?? '', vietSet) : { head: '', tail: '' })
     let composeMode = $derived(!!composing.head.trim() && !!composing.tail)
     let typedViet = $derived(!enabled || soundTyping ? '' : composeMode ? composing.tail
@@ -75,7 +78,7 @@
     let meaningOfZh = $derived.by(() => {
         // the most used Vietnamese word wins (我 → tôi, not "bản thân"), by the list's everyday order
         const back = new Map<string, string>()
-        if (lang === 'zh' && wordList) {
+        if ((lang === 'zh' || lang === 'en') && wordList) {
             const rank = new Map((wordList.order ?? []).map((w, i) => [w, i]))
             const vis = Object.keys(wordList.words).sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9))
             for (const vi of vis) {
@@ -86,6 +89,7 @@
         return (w: string) => back.get(w) ?? ''
     })
     let imeItems = $derived(!enabled ? [] : lang === 'zh' ? imeSuggestions(value ?? '', soundIndex, meaningOfZh)
+        : lang === 'en' ? (enSound ? imeSuggestions(value ?? '', enIndex, meaningOfZh) : [])
         : lang === 'ko' ? imeSuggestions(value ?? '', koIndex) : lang === 'ja' ? jaSuggestions(value ?? '', kanaIndex) : [])
 
     // the Korean and Japanese sound typing: built once the lists are here (Korean: the word list plus the dictionary's words,
@@ -106,7 +110,7 @@
     $effect(() => {
         const v = value ?? ''
         if (!enabled || DBState.db.learningAutoWrite === false || !v.endsWith(' ')) return
-        const next = commitOnSpace(v, lang, { zh: soundIndex, ko: koIndex, ja: kanaIndex, vietnamese: vietnameseWords })
+        const next = commitOnSpace(v, lang, { zh: soundIndex, ko: koIndex, ja: kanaIndex, en: enIndex, vietnamese: vietnameseWords })
         if (next !== null && next !== v) value = next
     })
     let items = $derived.by(() => {
@@ -200,6 +204,7 @@
         readingLists.get(want)!.then((words) => {
             if (words && lang === want) { list.set(words); ReloadGUIPointer.update((v) => v + 1) }
             if (words && want === 'zh' && !soundIndex) setTimeout(() => { soundIndex = buildSoundIndex(words) }, 0)
+            if (words && want === 'en' && !enIndex) setTimeout(() => { enIndex = buildEnglishIndex(words) }, 0)
         })
     })
 

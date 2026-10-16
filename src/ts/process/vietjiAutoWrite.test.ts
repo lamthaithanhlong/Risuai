@@ -110,3 +110,37 @@ describe('reported: "… 침착하다 đi" showed 디 first (đi reads exactly a
         expect(chips).not.toContain('디')
     })
 })
+
+// asked 2026-10-15: "làm bộ gõ tiếng Anh tương tự"
+describe('English sound typing', async () => {
+    const { buildEnglishIndex, englishTail, looksLikeVietji } = await import('./vietjiIme')
+    const readings = json('public/dict/en-vietji.json').words as Record<string, string>
+    const en = buildEnglishIndex(readings)
+    const vi = new Set(Object.keys(json('public/dict/vi-en.json').words))
+    it.each([['hơ-lô', 'hello'], ['uơ-ri', 'worry'], ['oa-tơ', 'water'], ['biu-ti-phơn', 'beautiful'], ['ô-cây', 'okay'], ['plít', 'please']])('%s → %s', (s, w) => {
+        expect(convert(en, s)?.text).toBe(w)
+    })
+    it('words stand apart, and the English already written stays', () => {
+        expect(convert(en, 'plít uơ-ri')?.text).toBe('please worry')
+        expect(englishTail('I like hơ-lô')).toEqual({ head: 'I like ', sound: 'hơ-lô' })
+        expect(imeSuggestions('I like hơ-lô', en)[0].replace).toBe('I like hello')
+    })
+    it('at the space: Việt-ji is written, English typed as it is and Vietnamese words are not', () => {
+        expect(commitOnSpace('hơ-lô ', 'en', { en, vietnamese: vi })).toBe('hello ')
+        expect(commitOnSpace('I say hơ-lô ', 'en', { en, vietnamese: vi })).toBe('I say hello ')
+        expect(commitOnSpace('hello ', 'en', { en, vietnamese: vi })).toBe(null)
+        expect(commitOnSpace('ten ', 'en', { en, vietnamese: vi })).toBe(null)
+        expect(commitOnSpace('ít ', 'en', { en, vietnamese: vi })).toBe(null)           // ít is Vietnamese (few)
+        expect(looksLikeVietji('hello')).toBe(false)
+    })
+    it('measured: the 500 most used English words come back from their own Việt-ji', () => {
+        const top = Object.entries(readings).slice(0, 500)
+        const back = top.filter(([w, vj]) => convert(en, vj)?.text.toLowerCase() === w).length
+        // a word that sounds like a more used one gives that one (two → to): what is left is homophones
+        const homophones = top.filter(([w, vj]) => convert(en, vj)?.text.toLowerCase() !== w).filter(([, vj]) => convert(en, vj)?.text.toLowerCase() !== '' && readings[convert(en, vj)!.text.toLowerCase()] === vj).length
+        const other = top.filter(([w, vj]) => convert(en, vj)?.text.toLowerCase() !== w && readings[convert(en, vj)?.text.toLowerCase() ?? ''] !== vj)
+        if (process.env.VJ_EN_RT) require('fs').writeFileSync(process.env.VJ_EN_RT, JSON.stringify({ back, homophones, other: other.map(([w, vj]) => [w, vj, convert(en, vj)?.text]) }, null, 1))
+        expect(back + homophones).toBe(500)
+        expect(back).toBeGreaterThan(430)
+    })
+})

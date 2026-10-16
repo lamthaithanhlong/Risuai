@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import { composeSuggestions, dictSuggestions, needsModel } from './vietjiDict'
-import { buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping } from './vietjiIme'
+import { buildEnglishIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping } from './vietjiIme'
 import { mixChips } from './vietjiSuggest'
 import { filledHtml, parseDetail, readInline, parseLesson, lessonHtml } from './grammarCoach'
 import { setEnglishReadings, setHanReadings } from './vietji'
@@ -17,6 +17,7 @@ const top = (json('public/dict/vi-zh.json').order as string[]).slice(0, 300)
 setHanReadings(json('public/dict/zh-pinyin.json').words)
 setEnglishReadings(json('public/dict/en-vietji.json').words)
 const zhIdx = buildSoundIndex(json('public/dict/zh-pinyin.json').words)
+const enIdx = buildEnglishIndex(json('public/dict/en-vietji.json').words)
 const koIdx = buildKoreanIndex(json('public/dict/ko-words.json').words, Object.values(lists.ko.words as Record<string, string[]>).flat())
 const HEAD: Record<string, string> = { ko: '나 ', zh: '我 ', ja: '私 ', es: 'yo ', fr: 'je ', en: 'I ' }
 const report: Record<string, unknown> = {}
@@ -36,7 +37,7 @@ describe('sweep: the 300 most used Vietnamese words', () => {
                 return mixChips(rest, imeSuggestions(w, l === 'ko' ? koIdx : zhIdx), [], { soundTyping: st, listSure: rest.length > 0 && !needsModel(w, lists[l]) }).some((c) => c.source === 'ime')
                     && rest.length > 0 && !needsModel(w, lists[l])
             }) : []
-            const eaten = (['zh', 'ko'] as const).includes(l as any) ? top.filter((w) => !w.includes(' ') && commitOnSpace(w + ' ', l, { zh: zhIdx, ko: koIdx, vietnamese: vi }) !== null) : []
+            const eaten = (['zh', 'ko', 'en'] as const).includes(l as any) ? top.filter((w) => !w.includes(' ') && commitOnSpace(w + ' ', l, { zh: zhIdx, ko: koIdx, en: enIdx, vietnamese: vi }) !== null) : []
             report[l] = { known: known.length, noChip: noChip.slice(0, 12), noChipN: noChip.length, headEatenN: headEaten.length, headEaten: headEaten.slice(0, 8),
                 soundFirstN: soundFirst.length, soundFirst: soundFirst.slice(0, 8), soundShownN: soundShown.length, eatenN: eaten.length }
         }

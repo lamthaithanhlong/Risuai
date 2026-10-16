@@ -41,7 +41,7 @@
             {/if}
             <Check bind:check={DBState.db.learningSuggest} name={language.learningSuggest}/>
             <Check bind:check={DBState.db.learningGrammarLater} name={language.learningGrammarLater}/>
-            {#if DBState.db.learningLang === 'zh' || DBState.db.learningLang === 'ja' || DBState.db.learningLang === 'ko'}
+            {#if DBState.db.learningLang === 'zh' || DBState.db.learningLang === 'ja' || DBState.db.learningLang === 'ko' || DBState.db.learningLang === 'en'}
                 <Check bind:check={DBState.db.learningAutoWrite} name={language.learningAutoWrite}/>
             {/if}
         </div>

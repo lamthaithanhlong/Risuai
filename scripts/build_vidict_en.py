@@ -56,6 +56,7 @@ if __name__ == '__main__':
     ap.add_argument('--out', required=True)
     ap.add_argument('--order-from', default='public/dict/vi-zh.json')
     ap.add_argument('--words-out')
+    ap.add_argument('--order-readings', help='public/dict/en-vietji.json: rewritten most used first, for the sound typing')
     a = ap.parse_args()
     data = build(a.vi)
     data = {'_source': 'English Wiktionary Vietnamese entries (kaikki.org, wiktextract), CC BY-SA 4.0', **data, 'unsure': []}
@@ -67,3 +68,20 @@ if __name__ == '__main__':
         seen = sorted({t for picks in data['words'].values() for p in picks for t in p.replace("'", ' ').split() if t.isalpha()})
         open(a.words_out, 'w').write('\n'.join(seen) + '\n')
     print(f"{len(data['words'])} words, {len(data['viVerbs'])} verbs -> {a.out}", file=sys.stderr)
+    if a.order_readings:
+        # an English word is as used as the most used Vietnamese word it translates (hello for xin chào), its own pick
+        # position breaking ties; the sound typing offers the most used word with a sound first (I before eye)
+        # ranked on the list as shipped (hand list applied: tôi = I, me; not temper, anneal), first two picks only
+        shipped = json.load(open('public/dict/vi-en.json', encoding='utf-8')) if os.path.exists('public/dict/vi-en.json') else data
+        order = {w: i for i, w in enumerate(shipped.get('order', []))}
+        rank = {}
+        for vi, picks in shipped['words'].items():
+            for j, p in enumerate(picks[:2]):
+                for t in p.lower().split():
+                    r = order.get(vi, 50_000) * 4 + j
+                    rank[t] = min(rank.get(t, 10**9), r)
+        r = json.load(open(a.order_readings, encoding='utf-8'))
+        r['words'] = dict(sorted(r['words'].items(), key=lambda kv: (rank.get(kv[0], 10**9), kv[0])))
+        r['_order'] = 'most used first: by the everyday order of the Vietnamese words they translate'
+        json.dump(r, open(a.order_readings, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+        print(f"{len(r['words'])} readings reordered -> {a.order_readings}", file=sys.stderr)
