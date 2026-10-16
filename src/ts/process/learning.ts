@@ -58,7 +58,7 @@ export function learningKeepsOriginal(text: string): boolean {
     return learningOn() && hasForeign(text)
 }
 
-const LANG_NAME: Record<LearningLang, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin, simplified characters)', ko: 'Korean', es: 'Spanish', fr: 'French' }
+const LANG_NAME: Record<LearningLang, string> = { ja: 'Japanese', zh: 'Chinese (Mandarin, simplified characters)', ko: 'Korean', es: 'Spanish', fr: 'French', en: 'English' }
 
 const LANG_FORMAT: Record<LearningLang, string> = {
     ja: 'Write Japanese the way a Japanese adult writes it: kanji wherever kanji is normal (二つ, 塩, 今日, 天気), kana for particles and endings. Right after every word that contains kanji, put its reading in hiragana in square brackets: 塩[しお]は 二つ[ふたつ] です。 今日[きょう]は いい 天気[てんき] です。 Words written only in kana need no brackets. Leave a space between words. Never romaji.',
@@ -67,6 +67,7 @@ const LANG_FORMAT: Record<LearningLang, string> = {
     es: 'Put every Spanish line inside «» guillemets: «Hola, ¿cuánto cuesta?» Use simple present-tense Spanish.',
     // French typography after the Imprimerie nationale rules: a space inside guillemets and before ? ! : ;
     fr: 'Put every French line inside « » guillemets, with French typography (a space inside the guillemets and before ? ! : ;): « Bonjour, ça coûte combien ? » Use simple present-tense French, with the vous form for strangers.',
+    en: 'Put every English line inside «» guillemets: «Hello, how much is it?» Use simple, everyday spoken English.',
 }
 
 /** The note that tells the model how to write the language being learned, so the display can show its reading. */
@@ -77,7 +78,7 @@ export function learningNote(lang: LearningLang): string {
         LANG_FORMAT[lang] ?? LANG_FORMAT.ja,
         'Every foreign line starts with who says it, named the way the story names them (Người phụ nữ: “…”, Haru: “…”), so the player knows whether it is theirs or someone else\'s; never a line with only an emoji before it. After every foreign line, its Vietnamese meaning in parentheses on the same line. Short everyday sentences; at most two new words per reply, reused soon after.',
         'When the player writes in the foreign language, the character understands it and answers that line in the foreign language too.',
-        'In Korean and Japanese, lines and answers leave out the person spoken to, the way people talk: never 당신 or あなた (use their name or title, or nothing).',
+        'In Korean and Japanese, lines and answers leave out the person spoken to, the way people talk: never 당신 or あなた (use their name or title, or nothing). In Chinese say 您 to someone older or a stranger one respects, 你 otherwise; Spanish leaves out tú/usted as a subject; French and English always say it (vous/tu, you).',
         'The player may type the foreign language by sound in Vietnamese letters without tone marks (for example "an nhong ha se do" for 안녕하세요, "ni hao" for 你好); understand it as that language and answer it.',
         'EVERY reply, without exception, ends with four to six things the player could answer next, one per line, written the same way, each followed by | its Vietnamese meaning | its kind: two "easy" (short, plain), one or two "stretch" (one new word, or a longer sentence that says more), and at least one "workaround" that says the idea with only words the player already knows, the way one talks around a missing word. Answers that fit the moment, and one way to say no:\n[[REPLIES\n<answer> | <meaning> | easy\n<answer> | <meaning> | stretch\n<answer> | <meaning> | workaround\n]]',
         'When the player writes "?" followed by something in Vietnamese, they are asking how to say it: in the narration, show three ways (plain, natural, and with words they already know), put the same three in REPLIES, and let the speaker wait for them to say one.',
@@ -129,6 +130,7 @@ const REMIND_WRITING: Partial<Record<LearningLang, string>> = {
     ja: ' (hiragana reading in square brackets after every word with kanji: 開けて[あけて])',
     es: ' (inside «» guillemets)',
     fr: ' (inside «» guillemets)',
+    en: ' (inside «» guillemets)',
 }
 
 /** The short reminder put after the player's last message in the request (see learningRequest). */
