@@ -7,6 +7,7 @@ import { language } from "src/lang";
 import { sleep } from "../util";
 import { runVITS } from "./transformers";
 import { isLocalTTS, resolveTTS } from "./ttsLocal";
+import { speakableText } from "./ttsText";
 import { playUnlocked, sharedAudioContext, stopUnlocked, unlockAudio } from "./audioUnlock";
 import { brLog } from "../brLog";
 import {
@@ -99,8 +100,11 @@ export async function sayTTS(character:character,text:string) {
         }
     
         let db = getDatabase()
-        // the chain of thought is not part of what is said
-        text = splitCoT(text).main.replace(/\*/g,'')
+        // the chain of thought is not part of what is said, nor the blocks for the machine, the emoji or the markup (ttsText.ts)
+        text = speakableText(splitCoT(text).main)
+        if(!text){
+            return
+        }
     
         if(character.ttsReadOnlyQuoted){
             const matches = text.match(/["「](.*?)["」]/g)
