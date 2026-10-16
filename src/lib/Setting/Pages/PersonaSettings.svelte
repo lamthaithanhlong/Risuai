@@ -8,6 +8,7 @@
     import { alertConfirm, alertSelect } from "src/ts/alert";
     import { getCharImage } from "src/ts/characters";
     import { changeUserPersona, exportUserPersona, importUserPersona, saveUserPersona, selectUserImg } from "src/ts/persona";
+    import { syncSelectedPersona } from "src/ts/personaSync";
     import Sortable from 'sortablejs/modular/sortable.core.esm.js';
     import { onDestroy, onMount } from "svelte";
     import { sleep, sortableOptions } from "src/ts/util";
@@ -56,6 +57,11 @@
     }
 
     onMount(createStb)
+    // every edit reaches the persona's entry at once, not only when switching persona (personaSync.ts)
+    $effect(() => {
+        DBState.db.username; DBState.db.personaPrompt; DBState.db.userIcon; DBState.db.userNote
+        syncSelectedPersona(DBState.db)
+    })
 
     onDestroy(() => {
         if(stb){

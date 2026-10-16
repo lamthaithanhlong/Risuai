@@ -7,6 +7,7 @@ import { changeLanguage, language } from '../../lang';
 import type { RisuPlugin } from '../plugins/plugins.svelte';
 import type {triggerscript as triggerscriptMain} from '../process/triggers';
 import { downloadFile, saveAsset as saveImageGlobal } from '../globalApi.svelte';
+import { syncSelectedPersona } from '../personaSync';
 import { defaultAutoSuggestPrompt, defaultJailbreak, defaultMainPrompt } from './defaultPrompts';
 import { alertNormal } from '../alert';
 import type { NAISettings } from '../process/models/nai';
@@ -381,6 +382,8 @@ export function setDatabase(data:Database){
         note: data.userNote,
         largePortrait: false
     }]
+    // the selected persona's entry kept equal to what is shown and sent (personaSync.ts: it had drifted, 74 vs 956 characters)
+    syncSelectedPersona(data)
     data.classicMaxWidth ??= false
     data.ooba ??= safeStructuredClone(defaultOoba)
     data.ainconfig ??= safeStructuredClone(defaultAIN)
