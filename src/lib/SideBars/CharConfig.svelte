@@ -1209,6 +1209,11 @@
             <span> <Help key="lowLevelAccess" name={language.lowLevelAccess}/></span>
         </div>
 
+        <!-- storyEffort.ts: a card with many required blocks (Alternate Hunters) keeps its format better with full reasoning -->
+        <div class="flex items-center mt-4">
+            <Check bind:check={(DBState.db.characters[$selectedCharID] as character).fullReasoning} name="Suy nghĩ đầy đủ mọi lượt (thẻ nhiều khối bắt buộc)"/>
+        </div>
+
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].hideChatIcon} name={language.hideChatIcon}/>
         </div>

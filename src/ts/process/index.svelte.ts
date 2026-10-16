@@ -1601,7 +1601,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
-        storyOpening: isOpening(currentChat?.message),
+        // a card that asks for full reasoning on every turn is treated as an opening (storyEffort.ts)
+        storyOpening: isOpening(currentChat?.message) || !!currentChar?.fullReasoning,
     }, 'model', abortSignal), 0)
     genStatusEvents.send()
     let req = await requestModelOnce()

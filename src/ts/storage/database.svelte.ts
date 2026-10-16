@@ -1590,6 +1590,8 @@ export interface character{
     }>
     defaultVariables?:string
     lowLevelAccess?:boolean
+    /** storyEffort.ts: keep the default reasoning effort on every turn of this story */
+    fullReasoning?:boolean
     hideChatIcon?:boolean
     lastInteraction?:number
     translatorNote?:string

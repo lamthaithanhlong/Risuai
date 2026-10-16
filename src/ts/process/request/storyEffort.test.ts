@@ -16,4 +16,7 @@ describe('reasoning effort by turn (measured: -56% output tokens after the openi
         expect(isOpening([])).toBe(true)
         expect(isOpening(undefined)).toBe(true)
     })
+    it('a card set to full reasoning keeps the default on every turn (passed as an opening)', () => {
+        expect(storyEffort(true, 'model', true)).toBe(undefined)
+    })
 })
