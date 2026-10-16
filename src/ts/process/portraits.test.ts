@@ -109,3 +109,25 @@ describe('the picture type of a reference', async () => {
         expect(mimeOf(new Uint8Array([0xff, 0xd8, 0xff]))).toBe('image/jpeg')
     })
 })
+
+describe('the player\'s own character (reported: Kenji Park has a persona picture; drawing him again gave someone else)', async () => {
+    const { withPlayer, playerLook, portraitNote, drawNewPortraits, referencesFor } = await import('./portraits')
+    const kenji = { name: 'Kenji Park', icon: 'assets/b087.png', prompt: '[{{user}} = Kenji Park, nam, 25 tuổi, đeo kính, nhân viên văn phòng]' }
+    it('the persona picture is the portrait and its description the look', () => {
+        expect(playerLook(kenji)).toBe('Kenji Park = Kenji Park, nam, 25 tuổi, đeo kính, nhân viên văn phòng')
+        const st = withPlayer({}, kenji)
+        expect(st['kenji park']).toMatchObject({ status: 'done', asset: 'assets/b087.png' })
+        expect(referencesFor(st, 'Kenji climbs the roof').map((e) => e.asset)).toEqual(['assets/b087.png'])
+        expect(withPlayer({}, { name: 'Kenji Park' })).toEqual({})               // no picture: drawn like anyone else
+    })
+    it('the story is not asked to describe him, and he is not drawn again', async () => {
+        expect(portraitNote(withPlayer({}, kenji), kenji.name)).toContain('Already described, never again: Kenji Park')
+        const card = {}
+        const drawn: string[] = []
+        await drawNewPortraits(card, '[[LOOK Kenji Park | seventeen, school uniform]]\n[[LOOK Elise | grey eyes]]', {
+            now: () => 1, draw: async (p) => { drawn.push(p); return { inlayId: 'x' } }, keep: async () => ({ path: 'assets/x.webp', ext: 'webp' }),
+        }, () => {}, kenji)
+        expect(drawn).toHaveLength(1)
+        expect(drawn[0]).toContain('Elise')
+    })
+})

@@ -2,8 +2,15 @@
 // with a scene picture. Only with the OpenAI-compatible picture setting (9router), the one whose route takes reference images.
 
 import { getDatabase, type character, type Chat } from '../storage/database.svelte'
-import { adoptHandAssets, drawNewPortraits, keyOf, mimeOf, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
+import { checkPersonaBinded, getPersonaPrompt, getUserName } from '../util'
+import { adoptHandAssets, drawNewPortraits, keyOf, mimeOf, withPlayer, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
 import type { OpenAIChat } from './index.svelte'
+
+/** The player's character as the chat sees it: the bound persona, else the selected one. */
+export function currentPlayer(): Player {
+    const bound = checkPersonaBinded()
+    return { name: getUserName(), icon: bound ? bound.icon : getDatabase().userIcon, prompt: getPersonaPrompt() }
+}
 
 export function portraitsOn(): boolean {
     const db = getDatabase()
@@ -11,10 +18,10 @@ export function portraitsOn(): boolean {
 }
 
 /** The note goes in as a system message right before the last user message, like the learning note. */
-export function portraitRequest<T extends OpenAIChat>(formated: T[], char: character | undefined, player: string): T[] {
+export function portraitRequest<T extends OpenAIChat>(formated: T[], char: character | undefined, player: Player = currentPlayer()): T[] {
     if (!portraitsOn() || !char || char.type !== 'character') return formated
     adoptHandAssets(char)
-    const note = { role: 'system', content: portraitNote(stateOf(char), player) } as T
+    const note = { role: 'system', content: portraitNote(withPlayer(stateOf(char), player), player.name) } as T
     const last = formated.map((m) => m.role).lastIndexOf('user')
     return last >= 0 ? [...formated.slice(0, last), note, ...formated.slice(last)] : [...formated, note]
 }
@@ -56,12 +63,12 @@ export function notePortraits(charIndex: number, chat: Chat | undefined): void {
             if (!bytes) return null
             return { path: await saveAsset(bytes, '', `portrait.${ext}`), ext }
         },
-    }, save).catch((e) => console.warn('[portraits] drawing failed', e))
+    }, save, currentPlayer()).catch((e) => console.warn('[portraits] drawing failed', e))
 }
 
 /** The portraits as references: by name, from the state and from Additional Assets the learner added by hand. */
 function view(char: character): PortraitState {
-    const state: PortraitState = { ...stateOf(char) }
+    const state: PortraitState = withPlayer({ ...stateOf(char) }, currentPlayer())
     for (const [name, path] of char.additionalAssets ?? []) {
         const k = keyOf(name)
         if (!state[k] || state[k].status !== 'done') state[k] = { name, look: state[k]?.look ?? '', status: 'done', at: 0, asset: path }

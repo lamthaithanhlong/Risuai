@@ -1515,7 +1515,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // Settings → Learning: what the learner typed in Việt-ji reaches the model as kana
     formated = learningRequest(formated, currentChat)
     // Settings → Image generation: the story describes each named character once, for their portrait
-    formated = portraitRequest(formated, currentChar, getUserName())
+    formated = portraitRequest(formated, currentChar)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)

@@ -44,6 +44,21 @@ export function newLooks(state: PortraitState, looks: Look[], now: number): Look
     })
 }
 
+/** The player's own character: their persona's picture is their portrait and its description their look (asked: Kenji Park
+ *  already has a persona picture; drawing him again gave someone else). */
+export type Player = { name: string; icon?: string; prompt?: string }
+
+/** The persona description as a look: {{user}} named, brackets gone, one line. */
+export function playerLook(p: Player): string {
+    return (p.prompt ?? '').replace(/\{\{user\}\}/gi, p.name).replace(/[[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+}
+
+/** The state with the player in it, drawn, when their persona has a picture. */
+export function withPlayer(state: PortraitState, p: Player | undefined): PortraitState {
+    if (!p?.name || !p.icon) return state
+    return { ...state, [keyOf(p.name)]: { name: p.name, look: playerLook(p) || state[keyOf(p.name)]?.look || '', status: 'done', at: 0, asset: p.icon } }
+}
+
 /** The note for the story: which names to describe once, which are drawn already. */
 export function portraitNote(state: PortraitState, player: string): string {
     const drawn = Object.values(state).filter((e) => e.status !== 'error').map((e) => e.name)
@@ -115,9 +130,9 @@ export function stateOf(card: CardLike): PortraitState {
  * before drawing, so a second reply naming the same character while it is drawn does not draw it again; an asset already
  * named so (one the learner added by hand) is never replaced.
  */
-export async function drawNewPortraits(card: CardLike, reply: string, deps: PortraitDeps, save: () => void = () => {}): Promise<string[]> {
+export async function drawNewPortraits(card: CardLike, reply: string, deps: PortraitDeps, save: () => void = () => {}, player?: Player): Promise<string[]> {
     const state = stateOf(card)
-    const todo = newLooks(state, parseLooks(reply), deps.now())
+    const todo = newLooks(withPlayer(state, player), parseLooks(reply), deps.now())
     if (!todo.length) return []
     for (const l of todo) state[keyOf(l.name)] = { name: l.name, look: l.look, status: 'pending', at: deps.now() }
     save()
