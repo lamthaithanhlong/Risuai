@@ -1477,6 +1477,8 @@ export interface character{
     scenario:string
     firstMsgIndex:number
     loreSettings?:loreSettings
+    /** Lore picked each turn from an index by the helper model, besides key words (loreIndex.ts); on unless false. */
+    loreIndexPick?:boolean
     loreExt?:any
     additionalData?: {
         tag?:string[]
@@ -1609,6 +1611,8 @@ export interface loreSettings{
 
 
 export interface groupChat{ 
+    /** See character.loreIndexPick. */
+    loreIndexPick?:boolean
     type: 'group'
     image?:string
     firstMessage:string

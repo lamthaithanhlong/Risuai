@@ -13,6 +13,7 @@ import { genStatus, genStatusEvents } from "./genStatus.svelte";
 import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
+import { pickLoreForTurn } from "./loreIndexPage";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -512,6 +513,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
     }
 
+    // the helper model picks lore from the card's index first (loreIndexPage.ts), then the lorebook pass runs as before
+    await brTimed('lore index', () => pickLoreForTurn(currentChar, DBState.db.characters[sel.char]?.chats?.[DBState.db.characters[sel.char]?.chatPage]), 0)
     const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt(), 0)
 
     const positionRegex = /{{position::(.+?)}}/g

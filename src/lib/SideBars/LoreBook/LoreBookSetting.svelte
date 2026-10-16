@@ -108,6 +108,10 @@
             />
         </div>
     {/if}
+    <div class="flex flex-col mt-4 gap-1">
+        <Check check={DBState.db.characters[$selectedCharID].loreIndexPick !== false} onChange={(v) => { DBState.db.characters[$selectedCharID].loreIndexPick = v }} name="Chọn lore theo mục lục"/>
+        <span class="text-textcolor2 text-xs">Mỗi lượt, model phụ đọc mục lục lore (tên từng mục) cùng vài tin nhắn gần nhất, chọn tới 8 mục cảnh tiếp theo cần, rồi nạp chúng như khi khớp từ khoá. Cần khi từ khoá viết một thứ tiếng mà truyện kể bằng thứ tiếng khác. Chỉ chạy khi thẻ có từ 20 mục trở lên.</span>
+    </div>
     <div class="flex items-center mt-4">
         {#if DBState.db.useExperimental}
             <Check bind:check={DBState.db.characters[$selectedCharID].lorePlus}
