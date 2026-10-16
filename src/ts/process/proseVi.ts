@@ -15,6 +15,9 @@
 // model): DeepSeek V4.1 Flash still put the emoji alone before the quote 14 times, obeying the emoji module over the reminder,
 // so the reminder now says it wins over any emoji rule (14 -> 1, story 0-1, MiniMax 15 -> 1, the module left as written);
 // MiniMax told other people's tastes and thoughts (POV 6), so it says to tell only what shows (6 -> 1).
+// A stranger treated the player as known (reported on a new Shadow Slave chat: Elise named herself and asked Kenji for a way
+// out the moment he appeared): with only this chat's cast in the portrait note still 2 of 8 openings, with the first-meeting
+// line 0 of 8.
 export function viProseReminder(player = 'nhân vật chính'): string {
     return '\n\n' + "[Viết văn tiếng Việt tự nhiên như tiểu thuyết dịch tốt: \"một người phụ nữ\" (không viết \"một phụ nữ\"); xưng hô theo tuổi so với "
         + "nhân vật chính, tính bằng số: hơn dưới 15 tuổi là chị/anh (người 40 tuổi với người 25 tuổi là chị hoặc cô, không phải bà), hơn "
@@ -24,7 +27,8 @@ export function viProseReminder(player = 'nhân vật chính'): string {
         + "😨 “…”), kể cả khi luật emoji ở trên bảo đặt emoji ngay trước lời thoại — luật này thắng; lời kể chỉ nói điều nhân vật chính thấy, "
         + "nghe, biết (không kể vị, mùi, cảm giác hay ý nghĩ trong đầu người khác, chỉ kể dấu hiệu nhìn thấy được: ông ta nhăn mặt); chưa rõ "
         + "nguồn thì tả cái nghe thấy (\"tiếng gõ\", \"một giọng gọi\"), không khẳng định \"có người\" hay \"ai đó\"; giữ đúng chỗ đứng và đồ vật đã "
-        + "kể.]"
+        + "kể; người lạ mới gặp lần đầu thì phản ứng như người lạ (giật mình, đề phòng, hỏi là ai, không tin ngay), không tự kể đời mình hay "
+        + "nhờ vả như người quen, trừ khi truyện đã cho họ quen nhau.]"
 }
 
 const VI_LETTERS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỷỹỵ]/gi

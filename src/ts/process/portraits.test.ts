@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { adoptHandAssets, drawNewPortraits, keyOf, newLooks, parseLooks, portraitNote, portraitPrompt, referencesFor, stateOf, STALE_MS, stripLooks, withLooks, type CardLike, type PortraitDeps } from './portraits'
+import { metInChat, stripPictureAsks } from './portraits'
 
 const REPLY = 'Một cô gái bước ra.\n[[LOOK Elise | silver hair to the shoulders, grey eyes, black hooded cloak, about twenty]]\nCô nhìn Kenji.\n[[LOOK Kenji Park | short black hair, tired brown eyes, torn school uniform, seventeen]]'
 
@@ -213,4 +214,27 @@ describe('reported: Elise\'s portrait came out photographic; the Shadow Slave ru
         expect(drawn).toEqual([])
         expect(card.additionalAssets).toEqual([['Elise', 'assets/mine.png', 'png']])
     })
+})
+
+describe('reported 2026-10-16: a new chat met Elise as if the story already had her', () => {
+    const st = {
+        'elise moreau': { name: 'Elise Moreau', look: 'brown hair', status: 'done', at: 1, asset: 'a.webp' },
+        'kenji park': { name: 'Kenji Park', look: 'glasses', status: 'done', at: 0, asset: 'k.png' },
+        'cassie': { name: 'Cassie', look: 'blind', status: 'done', at: 1, asset: 'c.webp' },
+    } as any
+    it('a chat that has not met her: only the player is "already described"', () => {
+        expect(Object.keys(metInChat(st, 'Will you cross?\n\nCó', 'Kenji Park'))).toEqual(['kenji park'])
+        expect(portraitNote(metInChat(st, 'Có', 'Kenji Park'), 'Kenji Park')).not.toContain('Elise')
+    })
+    it('a chat that named her, in full or by first name, keeps her', () => {
+        expect(Object.keys(metInChat(st, '“Tôi là Elise Moreau.”', 'Kenji Park'))).toContain('elise moreau')
+        expect(Object.keys(metInChat(st, 'Elise nhìn theo những vệt kéo', 'Kenji Park'))).toContain('elise moreau')
+        expect(Object.keys(metInChat(st, 'Cassiel walked in', 'Kenji Park'))).not.toContain('cassie')   // a whole word, not a prefix
+    })
+})
+
+it('an undrawn [[img:]] is hidden on screen (reported: shown as an English line on a card with no script)', () => {
+    expect(stripPictureAsks('[[img: A stone granary cellar at night]]\n\nKenji Park, 25 tuổi.')).toBe('Kenji Park, 25 tuổi.')
+    expect(stripPictureAsks('Chị gật đầu.\n[[img: half written')).toBe('Chị gật đầu.\n')
+    expect(stripPictureAsks('{{inlay::abc}}\nKenji')).toBe('{{inlay::abc}}\nKenji')            // a drawn picture stays
 })

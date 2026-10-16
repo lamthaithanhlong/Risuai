@@ -26,6 +26,7 @@ describe('reported: the opening of a Vietnamese story read wrong (no speaker, "m
         // across models: DeepSeek obeyed the emoji module over the reminder (14 speakerless -> 1 once it says it wins)
         expect(r).toContain('kể cả khi luật emoji ở trên bảo đặt emoji ngay trước lời thoại — luật này thắng')
         expect(r).toContain('không kể vị, mùi, cảm giác hay ý nghĩ trong đầu người khác')   // MiniMax POV 6 -> 1
+        expect(r).toContain('người lạ mới gặp lần đầu thì phản ứng như người lạ')          // a stranger treated as known: 2/8 -> 0/8
     })
 })
 

@@ -38,6 +38,15 @@ export function stripLooks(text: string): string {
     return (text ?? '').replace(/[ \t]*\[\[LOOK[^\]]*\]\][ \t]*\n?/g, '').replace(/\[\[LOOK[^\]]*$/, '').replace(/\n{3,}/g, '\n\n')
 }
 
+/**
+ * A scene picture still asked for, not drawn: "[[img: …]]" is turned into a picture by the story's own script, and stayed on
+ * screen as an English line where the card has none (reported 2026-10-16: the second copy of Shadow Slave on the live save has
+ * no trigger script). Hidden on screen only; the message keeps it, so a script still draws it.
+ */
+export function stripPictureAsks(text: string): string {
+    return (text ?? '').replace(/[ \t]*\[\[img:[^\]]*\]\][ \t]*\n?/gi, '').replace(/\[\[img:[^\]]*$/i, '').replace(/^\n+/, '')
+}
+
 /** The looks that still need a portrait: none yet, a failed one, or a pending one that was lost. */
 export function newLooks(state: PortraitState, looks: Look[], now: number): Look[] {
     return looks.filter((l) => {
@@ -59,6 +68,28 @@ export function playerLook(p: Player): string {
 export function withPlayer(state: PortraitState, p: Player | undefined): PortraitState {
     if (!p?.name || !p.icon) return state
     return { ...state, [keyOf(p.name)]: { name: p.name, look: playerLook(p) || state[keyOf(p.name)]?.look || '', status: 'done', at: 0, asset: p.icon } }
+}
+
+/**
+ * The portraits of the characters this chat has met: named in its messages so far, and the player. Reported 2026-10-16 on a
+ * new Shadow Slave chat: a stranger introduced herself as Elise Moreau and treated Kenji as an ally. Elise had been drawn in
+ * another chat (Adv1, since deleted) of the story's other copy, and the request said "Already described: Elise Moreau", so the
+ * model took her as someone the story already had. Measured on that opening: with the story's whole list Elise came in 4 of 6
+ * new chats, with only this chat's cast 0 of 6. The other portraits stay kept, as references when a reply names them.
+ */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** The name as a whole word of the text (Cassie is not in "Cassiel"). */
+const namedIn = (text: string, name: string) => !!name && new RegExp(`(?<!\\p{L})${escapeRe(name)}(?!\\p{L})`, 'u').test(text)
+
+export function metInChat(state: PortraitState, chatText: string, player?: string): PortraitState {
+    const text = (chatText ?? '').toLowerCase().normalize('NFC')
+    const out: PortraitState = {}
+    for (const [k, e] of Object.entries(state)) {
+        const full = keyOf(e.name)
+        const first = full.split(/\s+/)[0]
+        if (full === keyOf(player ?? '') || namedIn(text, full) || (first.length >= 3 && namedIn(text, first))) out[k] = e
+    }
+    return out
 }
 
 /** The note for the story: which names to describe once, which are drawn already. */

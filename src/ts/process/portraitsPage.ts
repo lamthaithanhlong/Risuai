@@ -5,7 +5,7 @@ import { get } from 'svelte/store'
 import { getDatabase, type character, type Chat, type groupChat } from '../storage/database.svelte'
 import { selectedCharID } from '../stores.svelte'
 import { checkPersonaBinded, getPersonaPrompt, getUserName } from '../util'
-import { adoptFromSiblings, adoptHandAssets, portraitReminder, storyStyle, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
+import { adoptFromSiblings, adoptHandAssets, metInChat, portraitReminder, storyStyle, withLooksText, drawNewPortraits, keyOf, mimeOf, withPlayer, type CardLike, type Player, portraitNote, referencesFor, stateOf, withLooks, type PortraitState } from './portraits'
 import type { OpenAIChat } from './index.svelte'
 
 /** The player's character as the chat sees it: the bound persona, else the selected one. */
@@ -42,7 +42,9 @@ export function currentRoom(fallback?: character): Room | undefined {
 export function portraitRequest<T extends OpenAIChat>(formated: T[], chatRoom: Room | undefined, player: Player = currentPlayer()): T[] {
     const card = portraitsOn() ? room(chatRoom) : null
     if (!card) return formated
-    const state = withPlayer(stateOf(card), player)
+    // only who this chat has met is "already described": another chat's cast read as people the story already has (metInChat)
+    const said = formated.filter((m) => m.role !== 'system' && typeof m.content === 'string').map((m) => m.content as string).join('\n')
+    const state = metInChat(withPlayer(stateOf(card), player), said, player.name)
     const note = { role: 'system', content: portraitNote(state, player.name) } as T
     const last = formated.map((m) => m.role).lastIndexOf('user')
     if (last < 0) return [...formated, note]
