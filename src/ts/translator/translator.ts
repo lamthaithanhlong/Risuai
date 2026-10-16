@@ -1,3 +1,4 @@
+import { keepMachineBlocks } from './keepBlocks'
 import { createLimiter, splitThoughts } from "./limiter";
 import { looksVietnamese, repairTranslation, translateForeignRuns } from "./vietnamese";
 import { isUsableTranslation } from "./cacheValue";
@@ -289,7 +290,7 @@ export async function translateHTML(html: string, reverse:boolean, charArg:simpl
     let DoingChat = get(doingChat)
     if(DoingChat){
         if(isExpTranslator()){
-            if(!(db.translatorType === 'llm' && await getLLMCache(html) !== null)){
+            if(!(db.translatorType === 'llm' && await getLLMCache(keepMachineBlocks(html).text) !== null)){
                 return html
             }
         }
@@ -297,7 +298,8 @@ export async function translateHTML(html: string, reverse:boolean, charArg:simpl
     if(db.translatorType === 'llm'){
         const tr = db.translator || 'en'
         const from = db.translatorInputLanguage
-        const r = await translateLLM(html, {to: tr, from: from, regenerate})
+        const keep = keepMachineBlocks(html)
+        const r = keep.restore(await translateLLM(keep.text, {to: tr, from: from, regenerate}))
         if(db.playMessageOnTranslateEnd){
             const audio = new Audio(sendSound);
             audio.play().catch(() => {});

@@ -42,9 +42,19 @@ export function learningOn(): boolean {
 }
 
 /** The display stage: suggested replies as a list, readings under every foreign word. */
+/**
+ * The blocks the story writes for the bar ([[REPLIES]], [[CHECK]]) are never shown as text: with learning mode off they stay in
+ * the messages written while it was on, and showed raw (reported 2026-10-15, chat Adv1, learning switched off). A block still
+ * being streamed is hidden too.
+ */
+export function stripMachineBlocks(text: string): string {
+    return (text ?? '').replace(/\n*\[\[(?:REPLIES|CHECK)\b[\s\S]*?\]\]/g, '').replace(/\n*\[\[(?:REPLIES|CHECK)\b[^\]]*$/, '')
+}
+
 export function learningDisplay(text: string): string {
     const db = getDatabase()
-    if (!db.learningMode || !text) return text
+    if (!text) return text
+    if (!db.learningMode) return stripMachineBlocks(text)
     // the replies box is read on its own, after the body: reading the whole message again would put a second reading on it
     setLatinLanguage(db.learningLang)
     const readings = db.learningReadings !== false

@@ -284,3 +284,13 @@ describe('reported: あなた / 당신 in ordinary sentences', () => {
         expect(learningRequest(req('こんにちは')).find((m: any) => m.role === 'system').content).toContain('never 당신 or あなた')
     })
 })
+
+describe('reported: [[REPLIES]] shown raw in chat Adv1 (learning mode switched off)', () => {
+    const MSG = 'Elise đứng cạnh Kenji.\n\n[[REPLIES\n네, 가요. | Vâng, đi thôi.\n천천히 가요. | Đi chậm thôi.\n]]\n[[CHECK ok]]'
+    it('with learning off, the blocks written while it was on are not shown', () => {
+        db.learningMode = false
+        expect(learningDisplay(MSG)).toBe('Elise đứng cạnh Kenji.')
+        expect(learningDisplay('Mưa.\n[[REPLIES\n네')).toBe('Mưa.')                  // one still streaming
+        expect(learningDisplay('Không có khối nào.')).toBe('Không có khối nào.')
+    })
+})
