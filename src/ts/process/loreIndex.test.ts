@@ -62,3 +62,13 @@ describe('the plan for any card', () => {
         expect(hintOf('## Dreamspawn are Nightmare Creatures born of the Spell. They hunt.')).toBe('Dreamspawn are Nightmare Creatures born of the Spell.')
     })
 })
+
+describe('reported: with learning mode off the story still had a foreign speaker (Elise did not understand Vietnamese)', async () => {
+    const { isLearningOnlyLore } = await import('./loreIndex')
+    it('the foreign speaker module, or an entry marked @@learning_only, is learning mode\'s lore', () => {
+        expect(isLearningOnlyLore({ comment: 'Module 08 — The Japanese Speaker', content: 'MODULE 08: THE FOREIGN SPEAKER\n\nOne recurring character…' })).toBe(true)
+        expect(isLearningOnlyLore({ comment: 'Haru', content: '@@learning_only\nHaru sells string.' })).toBe(true)
+        expect(isLearningOnlyLore({ comment: 'Naga Clans / Sea Folk', content: 'deeply foreign: they think differently' })).toBe(false)
+        expect(isLearningOnlyLore({ comment: 'White Tower Pathway', content: 'learning speed' })).toBe(false)
+    })
+})

@@ -114,3 +114,14 @@ export function clearLorePicks() { current = null }
 export function lorePicked(chaId: string, i: number): boolean {
     return !!current && current.chaId === chaId && current.ids.has(i)
 }
+
+/**
+ * Lore that belongs to learning mode: the foreign speaker module ("MODULE 08: THE FOREIGN SPEAKER", loaded as an always-on
+ * entry) or any entry marked @@learning_only. Reported 2026-10-15: with learning mode off the story still said Elise did not
+ * understand Vietnamese and offered Korean lines, because that always-on entry went on being sent. Such lore is left out
+ * while learning mode is off.
+ */
+export function isLearningOnlyLore(l: LoreLike): boolean {
+    return /@@learning_only\b/.test(l.content ?? '') || /^\s*MODULE\s+\d+:\s*THE\s+FOREIGN\s+SPEAKER\b/i.test(l.content ?? '')
+        || /\b(?:foreign|japanese)\s+speaker\b/i.test(l.comment ?? '')
+}

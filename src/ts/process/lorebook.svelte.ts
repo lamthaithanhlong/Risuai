@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { lorePicked } from "./loreIndex"
+import { isLearningOnlyLore, lorePicked } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -571,6 +571,10 @@ export async function loadLoreBookV3Prompt(){
             // picked from the index this turn (loreIndex.ts): key words alone missed every canon entry of a Vietnamese story
             else if(!activated && i < characterLore.length && lorePicked(char.chaId, i)){
                 activated = true
+            }
+            // learning mode's own lore (the foreign speaker) only while learning mode is on
+            if(activated && !DBState.db.learningMode && isLearningOnlyLore(fullLore[i])){
+                activated = false
             }
 
             if(activated){
