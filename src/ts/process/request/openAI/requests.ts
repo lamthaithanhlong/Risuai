@@ -579,9 +579,9 @@ export async function requestOpenAI(arg:RequestDataArgumentExtended):Promise<req
     
     body = applyAdditionalParameters(body, headers, [...getAdditionalParameters(aiModel), ...(aiModel === 'reverse_proxy' ? modeAdditionalParameters(arg.mode, db.additionalParamsForTranslate, db.translatorRequestModel) : [])])
     body = dropNeutralPenalties(body)
-    // the story model thinks less after the opening (storyEffort.ts: measured -56% output tokens, judged as good)
+    // opt-in: the story model thinks less after the opening (storyEffort.ts: fewer output tokens, more scene slips)
     if(aiModel === 'reverse_proxy' && body.reasoning_effort === undefined && body.reasoning === undefined){
-        const effort = storyEffort(arg.storyOpening, arg.mode, db.adaptiveStoryEffort !== false)
+        const effort = storyEffort(arg.storyOpening, arg.mode, db.adaptiveStoryEffort === true)
         if(effort){
             body.reasoning_effort = effort
         }

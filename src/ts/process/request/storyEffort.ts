@@ -9,6 +9,11 @@
 // faults the same in total (default 12, low 10 over 12 replies). On Alternate Hunters, a card with required blocks, low kept
 // the chat's own ending (profile line, then status line) 4 of 6 times, the default 1 of 6; with the shape reminder
 // (replyFormat.ts, for every story) 6 of 6 at low. So no card needs the default effort after its opening.
+// Then played over several turns on all five story cards (asked: every story up to standard, its format kept, fewer tokens),
+// each reply judged for prose, lore and state: low effort made 0.29-0.40 scene slips a reply (POV, who is where) against
+// 0.08 at the default; a scene check added to the reminder brought it only to 0.31 (it saw a key in the outside lock of a
+// closed door; a child held in her arms "stepped back"). It saved 90-100 output tokens a reply, 1-3% of a turn's tokens
+// (the input is 10-20k). So it is off by default and a choice in the settings; the shape reminder stays on for everyone.
 
 /** The opening: the chat has no reply yet (the first message is not one of its messages; a reroll removes the reply first).
  *  Counted on the chat, not on the request, where a card's example dialogue also comes as assistant messages. */
