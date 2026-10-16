@@ -146,9 +146,12 @@ function mergeById(bElems, oursArr, theirsArr, report) {
     const out = []
     for (const [id, o] of oIds) {
         const t = tIds.get(id)
-        if (t && bElems[id] !== undefined && hashValue(o) === bElems[id]) {
+        const untouched = bElems[id] !== undefined && hashValue(o) === bElems[id]
+        if (t && untouched) {
             if (hashValue(t) !== bElems[id]) report.fromServer++
             out.push(t)                    // the page did not touch it: follow the server
+        } else if (!t && untouched) {
+            report.fromServer++            // deleted by the server, untouched by the page: gone (a deleted chat used to come back here)
         } else {
             out.push(o)                    // changed or added by the page
         }

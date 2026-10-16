@@ -37,7 +37,8 @@ export function findTarget(db: Pick<Database, 'characters'>, target: ImageTarget
     if (!target) return null
     const char = db.characters?.find((c) => c?.chaId === target.charId)
     if (!char) return null
-    const chat = (target.chatId ? char.chats?.find((c) => c?.id === target.chatId) : undefined) ?? char.chats?.[target.chatIndex]
+    // a chat with an id that is gone was deleted: its picture goes nowhere (the position would put it in whichever chat moved up)
+    const chat = target.chatId ? char.chats?.find((c) => c?.id === target.chatId) : char.chats?.[target.chatIndex]
     if (!chat) return null
     const index = target.messageId ? chat.message.findIndex((m) => m.chatId === target.messageId) : target.messageIndex
     if (index < 0 || !chat.message[index]) return null

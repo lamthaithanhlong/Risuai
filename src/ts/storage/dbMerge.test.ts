@@ -101,6 +101,22 @@ describe('three-way merge of a write', () => {
         expect(ids).toEqual(['k1', 'k9'])
     })
 
+    test('a chat deleted on the other page stays deleted while this page chats in another chat (reported: a deleted chat came back)', () => {
+        // the laptop deletes k2; the phone, which loaded k2, then sends a message in k1 and writes its whole save
+        const theirs = edit(base, (g, s) => { const c = g('c1'); c.chats = c.chats.filter((x: any) => x.id !== 'k2'); s('c1', c) })
+        const ours = edit(base, (g, s) => { const c = g('c1'); c.chats[0].message.push('from the phone'); s('c1', c) })
+        const c1 = read(M(base, ours, theirs).buf, 'c1')
+        expect(c1.chats.map((x: any) => x.id)).toEqual(['k1'])
+        expect(c1.chats[0].message).toEqual(['hi', 'from the phone'])
+    })
+
+    test('a chat deleted on the other page but written to on this one is kept (no message is lost)', () => {
+        const theirs = edit(base, (g, s) => { const c = g('c1'); c.chats = c.chats.filter((x: any) => x.id !== 'k2'); c.chats[0].message.push('x'); s('c1', c) })
+        const ours = edit(base, (g, s) => { const c = g('c1'); c.chats[1].message.push('still writing here'); s('c1', c) })
+        const ids = read(M(base, ours, theirs).buf, 'c1').chats.map((x: any) => x.id)
+        expect(ids).toEqual(['k1', 'k2'])
+    })
+
     test('a character created on the other page is kept and listed in the directory', () => {
         const theirs = edit(base, (g, s) => { s('c3', { chaId: 'c3', name: 'Brand new', chats: [] }); const r = g('root'); r.__directory.push('c3'); s('root', r) })
         const ours = edit(base, (g, s) => { const c = g('c2'); c.name = 'Renamed'; s('c2', c) })

@@ -28,6 +28,13 @@ describe('findTarget', () => {
         expect(findTarget(db(), { charId: 'ss', chatId: 'chat-a', chatIndex: 0, messageId: 'deleted', messageIndex: 1 })).toBe(null)
         expect(findTarget(db(), null)).toBe(null)
     })
+    it('a picture for a deleted chat goes nowhere, not into the chat that moved to its position', () => {
+        const d = db()
+        d.characters[0].chats.unshift({ id: 'other', message: [{ role: 'char', data: 'x', chatId: 'm0' }, { role: 'char', data: 'y', chatId: 'm1' }] } as any)
+        d.characters[0].chats = d.characters[0].chats.filter((c: any) => c.id !== 'chat-a')       // chat-a deleted, 'other' now at 0
+        expect(findTarget(d, { charId: 'ss', chatId: 'chat-a', chatIndex: 0, messageIndex: 1 })).toBe(null)
+        expect(findTarget(d, { charId: 'ss', chatIndex: 0, messageIndex: 1 })?.chat.id).toBe('other')   // an old job without ids: by position
+    })
 })
 
 /** A fake server holding jobs. */
