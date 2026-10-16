@@ -221,10 +221,12 @@ function ordered(parts: { vi: string; fr: string[] }[], lang: LearningLang, join
     }))
 }
 
-/** Korean and Japanese do not say the person spoken to: "cô có sao không" → 괜찮아요, not 당신 괜찮아요. Only at the start and
- *  only when more follows (cô alone is still offered as itself). */
+/** Korean and Japanese do not say the person spoken to, anywhere in the sentence: "cô có sao không" → 괜찮아요?, "tôi thích
+ *  cô" → 私 好き (asked for Japanese あなた in ordinary sentences, 2026-10-15). Only when more is left (cô alone is still offered). */
 function withoutAddressee<P extends { vi: string }>(parts: P[], lang: LearningLang): P[] {
-    return DROPS_ADDRESSEE.has(lang) && parts.length > 1 && isAddressee(parts[0].vi) ? parts.slice(1) : parts
+    if (!DROPS_ADDRESSEE.has(lang) || parts.length < 2) return parts
+    const kept = parts.filter((p) => !isAddressee(p.vi))
+    return kept.length ? kept : parts
 }
 
 /** A word already written in the language is a verb when it translates a Vietnamese verb (the list's vote); with no vote in

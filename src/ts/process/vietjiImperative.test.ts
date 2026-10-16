@@ -209,3 +209,22 @@ describe('the person spoken to', () => {
         expect(dictSuggestions('tôi đi', list('ko').words, 'ko', 6, v('ko'))[0].text.startsWith('저')).toBe(true)
     })
 })
+
+// asked 2026-10-15: "làm luôn cho tiếng Nhật あなた trong câu thường"
+describe('Japanese (and Korean) ordinary sentences: no あなた / 당신', () => {
+    const v = (l: string) => new Set<string>(JSON.parse(readFileSync(`public/dict/vi-${l}.json`, 'utf8')).verbs)
+    const whole = (t: string, l: string) => dictSuggestions(t, list(l).words, l as any, 6, v(l)).find((c) => c.meaning.includes('từng chữ'))?.text ?? ''
+    it('the person spoken to is left out anywhere in the sentence', () => {
+        for (const t of ['tôi thích cô', 'cô ăn chưa', 'tôi muốn giúp bạn', 'anh đi đâu']) {
+            expect(whole(t, 'ja'), t).not.toMatch(/あなた|そちら|君/)
+            expect(whole(t, 'ko'), t).not.toMatch(/당신|그쪽/)
+        }
+        expect(dictSuggestions('cô có sao không', list('ja').words, 'ja', 6, v('ja'))[0].text).toBe('大丈夫[だいじょうぶ]ですか')
+    })
+    it('alone, cô is not あなた first; cô ấy stays 彼女; tôi stays', () => {
+        expect(dictSuggestions('cô', list('ja').words, 'ja')[0].text).toBe('そちら')
+        expect(dictSuggestions('bạn', list('ja').words, 'ja')[0].text).toBe('君[きみ]')
+        expect(whole('cô ấy thích tôi', 'ja')).toMatch(/^彼女/)
+        expect(whole('tôi thích cô', 'ja')).toMatch(/^私/)
+    })
+})

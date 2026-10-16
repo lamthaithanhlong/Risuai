@@ -1,16 +1,16 @@
 {
- "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15). ko cô/anh/chị gave 당신 first (cold or rude spoken to someone; cô also 나): 그쪽 and the kin word; ông/bà 어르신. es ngồi was sentar (seat someone): sentarse. có sao không / không sao as said (cô có sao không gave 있다 왜 아니요).",
+ "_why": "Everyday words put first, where the join through English picks a rarer sense or misses (same role as COMMON in build_vidict.py). Vietnamese function words read the Vietnamese way: cái đó = that thing, cái quái gì = what on earth, thế/vậy = then (2026-10-15). es đi was hacer (make): ir. ja ăn was 食う (rude), sống was ある; về was 작동하다/那么 (2026-10-15 sweep). ko giúp was 지원하다 (apply, support). đừng was 떽 (ko), な/せん (ja); đừng sợ / đừng lo as said (2026-10-15). zh đến/vào, ja/fr làm: the everyday verb first (sweep of đừng, 2026-10-15). ko cô/anh/chị gave 당신 first (cold or rude spoken to someone; cô also 나): 그쪽 and the kin word; ông/bà 어르신. es ngồi was sentar (seat someone): sentarse. có sao không / không sao as said (cô có sao không gave 있다 왜 아니요). ja cô/anh/chị/bạn/ông/bà gave あなた first: そちら, the kin word, 君 for the familiar ones.",
  "ja": {
   "tôi": [
    "私[わたし]",
    "僕[ぼく]"
   ],
   "bạn": [
-   "あなた",
+   "君[きみ]",
    "友達[ともだち]"
   ],
   "anh": [
-   "あなた",
+   "そちら",
    "お兄さん[おにいさん]"
   ],
   "có": [
@@ -109,33 +109,28 @@
    "しかし"
   ],
   "cô": [
-   "あなた",
-   "先生[せんせい]",
-   "おばさん"
+   "そちら",
+   "お姉さん[おねえさん]",
+   "先生[せんせい]"
   ],
   "chị": [
-   "あなた",
+   "そちら",
    "お姉さん[おねえさん]"
   ],
   "em": [
-   "君[きみ]",
-   "あなた"
+   "君[きみ]"
   ],
   "ông": [
-   "あなた",
    "おじいさん"
   ],
   "bà": [
-   "あなた",
    "おばあさん"
   ],
   "chú": [
-   "おじさん",
-   "あなた"
+   "おじさん"
   ],
   "bác": [
-   "おじさん",
-   "あなた"
+   "おじさん"
   ],
   "cậu": [
    "君[きみ]"

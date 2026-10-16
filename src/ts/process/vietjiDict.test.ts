@@ -175,7 +175,8 @@ describe('Vietnamese pronouns (reported: "cô" gave 我; es "i", fr "sourcils" f
     const bare = (t?: string) => (t ?? '').replace(/\[[^\]]*\]/g, '')
     it.each([
         ['zh', { 'cô': '你', 'chị': '你', 'anh': '你', 'ông': '您', 'mình': '我', 'cô ấy': '她', 'tao': '我' }],
-        ['ja', { 'cô': 'あなた', 'anh': 'あなた', 'mình': '私', 'cô ấy': '彼女', 'mày': 'お前' }],
+        // あなた is avoided in ordinary sentences (owner, 2026-10-15): そちら, and in a sentence the addressee is left out
+        ['ja', { 'cô': 'そちら', 'anh': 'そちら', 'mình': '私', 'cô ấy': '彼女', 'mày': 'お前' }],
         // 당신 sounds cold or rude to someone's face (owner, 2026-10-15): 그쪽, and in a sentence the addressee is left out
         ['ko', { 'cô': '그쪽', 'chị': '그쪽', 'em': '너', 'mình': '나', 'cô ấy': '그녀' }],
         ['es', { 'cô': 'usted', 'chị': 'tú', 'mình': 'yo', 'mày': 'tú', 'cô ấy': 'ella' }],

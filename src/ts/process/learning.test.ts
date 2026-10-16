@@ -277,3 +277,10 @@ describe('reported: 😨 “아직 안전하지 않아요…” — no one could
         expect(out.filter((m: any) => m.role === 'user').pop().content).toContain('starting with their name (Name: “…”)')
     })
 })
+
+describe('reported: あなた / 당신 in ordinary sentences', () => {
+    it('the note asks the story to leave out the person spoken to in Korean and Japanese', () => {
+        Object.assign(db, { learningLang: 'ja' })
+        expect(learningRequest(req('こんにちは')).find((m: any) => m.role === 'system').content).toContain('never 당신 or あなた')
+    })
+})
