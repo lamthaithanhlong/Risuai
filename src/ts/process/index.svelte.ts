@@ -14,6 +14,7 @@ import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
 import { pickLoreForTurn } from "./loreIndexPage";
+import { storyInVietnamese, viProseRequest } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -1519,6 +1520,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = learningRequest(formated, currentChat)
     // Settings → Image generation: the story describes each named character once, for their portrait
     formated = portraitRequest(formated, DBState.db.characters[sel.char] ?? currentChar)
+    // natural Vietnamese prose for a story told in Vietnamese (proseVi.ts): speaker before every spoken line, and the rest
+    formated = viProseRequest(formated, DBState.db.viProseGuard !== false, storyInVietnamese(currentChat?.message ?? [], currentChar?.firstMessage ?? ''))
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)

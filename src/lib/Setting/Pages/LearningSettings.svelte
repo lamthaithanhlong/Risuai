@@ -21,6 +21,8 @@
 <h2 class="mb-2 text-2xl font-bold mt-2">{language.learning}</h2>
 
 <div class="flex flex-col gap-3 mt-2">
+    <Check check={DBState.db.viProseGuard !== false} onChange={(v) => { DBState.db.viProseGuard = v }} name="Văn tiếng Việt tự nhiên"/>
+    <span class="text-textcolor2 text-sm">Truyện kể bằng tiếng Việt thì mỗi lượt nhắc model: tên người nói đứng trước câu thoại, "một người phụ nữ", xưng hô theo tuổi, lời kể chỉ nói điều nhân vật biết, giữ đúng chỗ đứng.</span>
     <Check bind:check={DBState.db.learningMode} name={language.learningMode}/>
     <span class="text-textcolor2 text-sm">{language.learningModeDesc}</span>
 
