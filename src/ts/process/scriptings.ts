@@ -399,6 +399,11 @@ export async function runScripted(code:string, arg:{
                 // this page is closed meanwhile, and put in its message at the next start. `index` is the message it is for
                 // (negative counts from the end, as in getChat); without it, the last message.
                 const db = getDatabase()
+                // the portraits of the characters this picture names go with it as references (portraitsPage.ts)
+                const { sceneReferences } = await import('./portraitsPage')
+                const sceneMsgs = ScriptingEngineState.chat?.message ?? []
+                const sceneAt = typeof index === 'number' ? (index < 0 ? sceneMsgs.length + index : index) : sceneMsgs.length - 1
+                const scene = await sceneReferences(char as character, value, sceneMsgs[sceneAt]?.data ?? '')
                 // the same flag as platform.ts isNodeServer, read here because platform.ts touches `window` when it loads
                 const onNodeServer = !!(globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__
                 if(onNodeServer && db.sdProvider === 'openai-compat' && db.openaiCompatImage?.url){
@@ -408,7 +413,7 @@ export async function runScripted(code:string, arg:{
                         charId: (char as character).chaId, chatId: ScriptingEngineState.chat?.id, chatIndex: (char as character).chatPage,
                         messageId: msgs[at]?.chatId, messageIndex: at,
                     }
-                    const { url, key, body, models } = openaiCompatImageRequest(value)
+                    const { url, key, body, models } = openaiCompatImageRequest(scene.prompt, scene.images)
                     try {
                         // loaded here: the node storage module touches `window` when it loads, which scripts tests run without
                         const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
@@ -422,7 +427,7 @@ export async function runScripted(code:string, arg:{
                         console.warn('[image] server job unavailable, drawing in the page', e)
                     }
                 }
-                const gen = await generateAIImage(value, char as character, negValue, 'inlay')
+                const gen = await generateAIImage(scene.prompt, char as character, negValue, 'inlay', scene.images)
                 if(!gen){
                     return 'Error: Image generation failed'
                 }

@@ -12,6 +12,7 @@ import { TRANSIENT_RETRY_DELAYS_MS, isTransientFailure } from "./transientRetry"
 import { genStatus, genStatusEvents } from "./genStatus.svelte";
 import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
+import { notePortraits, portraitRequest } from "./portraitsPage";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
@@ -1513,6 +1514,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = await brTimed('lua editRequest', () => runLuaEditTrigger(currentChar, 'editRequest', formated), 0)
     // Settings → Learning: what the learner typed in Việt-ji reaches the model as kana
     formated = learningRequest(formated, currentChat)
+    // Settings → Image generation: the story describes each named character once, for their portrait
+    formated = portraitRequest(formated, currentChar, getUserName())
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1859,6 +1862,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         DBState.db.characters[sel.char].chats[sel.chat] = currentChat
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
+        notePortraits(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
         const outputMessage = currentChat.message[inlayMessageIndex]
         if(outputMessage){
@@ -1968,6 +1972,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
+        notePortraits(sel.char, currentChat)
         if(outputMessageId){
             outputMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
             await runChatOutputListeners(currentChar, currentChat, sel.char, sel.chat, outputMessageIndex)

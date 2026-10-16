@@ -5,6 +5,7 @@ import markdownit from 'markdown-it'
 import { appVer, getCurrentCharacter, getDatabase, type Database, type character, type customscript, type groupChat, type triggerscript } from '../storage/database.svelte';
 import { DBState, selIdState } from '../stores.svelte';
 import { learningDisplay } from '../process/learning';
+import { stripLooks } from '../process/portraits';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getChatVar, setChatVar, getGlobalChatVar } from './chatVar.svelte';
@@ -746,7 +747,7 @@ export async function ParseMarkdown(
     }
 
     // Settings → Learning: Việt-ji readings over kana, suggested replies as a list (no-op when learning mode is off)
-    data = learningDisplay(data)
+    data = learningDisplay(stripLooks(data))           // [[LOOK]] lines are for the portraits only (portraits.ts)
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {

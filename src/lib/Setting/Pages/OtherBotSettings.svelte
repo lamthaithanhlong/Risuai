@@ -823,6 +823,10 @@
                 <OptionInput value="medium" >Medium</OptionInput>
                 <OptionInput value="high" >High</OptionInput>
             </SelectInput>
+            <div class="mb-4 flex flex-col gap-1">
+                <Check check={DBState.db.autoPortraits !== false} onChange={(v) => { DBState.db.autoPortraits = v }} name="Tự vẽ chân dung nhân vật"/>
+                <span class="text-textcolor2 text-xs">Mỗi nhân vật có tên (kể cả nhân vật của bạn) được vẽ chân dung một lần, lưu vào Additional Assets, rồi dùng làm ảnh mẫu cho mọi ảnh cảnh có nhân vật đó, để họ luôn giống nhau.</span>
+            </div>
         {/if}
 
         {#if DBState.db.sdProvider === 'wavespeed'}

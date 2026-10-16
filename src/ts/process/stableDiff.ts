@@ -66,7 +66,7 @@ export async function stableDiff(currentChar:character,prompt:string){
  * The OpenAI-compatible picture request (Settings → Other Bots → Image Generation): body without a model, headers, and the models
  * to try in order (the configured one, then the fallbacks). Shared by the page and the server job (imageJobClient.ts).
  */
-export function openaiCompatImageRequest(genPrompt: string) {
+export function openaiCompatImageRequest(genPrompt: string, images: string[] = []) {
     const config = getDatabase().openaiCompatImage
     const style = config.style?.trim()
     const body: {[key:string]: any} = {
@@ -78,6 +78,10 @@ export function openaiCompatImageRequest(genPrompt: string) {
         "size": config.size || "1024x1024",
         "quality": config.quality || "auto"
     }
+    // the characters' portraits (portraitsPage.ts): 9router draws an edit from them, so a character looks the same in every scene
+    if(images.length){
+        body.images = images
+    }
     const headers: {[key:string]: string} = { "Content-Type": "application/json" }
     if(config.key){
         headers["Authorization"] = "Bearer " + config.key
@@ -87,7 +91,7 @@ export function openaiCompatImageRequest(genPrompt: string) {
     return { url: config.url, key: config.key, body, headers, models: modelChain(config.model ?? '', config.fallbackModels) }
 }
 
-export async function generateAIImage(genPrompt:string, currentChar:character, neg:string, returnSdData:string):Promise<string|false>{
+export async function generateAIImage(genPrompt:string, currentChar:character, neg:string, returnSdData:string, refImages: string[] = []):Promise<string|false>{
     const db = getDatabase()
     console.log(db.sdProvider)
     if(db.sdProvider === 'webui'){
@@ -757,7 +761,7 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
             return false
         }
 
-        const { body, headers, models: chain } = openaiCompatImageRequest(genPrompt)
+        const { body, headers, models: chain } = openaiCompatImageRequest(genPrompt, refImages)
 
         // Asked as a stream: the router then sends progress every few seconds while the model draws, so the connection is never silent
         // for the 30-60 s a picture takes (a silent one is what got cut off as "terminated"). parseImageStream reads the final picture.

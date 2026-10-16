@@ -903,6 +903,8 @@ export interface Database{
     learningAutoWrite?: boolean
     /** words first: a sentence of right words in Vietnamese order counts right, one grammar point is shown a reply */
     learningGrammarLater?: boolean
+    /** Draw each named character's portrait once and send it as the reference of scene pictures (portraits.ts); on unless false. */
+    autoPortraits?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */
