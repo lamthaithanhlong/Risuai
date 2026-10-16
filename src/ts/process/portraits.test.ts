@@ -168,3 +168,21 @@ describe('reported: no portrait was ever drawn (the story wrote no [[LOOK]] line
         expect(portraitReminder({})).not.toContain('described already')
     })
 })
+
+describe('reported: Elise\'s portrait was drawn but shown nowhere', async () => {
+    const { castStrip } = await import('./portraits')
+    const card = {
+        additionalAssets: [['Elise Moreau', 'assets/69f1.webp', 'webp']] as [string, string, string][],
+        extentions: { vjPortraits: { 'elise moreau': { name: 'Elise Moreau', look: 'grey eyes', status: 'done', at: 1, asset: 'assets/69f1.webp' } } },
+    }
+    it('a message naming her (first name is enough) gets her picture under it, through the asset macro', () => {
+        const html = castStrip(card, 'Elise hạ tay xuống, chờ Kenji nhìn về phía cô chỉ.')
+        expect(html).toContain('<img src="{{path::Elise Moreau}}"')
+        expect(html).toContain('>Elise</span>')
+    })
+    it('not named, still being drawn, or only in a LOOK line: nothing', () => {
+        expect(castStrip(card, 'Mưa rơi trên mái.')).toBe('')
+        expect(castStrip(card, 'Mưa.\n[[LOOK Elise Moreau | grey eyes]]')).toBe('')
+        expect(castStrip({ ...card, extentions: { vjPortraits: { 'elise moreau': { ...card.extentions.vjPortraits['elise moreau'], status: 'pending' } } } }, 'Elise đứng đó.')).toBe('')
+    })
+})

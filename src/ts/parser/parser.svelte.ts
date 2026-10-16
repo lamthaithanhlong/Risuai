@@ -5,7 +5,7 @@ import markdownit from 'markdown-it'
 import { appVer, getCurrentCharacter, getDatabase, type Database, type character, type customscript, type groupChat, type triggerscript } from '../storage/database.svelte';
 import { DBState, selIdState } from '../stores.svelte';
 import { learningDisplay } from '../process/learning';
-import { stripLooks } from '../process/portraits';
+import { castStrip, stripLooks } from '../process/portraits';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getChatVar, setChatVar, getGlobalChatVar } from './chatVar.svelte';
@@ -747,7 +747,12 @@ export async function ParseMarkdown(
     }
 
     // Settings → Learning: Việt-ji readings over kana, suggested replies as a list (no-op when learning mode is off)
-    data = learningDisplay(stripLooks(data))           // [[LOOK]] lines are for the portraits only (portraits.ts)
+    // the portraits of the characters this message names, under it (portraits.ts); before the second asset pass, which
+    // turns their {{path::name}} into the picture's address
+    // the chat passes a slim character (simpleCharacterArgument: no extentions), so the card itself is looked up by its id
+    const castCard = char && char.type !== 'group' ? getDatabase().characters.find((c) => c?.chaId === char.chaId) : undefined
+    const cast = castCard && castCard.type !== 'group' && mode !== 'pretranslate' ? castStrip(castCard as character, data) : ''
+    data = learningDisplay(stripLooks(data)) + cast    // [[LOOK]] lines are for the portraits only
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {

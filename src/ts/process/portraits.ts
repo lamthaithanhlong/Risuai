@@ -126,6 +126,25 @@ export function withLooksText(prompt: string, refs: PortraitEntry[]): string {
     return looks.length ? `${prompt}\n\nCharacters: ${looks.map((e) => `${e.name}: ${e.look}`).join('; ')}.` : prompt
 }
 
+/**
+ * The portraits shown under a reply: the drawn characters it names (Elise for Elise Moreau), as small round pictures with
+ * their names. Reported 2026-10-15: Elise's portrait was drawn at 22:58 and kept as an Additional Asset, but nothing showed
+ * it; the asset macro {{path::<name>}} gives the picture's address when the message is drawn.
+ */
+export function castStrip(card: CardLike, text: string, max = 4): string {
+    const state = (card.extentions?.vjPortraits ?? {}) as PortraitState
+    const assets = card.additionalAssets ?? []
+    const shown = referencesFor(state, stripLooks(text).replace(/<[^>]+>/g, ' '), '', max)
+        .map((e) => assets.find((a) => keyOf(a[0]) === keyOf(e.name))?.[0])
+        .filter((n): n is string => !!n && !/[{}]/.test(n))
+    if (!shown.length) return ''
+    const q = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
+    return '\n\n<div style="display:flex;gap:.6em;flex-wrap:wrap;margin-top:.5em">' + shown.map((n) =>
+        `<span style="display:inline-flex;flex-direction:column;align-items:center;font-size:.72em;opacity:.85">`
+        + `<img src="{{path::${n}}}" alt="${q(n)}" title="${q(n)}" style="width:3.4em;height:3.4em;border-radius:50%;object-fit:cover;object-position:top;border:1px solid #8fb8ff66"/>`
+        + `${q(n.split(/\s+/)[0])}</span>`).join('') + '</div>'
+}
+
 // ---- the effects, with their dependencies passed in (tested without a page) ------------------------------------------------
 
 export interface PortraitDeps {
