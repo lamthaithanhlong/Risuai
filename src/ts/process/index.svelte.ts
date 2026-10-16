@@ -16,6 +16,7 @@ import { notePortraits, portraitRequest } from "./portraitsPage";
 import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
+import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
@@ -1077,6 +1078,18 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         index++
     }
     console.log(JSON.stringify(chats, null, 2))
+
+    // a long chat: its old messages through a table of contents, the helper picking the ones this turn needs (historyIndex.ts)
+    {
+        const before = chats
+        chats = await brTimed('history index', () => historyForTurn(chats, currentChat, (content) => ({ role: 'system', content, memo: INDEX_MEMO })), 0)
+        if (chats !== before) {
+            // only what changed: the old messages left out, the table put in
+            const now = new Set(chats), was = new Set(before)
+            for (const c of before) if (!now.has(c)) currentTokens -= await tokenizer.tokenizeChat(c)
+            for (const c of chats) if (!was.has(c)) currentTokens += await tokenizer.tokenizeChat(c)
+        }
+    }
 
     const depthPrompts = lorepmt.actives.filter(v => {
         return (v.pos === 'depth' && v.depth > 0) || v.pos === 'reverse_depth'

@@ -913,6 +913,7 @@ export interface Database{
     autoScenePictures?: boolean
     adaptiveStoryEffort?: boolean
     oneSystemMessage?: boolean
+    historyIndex?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */
@@ -1950,6 +1951,8 @@ export interface Chat{
     bookmarkNames?: { [chatId: string]: string };
     useLocallySetGlobalVariables?: boolean
     GLGlobalVariables?: { [key: string]: string }
+    /** historyIndex.ts: one table-of-contents line per old message, by its chatId */
+    historyToc?: { [chatId: string]: string }
 }
 
 export interface ChatFolder{
