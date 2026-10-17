@@ -8,6 +8,7 @@
 //
 //   node server/node/loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> [...]
 //   node server/node/loreImport.cjs <save dir> --image <picture.png> <chaId prefix> [...]   (the card's icon)
+//   node server/node/loreImport.cjs <save dir> --script <card.json> <chaId prefix> [...]     (the card's trigger scripts, e.g. a new status.lua)
 const fs = require('fs')
 const path = require('path')
 const net = require('net')
@@ -91,6 +92,28 @@ function setCardImage(saveDir, prefixes, imageBytes, ext = 'png', syncFile = sav
     }, syncFile, 'card-image')
 }
 
+/** Replaces the cards' trigger scripts (and their low-level access flag) with those of a built card, recorded like a lore import. */
+function setCardScript(saveDir, prefixes, triggerscript, lowLevelAccess, syncFile = saveDir + '.sync.sqlite') {
+    if (!Array.isArray(triggerscript) || !triggerscript.length) throw new Error('the card has no trigger script')
+    return recordedWrite(saveDir, (current) => {
+        const blocks = decodeSave(current)
+        const report = []
+        for (const prefix of prefixes) {
+            const i = blocks.findIndex((b) => b.name.startsWith(prefix))
+            if (i < 0) throw new Error(`no card ${prefix} in the save`)
+            const v = parseBlock(blocks[i])
+            const size = (t) => JSON.stringify(t ?? []).length
+            report.push({ prefix, name: v.name, before: size(v.triggerscript), after: size(triggerscript) })
+            v.triggerscript = structuredClone(triggerscript)
+            if (lowLevelAccess !== undefined) v.lowLevelAccess = !!lowLevelAccess
+            blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
+        }
+        const out = encodeSave(blocks)
+        validateSave(out)
+        return { out, report }
+    }, syncFile, 'card-script')
+}
+
 function serverRunning(port = 6001) {
     return new Promise((resolve) => {
         const s = net.connect(port, '127.0.0.1')
@@ -104,6 +127,14 @@ if (require.main === module) {
         const [saveDir, ...pairs] = process.argv.slice(2)
         if (!saveDir || !pairs.length) { console.error('usage: loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> ...'); process.exit(2) }
         if (await serverRunning()) { console.error('the Risu server is running on :6001; stop it first (its queue flushes on SIGTERM)'); process.exit(1) }
+        if (pairs[0] === '--script') {
+            // loreImport.cjs <save dir> --script <card.json> <chaId prefix> ...
+            const [, cardFile, ...prefixes] = pairs
+            const c = JSON.parse(fs.readFileSync(cardFile, 'utf8'))
+            const risu = (c.data ?? c).extensions?.risuai ?? {}
+            for (const r of setCardScript(saveDir, prefixes, risu.triggerscript, risu.lowLevelAccess)) console.log(`${r.prefix} ${r.name}: trigger script ${r.before} -> ${r.after} chars`)
+            return
+        }
         if (pairs[0] === '--image') {
             // loreImport.cjs <save dir> --image <picture> <chaId prefix> ...
             const [, pic, ...prefixes] = pairs
@@ -115,4 +146,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, recordedWrite, toRisuLore }
+module.exports = { importLore, withLore, setCardImage, setCardScript, recordedWrite, toRisuLore }

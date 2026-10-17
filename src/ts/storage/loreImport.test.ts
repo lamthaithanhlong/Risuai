@@ -9,7 +9,7 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore, setCardImage, toRisuLore } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage, setCardScript, toRisuLore } = req('../../../server/node/loreImport.cjs')
 // characters.ts updateLorebooks, copied (it needs a browser to import); the test below fails if the original changes
 const updateLorebooks = (book: any[]) => book.map((v) => {
     v.bookVersion ??= 1
@@ -63,6 +63,23 @@ describe('lore import while a page is open', () => {
         sync = openDbSync({ dbFile: syncFile, log: () => {} })
         const w = sync.onWrite('page', save(card(['lore'], ['hi', 'more'])), readFileSync(join(saveDir, FILE))); sync.close()
         expect(read(w.bytes).image).toBe(r.after)
+        expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+    })
+
+    test("a new trigger script survives the next write of a page that loaded the old one", () => {
+        const dir = mkdtempSync(join(tmpdir(), 'loreimp-s-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const syncFile = saveDir + '.sync.sqlite'
+        const old = { ...card(['lore'], ['hi']), triggerscript: [{ comment: 'panel', effect: [{ type: 'triggerlua', code: 'hp' }] }] }
+        const loaded = save(old)
+        writeFileSync(join(saveDir, FILE), loaded)
+        let sync = openDbSync({ dbFile: syncFile, log: () => {} }); sync.onRead('page', loaded); sync.close()
+        const script = [{ comment: 'panel', effect: [{ type: 'triggerlua', code: 'runes' }] }]
+        const [r] = setCardScript(saveDir, ['ss'], script, true)
+        expect(r.after).toBeGreaterThan(0)
+        sync = openDbSync({ dbFile: syncFile, log: () => {} })
+        const w = sync.onWrite('page', save({ ...old, chats: [{ id: 'k1', message: ['hi', 'more'] }] }), readFileSync(join(saveDir, FILE))); sync.close()
+        expect(read(w.bytes).triggerscript[0].effect[0].code).toBe('runes')
+        expect(read(w.bytes).lowLevelAccess).toBe(true)
         expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
     })
 
