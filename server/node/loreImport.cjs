@@ -16,10 +16,18 @@ const { openDbSync } = require('./dbSync.cjs')
 
 const DB_FILE = '64617461626173652f64617461626173652e62696e'        // hex of database/database.bin
 
+/**
+ * An entry in the shape Risu itself holds it in. A page normalizes every entry that is not bookVersion 2 when it loads (characters.ts
+ * updateLorebooks: @@end -> @@depth 0, <char>/<bot> -> {{char}}, <user> -> {{user}}, then bookVersion = 2). An entry written without
+ * that makes the page's copy differ from the file the page loaded, and the merge then reads it as "the page changed the lore": an open
+ * page that loaded older lore put it back (found 2026-10-17: the Memories and Echoes text imported at 00:03 was gone at 00:45, all 822
+ * other entries "differing" only by bookVersion). Writing the normalized shape makes an unchanged page lore equal to its base.
+ */
 function toRisuLore(e) {
+    const content = String(e.content ?? '').replace(/@@@?end/g, '@@depth 0').replace(/<(char|bot)>/g, '{{char}}').replace(/<(user)>/g, '{{user}}')
     return {
-        key: e.key ?? '', secondkey: e.secondkey ?? '', insertorder: e.insertorder ?? 100, comment: e.comment ?? '', content: e.content ?? '',
-        mode: e.mode ?? 'normal', alwaysActive: !!e.alwaysActive, selective: !!e.selective, useRegex: !!e.useRegex,
+        key: e.key ?? '', secondkey: e.secondkey ?? '', insertorder: e.insertorder ?? 100, comment: e.comment ?? '', content,
+        mode: e.mode ?? 'normal', alwaysActive: !!e.alwaysActive, selective: !!e.selective, useRegex: !!e.useRegex, bookVersion: 2,
     }
 }
 
@@ -107,4 +115,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, recordedWrite }
+module.exports = { importLore, withLore, setCardImage, recordedWrite, toRisuLore }

@@ -9,7 +9,16 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore, setCardImage } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage, toRisuLore } = req('../../../server/node/loreImport.cjs')
+// characters.ts updateLorebooks, copied (it needs a browser to import); the test below fails if the original changes
+const updateLorebooks = (book: any[]) => book.map((v) => {
+    v.bookVersion ??= 1
+    if (v.bookVersion >= 2) return v
+    if (v.activationPercent) { const perc = v.activationPercent; v.activationPercent = null; v.content = `@@probability ${perc}\n${v.content}` }
+    v.content = v.content.replace(/@@@?end/g, '@@depth 0').replace(/\<(char|bot)\>/g, '{{char}}').replace(/\<(user)\>/g, '{{user}}')
+    v.bookVersion = 2
+    return v
+})
 const FILE = '64617461626173652f64617461626173652e62696e'
 
 function save(card: any) {
@@ -55,5 +64,39 @@ describe('lore import while a page is open', () => {
         const w = sync.onWrite('page', save(card(['lore'], ['hi', 'more'])), readFileSync(join(saveDir, FILE))); sync.close()
         expect(read(w.bytes).image).toBe(r.after)
         expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+    })
+
+    test('the copy of updateLorebooks above is still what Risu does', () => {
+        const src = readFileSync(join(__dirname, '../characters.ts'), 'utf8')
+        for (const line of ["v.bookVersion ??= 1", "v.content = v.content.replace(/@@@?end/g, '@@depth 0').replace(/\\<(char|bot)\\>/g, '{{char}}').replace(/\\<(user)\\>/g, '{{user}}')", "v.bookVersion = 2"]) expect(src).toContain(line)
+    })
+
+    test('an entry is written the way Risu normalizes it, so an open page never reads it as changed', () => {
+        const e = { key: 'a', comment: 'c', content: 'He says @@end and <user> meets <char>.', insertorder: 5 }
+        const written = toRisuLore(e)
+        expect(written.bookVersion).toBe(2)
+        // what the page does to it on load changes nothing
+        expect(updateLorebooks([structuredClone(written)] as any)[0]).toEqual(written)
+        expect(written.content).toBe('He says @@depth 0 and {{user}} meets {{char}}.')
+    })
+
+    test('the incident: a page that loaded the first import still holds it when the second import lands, and keeps the second', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'loreimp2-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const syncFile = saveDir + '.sync.sqlite'
+        writeFileSync(join(saveDir, FILE), save(card([], ['hi'])))
+        importLore(saveDir, [{ prefix: 'ss', entries: [{ comment: 'first', content: 'first lore', key: '' }] }])
+        const loaded = readFileSync(join(saveDir, FILE))
+        let sync = openDbSync({ dbFile: syncFile, log: () => {} }); sync.onRead('page', loaded); sync.close()
+        // the page loads the save: Risu normalizes the lore in memory
+        const inPage = merge.parseBlock(merge.decodeSave(loaded).find((b: any) => b.name === 'ss'))
+        inPage.globalLore = updateLorebooks(inPage.globalLore as any)
+        inPage.chats[0].message.push('typed on the page')
+        // the second import lands behind it
+        importLore(saveDir, [{ prefix: 'ss', entries: [{ comment: 'second', content: 'second lore with the Echo definition', key: '' }] }])
+        sync = openDbSync({ dbFile: syncFile, log: () => {} })
+        const w = sync.onWrite('page', save(inPage), readFileSync(join(saveDir, FILE))); sync.close()
+        const v = read(w.bytes)
+        expect(v.globalLore.map((l: any) => l.comment)).toEqual(['second'])
+        expect(v.chats[0].message).toEqual(['hi', 'typed on the page'])
     })
 })
