@@ -28,7 +28,7 @@ export function profilePrompt(rules: string): string {
     return 'Below are the rules of an interactive story (the card\'s description and its always-on lore). Does this story have an in-world voice or system that'
         + ' sends the player\'s character messages about what happens (for example the Spell in Shadow Slave, the System of a hunter story)? Use the rules'
         + ' and what you know of the source work. Answer with only JSON: {"voice": "its name, or null when the story has none", "reports": ["the events it'
-        + ' reports, short, e.g. kill, item gained, rank change"], "format": "one example line exactly as it would appear, in the style the rules or the source use"}'
+        + ' reports, short, e.g. kill, item gained, rank change"], "format": "one example line as it would appear, in the style the rules or the source use, with <name> where a name goes"}'
         + '\n\nRULES\n' + rules
 }
 
