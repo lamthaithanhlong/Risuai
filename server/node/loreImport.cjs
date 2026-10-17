@@ -7,6 +7,7 @@
 // so a page that loaded before it takes the merge path, and the merge keeps the new lore (the page did not change it).
 //
 //   node server/node/loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> [...]
+//   node server/node/loreImport.cjs <save dir> --image <picture.png> <chaId prefix> [...]   (the card's icon)
 const fs = require('fs')
 const path = require('path')
 const net = require('net')
@@ -40,19 +41,46 @@ function withLore(bytes, plan) {
     return { out, report }
 }
 
-/** Replaces the lorebooks and records the write in dbSync as its own client; returns what was written. */
-function importLore(saveDir, plan, syncFile = saveDir + '.sync.sqlite') {
+/** Writes the save changed by `change(current) -> { out, report }`, recorded in dbSync as its own client, so an open page merges. */
+function recordedWrite(saveDir, change, syncFile = saveDir + '.sync.sqlite', client = 'lore-import') {
     const file = path.join(saveDir, DB_FILE)
     const current = fs.readFileSync(file)
-    const { out, report } = withLore(current, plan)
+    const { out, report } = change(current)
     let stored = out
     if (fs.existsSync(syncFile)) {
         const sync = openDbSync({ dbFile: syncFile, log: () => {} })
-        try { stored = sync.onWrite('lore-import', out, current).bytes } finally { sync.close() }
+        try { stored = sync.onWrite(client, out, current).bytes } finally { sync.close() }
     }
     fs.writeFileSync(file + '.lore-tmp', stored)
     fs.renameSync(file + '.lore-tmp', file)
     return report
+}
+
+/** Replaces the lorebooks and records the write in dbSync as its own client; returns what was written. */
+function importLore(saveDir, plan, syncFile = saveDir + '.sync.sqlite') {
+    return recordedWrite(saveDir, (current) => withLore(current, plan), syncFile)
+}
+
+/** Sets the cards' image: the picture is stored as Risu stores an asset (assets/<sha256>.<ext>), then each card points at it. */
+function setCardImage(saveDir, prefixes, imageBytes, ext = 'png', syncFile = saveDir + '.sync.sqlite') {
+    const name = `assets/${require('crypto').createHash('sha256').update(imageBytes).digest('hex')}.${ext}`
+    const assetFile = path.join(saveDir, Buffer.from(name, 'utf-8').toString('hex'))
+    if (!fs.existsSync(assetFile)) fs.writeFileSync(assetFile, imageBytes)
+    return recordedWrite(saveDir, (current) => {
+        const blocks = decodeSave(current)
+        const report = []
+        for (const prefix of prefixes) {
+            const i = blocks.findIndex((b) => b.name.startsWith(prefix))
+            if (i < 0) throw new Error(`no card ${prefix} in the save`)
+            const v = parseBlock(blocks[i])
+            report.push({ prefix, name: v.name, before: v.image || '(none)', after: name })
+            v.image = name
+            blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
+        }
+        const out = encodeSave(blocks)
+        validateSave(out)
+        return { out, report }
+    }, syncFile, 'card-image')
 }
 
 function serverRunning(port = 6001) {
@@ -68,9 +96,15 @@ if (require.main === module) {
         const [saveDir, ...pairs] = process.argv.slice(2)
         if (!saveDir || !pairs.length) { console.error('usage: loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> ...'); process.exit(2) }
         if (await serverRunning()) { console.error('the Risu server is running on :6001; stop it first (its queue flushes on SIGTERM)'); process.exit(1) }
+        if (pairs[0] === '--image') {
+            // loreImport.cjs <save dir> --image <picture> <chaId prefix> ...
+            const [, pic, ...prefixes] = pairs
+            for (const r of setCardImage(saveDir, prefixes, fs.readFileSync(pic), path.extname(pic).slice(1).toLowerCase() || 'png')) console.log(`${r.prefix} ${r.name}: image ${r.before} -> ${r.after}`)
+            return
+        }
         const plan = pairs.map((p) => { const [prefix, f] = p.split('='); return { prefix, entries: JSON.parse(fs.readFileSync(f, 'utf8')).data } })
         for (const r of importLore(saveDir, plan)) console.log(`${r.prefix} ${r.name}: lore ${r.before} -> ${r.after}`)
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore }
+module.exports = { importLore, withLore, setCardImage, recordedWrite }

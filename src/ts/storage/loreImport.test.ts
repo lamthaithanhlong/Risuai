@@ -9,7 +9,7 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage } = req('../../../server/node/loreImport.cjs')
 const FILE = '64617461626173652f64617461626173652e62696e'
 
 function save(card: any) {
@@ -40,5 +40,20 @@ describe('lore import while a page is open', () => {
         expect(r.how).toBe('merged')
         expect(v.globalLore.map((l: any) => l.comment)).toEqual(['new lore', 'kill rule'])
         expect(v.chats[0].message).toEqual(['hi', 'a new message'])
+    })
+    test('a card icon set while a page is open survives the page\'s next write; the picture is stored as Risu stores assets', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'cardimg-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const syncFile = saveDir + '.sync.sqlite'
+        const loaded = save(card(['lore'], ['hi']))
+        writeFileSync(join(saveDir, FILE), loaded)
+        let sync = openDbSync({ dbFile: syncFile, log: () => {} }); sync.onRead('page', loaded); sync.close()
+        const png = Buffer.from('fake png bytes')
+        const [r] = setCardImage(saveDir, ['ss'], png)
+        expect(r.after).toMatch(/^assets\/[0-9a-f]{64}\.png$/)
+        expect(readFileSync(join(saveDir, Buffer.from(r.after).toString('hex')))).toEqual(png)
+        sync = openDbSync({ dbFile: syncFile, log: () => {} })
+        const w = sync.onWrite('page', save(card(['lore'], ['hi', 'more'])), readFileSync(join(saveDir, FILE))); sync.close()
+        expect(read(w.bytes).image).toBe(r.after)
+        expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
     })
 })
