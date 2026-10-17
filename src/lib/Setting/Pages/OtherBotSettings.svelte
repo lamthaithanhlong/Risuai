@@ -282,6 +282,7 @@
                 <Check check={DBState.db.adaptiveStoryEffort === true} onChange={(v) => { DBState.db.adaptiveStoryEffort = v }} name="Tiết kiệm token: suy nghĩ ít sau lượt mở đầu (truyện kém mạch lạc hơn)"/>
                 <Check check={DBState.db.playerAgency !== false} onChange={(v) => { DBState.db.playerAgency = v }} name="Làm đúng hành động người chơi viết (không bịa chi tiết để từ chối)"/>
                 <Check check={DBState.db.storyVoice !== false} onChange={(v) => { DBState.db.storyVoice = v }} name="Giọng hệ thống của truyện (Spell, System) báo sự kiện"/>
+                <Check check={DBState.db.storyTerms !== false} onChange={(v) => { DBState.db.storyTerms = v }} name="Hiểu thuật ngữ của truyện (Tiếng Vọng = Echo, Ký Ức = Memory)"/>
                 <span class="text-textcolor2 text-xs">Mọi chat, mọi nhà cung cấp ảnh: mỗi nhân vật có tên (kể cả nhân vật của bạn, lấy ảnh persona) có một chân dung, lưu vào Additional Assets và dùng chung cho các bản sao cùng tên của truyện. Ảnh cảnh có nhân vật đó được ghi ngoại hình, và với OpenAI-compatible (9router) được gửi kèm chân dung làm ảnh mẫu.</span>
             </div>
         {/if}

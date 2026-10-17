@@ -18,6 +18,7 @@ import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
 import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
+import { glossaryOf, termsRequest } from "./storyTermsPage";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
@@ -1546,6 +1547,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = agencyRequest(formated, DBState.db.playerAgency !== false)
     // the story's own voice (the Spell, a System) speaks when it should, read once from the card's rules (storyVoice.ts)
     formated = voiceRequest(formated, await brTimed('story voice', () => voiceProfileOf(currentChar), 0))
+    // the story's own words the player used ("tiếng vọng" = Echo), read once from the card's rules (storyTerms.ts)
+    formated = termsRequest(formated, await brTimed('story terms', () => glossaryOf(currentChar), 0), [...(currentChat?.message ?? [])].reverse().find((m) => m.role === 'user')?.data ?? '')
     // the shape the story's replies keep (its panels at either end), after the opening (replyFormat.ts)
     if(!isOpening(currentChat?.message)){
         formated = shapeRequest(formated, currentChat?.message)
