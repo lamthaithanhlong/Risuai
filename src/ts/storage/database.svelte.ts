@@ -915,6 +915,7 @@ export interface Database{
     oneSystemMessage?: boolean
     historyIndex?: boolean
     playerAgency?: boolean
+    storyVoice?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */
