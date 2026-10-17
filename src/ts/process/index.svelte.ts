@@ -16,6 +16,7 @@ import { notePortraits, portraitRequest } from "./portraitsPage";
 import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
+import { agencyRequest } from "./playerAgency";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
@@ -1540,6 +1541,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = scenePictureRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // natural Vietnamese prose for a story told in Vietnamese (proseVi.ts): speaker before every spoken line, and the rest
     formated = viProseRequest(formated, DBState.db.viProseGuard !== false, wantsVietnameseProse(currentChat?.message ?? [], currentChar?.firstMessage ?? '', DBState.db.translator), getUserName())
+    // the player's turn is carried out: their plan happens, no detail invented to refuse it (playerAgency.ts)
+    formated = agencyRequest(formated, DBState.db.playerAgency !== false)
     // the shape the story's replies keep (its panels at either end), after the opening (replyFormat.ts)
     if(!isOpening(currentChat?.message)){
         formated = shapeRequest(formated, currentChat?.message)
