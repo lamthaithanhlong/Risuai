@@ -13,6 +13,13 @@ describe('the player\'s turn is carried out (measured: the stalactite plan 0/6 -
         expect(PLAYER_AGENCY).toContain('Only what is impossible in this world')
         expect(PLAYER_AGENCY).toContain('Other people still decide for themselves')
     })
+    it('keeps the player\'s character the player\'s: no words or choices of theirs beyond the turn (acceptance voice.player)', () => {
+        expect(PLAYER_AGENCY).toContain('it says and does only what they wrote')
+        expect(PLAYER_AGENCY).toContain('never a new line, answer, promise, agreement or refusal')
+        expect(PLAYER_AGENCY).toContain('nor a next move after it')
+        // carrying out the turn stays first: the new rule must not read as a reason to cut the player's own action short
+        expect(PLAYER_AGENCY.indexOf('carry out what the player wrote')).toBeLessThan(PLAYER_AGENCY.indexOf('only what they wrote'))
+    })
     it('is the text that was measured', () => {
         const f = '/private/tmp/claude-501/proseeval/agency1b.py'
         if (!existsSync(f)) return

@@ -11,7 +11,9 @@ export const PLAYER_AGENCY = '\n\n[Player\'s turn: carry out what the player wro
     + ' that the story has not described yet (a stalactite in a cave, a loose stone) exists if it fits the setting; never invent a contradicting detail to'
     + ' refuse it. A prepared, plausible plan works; the world can make it costly or bring new trouble after, not cancel it. Only what is impossible in this'
     + ' world or contradicts what the story already showed fails, and then the narration shows why. Other people still decide for themselves: the player\'s'
-    + ' words never decide what someone else feels, believes or chooses; that comes from the scene.]'
+    + ' words never decide what someone else feels, believes or chooses; that comes from the scene. The player\'s character is the player\'s:'
+    + ' it says and does only what they wrote (their words may become a spoken line); never a new line, answer, promise, agreement or refusal of'
+    + ' theirs, nor a next move after it; the reply stops where the character would next speak or choose.]'
 
 /** At the end of the player's message, where the model follows it (a system note alone is not read on this route). */
 export function agencyRequest<T extends { role: string; content: unknown }>(formated: T[], on: boolean): T[] {
