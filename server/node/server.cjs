@@ -79,7 +79,15 @@ if (process.env.RISU_DB_MERGE !== '0') {
         console.error('[Sync] disabled:', error.message);
     }
 }
-const clientIdOf = (req) => req.risuClient || (req.headers['x-risu-client'] ? String(req.headers['x-risu-client']) : require('crypto').createHash('sha1').update(`${req.ip}|${req.headers['user-agent'] || ''}`).digest('hex'));
+// A page is its browser's signing key AND its tab: the key lives in IndexedDB, so every tab of one browser shares it, and two tabs
+// counted as one page never saw each other's writes as foreign, so the last one to save replaced the other's work whole
+// (specs/chat/DbSync.tla, SameBrowser). The tab id comes from the page's sessionStorage (nodeStorage.ts tabId).
+const tabIdOf = (req) => { const t = req.headers['x-risu-tab']; return typeof t === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(t) ? t : ''; };
+const clientIdOf = (req) => {
+    const base = req.risuClient || (req.headers['x-risu-client'] ? String(req.headers['x-risu-client']) : require('crypto').createHash('sha1').update(`${req.ip}|${req.headers['user-agent'] || ''}`).digest('hex'));
+    const tab = tabIdOf(req);
+    return tab ? `${base}:${tab}` : base;
+};
 const currentSaveBytes = (hexKey) => {
     const queued = saveQueue.readPending(hexKey);
     if (queued) return queued.op === 'delete' ? null : Buffer.from(queued.data);

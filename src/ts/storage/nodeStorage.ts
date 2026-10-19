@@ -2,6 +2,7 @@ import { retryDelayMs, writeFailureMessage } from "./writeRetry"
 import { language } from "src/lang"
 import { alertError, alertInput, alertToast, waitAlert } from "../alert"
 import { base64url, getKeypairStore, saveKeypairStore } from "../util"
+import { tabId } from "./tabId"
 
 
 export class NodeStorage{
@@ -83,7 +84,8 @@ export class NodeStorage{
                     headers: {
                         'content-type': 'application/octet-stream',
                         'file-path': Buffer.from(key, 'utf-8').toString('hex'),
-                        'risu-auth': await this.createAuth()
+                        'risu-auth': await this.createAuth(),
+                        'x-risu-tab': tabId(),
                     }
                 })
             } catch (error) {
@@ -119,7 +121,8 @@ export class NodeStorage{
             method: "GET",
             headers: {
                 'file-path': Buffer.from(key, 'utf-8').toString('hex'),
-                'risu-auth': await this.createAuth()
+                'risu-auth': await this.createAuth(),
+                'x-risu-tab': tabId(),
             }
         })
         if(da.status < 200 || da.status >= 300){
