@@ -248,6 +248,11 @@ export function scoreStory(rec, judge = {}) {
         leaked.length ? `${leaked.length} replies show planning or English` : 'no planning marker or English paragraph in any shown reply',
         leaked.flatMap((x) => x.l.map((l) => quote(`${x.t.label} ${l.kind}`, l.text, 160)))))
 
+    const proseScores = canon.map((c) => c.prose).filter((x) => typeof x === 'number')
+    if (proseScores.length) out.push(check('prose.quality', 'Prose quality of the sampled replies (model judge)', 'INFO',
+        `mean ${(proseScores.reduce((a, b) => a + b, 0) / proseScores.length).toFixed(1)}/3 over ${proseScores.length}`,
+        canon.filter((c) => c.proseNotes).map((c) => `${c.label}: ${c.prose}/3 — ${oneLine(c.proseNotes, 200)}`)))
+
     // ---- the run itself ---------------------------------------------------------------------------------------------------------
     const all = [...steps, ...play]
     const failed = all.filter((t) => !t.ok)
@@ -255,9 +260,13 @@ export function scoreStory(rec, judge = {}) {
     out.push(check('run.turns', 'Every turn got a reply (retries allowed)', pass(!failed.length && all.length > 0),
         `${all.length - failed.length}/${all.length} turns answered; ${errs.length} request error(s); median reply ${median(all.filter((t) => t.ok).map((t) => t.ms / 1000)).toFixed(0)} s`,
         [...failed.map((t) => `${t.label}: no reply${t.timeout ? ' (timeout)' : ''}`), ...errs.slice(0, 6).map((x) => `${x.t.label}: ${oneLine(x.e.error, 160)}`)]))
+    const lat = all.filter((t) => t.ok && t.phase === 'story').map((t) => t.ms / 1000)
+    if (lat.length) out.push(check('run.latency', 'Seconds from send to a settled reply (story turns)', 'INFO',
+        `median ${median(lat).toFixed(0)} s, p90 ${pct(lat, 0.9).toFixed(0)} s, max ${Math.max(...lat).toFixed(0)} s over ${lat.length} turns; mean reply ${Math.round(after.reduce((a, t) => a + (t.shown || '').length, 0) / Math.max(1, after.length))} chars`, []))
     return out
 }
 
+function pct(xs, p) { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] }
 function median(xs) { if (!xs.length) return 0; const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] }
 
 export function tally(checks) {

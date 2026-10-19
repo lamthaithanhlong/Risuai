@@ -137,6 +137,11 @@ export class Player {
                 const prose = texts.map((t) => {
                     const c = t.cloneNode(true)
                     c.querySelectorAll('details, style, script').forEach((n) => n.remove())
+                    // a strip of pictures with short captions (the scene's portraits, "Người · Lính") is not prose
+                    for (const n of [...c.querySelectorAll('*')]) {
+                        const k = n.querySelectorAll('img').length
+                        if (k && (n.textContent || '').trim().length <= 24 * k && n.parentNode) n.remove()
+                    }
                     return c.innerText
                 }).join('\n').trim()
                 const imgs = [...el.querySelectorAll('.chattext img, img.risu-inlay, .inlay img')].filter((i) => !i.closest('details'))

@@ -127,7 +127,9 @@ PLAYER: ${t.text}
 REPLY:
 ${String(t.shown || t.reply).slice(0, 6000)}
 
-Answer only JSON: {"fit": 0-3 (3 = fully canon), "summary": "<one sentence>", "slips": [{"slip": "<quote + what is wrong>", "severity": "minor"|"major"}]}`, { maxTokens: 1500 })
+Also rate the Vietnamese prose as a reader of translated web novels would: natural, vivid, varied sentences, not a report, no repeated phrases, no awkward calques.
+
+Answer only JSON: {"fit": 0-3 (3 = fully canon), "summary": "<one sentence>", "slips": [{"slip": "<quote + what is wrong>", "severity": "minor"|"major"}], "prose": 0-3 (3 = reads like a good novel), "proseNotes": "<one sentence with a quote>"}`, { maxTokens: 1500 })
             out.canon.push({ label: t.label, ...a })
         } catch (e) { out.errors.push(`canon ${t.label}: ${e.message}`) }
     }
