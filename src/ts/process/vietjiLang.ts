@@ -20,14 +20,15 @@ const TONED: Record<string, string[]> = {
 const MARK_INDEX = { sac: 0, huyen: 1, hoi: 2, nga: 3, nang: 4 } as const
 export type VietTone = keyof typeof MARK_INDEX | 'ngang'
 
-/** Puts a tone mark on a Vietnamese syllable: on ơ/ê/ô/â/ă/ư first, else on the second of two vowels when a consonant ends the
+/** Puts a tone mark on a Vietnamese syllable: on ơ/ê/ô/â/ă/ư first (the last one: ươ → ơ), else on the second of two vowels when a consonant ends the
  *  syllable or the pair is oa/oe/uy, else on the first of the vowels. */
 export function toneSyllable(syl: string, tone: VietTone): string {
     if (tone === 'ngang') return syl
     const chars = [...syl]
     const vowelIdx = chars.map((c, i) => (TONED[c] ? i : -1)).filter((i) => i >= 0)
     if (vowelIdx.length === 0) return syl
-    let at = vowelIdx.find((i) => 'ơêôâăư'.includes(chars[i]))
+    // the last of them: ươ takes the mark on ơ (người, rượu), never on ư
+    let at = vowelIdx.findLast((i) => 'ơêôâăư'.includes(chars[i]))
     if (at === undefined) {
         const last = vowelIdx[vowelIdx.length - 1]
         const endsWithConsonant = last < chars.length - 1

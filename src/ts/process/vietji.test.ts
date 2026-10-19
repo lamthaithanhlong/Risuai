@@ -140,6 +140,8 @@ describe('readings by rule', () => {
         expect(toneSyllable('trung', 'sac')).toBe('trúng')
         expect(toneSyllable('oan', 'huyen')).toBe('oàn')
         expect(toneSyllable('xiê', 'huyen')).toBe('xiề')
+        expect(toneSyllable('ngươi', 'huyen')).toBe('người')          // ươ: on ơ, not ư
+        expect(toneSyllable('mương', 'hoi')).toBe('mưởng')
     })
 })
 
