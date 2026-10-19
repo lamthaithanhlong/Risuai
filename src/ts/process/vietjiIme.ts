@@ -8,6 +8,7 @@
 // picking one turns those syllables into characters and leaves the rest of the sound to go on with.
 
 import { hangulToVietji, pinyinToVietji } from './vietjiLang'
+import { thaiToVietji } from './vietjiThai'
 import { fromVietji } from './vietji'
 import type { Suggestion } from './vietjiSuggest'
 
@@ -132,7 +133,7 @@ export function imeSuggestions(input: string, idx: SoundIndex | null, meaningOf:
     const tail = tailOf(idx, input)
     const sound = tail.sound
     // Chinese has no spaces between words: the space before the sound goes when what comes before it is a character
-    const head = /[\u3400-\u9fff]\s+$/.test(tail.head) && !wholeSyllable(idx) ? tail.head.trimEnd() : tail.head
+    const head = /[\u3400-\u9fff\u0E01-\u0E4E]\s+$/.test(tail.head) && !wholeSyllable(idx) ? tail.head.trimEnd() : tail.head
     const typed = sound.split(/[\s-]+/).filter(Boolean)
     if (!typed.length) return []
     const folded = typed.map(foldSyllable)
@@ -168,6 +169,30 @@ export function isSoundTyping(input: string, idx: SoundIndex | null, vietnamese?
     if (vietnamese && !sound.includes('-') && words.length && words.every((w) => vietnamese.has(w.toLowerCase()))) return false
     const c = convert(idx, sound)
     return !!c && c.known && c.tones === c.syllables && c.syllables > 0
+}
+
+// ---- Thai ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Thai words (the word list, most used first, public/dict/th-words.json) read with the chat's own reader, so what the learner
+ * types is what the chat shows under the word ("xa-oặt đi khrắp" → สวัสดีครับ). Thai has no spaces between words and its
+ * Việt-ji carries tone marks, so it is typed the Chinese way: the words follow each other, and the marks typed are compared.
+ * Call after setThaiWords(words): the readings are the list's.
+ */
+export function buildThaiIndex(words: Record<string, string>): SoundIndex {
+    const idx: SoundIndex = new Map()
+    let rank = 0
+    for (const word of Object.keys(words)) {
+        rank++
+        const vj = thaiToVietji(word)
+        if (!vj) continue
+        const vietji = vj.split(/[-\s]+/).filter(Boolean)
+        if (vietji.length === 0 || vietji.length > MAX_SYLLABLES) continue
+        const key = vietji.map(foldSyllable).join(' ')
+        if (!idx.has(key)) idx.set(key, [])
+        idx.get(key)!.push({ word, pinyin: '', vietji, rank })
+    }
+    return idx
 }
 
 // ---- Korean -------------------------------------------------------------------------------------------------------------------

@@ -6,7 +6,7 @@
     // Shown only when learning mode and its suggestions are on. `floating` sits it on top of a sticky input row (fixed textarea).
     import { DBState } from "src/ts/stores.svelte";
     import type { Chat } from "src/ts/storage/database.svelte";
-    import { KIND_LABEL, isLatinLang, parseReplies, setEnglishReadings, setHanReadings, setKanjiReadings, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
+    import { KIND_LABEL, isLatinLang, parseReplies, setEnglishReadings, setHanReadings, setKanjiReadings, setThaiWords, stripReadings, type LearningLang, type SuggestedReply } from "src/ts/process/vietji";
     import { ReloadGUIPointer } from "src/ts/stores.svelte";
     import { insertText, looksVietnamese, soundMatch, suggest, suggestionPool, type Suggestion } from "src/ts/process/vietjiSuggest";
     import { howToSayPrompt } from "src/ts/process/learning";
@@ -15,7 +15,7 @@
     import { phraseVietji } from "src/ts/process/vietji";
     import { mixChips, repliesOrThrow } from "src/ts/process/vietjiSuggest";
     import { rememberThought, thoughtFor } from "src/ts/process/learningThought";
-    import { buildEnglishIndex, buildKanaIndex, buildKoreanIndex, buildSoundIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, englishTail, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
+    import { buildEnglishIndex, buildKanaIndex, buildKoreanIndex, buildSoundIndex, buildThaiIndex, commitOnSpace, imeSuggestions, isSoundTyping, jaSuggestions, englishTail, type KanaIndex, type SoundIndex } from "src/ts/process/vietjiIme";
     import { composeSuggestions, dictSuggestions, loadWordList, makeAsker, needsModel, toneless, vietnameseTail, type Dictionary } from "src/ts/process/vietjiDict";
     import { migrateChat, readNotebook } from "src/ts/process/learningStore";
     import { errorRate, flagged } from "src/ts/process/learningMemory";
@@ -49,9 +49,10 @@
     // looked up (and asked about), and its chips keep what is before it
     let vietSet = $derived(new Set(Object.keys(wordList?.words ?? {})))
     let enIndex = $state<SoundIndex | null>(null)
+    let thIndex = $state<SoundIndex | null>(null)
     let enSound = $derived(lang === 'en' && !!englishTail(value ?? '').sound)
     let soundTyping = $derived((lang === 'zh' && isSoundTyping(value ?? '', soundIndex, vietSet)) || (lang === 'ko' && isSoundTyping(value ?? '', koIndex, vietSet))
-        || (enSound && isSoundTyping(value ?? '', enIndex, vietSet)))
+        || (enSound && isSoundTyping(value ?? '', enIndex, vietSet)) || (lang === 'th' && isSoundTyping(value ?? '', thIndex, vietSet)))
     let composing = $derived(enabled ? vietnameseTail(value ?? '', vietSet) : { head: '', tail: '' })
     let composeMode = $derived(!!composing.head.trim() && !!composing.tail)
     let typedViet = $derived(!enabled || soundTyping ? '' : composeMode ? composing.tail
@@ -90,7 +91,8 @@
     })
     let imeItems = $derived(!enabled ? [] : lang === 'zh' ? imeSuggestions(value ?? '', soundIndex, meaningOfZh)
         : lang === 'en' ? (enSound ? imeSuggestions(value ?? '', enIndex, meaningOfZh) : [])
-        : lang === 'ko' ? imeSuggestions(value ?? '', koIndex) : lang === 'ja' ? jaSuggestions(value ?? '', kanaIndex) : [])
+        : lang === 'ko' ? imeSuggestions(value ?? '', koIndex) : lang === 'ja' ? jaSuggestions(value ?? '', kanaIndex)
+        : lang === 'th' ? imeSuggestions(value ?? '', thIndex) : [])
 
     // the Korean and Japanese sound typing: built once the lists are here (Korean: the word list plus the dictionary's words,
     // so dictionary forms like 먹다 are known; Japanese: the kanji list and its kana words)
@@ -118,7 +120,7 @@
         // in a sentence being built, a chip for the Vietnamese end replaces only that end
         const compose = composeMode ? composeSuggestions(value ?? '', wordList, lang) : []
         const keepHead = (x: Suggestion) => (composeMode && x.replace === undefined && (x.source === 'asked' || x.source === 'dict')
-            ? { ...x, replace: composing.head.replace(/(?<=[\u3040-\u30ff\u3400-\u9fff])\s+$/, '') + stripReadings(x.text).replace(/[«»]/g, '').trim() } : x)
+            ? { ...x, replace: composing.head.replace(/(?<=[\u3040-\u30ff\u3400-\u9fff\u0E01-\u0E4E])\s+$/, '') + stripReadings(x.text).replace(/[«»]/g, '').trim() } : x)
         // while composing, the list's own chips for the Vietnamese end are the compose chips: the whole-input ones would repeat them
         const rest = [...compose, ...suggest(composeMode ? composing.tail : value ?? '', pool).filter((x) => !(composeMode && x.source === 'dict')).map(keepHead)]
         // an offered answer that starts with the typed sound is most likely what is being typed: it goes first
@@ -190,6 +192,7 @@
         zh: { file: '/dict/zh-pinyin.json', set: setHanReadings },
         ja: { file: '/dict/ja-kanji.json', set: setKanjiReadings },
         en: { file: '/dict/en-vietji.json', set: setEnglishReadings },
+        th: { file: '/dict/th-words.json', set: setThaiWords },        // word boundaries and the readings rules miss
     }
     const readingLists = new Map<string, Promise<Record<string, string> | null>>()
     $effect(() => {
@@ -205,6 +208,7 @@
             if (words && lang === want) { list.set(words); ReloadGUIPointer.update((v) => v + 1) }
             if (words && want === 'zh' && !soundIndex) setTimeout(() => { soundIndex = buildSoundIndex(words) }, 0)
             if (words && want === 'en' && !enIndex) setTimeout(() => { enIndex = buildEnglishIndex(words) }, 0)
+            if (words && want === 'th' && !thIndex) setTimeout(() => { thIndex = buildThaiIndex(words) }, 0)
         })
     })
 

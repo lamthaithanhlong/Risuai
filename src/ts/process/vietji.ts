@@ -14,6 +14,7 @@
 import TABLE from './vietjiTable.json'
 import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji } from './vietjiLang'
 import { THAI, THAI_RUN, thaiToVietji, thaiUnits } from './vietjiThai'
+export { setThaiWords } from './vietjiThai'
 
 const VJ: Record<string, string> = TABLE.table
 const ALIAS: Record<string, string> = TABLE.alias
@@ -147,8 +148,9 @@ const SUB_STYLE = 'font-size:.55em;color:#c8cbe6;font-weight:500;letter-spacing:
 const VJ_STYLE = 'font-size:.68em;color:#f2c76b;font-weight:600;letter-spacing:.03em;white-space:nowrap'   // Việt-ji, below
 const WORD_STYLE = 'display:inline-flex;flex-direction:column;align-items:center;vertical-align:bottom;margin:0 .14em;line-height:1.3'
 const UNREAD_STYLE = 'border-bottom:1px dotted #8e97cf;opacity:.6'
-// a Thai syllable sits next to the one before it in the same word: less space between them than between words
+// a Thai syllable sits next to the one before it in the same word, a new word a little apart (the word list's boundaries)
 const THAI_WORD_STYLE = WORD_STYLE.replace('margin:0 .14em', 'margin:0 .05em')
+const THAI_NEW_WORD_STYLE = WORD_STYLE.replace('margin:0 .14em', 'margin:0 .05em 0 .32em')
 
 function esc(s: string): string {
     return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
@@ -162,7 +164,7 @@ function wordUnit(baseHtml: string, vietji: string | null, style = WORD_STYLE): 
 
 /** A run of Thai (no spaces between its words): each syllable as Thai readers cut it, with its reading underneath. */
 function thaiRun(run: string): string {
-    return thaiUnits(run).map((u) => wordUnit(u.text, u.vietji, THAI_WORD_STYLE)).join('')
+    return thaiUnits(run).map((u, k) => wordUnit(u.text, u.vietji, u.wordStart && k > 0 ? THAI_NEW_WORD_STYLE : THAI_WORD_STYLE)).join('')
 }
 
 // A Japanese or Chinese word: kanji/hanzi with their reading in brackets (今日[きょう], 你好[nǐhǎo]), kana, or both (今日[きょう]は).

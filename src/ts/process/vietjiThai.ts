@@ -5,7 +5,7 @@
 // vowel or tone mark starts a syllable, true clusters (กร คล ปร ขว ...), a silent leading ห (หมา, ใหญ่) or อ (อยู่), the vowel
 // shapes (เ-ีย, เ-ือ, -ัว, เ-าะ, -รร ...), one final consonant, and what ์ (karan) silences (จันทร์, ศาสตร์, สิทธิ์). When the
 // spelling allows two cuts the one with the fewest syllables and the fewest unwritten vowels wins (ขนม = ข|นม, not ขน|ม).
-// ๆ repeats the syllable before it.
+// ๆ repeats the word before it (word boundaries come from the word list, below).
 // A syllable with no written vowel that is not the last one is said with a short a (ส in สวัสดี, ข in ขนม) and is shown with
 // the syllable after it, the way Thai readers group it (สวัส ดี: the unit is pythainlp's syllable, the reading has both).
 //
@@ -24,8 +24,12 @@
 // Southern speakers say hỏi and ngã alike, so for them falling and rising look different but sound alike: the one loss.
 //
 // Letters: Vietnamese spelling rules are kept (c/k/q, ng/ngh, ch/nh after i and ê, oa/uy for a w-glide, ay/au for a short
-// a before i/u: ไทย = thay, เขา = khẫu, against ข้าว = khảo). A short a before another final is ă (วัส = oặt). Aspirated
-// ป/พ have no Vietnamese letter (ph is f): both are p, ฟ/ฝ are ph. ย/ญ are d, as や = da in the Japanese table.
+// a before i/u: ไทย = thay, เขา = khẫu, against ข้าว = khảo). A short a before another final is ă (วัส = oặt). ย/ญ are d, as
+// や = da in the Japanese table.
+// Aspiration keeps three pairs apart the way Vietnamese already writes two of them: t (ต, unaspirated, Vietnamese t) against th
+// (ท ถ ฐ ฑ ฒ ธ, aspirated, Vietnamese th), c/k (ก) against kh (ข ค ฆ), and so p (ป) against ph (พ ผ ภ). Vietnamese reads ph as
+// f, so ph here is a convention to learn once ("p with a puff", like th), and ฟ ฝ, the real f, are written f; d (ด) and b (บ)
+// are Vietnamese đ and b. By ear: a Vietnamese t/th/c/kh already falls on the Thai side of each pair, so only ph is new.
 // These are readings for a beginner to say aloud, not phonetics.
 
 import { toneSyllable, type VietTone } from './vietjiLang'
@@ -50,7 +54,7 @@ const classOf = (c: string): ThaiClass => (MID.includes(c) ? 'mid' : HIGH.includ
 // the sound each consonant starts a syllable with, and the one it ends a syllable with
 const ONSET: Record<string, string> = {}
 for (const [sound, letters] of Object.entries({
-    k: 'ก', kh: 'ขฃคฅฆ', ng: 'ง', ch: 'จฉชฌ', s: 'ซศษส', y: 'ญย', d: 'ฎด', t: 'ฏต', th: 'ฐฑฒถทธ', n: 'ณน', b: 'บ', p: 'ปผพภ',
+    k: 'ก', kh: 'ขฃคฅฆ', ng: 'ง', ch: 'จฉชฌ', s: 'ซศษส', y: 'ญย', d: 'ฎด', t: 'ฏต', th: 'ฐฑฒถทธ', n: 'ณน', b: 'บ', p: 'ป', ph: 'ผพภ',
     f: 'ฝฟ', m: 'ม', r: 'ร', l: 'ลฬ', w: 'ว', h: 'หฮ', '': 'อ',
 })) for (const c of letters) ONSET[c] = sound
 const CODA: Record<string, string> = {}
@@ -83,7 +87,7 @@ const TEMPLATES: [string, string, string, Final, boolean][] = [
     ['ใ', '', 'ai', 'none', false], ['ไ', 'ย', 'ai', 'none', false], ['ไ', '', 'ai', 'none', false],
 ]
 
-type Syl = {
+export type Syl = {
     onset: string           // the sound the syllable starts with: 'k', 'kh', 's', '' ...
     glide: string           // '' or the cluster's second sound: 'r', 'l', 'w'
     cls: ThaiClass
@@ -165,7 +169,11 @@ function parseAt(s: string[], i: number): Cand[] {
             if (finalRule !== 'none' && s[p] === 'ต' && 'ิุ'.includes(s[p + 1] ?? '-') && p + 2 === s.length && !TONE_MARKS.includes(s[p + 2] ?? '-')) {
                 add({ ...base, coda: 't' }, p + 2, 1.1)
             }
-            if (finalRule !== 'none' && finalOk) {
+            // a silenced consonant before the final, in loanwords: การ์ด, ฟิล์ม, เวิร์ด (ร์ is not said, ด closes)
+            if (finalRule !== 'none' && isCons(s[p]) && s[p + 1] === KARAN && isCons(s[p + 2]) && s[p + 2] !== 'อ' && !binds(s[p + 3]) && s[p + 3] !== KARAN && CODA[s[p + 2]] !== undefined) {
+                add({ ...base, coda: CODA[s[p + 2]] }, p + 3, 1)
+            }
+            if (finalRule !== 'none' && finalOk && s[p + 1] !== KARAN) {
                 add({ ...base, coda: CODA[s[p]] }, p + 1, body === 'ว' ? 1.2 : 1)
                 // a final consonant then a silent ร (บัตร, สมุทร, เพชร)
                 if (s[p + 1] === 'ร' && !binds(s[p + 2]) && s[p + 2] !== KARAN && s[p + 2] !== 'ร') add({ ...base, coda: CODA[s[p]] }, p + 2, 1.4)
@@ -267,7 +275,7 @@ function rhyme(v: string, long: boolean, coda: string): string {
 }
 
 const ONSET_VI: Record<string, string> = {
-    k: 'c', kh: 'kh', ng: 'ng', ch: 'ch', s: 'x', y: 'd', d: 'đ', t: 't', th: 'th', n: 'n', b: 'b', p: 'p', f: 'ph', m: 'm', r: 'r',
+    k: 'c', kh: 'kh', ng: 'ng', ch: 'ch', s: 'x', y: 'd', d: 'đ', t: 't', th: 'th', n: 'n', b: 'b', p: 'p', ph: 'ph', f: 'f', m: 'm', r: 'r',
     l: 'l', h: 'h', '': '',
 }
 
@@ -300,17 +308,148 @@ function spell(syl: Syl, tone: ThaiTone): string {
 }
 
 export type ThaiSyllable = { vietji: string; tone: ThaiTone; vowel: string; coda: string; long: boolean }
-/** A unit of written Thai (a syllable as Thai readers cut it) and its syllables as said. */
-export type ThaiUnit = { text: string; syllables: ThaiSyllable[]; vietji: string | null }
+/** A unit of written Thai (a syllable as Thai readers cut it) and its syllables as said; wordStart: the first unit of a word. */
+export type ThaiUnit = { text: string; syllables: ThaiSyllable[]; vietji: string | null; wordStart?: boolean }
 
 export const THAI_RUN = /[ก-ฺเ-๎]+/g
 export const THAI = /[ก-ฺเ-๎]/
 
+// ---- the word list -----------------------------------------------------------------------------------------------------------
+//
+// public/dict/th-words.json (scripts/build_th_dict.mjs): the 20,000 most used Thai words, each "" when the rules above read it
+// the way tltk's dictionary g2p does, else tltk's reading: written units with their lengths and the syllables said in each,
+// "2phon4'la3~3maaj3" for ผลไม้ (ผล said phǒn-la, a linking vowel no spelling shows; tones 0 mid 1 low 2 falling 3 high
+// 4 rising). Loaded by the bar while learning Thai; until then, and for any word not in it, the rules read alone.
+// The list also gives the word boundaries: a run is cut into the fewest words it can (maximal matching), a stretch that no
+// word covers is cut by the rules, so ราตรี|สวัสดิ์ and ดี|กว่า are cut where the words end, not where a spelling allows.
+
+let words: Map<string, string> | null = null
+let rank: Map<string, number> = new Map()                 // the list is most used first
+let longest = 0
+const decoded = new Map<string, ThaiUnit[]>()
+
+export function setThaiWords(list: Record<string, string> | null): void {
+    words = list ? new Map(Object.entries(list)) : null
+    rank = new Map([...(words?.keys() ?? [])].map((w, k) => [w, k]))
+    longest = 0
+    for (const w of words?.keys() ?? []) longest = Math.max(longest, w.length)
+    decoded.clear()
+}
+
+const ROMAN_ONSETS = ['khr', 'khl', 'khw', 'phr', 'phl', 'thr', 'kr', 'kl', 'kw', 'pr', 'pl', 'tr', 'br', 'bl', 'dr', 'fr', 'fl',
+    'ch', 'kh', 'ph', 'th', 'p', 't', 'c', 'k', '?', 'b', 'd', 'm', 'n', 'N', 'f', 's', 'h', 'j', 'w', 'l', 'r']
+const ROMAN_ONSET: Record<string, string> = { c: 'ch', '?': '', N: 'ng', j: 'y' }
+const ROMAN_VOWELS: [string, string, boolean][] = [
+    ['iia', 'ia', true], ['UUa', 'uea', true], ['uua', 'ua', true], ['ia', 'ia', false], ['Ua', 'uea', false], ['ua', 'ua', false],
+    ['aa', 'aa', true], ['ii', 'i', true], ['UU', 'ue', true], ['uu', 'u', true], ['ee', 'e', true], ['xx', 'ae', true],
+    ['oo', 'o', true], ['OO', 'or', true], ['@@', 'oe', true], ['a', 'a', false], ['i', 'i', false], ['U', 'ue', false],
+    ['u', 'u', false], ['e', 'e', false], ['x', 'ae', false], ['o', 'o', false], ['O', 'or', false], ['@', 'oe', false],
+]
+// tltk's vowels: U is ɯ (ư), x is ɛ (e), O is ɔ (o), @ is ə (ơ), a doubled letter is long; a loanword may end in l or s, said n, t
+const ROMAN_CODA: Record<string, string> = { '': '', '?': '', p: 'p', t: 't', k: 'k', m: 'm', n: 'n', N: 'ng', j: 'j', w: 'w', l: 'n', s: 't', f: 'p' }
+const ROMAN_TONE: ThaiTone[] = ['mid', 'low', 'falling', 'high', 'rising']
+
+/** One syllable of tltk's romanization ("phon4") as a syllable to spell; null when it is not one. */
+export function romanSyllable(roman: string): Syl | null {
+    const m = /^(.+?)([0-4])$/.exec(roman)
+    if (!m) return null
+    for (const on of ROMAN_ONSETS) {
+        if (!m[1].startsWith(on)) continue
+        const rest = m[1].slice(on.length)
+        for (const [v, vowel, long] of ROMAN_VOWELS) {
+            if (!rest.startsWith(v)) continue
+            const coda = ROMAN_CODA[rest.slice(v.length)]
+            if (coda === undefined) continue
+            const second = on.length > 1 && 'rlw'.includes(on[on.length - 1]) && on !== 'kh' ? on[on.length - 1] : ''
+            const first = second ? on.slice(0, -1) : on
+            const onset = ROMAN_ONSET[first] ?? first
+            return { onset, glide: second, cls: 'mid', single: '', vowel, long, coda, mark: 0,
+                unwritten: '', fixedTone: ROMAN_TONE[Number(m[2])] }
+        }
+    }
+    return null
+}
+
+/** A word's units from its list entry ("2phon4'la3~3maaj3"); null when the entry cannot be read. */
+function listedUnits(word: string, entry: string): ThaiUnit[] | null {
+    if (decoded.has(word)) return decoded.get(word)!
+    const units: ThaiUnit[] = []
+    let at = 0
+    for (const part of entry.split('~')) {
+        const m = /^(\d+)(.+)$/.exec(part)
+        if (!m) return null
+        const syls = m[2].split("'").map(romanSyllable)
+        if (syls.some((x) => !x)) return null
+        units.push(toUnit(word.slice(at, at + Number(m[1])), syls as Syl[], false))
+        at += Number(m[1])
+    }
+    if (at !== word.length) return null
+    decoded.set(word, units)
+    return units
+}
+
+/** Where a word may end: not before a mark that belongs to the consonant before it, not right after a leading vowel. */
+const canEnd = (s: string[], e: number) => e === s.length || (!binds(s[e]) && s[e] !== KARAN && !LEADS.includes(s[e - 1]))
+
+/** A run cut into words: list words where they fit, the fewest pieces; a stretch no word covers is one piece for the rules. */
+export function thaiWords(run: string): { text: string; known: boolean }[] {
+    const s = [...run]
+    if (!words) return run ? [{ text: run, known: false }] : []
+    // cost: a listed word 1, a syllable no word covers 2 (so a word always wins over cutting the same letters by rule); among
+    // cuts into as many words, the more used words win (หมอ|บอก|ว่า, not หมอ|บอ|กว่า): a word adds 0.04 per power of ten of its rank
+    // in the list, at most 0.18, so it never outweighs a word more
+    const best: ({ cost: number; prev: number; known: boolean } | null)[] = Array(s.length + 1).fill(null)
+    best[0] = { cost: 0, prev: -1, known: true }
+    const relax = (i: number, e: number, cost: number, known: boolean) => {
+        const c = best[i]!.cost + cost
+        if (!best[e] || c < best[e]!.cost) best[e] = { cost: c, prev: i, known }
+    }
+    for (let i = 0; i < s.length; i++) {
+        if (!best[i]) continue
+        if (s[i] === REPEAT) { relax(i, i + 1, 0, true); continue }
+        for (let n = Math.min(longest, s.length - i); n >= 1; n--) {
+            const w = s.slice(i, i + n).join('')
+            if (words.has(w) && canEnd(s, i + n)) relax(i, i + n, 1 + 0.04 * Math.log10((rank.get(w) ?? 0) + 1), true)
+        }
+        const cands = parseAt(s, i)
+        for (const c of cands) relax(i, c.end, 2 * Math.max(1, c.syls.length), false)
+        if (!cands.length) relax(i, i + 1, 10, false)
+    }
+    const cut: { text: string; known: boolean }[] = []
+    for (let e = s.length; e > 0;) {
+        const b = best[e]!
+        const text = s.slice(b.prev, e).join('')
+        // unknown pieces next to each other are one stretch: the rules cut it as a whole (their own costs decide inside)
+        if (!b.known && cut.length && !cut[0].known) cut[0] = { text: text + cut[0].text, known: false }
+        else cut.unshift({ text, known: b.known })
+        e = b.prev
+    }
+    return cut
+}
+
 /**
  * A run of Thai cut into the units shown one by one, each with its reading. A syllable said with an unwritten a is joined to the
- * syllable after it (สวัส|ดี), ๆ is its own unit and repeats the reading before it.
+ * syllable after it (สวัส|ดี); ๆ is its own unit and repeats the word before it (เด็กๆ = đệch-đệch, ช้าๆ).
  */
 export function thaiUnits(run: string): ThaiUnit[] {
+    const out: ThaiUnit[] = []
+    let prev: ThaiUnit[] = []
+    for (const w of thaiWords(run)) {
+        if (w.text === REPEAT) {
+            const syllables = prev.flatMap((u) => u.syllables)
+            out.push({ text: REPEAT, syllables, vietji: syllables.length ? syllables.map((x) => x.vietji).join('-') : null, wordStart: true })
+            continue
+        }
+        const entry = w.known ? words?.get(w.text) : undefined
+        const units = (entry ? listedUnits(w.text, entry) : null) ?? ruleUnits(w.text)
+        units.forEach((u, k) => out.push({ ...u, wordStart: k === 0 }))
+        prev = units
+    }
+    return out
+}
+
+/** A stretch of Thai read by the spelling rules alone. */
+function ruleUnits(run: string): ThaiUnit[] {
     const pieces = parseRun(run)
     const units: ThaiUnit[] = []
     let carry: { text: string; syls: Syl[] } | null = null
@@ -350,8 +489,8 @@ export function thaiUnits(run: string): ThaiUnit[] {
 // short vowels said long in everyday speech (น้ำ is náam): spelling rules cannot tell, so they are listed
 const SAID_LONG = new Set(['น้ำ', 'ได้', 'ไม้', 'ใต้', 'เก้า', 'เช้า', 'เจ้า', 'เท้า'])
 
-function toUnit(text: string, syls: Syl[]): ThaiUnit {
-    if (SAID_LONG.has(text)) syls = syls.map((syl) => ({ ...syl, long: true }))
+function toUnit(text: string, syls: Syl[], byRule = true): ThaiUnit {
+    if (byRule && SAID_LONG.has(text)) syls = syls.map((syl) => ({ ...syl, long: true }))
     const syllables = syls.map((syl) => {
         const tone = toneOf(syl, syl.cls)
         return { vietji: spell(syl, tone), tone, vowel: syl.vowel, coda: syl.coda, long: syl.long }
