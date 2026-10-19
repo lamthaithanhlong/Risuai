@@ -11,11 +11,13 @@ type Store = {
     getJob(id: string): { status: string } | null
     finish(id: string, status: string, now?: number): void
     findReusable(idem: string | undefined, maxAgeMs: number, now?: number): { id: string, status: string } | null
-    interruptRunning(): number
+    interruptRunning(now?: number): number
+    beat(now?: number): number
     prune(before: number): number
     close(): void
 }
-const { openJobStore } = createRequire(import.meta.url)('../../../server/node/jobStore.cjs') as { openJobStore: (file: string) => Store }
+type StoreOpts = { boot?: string, pid?: number, isAlive?: (pid: number) => boolean }
+const { openJobStore } = createRequire(import.meta.url)('../../../server/node/jobStore.cjs') as { openJobStore: (file: string, opts?: StoreOpts) => Store }
 
 let dir: string
 let file: string
@@ -149,3 +151,37 @@ describe('reuse window (the page may come back hours later)', () => {
         }
     })
 })
+
+describe('two servers on one jobs file (F5: a test run started a second server.cjs with the owner\'s HOME)', () => {
+    const alive = new Set([111, 222])
+    const isAlive = (pid: number) => alive.has(pid)
+
+    test('a server that starts leaves the running jobs of a live server alone', () => {
+        const live = openJobStore(file, { pid: 111, isAlive })
+        live.interruptRunning()
+        live.createJob('reply', 'k1:gen#0')
+        live.append('reply', { type: 'chunk', n: 1 })
+        const second = openJobStore(file, { pid: 222, isAlive })
+        expect(second.interruptRunning()).toBe(0)
+        expect(live.getJob('reply')?.status).toBe('running')
+        expect(live.append('reply', { type: 'chunk', n: 2 })).toBe(2)   // used to fail: UNIQUE constraint on events.seq
+        second.close(); live.close()
+    })
+
+    test('jobs of a server whose process is gone are interrupted at once; of one that stopped beating, by the next beat', () => {
+        const hung = openJobStore(file, { pid: 111, isAlive })      // alive process, but it stops beating
+        hung.interruptRunning(1000)
+        hung.createJob('b', 'k2:y#0')
+        const old = openJobStore(file, { pid: 333, isAlive })      // 333 is not alive: a crash
+        old.interruptRunning(1000)
+        old.createJob('a', 'k1:x#0')
+        const fresh = openJobStore(file, { pid: 222, isAlive })
+        expect(fresh.interruptRunning(2000)).toBe(1)
+        expect(fresh.getJob('a')?.status).toBe('interrupted')
+        expect(fresh.getJob('b')?.status).toBe('running')
+        expect(fresh.beat(1000 + 31_000)).toBe(1)
+        expect(fresh.getJob('b')?.status).toBe('interrupted')
+        fresh.close(); hung.close(); old.close()
+    })
+})
+

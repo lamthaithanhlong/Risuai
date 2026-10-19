@@ -98,3 +98,38 @@ describe('F3: two tabs of one browser (one signing key) are two pages', () => {
         await stop(s)
     }, 60000)
 })
+
+describe('F5: a second server on the same jobs file', () => {
+    test('a reply keeps streaming to its end when another server.cjs starts on the same jobs file', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'chat-f5-'))
+        const k = await newKey()
+        // a fake model: 12 chunks, one every 250 ms
+        const up = http.createServer((_req, res) => {
+            res.writeHead(200, { 'content-type': 'text/event-stream' })
+            let i = 0
+            const t = setInterval(() => {
+                if (i < 12) res.write(`data: {"choices":[{"delta":{"content":"w${i++} "}}]}\n\n`)
+                else { res.write('data: [DONE]\n\n'); res.end(); clearInterval(t) }
+            }, 250)
+        })
+        const upPort = await freePort()
+        await new Promise<void>((r) => up.listen(upPort, '127.0.0.1', () => r()))
+        const live = await startServer(root, 'live', [k])
+        const auth = { 'content-type': 'application/json', 'risu-auth': await token(k) }
+        const job = await (await fetch(`http://127.0.0.1:${live.port}/proxy-stream-jobs`, {
+            method: 'POST', headers: auth,
+            body: JSON.stringify({ url: `http://127.0.0.1:${upPort}/v1/chat/completions`, method: 'POST', bodyBase64: b64u('{}'), idempotencyKey: 'chat-k1:gen-1#0' }),
+        })).json()
+        await sleep(800)
+        const second = await startServer(root, 'second', [k])           // what a test run did with the owner's HOME
+        await sleep(4500)
+        const text = await (await fetch(`http://127.0.0.1:${live.port}/proxy-stream-jobs/${job.jobId}/events?from=1`, { headers: auth })).text()
+        const types = text.trim().split('\n').map((l) => JSON.parse(l)).filter((l) => l.event).map((l) => l.event.type)
+        expect(types).not.toContain('error')
+        expect(types.at(-1)).toBe('done')
+        expect(live.log()).not.toContain('Job store append failed')
+        await stop(second)
+        await stop(live)
+        up.close()
+    }, 60000)
+})

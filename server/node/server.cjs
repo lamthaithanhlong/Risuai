@@ -133,13 +133,15 @@ const proxyStreamJobs = new Map();
 
 // Durable log of every stream job's events (see jobStore.cjs): lets a phone that dropped or refreshed pick up the
 // reply from where it stopped. If SQLite cannot be opened the jobs still run, just without that.
-const { JOB_REUSE_MAX_AGE_MS: PROXY_JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS: PROXY_JOB_KEEP_MS } = require('./jobStore.cjs');
+const { JOB_REUSE_MAX_AGE_MS: PROXY_JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS: PROXY_JOB_KEEP_MS, BOOT_BEAT_MS } = require('./jobStore.cjs');
 let jobStore = null;
 try {
     const jobsDbPath = process.env.RISU_JOBS_DB || path.join(require('os').homedir(), '.risu-lan', 'jobs.sqlite');
     mkdirSync(path.dirname(jobsDbPath), { recursive: true });
     jobStore = require('./jobStore.cjs').openJobStore(jobsDbPath);
     const interrupted = jobStore.interruptRunning();
+    // other servers on the same file (a test run) leave our running jobs alone while this beats
+    setInterval(() => { try { jobStore.beat(); } catch { /* ignore */ } }, BOOT_BEAT_MS).unref();
     const pruned = jobStore.prune(Date.now() - PROXY_JOB_KEEP_MS);
     console.log(`[Server] Job store ready (${jobsDbPath}); interrupted ${interrupted}, pruned ${pruned}`);
     setInterval(() => { try { jobStore.prune(Date.now() - PROXY_JOB_KEEP_MS); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();

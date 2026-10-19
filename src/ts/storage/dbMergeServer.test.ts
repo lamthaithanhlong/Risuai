@@ -53,7 +53,8 @@ let proc: ChildProcess | null = null
 let A: Page, B: Page
 
 async function start() {
-    proc = spawn(process.execPath, [SERVER], { cwd: dir, env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'] })
+    // its own HOME and jobs file: with the runner's HOME it opened ~/.risu-lan/jobs.sqlite and cut the owner's running reply (F5)
+    proc = spawn(process.execPath, [SERVER], { cwd: dir, env: { ...process.env, PORT: String(port), HOME: join(dir, 'home'), RISU_JOBS_DB: join(dir, 'home', 'jobs.sqlite') }, stdio: ['ignore', 'pipe', 'pipe'] })
     proc.stdout!.on('data', () => {})
     proc.stderr!.on('data', () => {})
     for (let i = 0; i < 100; i++) {
