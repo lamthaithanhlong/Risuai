@@ -11,6 +11,7 @@ export function storyMarkdown(rec, checks) {
     L.push(`Played through the real Risu page (headless Chromium) on a copy of the save, server :${rec.port}, ${rec.store} store, client ${rec.build}.`)
     L.push(`Model: ${rec.model.aiModel} slot "${rec.model.slot}" → \`${rec.model.requestModel}\` via ${rec.model.url.replace(/\/v1\/.*$/, '')}; Game Master ${rec.model.gameMaster ? 'on' : 'off'}, Jev referee ${rec.model.jevReferee ? 'on' : 'off'}. Judge: ${rec.judge?.model ?? 'not run'}${rec.judge?.fallbackWhy ? ` (${rec.judge.fallbackWhy})` : ''}.`)
     L.push(`Chats: step-by-step \`${rec.steps?.chatId ?? '-'}\`, surprise \`${rec.play?.chatId ?? '-'}\` (new chats on the copy; the owner's chats untouched). Duration ${Math.round((rec.ms ?? 0) / 60000)} min.`, '')
+    if (rec.narrator) L.push(`**Narrator** — ${rec.narrator}.`, '')
     if (rec.diagnostic) L.push(`**DIAGNOSTIC RUN** — ${rec.diagnostic}. Not how the owner plays today.`, '')
     L.push(`**${t.pass} pass, ${t.fail} fail, ${t.na} n/a${t.info ? `, ${t.info} info` : ''}**`, '')
     L.push('| Check | Result | Summary |', '|---|---|---|')

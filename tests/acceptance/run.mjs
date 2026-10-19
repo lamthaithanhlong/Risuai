@@ -12,6 +12,9 @@
 //     --judge-model M    the judge's model (default: the owner's narrator model; a refused one falls back to the DeepSeek slot)
 //     --port 6101        first port for the copies          --store files|sqlite   override the live server's store
 //     --out DIR          default ~/.backend-review/work/risu-acceptance/<YYYY-MM-DD>
+//     --narrator web     the narrator on ChatGPT web (lib/webShim.mjs, through the Codex Web GPT bridge) instead of the
+//                        COPY's 9router slot; the judge stays on 9router (default: router)
+//     --narrator-slot S  the COPY plays on the model slot named S (e.g. codex) whatever slot the live save has active
 //     --max-context N    DIAGNOSTIC: the COPY's maxContext set to N (to measure what sits behind a context blocker); the
 //                        scorecards say so, and the default out dir gets a -diag suffix
 //   node tests/acceptance/run.mjs --rescore DIR [--rejudge]    recompute the scorecards from DIR/<story>.json (--rejudge: ask the judge again)
@@ -29,6 +32,7 @@ import { Player } from './lib/play.mjs'
 import { modelSettings, patchCopyRoot, redact } from './lib/save.mjs'
 import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord } from './lib/judge.mjs'
+import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
 
 const argv = process.argv.slice(2)
@@ -87,6 +91,16 @@ async function playStory(key, ctx) {
     const recFile = path.join(OUT, `${key}.json`)
     const { dir, password } = copySave(ctx.runDir, ctx.base, key, { log })
     rec.copyDir = dir
+    if (ctx.slot) {
+        const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, { activeModelSlot: ctx.slot.id })
+        rec.narratorSlot = `slot "${ctx.slot.name}" (${ctx.slot.req}); the live save has ${was.activeModelSlot === ctx.slot.id ? 'the same' : 'another'} slot active`
+        log(rec.narratorSlot)
+    }
+    if (ctx.web) {
+        const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, { forceReplaceUrl: ctx.web.url })
+        rec.narrator = `ChatGPT web (${ctx.web.model}, effort ${ctx.web.effort}) through ${ctx.web.url} for requests to "${ctx.web.narrator}"; the copy's URL was ${was.forceReplaceUrl || 'the default'}`
+        log(rec.narrator)
+    }
     if (DIAG) {
         const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, DIAG)
         rec.diagnostic = `copy settings changed for this run: ${Object.entries(DIAG).map(([k, v]) => `${k} ${was[k]} -> ${v}`).join(', ')} (the owner's real save keeps ${JSON.stringify(was)})`
@@ -183,16 +197,29 @@ async function main() {
     buildClient(runDir, { noBuild: flag('--no-build') })
     const base = await snapshotLive(runDir, { liveCwd: live?.cwd || undefined, backend })
     const ms = modelSettings(path.join(base, 'save'), backend)
+    // the owner may have another slot active on the live server; the run can pin the narrator to a named one (copy only)
+    const slot = opt('--narrator-slot') ? ms.slots.find((x) => x.name === opt('--narrator-slot')) : null
+    if (opt('--narrator-slot') && !slot) throw new Error(`no model slot named "${opt('--narrator-slot')}" (have: ${ms.slots.map((x) => x.name).join(', ')})`)
+    if (slot) { ms.slot = slot.name; ms.requestModel = slot.req }
     const model = { aiModel: ms.aiModel, slot: ms.slot, requestModel: ms.requestModel, url: ms.url, gameMaster: ms.gameMaster, jevReferee: ms.jevReferee, autoTranslate: ms.autoTranslate }
     // the judge uses the owner's narrator model; --judge-model picks another; a refused model falls back to the DeepSeek slot
     const deepseek = ms.slots.find((x) => /deepseek/i.test(x.name))?.req
-    const judgeCfg = { url: ms.url, key: ms.key, model: opt('--judge-model', ms.requestModel), fallback: deepseek }
-    const meta = { date: today, command: 'node tests/acceptance/run.mjs ' + argv.join(' '), runDir, store: backend, build, model: `${ms.slot} → ${ms.requestModel}` }
+    // the judge uses the narrator's model only when that is the router's; on ChatGPT web it takes the DeepSeek slot
+    const narratorWeb = opt('--narrator', 'router') === 'web'
+    const judgeCfg = { url: ms.url, key: ms.key, model: opt('--judge-model', narratorWeb ? deepseek : ms.requestModel), fallback: deepseek }
+    let shim = null, web = null
+    if (narratorWeb) {
+        web = { model: opt('--web-model', 'chatgpt-web/gpt-6-sol'), effort: opt('--web-effort', 'medium'), narrator: ms.requestModel }
+        shim = await startShim({ port: Number(opt('--shim-port', 20199)), upstream: new URL(ms.url).origin, narrator: ms.requestModel, web: { model: web.model, effort: web.effort } })
+        web.url = shim.url
+        console.log(`[env] narrator "${ms.requestModel}" goes to ChatGPT web (${web.model}) through ${shim.url}`)
+    }
+    const meta = { date: today, command: 'node tests/acceptance/run.mjs ' + argv.join(' '), runDir, store: backend, build, model: web ? `ChatGPT web ${web.model} (effort ${web.effort}) for "${ms.requestModel}"` : `${ms.slot} → ${ms.requestModel}` }
     fs.writeFileSync(path.join(OUT, 'run.json'), JSON.stringify(meta, null, 1))
     const turns = Number(opt('--turns', 20))
     let port = Number(opt('--port', 6101))
     const ctxs = []
-    for (const k of keys) { port = await freePort(port); ctxs.push([k, { runDir, base, backend, build, model, judgeCfg, turns, date: today, port }]); port++ }
+    for (const k of keys) { port = await freePort(port); ctxs.push([k, { runDir, base, backend, build, model, judgeCfg, turns, date: today, port, web, slot }]); port++ }
     const results = []
     if (flag('--serial')) for (const [k, c] of ctxs) results.push(await playStory(k, c).catch((e) => ({ title: STORIES[k].title, error: String(e.message || e) })))
     else results.push(...await Promise.all(ctxs.map(([k, c]) => playStory(k, c).catch((e) => ({ title: STORIES[k].title, error: String(e.message || e) })))))
@@ -206,6 +233,7 @@ async function main() {
     }
     fs.writeFileSync(path.join(OUT, 'summary.md'), summaryMarkdown(today, STORY_KEYS.filter((k) => byKey[k]).map((k) => byKey[k]), meta))
     console.log(`\nsummary: ${path.join(OUT, 'summary.md')}`)
+    if (shim) { console.log(`[shim] ${JSON.stringify(shim.stats)}`); await shim.close() }
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
