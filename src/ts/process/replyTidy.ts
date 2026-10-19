@@ -112,3 +112,27 @@ export function tidyLastReply(chat: { message: { role: string; data: string }[] 
     chat.message[at] = { ...reply, data: tidy }
     return true
 }
+
+// Measured 2026-10-19 (narrator gpt-6-luna, Infinite Mailman t3): the Initialization reply opened its panel block with a CJK
+// bracket, "【STATUS … ]]", so the card's script (which reads "[[STATUS … ]]") never saw it and the player read the block as
+// text. A block opener written with other brackets is put back in the cards' form before the card's script reads the reply.
+const OPENER = /^([ \t]*)(?:【{1,2}|［{1,2}|〔{1,2}|\[(?!\[)|\[\[\s+)\s*(STATUS|LEDGER|GM)\b/gm
+const CLOSER = /^([ \t]*)(?:】{1,2}|］{1,2}|〕{1,2})[ \t]*$/gm
+
+/** The reply with its hidden blocks opened "[[STATUS", "[[LEDGER", "[[GM" and closed "]]" whatever brackets the model used. */
+export function fixBlockBrackets(text: string): string {
+    const t = text ?? ''
+    if (!/(【|［|〔|\[(?!\[)|\[\[\s+)\s*(STATUS|LEDGER|GM)\b/.test(t)) return t
+    return t.replace(OPENER, '$1[[$2').replace(CLOSER, '$1]]')
+}
+
+/** Before the card's output script: the last story reply's block brackets fixed (fixBlockBrackets). */
+export function fixLastReplyBlocks(chat: { message: { role: string; data: string }[] } | undefined): boolean {
+    const at = (chat?.message?.length ?? 0) - 1
+    const reply = chat?.message?.[at]
+    if (!chat || !reply || reply.role !== 'char') return false
+    const fixed = fixBlockBrackets(reply.data)
+    if (fixed === reply.data) return false
+    chat.message[at] = { ...reply, data: fixed }
+    return true
+}

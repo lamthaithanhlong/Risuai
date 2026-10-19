@@ -80,3 +80,24 @@ describe('stored and shown', () => {
         expect(tidyReply(`<think>${PLAN1}</think>\n\n${plan3}\n\n${STORY1}`)).toBe(`<think>${PLAN1}</think>\n\n${STORY1}`)
     })
 })
+
+describe('measured 2026-10-19 (gpt-6-luna, Mailman t3): a panel block opened with a CJK bracket was shown as text', async () => {
+    const { fixBlockBrackets, fixLastReplyBlocks } = await import('./replyTidy')
+    const T3 = 'Ông ta mờ dần giữa màn sương.\n\n【STATUS\nname: Phác Mẫn\nnotes: Chưa có sách tem, điểm hay nhiệm vụ\n]]\n\n[[LOOK Phác Mẫn | Black hair]]'
+    it('the opener goes back to "[[STATUS" (and its kind), a CJK closer to "]]"; prose and right blocks are untouched', () => {
+        expect(fixBlockBrackets(T3)).toBe(T3.replace('【STATUS', '[[STATUS'))
+        expect(fixBlockBrackets('a\n［［LEDGER\nmem: x\n］］')).toBe('a\n[[LEDGER\nmem: x\n]]')
+        expect(fixBlockBrackets('a\n[STATUS\nplace: X\n]]')).toBe('a\n[[STATUS\nplace: X\n]]')
+        expect(fixBlockBrackets('a\n[[ GM\nbeat: 1\n]]')).toBe('a\n[[GM\nbeat: 1\n]]')
+        const ok = 'Văn.\n[[STATUS\nplace: X\n]]\n[Ứng viên! Chào mừng đến với Ác Mộng Ma Pháp.]'
+        expect(fixBlockBrackets(ok)).toBe(ok)
+        expect(fixBlockBrackets('Cô nói 【STATUS là gì】 rồi cười.')).toBe('Cô nói 【STATUS là gì】 rồi cười.')
+    })
+    it('only the last story reply is fixed', () => {
+        const chat = { message: [{ role: 'user', data: '【STATUS\nx: y\n]]' }, { role: 'char', data: T3 }] }
+        expect(fixLastReplyBlocks(chat)).toBe(true)
+        expect(chat.message[1].data).toContain('\n[[STATUS\nname: Phác Mẫn')
+        expect(chat.message[0].data).toBe('【STATUS\nx: y\n]]')
+        expect(fixLastReplyBlocks(chat)).toBe(false)
+    })
+})

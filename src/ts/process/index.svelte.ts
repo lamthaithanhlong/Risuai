@@ -18,7 +18,7 @@ import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
 import { creationRequest, gameMasterRequest, noteGameMaster } from "./gameMasterPage";
-import { tidyLastReply } from "./replyTidy";
+import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
 import { isNodeServer } from "../platform";
@@ -1910,6 +1910,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
         DBState.db.characters[sel.char].chats[sel.chat] = runCurrentChatFunction(DBState.db.characters[sel.char].chats[sel.chat])
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]        
+        fixLastReplyBlocks(currentChat)   // "【STATUS" → "[[STATUS", so the card's script reads it (replyTidy.ts)
         const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
         const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
         if(triggerResult && triggerResult.chat){
@@ -2024,6 +2025,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         DBState.db.characters[sel.char].chats[sel.chat] = runCurrentChatFunction(DBState.db.characters[sel.char].chats[sel.chat])
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]        
 
+        fixLastReplyBlocks(currentChat)   // "【STATUS" → "[[STATUS", so the card's script reads it (replyTidy.ts)
         const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
         const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
         if(triggerResult && triggerResult.chat){
