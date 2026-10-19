@@ -919,6 +919,8 @@ export interface Database{
     storyCheckInPrompt?: boolean
     /** Jev judges the player's turn (server/node/jevReferee.cjs) and a flagged turn gets a note after it; on unless false. */
     jevReferee?: boolean
+    /** The Game Master runs the player's own arc and the canon clock (gameMaster.ts); on unless false. */
+    gameMaster?: boolean
     storyVoice?: boolean
     storyTerms?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'. */

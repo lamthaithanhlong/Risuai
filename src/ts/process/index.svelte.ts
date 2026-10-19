@@ -17,6 +17,7 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
+import { gameMasterRequest, noteGameMaster } from "./gameMasterPage";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
 import { isNodeServer } from "../platform";
@@ -1567,6 +1568,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(!isOpening(currentChat?.message)){
         formated = shapeRequest(formated, currentChat?.message)
     }
+    // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
+    // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
+    formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1915,6 +1919,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        noteGameMaster(sel.char, currentChat)
         noteScenePicture(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
         const outputMessage = currentChat.message[inlayMessageIndex]
@@ -2026,6 +2031,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        noteGameMaster(sel.char, currentChat)
         noteScenePicture(sel.char, currentChat)
         if(outputMessageId){
             outputMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)

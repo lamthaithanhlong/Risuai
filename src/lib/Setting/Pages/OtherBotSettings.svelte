@@ -291,6 +291,10 @@
             <span class="text-textcolor2 text-xs">Chỉ khi chạy bằng server Node và có khoá Jev trên máy chủ. Trước mỗi lượt, Jev chấm lượt của người chơi theo bảng trạng thái và cảnh vừa kể: hành động vượt sức nhân vật, hoặc người chơi tự viết kết quả (giết được, nhận thưởng, người khác tin hay nghe theo) thì model được nhắc để thế giới tự quyết. Lượt bình thường không thêm gì.</span>
         </div>
         <div class="mb-4 flex flex-col gap-1">
+            <Check check={DBState.db.gameMaster !== false} onChange={(v) => { DBState.db.gameMaster = v }} name="Game Master (mặc định bật)"/>
+            <span class="text-textcolor2 text-xs">Mọi truyện, mọi nền tảng, không cần server. Sau khi nhân vật được chốt, Game Master giữ một mạch truyện riêng của bạn (kẻ thù riêng, mục tiêu, thử thách, hậu quả và phần thưởng trong luật của thế giới) và đồng hồ nguyên tác: nhân vật trong truyện sống đời của họ song song, bạn chỉ nghe tin, chỉ gặp khi đường đi tự giao nhau. Mỗi lượt app gieo xúc xắc nhịp truyện (yên, căng dần, sự kiện mới, leo thang). Trạng thái nằm trong biến chat gm_*, ẩn khỏi màn hình.</span>
+        </div>
+        <div class="mb-4 flex flex-col gap-1">
             <Check check={DBState.db.storyCheckInPrompt === true} onChange={(v) => { DBState.db.storyCheckInPrompt = v }} name="Kiểm tra mạch truyện và nhắc model sửa (mặc định tắt)"/>
             <span class="text-textcolor2 text-xs">Chỉ khi chạy bằng server Node. Trước mỗi lượt, server soát trạng thái truyện của chat này (bậc tăng mà không qua Ác Mộng hay Cánh Cổng, NPC đã chết lại hành động, ngày lùi, một Ký Ức ở hai ô, Mảnh Linh Hồn vượt sức chứa) và nếu có lỗi thì thêm một dòng hệ thống ngắn để model tự sửa. Không có lỗi, không có SWI-Prolog hay server chậm thì không thêm gì.</span>
         </div>

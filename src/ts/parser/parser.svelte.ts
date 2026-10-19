@@ -6,6 +6,7 @@ import { appVer, getCurrentCharacter, getDatabase, type Database, type character
 import { DBState, selIdState } from '../stores.svelte';
 import { learningDisplay } from '../process/learning';
 import { castStrip, stripLooks, stripPictureAsks } from '../process/portraits';
+import { stripGm } from '../process/gameMaster';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getChatVar, setChatVar, getGlobalChatVar } from './chatVar.svelte';
@@ -752,7 +753,7 @@ export async function ParseMarkdown(
     // the chat passes a slim character (simpleCharacterArgument: no extentions), so the card itself is looked up by its id
     const castCard = char && char.type !== 'group' ? getDatabase().characters.find((c) => c?.chaId === char.chaId) : undefined
     const cast = castCard && castCard.type !== 'group' && mode !== 'pretranslate' ? castStrip(castCard as character, data) : ''
-    data = learningDisplay(stripPictureAsks(stripLooks(data))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]] is hidden
+    data = learningDisplay(stripGm(stripPictureAsks(stripLooks(data)))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]] and the [[GM]] block are hidden
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {
