@@ -337,9 +337,10 @@ describe('per page bookkeeping', () => {
         expect(r.how).toBe('merged')
         expect(read(r.bytes, 'root').maxResponse).toBe(105)   // was 1000 again: the stale file was stored whole ('base pruned')
         expect(read(r.bytes, 'c1').name).toBe('z')
-        // revisions nobody has as a base are still pruned
+        // revisions nobody has as a base are still pruned. The phone's merged write makes its own file its base (a negative id,
+        // dbSync.cjs; specs/chat/DbSync.tla AdvanceBase), so rev 1, which it held until then, goes too; 7 is the Mac's read
         const kept = s.db.prepare('SELECT rev FROM sync_manifest ORDER BY rev').all().map((x: any) => x.rev)
-        expect(kept).toEqual([1, 7])
+        expect(kept).toEqual([-1, 7])
     })
 })
 

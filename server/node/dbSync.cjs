@@ -6,10 +6,11 @@
 //   onWrite(client, bytes, current) a page writes: returns the bytes to store (the page's own file when nobody else wrote since it
 //                           loaded, else the merge of its file with what the server has) and the new revision.
 //
-// A page is a browser (the hash of its public key, else the header x-risu-client, else address + user agent). Its base stays the
-// revision it loaded, also after its own writes: its memory is that revision plus its own edits, so what differs from the base is
-// exactly what it changed. When the base is not known (a page that loaded before this started, a pruned manifest) the page's file is
-// stored as it is, as before.
+// A page is a browser tab (the hash of its public key and the tab id, else the header x-risu-client, else address + user agent). Its
+// base is what it last loaded or wrote: after a write its memory is the file it wrote, so what differs from that is exactly what it
+// changed since. A write stored as it is makes that revision the base; a merged write keeps the page's own file as a manifest under a
+// negative id, and the page's next write is merged against it (the server holds more than the page then). When the base is not
+// known (a page that loaded before this started, a pruned manifest) the page's file is stored as it is, as before.
 const { manifestOf, mergeSaves, validateSave } = require('./dbMerge.cjs')
 
 function loadDriver() {
@@ -56,6 +57,9 @@ function openDbSync(opts) {
     // merged against it (specs/chat/DbSync.tla, LoadedBase). Unreferenced loaded manifests are dropped.
     const minLoaded = db.prepare('SELECT MIN(rev) AS m FROM sync_manifest WHERE rev < 0')
     const pruneLoaded = db.prepare('DELETE FROM sync_manifest WHERE rev < 0 AND rev NOT IN (SELECT base_rev FROM sync_client)')
+    // the base a page leaves behind when its write moves it (~29 KB a manifest on a 6 MB save, one per write): dropped unless another
+    // page still has it as its base. A later read of that revision would build it again from the bytes.
+    const dropBase = db.prepare('DELETE FROM sync_manifest WHERE rev = ? AND rev NOT IN (SELECT base_rev FROM sync_client)')
 
     const currentRev = () => getRev.get().rev
 
@@ -123,14 +127,25 @@ function openDbSync(opts) {
         }
         setRev.run(rev)
         putWrite.run(rev, client, now())
-        if (how === 'first' || how === 'unknown page' || how === 'base pruned' || how.startsWith('unmerged') || how.startsWith('merge failed')) {
-            // the server now holds exactly what the page wrote: that is the base from now on
-            try {
+        // After this write the page holds what it wrote, so that is its base for the next one. The base used to stay the revision the
+        // page LOADED: every later write of the page counted its earlier writes as its edits again, and another page's edit or delete
+        // of a message this page had written (or the retry of a write whose answer was lost, arriving after such an edit) was undone
+        // (measured with Toxiproxy on a copy of the save, 2026-10-19; specs/chat/DbSync.tla AdvanceBase, NoLostUpdateSinceSync).
+        try {
+            if (how === 'merged') {
+                // the server now holds more than the page (what the other pages wrote): its next write must merge, against what it wrote
+                const id = Math.min(0, minLoaded.get().m ?? 0) - 1
+                putManifest.run(id, now(), JSON.stringify(manifestOf(bytes)))
+                putClient.run(client, id, now())
+                pruneLoaded.run()
+            } else {
+                // the server now holds exactly what the page wrote: that is the base from now on
                 putManifest.run(rev, now(), JSON.stringify(manifestOf(out)))
                 putClient.run(client, rev, now())
-            } catch (error) {
-                log(`sync: could not record the write of ${client.slice(0, 8)}: ${error.message}`)
             }
+            if (row && row.base_rev > 0) dropBase.run(row.base_rev)
+        } catch (error) {
+            log(`sync: could not record the write of ${client.slice(0, 8)}: ${error.message}`)
         }
         if (how === 'merged') {
             log(`sync: merged a write of ${client.slice(0, 8)} (base ${row.base_rev}, now ${cur}): ${report.fromServer} parts from the server, ${report.conflicts} both-changed`)

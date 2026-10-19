@@ -12,26 +12,36 @@
 \* the server has recorded the base at the read, but the tab holds an OLDER revision. _BACKUP (LoadedBase = FALSE) is red.
 \* The code since F3/F4 is PerTab = TRUE, PinBases = TRUE (DbSync_FIXED.cfg, green); _SAMEBROWSER and _PRUNED are the code before
 \* (d588ddef) and stay red; _PERTABONLY / _PINONLY show each fix covers its own case.
+\* AdvanceBase (measured 2026-10-19 with Toxiproxy against a copy of the save, S3c/S3d/S7/S7d): the base of an identity stayed the
+\* revision it LOADED, also after its own acknowledged writes, so every later write of that page counted its earlier writes as edits
+\* again. Another page's edit or delete of a message this page had written (or a lost ack whose retry arrived after that edit) was
+\* undone. NoLostUpdateSinceSync says it: a key the tab did not change since it last read OR wrote keeps the server's value.
+\* _SINCESYNC (the code: base stays the loaded rev) is red; _ADVANCE (the base becomes what the page wrote; a merged write forces the
+\* next write of that page to merge, since the server then holds more than the page) is green. OwnEditKept (against what the tab
+\* LOADED) is exactly the rule AdvanceBase drops, so _ADVANCE checks OwnEditKeptSinceSync instead.
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS Tabs, Keys, MaxRev, MaxEdits, KEEP, SameBrowser, PerTab, PinBases, Backups, LoadedBase
+CONSTANTS Tabs, Keys, MaxRev, MaxEdits, KEEP, SameBrowser, PerTab, PinBases, Backups, LoadedBase, AdvanceBase
 
 Id(t) == IF PerTab THEN t ELSE IF SameBrowser THEN "browser" ELSE t
 Ids == {Id(t) : t \in Tabs}
 NoBase == 0
 
-VARIABLES server, rev, hist, writer, local, tabRev, loaded, base, floor, edits, forced
-vars == <<server, rev, hist, writer, local, tabRev, loaded, base, floor, edits, forced>>
+\* bst: the state an identity's base stands for (what its next write is merged against); synced: what a tab last read or wrote
+VARIABLES server, rev, hist, writer, local, tabRev, loaded, base, floor, edits, forced, bst, synced
+vars == <<server, rev, hist, writer, local, tabRev, loaded, base, floor, edits, forced, bst, synced>>
 
 Zero == [k \in Keys |-> 0]
 Init == /\ server = Zero /\ rev = 1 /\ hist = [r \in 1..MaxRev |-> Zero] /\ writer = [r \in 1..MaxRev |-> "none"]
         /\ local = [t \in Tabs |-> Zero] /\ tabRev = [t \in Tabs |-> 1] /\ loaded = [t \in Tabs |-> FALSE]
         /\ base = [i \in Ids |-> NoBase] /\ floor = 1 /\ edits = 0 /\ forced = [i \in Ids |-> FALSE]
+        /\ bst = [i \in Ids |-> Zero] /\ synced = [t \in Tabs |-> Zero]
 
 MinBase == LET bs == {base[i] : i \in {j \in Ids : base[j] # NoBase}} IN IF bs = {} THEN rev ELSE CHOOSE m \in bs : \A x \in bs : m <= x
 \* onRead: the tab gets the current file; its identity's base becomes rev; old manifests and write rows are pruned
 Read(t) == /\ local' = [local EXCEPT ![t] = server] /\ tabRev' = [tabRev EXCEPT ![t] = rev] /\ loaded' = [loaded EXCEPT ![t] = TRUE]
            /\ base' = [base EXCEPT ![Id(t)] = rev] /\ forced' = [forced EXCEPT ![Id(t)] = FALSE]
+           /\ bst' = [bst EXCEPT ![Id(t)] = server] /\ synced' = [synced EXCEPT ![t] = server]
            /\ floor' = IF rev > KEEP THEN (IF PinBases THEN (IF rev - KEEP < MinBase THEN rev - KEEP ELSE MinBase) ELSE rev - KEEP) ELSE floor
            /\ UNCHANGED <<server, rev, hist, writer, edits>>
 \* the read registers base = rev, then the tab decodes a backup: it HOLDS revision r < rev. With LoadedBase the server is told, the base
@@ -39,21 +49,27 @@ Read(t) == /\ local' = [local EXCEPT ![t] = server] /\ tabRev' = [tabRev EXCEPT 
 ReadBackup(t, r) == /\ Backups /\ r < rev
            /\ local' = [local EXCEPT ![t] = hist[r]] /\ tabRev' = [tabRev EXCEPT ![t] = r] /\ loaded' = [loaded EXCEPT ![t] = TRUE]
            /\ base' = [base EXCEPT ![Id(t)] = IF LoadedBase THEN r ELSE rev] /\ forced' = [forced EXCEPT ![Id(t)] = LoadedBase]
+           /\ bst' = [bst EXCEPT ![Id(t)] = IF LoadedBase THEN hist[r] ELSE server] /\ synced' = [synced EXCEPT ![t] = hist[r]]
            /\ UNCHANGED <<server, rev, hist, writer, edits, floor>>
 Edit(t, k) == /\ loaded[t] /\ edits < MaxEdits /\ edits' = edits + 1 /\ local' = [local EXCEPT ![t][k] = edits + 1]
-              /\ UNCHANGED <<server, rev, hist, writer, tabRev, loaded, base, floor, forced>>
+              /\ UNCHANGED <<server, rev, hist, writer, tabRev, loaded, base, floor, forced, bst, synced>>
 
-\* the three-way merge by key against the base revision (what Merge3.dfy proves)
-Merged(t, b) == [k \in Keys |-> IF local[t][k] = hist[b][k] THEN server[k] ELSE local[t][k]]
+\* the three-way merge by key against the base (what Merge3.dfy proves); without AdvanceBase bst[i] is always hist[base[i]]
+Merged(t, s) == [k \in Keys |-> IF local[t][k] = s[k] THEN server[k] ELSE local[t][k]]
 Foreign(i, b) == \E r \in (b + 1)..rev : r >= floor /\ writer[r] # i
 Write(t) == /\ loaded[t] /\ rev < MaxRev
             /\ LET i == Id(t)
                    b == base[i]
                    how == IF b = NoBase THEN "unknown" ELSE IF forced[i] THEN "merged" ELSE IF ~Foreign(i, b) THEN "fast" ELSE IF b < floor THEN "pruned" ELSE "merged"
-                   new == IF how = "merged" THEN Merged(t, b) ELSE local[t]
+                   new == IF how = "merged" THEN Merged(t, bst[i]) ELSE local[t]
                IN /\ server' = new /\ rev' = rev + 1 /\ hist' = [hist EXCEPT ![rev + 1] = new] /\ writer' = [writer EXCEPT ![rev + 1] = i]
-                  /\ base' = IF how \in {"unknown", "pruned"} THEN [base EXCEPT ![i] = rev + 1] ELSE base
-            /\ UNCHANGED <<local, tabRev, loaded, floor, edits, forced>>
+                  /\ base' = IF how \in {"unknown", "pruned"} \/ (AdvanceBase /\ how = "fast") THEN [base EXCEPT ![i] = rev + 1] ELSE base
+                  \* the stored file is the page's own: that is its base. AdvanceBase: after ANY write the page holds what it wrote; when
+                  \* that was merged the server holds more than the page, so its next write must merge (dbSync.cjs: a negative manifest id)
+                  /\ bst' = IF how \in {"unknown", "pruned"} \/ AdvanceBase THEN [bst EXCEPT ![i] = local[t]] ELSE bst
+                  /\ forced' = IF AdvanceBase THEN [forced EXCEPT ![i] = (how = "merged")] ELSE forced
+            /\ synced' = [synced EXCEPT ![t] = local[t]]
+            /\ UNCHANGED <<local, tabRev, loaded, floor, edits>>
 
 Next == \E t \in Tabs : Read(t) \/ Write(t) \/ (\E k \in Keys : Edit(t, k)) \/ (\E r \in 1..MaxRev : ReadBackup(t, r))
 Spec == Init /\ [][Next]_vars
@@ -62,4 +78,7 @@ Spec == Init /\ [][Next]_vars
 NoLostUpdate == [][ \A t \in Tabs : Write(t) => \A k \in Keys : (local[t][k] = hist[tabRev[t]][k]) => server'[k] = server[k] ]_vars
 \* and the writer's own edit is stored
 OwnEditKept == [][ \A t \in Tabs : Write(t) => \A k \in Keys : (local[t][k] # hist[tabRev[t]][k]) => server'[k] = local[t][k] ]_vars
+\* the same two, against what the tab last read or WROTE: a write the server acknowledged is not an edit again in the next write
+NoLostUpdateSinceSync == [][ \A t \in Tabs : Write(t) => \A k \in Keys : (local[t][k] = synced[t][k]) => server'[k] = server[k] ]_vars
+OwnEditKeptSinceSync == [][ \A t \in Tabs : Write(t) => \A k \in Keys : (local[t][k] # synced[t][k]) => server'[k] = local[t][k] ]_vars
 ====
