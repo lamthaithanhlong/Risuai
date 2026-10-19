@@ -170,6 +170,9 @@ describe('the side the player chose (path, enemies, what it gave)', () => {
         expect(s.gm_left).toBe('Song clan | left')
         expect(applyGm(s, ['path: -'], 6).gm_left).toBe('Song clan | left\nNephis\'s cohort | left')
         expect(applyGm(s, ['enemy: sunny\'s cohort | -'], 6).gm_enemies).toBe('')
+        // measured: "path: — | — | —" and "path: — | chưa chọn bên | …" were written while no side was taken
+        expect(applyGm({}, ['path: — | — | —'], 2).gm_path).toBe('')
+        expect(applyGm({}, ['path: chưa chọn bên | - | -'], 2).gm_path).toBe('')
     })
     it('the note carries the path, its enemies, what it gave and who remembers; without one it says how a side opens', () => {
         const st: GmState = { ...FULL, gm_path: 'Nighthawks | probationary member | trusted by Dunn', gm_enemies: 'the Aurora Order | I burned their altar', gm_gained: 'a revolver', gm_left: 'a heretic cell | left' }

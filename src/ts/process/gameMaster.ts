@@ -40,6 +40,7 @@ const MAX_LEFT = 2
 
 const BLOCK = /\[\[GM\b([\s\S]*?)\]\]/g
 /** a field name the model copied as a value ("hook|the debt|antagonist|Varn") */
+const NO_SIDE = /^(none|no side|chưa( chọn| có)?( bên| phe)?|không|<side>)$/i
 const ARC_LABEL = /^<?(hook|antagonist|rival|goal|stakes?)>?$/i
 const OPEN_TAIL = /\[\[GM\b[\s\S]*$/
 
@@ -110,7 +111,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 if (value) next.gm_canon = isDash(value) ? '' : value
             } else if (key === 'path' || key === 'allegiance' || key === 'faction') {
                 const was = next.gm_path ?? ''
-                const now = isDash(value) ? '' : value
+                // "path: — | chưa chọn bên" (measured: written while no side was taken) is no side
+                const now = isDash(value.split('|')[0]) || NO_SIDE.test(value.split('|')[0].trim()) ? '' : value
                 if (nameOf(was) && nameOf(was) !== nameOf(now)) next.gm_left = [...lines(next.gm_left), clean(`${was.split('|')[0].trim()} | left`)].slice(-MAX_LEFT).join('\n')
                 next.gm_path = now
             } else if (key === 'enemy' || key === 'enemies') {
