@@ -17,7 +17,7 @@ describe('the Game Master on the page', () => {
         const c = chatOf([{ role: 'user', data: 'surprise me' }, { role: 'char', data: 'Tên: Mai\nĐược chưa?' }, { role: 'user', data: 'sửa tên' }])
         expect(gameMasterRequest(req(), card as never, c as never)[1].content).toBe('Tui đi xuống hầm.')
         const ok = chatOf([{ role: 'char', data: 'story' }], { $st_name: 'Mai' })
-        expect(gameMasterRequest(req(), card as never, ok as never)[1].content).toContain('[GM, hidden')
+        expect(gameMasterRequest(req(), card as never, ok as never)[1].content).toContain('[GM (hidden')
         db.gameMaster = false
         expect(gameMasterRequest(req(), card as never, ok as never)[1].content).toBe('Tui đi xuống hầm.')
         db.gameMaster = true

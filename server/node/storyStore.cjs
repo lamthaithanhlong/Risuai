@@ -7,7 +7,7 @@
 //
 // Per chat: the runes and panel variables (st_*), the ledger (led_mem -> memories, led_rel -> relations, led_ev -> timeline), the
 // NPCs derived from them (names from relations and memory subjects, last seen time/place and dead or not from the timeline), and the
-// history of every st_* change (rank changes are checked against the timeline by story/canon.pl). Per character: its lore entries
+// history of every st_* and gm_* change (rank changes are checked against the timeline by story/canon.pl). Per character: its lore entries
 // (title, keys, hash, canon flag).
 //
 // Sync (sync(bytes, rev)): after every stored write of database.bin. One transaction; a character block whose bytes did not change
@@ -35,6 +35,9 @@ function lines(v) {
     return String(v).split('\n').map((l) => l.trim()).filter(Boolean)
 }
 const parts = (l) => l.split('|').map((x) => x.trim())
+
+/** st_* (the panel) and gm_* (the Game Master) keep their history; gm_prev / gm_at are the page's rollback bookkeeping */
+const keepsHistory = (k) => k.startsWith('st_') || (k.startsWith('gm_') && k !== 'gm_prev' && k !== 'gm_at' && k !== 'gm_beat_at')
 
 /** chat variables as the cards wrote them: scriptstate keys are '$' + name (src/ts/parser/chatVar.svelte.ts setChatVar) */
 function chatVars(chat) {
@@ -216,12 +219,13 @@ function openStoryStore(opts) {
             return false
         }
         q.putChat.run({ chat_id: chat.id, char_id: charId, name: chat.name ?? null, messages: msgs.length, last_message_at: lastAt, vars_hash: varsHash, rev, updated: t })
-        // panel variables: every st_* change is kept with its revision (rank changes are checked against the timeline)
+        // panel variables: every st_* change is kept with its revision (rank changes are checked against the timeline), and every
+        // change of the Game Master's state (gm_*: the player's arc, side, enemies; src/ts/process/gameMaster.ts) for a long chat
         const before = new Map(q.stateOf.all(chat.id).map((r) => [r.key, r.value]))
         for (const [k, v] of Object.entries(vars)) {
             if (k.startsWith('led_')) continue
             if (before.get(k) === v) continue
-            if (k.startsWith('st_') && row) q.putHistory.run(chat.id, k, rev, before.has(k) ? before.get(k) : null, v, t)
+            if (keepsHistory(k) && row) q.putHistory.run(chat.id, k, rev, before.has(k) ? before.get(k) : null, v, t)
             q.putState.run(chat.id, k, v, rev)
         }
         for (const k of before.keys()) if (!(k in vars)) q.delState.run(chat.id, k)
@@ -328,4 +332,4 @@ function openStoryStore(opts) {
     return { sync, story, history, lore, chatRow, close, db }
 }
 
-module.exports = { openStoryStore, chatVars, ledger, deriveNpcs, deathsIn, wordAt, DEATH }
+module.exports = { openStoryStore, chatVars, keepsHistory, ledger, deriveNpcs, deathsIn, wordAt, DEATH }

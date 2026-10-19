@@ -292,7 +292,7 @@
         </div>
         <div class="mb-4 flex flex-col gap-1">
             <Check check={DBState.db.gameMaster !== false} onChange={(v) => { DBState.db.gameMaster = v }} name="Game Master (mặc định bật)"/>
-            <span class="text-textcolor2 text-xs">Mọi truyện, mọi nền tảng, không cần server. Sau khi nhân vật được chốt, Game Master giữ một mạch truyện riêng của bạn (kẻ thù riêng, mục tiêu, thử thách, hậu quả và phần thưởng trong luật của thế giới) và đồng hồ nguyên tác: nhân vật trong truyện sống đời của họ song song, bạn chỉ nghe tin, chỉ gặp khi đường đi tự giao nhau. Mỗi lượt app gieo xúc xắc nhịp truyện (yên, căng dần, sự kiện mới, leo thang). Trạng thái nằm trong biến chat gm_*, ẩn khỏi màn hình.</span>
+            <span class="text-textcolor2 text-xs">Mọi truyện, mọi nền tảng, không cần server. Sau khi nhân vật được chốt, Game Master giữ một mạch truyện riêng của bạn (kẻ thù riêng, mục tiêu, thử thách, hậu quả và phần thưởng trong luật của thế giới), con đường bạn chọn trong thế giới đó (phe nào cũng được, kể cả phe phản diện; đổi phe thì phe cũ nhớ) cùng kẻ thù và phần thưởng của nó, và đồng hồ nguyên tác: nhân vật trong truyện sống đời của họ song song, bạn nghe tin, gặp khi đường đi giao nhau hoặc khi bạn tự tìm đến. Mỗi lượt app gieo xúc xắc nhịp truyện (yên, căng dần, sự kiện mới, leo thang). Trạng thái nằm trong biến chat gm_*, ẩn khỏi màn hình.</span>
         </div>
         <div class="mb-4 flex flex-col gap-1">
             <Check check={DBState.db.storyCheckInPrompt === true} onChange={(v) => { DBState.db.storyCheckInPrompt = v }} name="Kiểm tra mạch truyện và nhắc model sửa (mặc định tắt)"/>

@@ -129,9 +129,9 @@ describe('the note', () => {
         expect(n).toContain('ESCALATE')
         expect(n).toContain('a due consequence lands now')
         expect(n).toContain('some may come up now')
-        expect(n).toContain('never rewrite canon'); expect(n).toContain('a meeting only if paths cross naturally')
-        expect(n).toContain('The player\'s action still happens')
-        expect(n).toContain('no free rank, Sequence, stamp or power')
+        expect(n).toContain('canon events still happen'); expect(n).toContain('never forced')
+        expect(n).toContain('The player\'s action happens')
+        expect(n).toContain('no free rank, Sequence, stamp, power')
         expect(n).toContain('[[GM\nbeat: <n> | <now> | <due next>'); expect(n).toContain('no planning notes')
         expect(gmNote('run', FULL, { ...dice, pace: 'quiet', consequence: false, canon: false }, 'x')).not.toMatch(/lands now|come up now/)
     })
@@ -146,13 +146,48 @@ describe('the note', () => {
     })
     it('stays compact with a full state (rides every turn)', () => {
         const n = gmNote('run', FULL, dice, 'x')
-        // ~4 characters a token for English: ~350 tokens (cl100k) with every slot full
-        expect(n.length).toBeLessThan(1400)
+        // ~4 characters a token for English: ~400 tokens (cl100k) with every slot full (no side chosen yet)
+        expect(n.length).toBeLessThan(1550)
     })
-    it('stays near 250 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
+    it('stays near 290 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
         const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
-        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1100)
-        expect(gmNote('seed', {}, dice, worldFlavour(SS)).length).toBeLessThan(1000)
+        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300)
+        expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150)
+    })
+})
+
+describe('the side the player chose (path, enemies, what it gave)', () => {
+    it('keeps the path, merges enemies by name, and remembers a side the player left', () => {
+        let s = applyGm({}, ['path: Song clan | sworn servant | trusted by a steward\nenemy: Sunny\'s cohort | I sold their route\ngained: a Song token'], 3)
+        expect(s.gm_path).toBe('Song clan | sworn servant | trusted by a steward')
+        expect(s.gm_enemies).toBe('Sunny\'s cohort | I sold their route')
+        expect(s.gm_gained).toBe('a Song token')
+        s = applyGm(s, ['enemy: sunny\'s cohort | they hunt me now\ngained: a Memory loaned by the clan'], 4)
+        expect(s.gm_enemies).toBe('sunny\'s cohort | they hunt me now')
+        expect(s.gm_gained).toBe('a Song token\na Memory loaned by the clan')
+        s = applyGm(s, ['path: Nephis\'s cohort | newcomer | distrusted'], 5)
+        expect(s.gm_path).toBe('Nephis\'s cohort | newcomer | distrusted')
+        expect(s.gm_left).toBe('Song clan | left')
+        expect(applyGm(s, ['path: -'], 6).gm_left).toBe('Song clan | left\nNephis\'s cohort | left')
+        expect(applyGm(s, ['enemy: sunny\'s cohort | -'], 6).gm_enemies).toBe('')
+    })
+    it('the note carries the path, its enemies, what it gave and who remembers; without one it says how a side opens', () => {
+        const st: GmState = { ...FULL, gm_path: 'Nighthawks | probationary member | trusted by Dunn', gm_enemies: 'the Aurora Order | I burned their altar', gm_gained: 'a revolver', gm_left: 'a heretic cell | left' }
+        const n = gmNote('run', st, { pace: 'advance', surface: 'x', consequence: false, canon: false }, 'x')
+        expect(n).toContain('Path: Nighthawks | probationary member')
+        expect(n).toContain('enemies: the Aurora Order')
+        expect(n).toContain('gained: a revolver')
+        expect(n).toContain('left: a heretic cell (they remember)')
+        expect(n).toContain('its lore entry when present')
+        const none = gmNote('run', FULL, { pace: 'quiet', surface: 'x', consequence: false, canon: false }, 'x')
+        expect(none).toContain('villains included')
+        expect(none).toContain('never a menu')
+    })
+    it('a chosen side and its enemies surface in the dice', () => {
+        const st: GmState = { gm_arc: 'a | b | c | d', gm_path: 'Song clan | servant | low', gm_enemies: 'a rival servant | jealous' }
+        const seen = new Set(Array.from({ length: 300 }, () => rollGm(st, 3).surface))
+        expect([...seen].some((x) => x.startsWith('the path (Song clan)'))).toBe(true)
+        expect(seen.has('the enemy "a rival servant"')).toBe(true)
     })
 })
 

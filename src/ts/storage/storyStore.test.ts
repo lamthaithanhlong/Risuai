@@ -92,6 +92,17 @@ describe('sync', () => {
         expect(s.story('k1').timeline.map((e: any) => e.first_rev)).toEqual([10, 10, 10, 14])
     })
 
+    test('the Game Master state (gm_*) is kept with its history, without the page\'s rollback bookkeeping', () => {
+        const s = fresh()
+        s.sync(saveOf([card([chat1({ gm_path: 'Song clan | servant | low', gm_prev: '{}', gm_at: 'r1' })])]), 1)
+        s.sync(saveOf([card([chat1({ gm_path: 'Nephis\'s cohort | newcomer | distrusted', gm_left: 'Song clan | left', gm_prev: '{"x":1}', gm_at: 'r2' })])]), 2)
+        expect(s.story('k1').state.gm_path).toBe('Nephis\'s cohort | newcomer | distrusted')
+        const h = s.history('k1').filter((x: any) => x.key.startsWith('gm_'))
+        expect(h.map((x: any) => [x.key, x.rev, x.old_value, x.new_value])).toEqual([
+            ['gm_left', 2, null, 'Song clan | left'],
+            ['gm_path', 2, 'Song clan | servant | low', 'Nephis\'s cohort | newcomer | distrusted'],
+        ])
+    })
     test('a chat deleted from the save is archived (deleted_at, deleted_rev) and comes back if the save has it again', () => {
         const s = fresh()
         s.sync(saveOf([card([chat1(), chat1({}, 'k2')])]), 10)

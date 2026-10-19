@@ -11,14 +11,22 @@
 //   reward: what | when it is paid                    the whole list is replaced when any reward line is written ("reward: -")
 //   consequence: what | when it lands                 the same
 //   canon: in-world date | what canon is doing off-screen
+//   path: faction or road | stage | standing         the side the player chose in the canon world, villains included;
+//                                                    a new name moves the old one to gm_left (they remember), "path: -" leaves it
+//   enemy: who | why they oppose the player           up to 4, merged by name ("enemy: who | -" drops it)
+//   gained: what the path has given                   up to 4, newest last ("gained: -" clears)
 //   ]]
+// (asked again 2026-10-19: "trở thành kẻ thù của Sunny, làm thuộc hạ cho Song", "trở thành Kẻ Gác Đêm hoặc gia nhập kẻ
+// xấu": the player chooses a side inside the canon world and faces what it brings; paths open through meetings and acts,
+// never a menu, and the card's own lore entries for a path, when the lorebook wakes them, say what that side asks and gives.)
 // After the reply the app takes the block out of the message and keeps each value in a chat variable (gm_*, as the cards'
 // status.lua keeps st_*); the screen hides a block still being streamed. Every turn the app puts one short note after the
 // player's message (a system note alone is not read on this route, see playerAgency.ts): the state, and this turn's dice,
 // rolled by the app (crypto), not by the model's whim. Before the character is confirmed (the card's "Được chưa?" step) the
 // GM says nothing, and the reply to the yes (the card's Initialization) is left to the card; the reply after it seeds the arc.
 
-export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past'] as const
+export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past',
+    'gm_path', 'gm_enemies', 'gm_gained', 'gm_left'] as const
 export type GmKey = (typeof GM_KEYS)[number]
 export type GmState = Partial<Record<GmKey | 'gm_beat_at' | 'gm_at' | 'gm_prev', string>>
 
@@ -26,6 +34,9 @@ const MAXLEN = 140
 const MAX_THREATS = 3
 const MAX_DUE = 3
 const MAX_PAST = 3
+const MAX_ENEMIES = 4
+const MAX_GAINED = 4
+const MAX_LEFT = 2
 
 const BLOCK = /\[\[GM\b([\s\S]*?)\]\]/g
 /** a field name the model copied as a value ("hook|the debt|antagonist|Varn") */
@@ -58,6 +69,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
     let rewards: string[] | null = null
     let costs: string[] | null = null
     let threats = lines(state.gm_threats)
+    let enemies = lines(state.gm_enemies)
+    let gained: string[] | null = null
     for (const body of bodies) {
         for (const raw of body.split(/\r?\n/)) {
             const m = /^\s*[-*•]?\s*([a-z_]+)\s*:\s*(.*)$/i.exec(raw)
@@ -95,10 +108,27 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 if (!isDash(value)) costs.push(value)
             } else if (key === 'canon') {
                 if (value) next.gm_canon = isDash(value) ? '' : value
+            } else if (key === 'path' || key === 'allegiance' || key === 'faction') {
+                const was = next.gm_path ?? ''
+                const now = isDash(value) ? '' : value
+                if (nameOf(was) && nameOf(was) !== nameOf(now)) next.gm_left = [...lines(next.gm_left), clean(`${was.split('|')[0].trim()} | left`)].slice(-MAX_LEFT).join('\n')
+                next.gm_path = now
+            } else if (key === 'enemy' || key === 'enemies') {
+                const name = nameOf(value)
+                if (!name) continue
+                const rest = value.split('|').slice(1)
+                enemies = enemies.filter((t) => nameOf(t) !== name)
+                if (!(rest.length > 0 && rest.every(isDash))) enemies.push(value)
+            } else if (key === 'gained') {
+                gained ??= lines(state.gm_gained)
+                if (isDash(value)) gained = []
+                else gained.push(value)
             }
         }
     }
     next.gm_threats = threats.slice(-MAX_THREATS).join('\n')
+    next.gm_enemies = enemies.slice(-MAX_ENEMIES).join('\n')
+    if (gained) next.gm_gained = gained.slice(-MAX_GAINED).join('\n')
     if (rewards) next.gm_rewards_due = rewards.slice(-MAX_DUE).join('\n')
     if (costs) next.gm_consequences_due = costs.slice(-MAX_DUE).join('\n')
     return next
@@ -171,6 +201,9 @@ export function rollGm(state: GmState, charCount: number, rng: () => number = cr
         arc[1] ? `the antagonist (${arc[1]})` : '',
         ...lines(state.gm_threats).map((t) => `the threat "${t.split('|')[0].trim()}"`),
         arc[2] ? 'the goal' : '',
+        // the chosen side brings its own events (an order, a task, a test, a rival inside it) and its enemies come for the player
+        ...(state.gm_path ? [`the path (${state.gm_path.split('|')[0].trim()}): an event of its own`, `the path (${state.gm_path.split('|')[0].trim()}): an event of its own`] : []),
+        ...lines(state.gm_enemies).map((e) => `the enemy "${e.split('|')[0].trim()}"`),
     ].filter(Boolean)
     const surface = threads.length ? threads[Math.floor(rng() * threads.length)] : 'the arc'
     const consequence = !!lines(state.gm_consequences_due).length && rng() < 0.35
@@ -179,10 +212,10 @@ export function rollGm(state: GmState, charCount: number, rng: () => number = cr
 }
 
 const PACE: Record<GmDice['pace'], string> = {
-    quiet: 'QUIET beat: no new trouble; let the player\'s choice play out and breathe',
-    build: 'BUILD: no new event; one threat creeps a step (a sign at most)',
-    advance: 'ADVANCE: the arc\'s next event, enemy or obstacle arrives with a clear challenge',
-    escalate: 'ESCALATE: the arc\'s next beat arrives and the stakes rise',
+    quiet: 'QUIET: no new trouble, the player\'s choice plays out',
+    build: 'BUILD: no new event, a threat creeps (a sign at most)',
+    advance: 'ADVANCE: the next event, enemy or obstacle, with a clear challenge',
+    escalate: 'ESCALATE: the next beat hits and the stakes rise',
 }
 
 /** Flavour only: the kind of personal trouble that fits the card's world (the GM itself is the same for every world). */
@@ -196,13 +229,25 @@ export function worldFlavour(card: Card): string {
 
 const short = (v: string | undefined, n = 120) => { const s = (v ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 
+/** The side the player chose, what it made and gave; or how a side is chosen when none is. */
+export function pathLine(state: GmState): string {
+    const enemies = lines(state.gm_enemies), gained = lines(state.gm_gained), left = lines(state.gm_left)
+    const tail = [
+        enemies.length ? `enemies: ${enemies.map((e) => short(e, 60)).join('; ')}` : '',
+        gained.length ? `gained: ${gained.map((g) => short(g, 50)).join('; ')}` : '',
+        left.length ? `left: ${left.map((l) => l.split('|')[0].trim()).join(', ')} (they remember)` : '',
+    ].filter(Boolean).join('; ')
+    if (state.gm_path) return `Path: ${short(state.gm_path, 100)}${tail ? `; ${tail}` : ''}; its events, enemies, rewards, costs from that side (its lore entry when present).`
+    return `No side yet${tail ? ` (${tail})` : ''}: any side can be joined, villains included, through meetings and acts, never a menu; write path: on commit or switch.`
+}
+
 /** The note for this turn, or '' when the GM is silent. */
 export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string): string {
     if (phase === 'silent') return ''
     const parts: string[] = []
     if (phase === 'seed') {
         const past = lines(state.gm_past).pop()
-        parts.push(`No arc yet: seed one fitted to who the character is (hook, an antagonist of their own such as ${flavour}, never a canon villain; a goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}. In prose at most the first hook.`)
+        parts.push(`No arc yet: seed one fitted to who the character is (hook; an antagonist of their own, e.g. ${flavour}, never a canon villain; goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}; in prose at most the hook.`)
     } else {
         parts.push(`Arc: ${short(state.gm_arc, 130)}.`)
         if (state.gm_beat) parts.push(`Beat: ${short(state.gm_beat, 100)}.`)
@@ -211,17 +256,18 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         const rewards = lines(state.gm_rewards_due), costs = lines(state.gm_consequences_due)
         if (rewards.length) parts.push(`Reward: ${rewards.map((r) => short(r, 70)).join('; ')}.`)
         if (costs.length) parts.push(`Consequence: ${costs.map((c) => short(c, 70)).join('; ')}.`)
-        parts.push(`Dice: ${PACE[dice.pace]}; surfaces: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
+        parts.push(`Dice: ${PACE[dice.pace]}; focus: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
     }
-    parts.push(`Canon: ${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}; canon people live their own lives off-screen: news or a distant sighting only${dice.canon ? ' (some may come up now)' : ''}, a meeting only if paths cross naturally; never rewrite canon.`)
+    parts.push(pathLine(state))
+    parts.push(`Canon (${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}): canon people live their own lives off-screen, heard as news or seen afar${dice.canon ? ' (some may come up now)' : ''}; met only when paths cross or the player seeks them, never forced; canon events still happen.`)
     // measured 2026-10-19 (DeepSeek v4.1 flash, 10 turns x 2 cards): "only changed lines" left the block out of 13 of 22
     // replies and the field names were copied as words ("hook|…|antagonist|…"); one seeding reply printed its planning
     const block = phase === 'seed'
         ? '[[GM\narc: <hook> | <antagonist> | <goal> | <stakes>\nbeat: 1 | <what is happening> | <what is due next>\nthreat: <name> | <progress> | <when full>\ncanon: <date> | <off-screen>\n]]'
-        : '[[GM\nbeat: <n> | <now> | <due next>\n]] plus any line above that changed (also reward:/consequence: <what> | <when>; arc: done | <how> ends it)'
-    return '\n\n[GM, hidden, never named in the story: the player\'s own arc, not the novel\'s plot. ' + parts.join(' ')
-        + ' The player\'s action still happens; at most one new trouble a reply, card dice included. Success pays, failure costs, within the world\'s rules (no free rank, Sequence, stamp or power).'
-        + ` The reply is only the story (no planning notes); end it, after any panel, with ${block}]`
+        : '[[GM\nbeat: <n> | <now> | <due next>\n]] + changed lines (arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when>, canon; arc: done | <how> ends it)'
+    return '\n\n[GM (hidden, never named): the player\'s own story, not the novel\'s plot. ' + parts.join(' ')
+        + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs, within world rules (no free rank, Sequence, stamp, power).'
+        + ` Story only, no planning notes; end, after any panel, with ${block}]`
 }
 
 /** The note at the end of the player's last message; unchanged without a note or a text message. */
