@@ -314,7 +314,10 @@
     let abortController:null|AbortController = null
 
     async function sendChatMain(continued:boolean = false, guardRetry = 0, emptyRetry = 0, resumeKey?:string) {
-        const generationKey = resumeKey ?? crypto.randomUUID()
+        // "<chat id>:<uuid>": the server can then tell which chat a running job answers (GET /proxy-stream-jobs/running), so another
+        // page loading this chat does not settle it as cut off while the phone is locked and the job runs on
+        const keyChatId = DBState.db.characters[$selectedCharID]?.chats?.[DBState.db.characters[$selectedCharID]?.chatPage]?.id
+        const generationKey = resumeKey ?? (typeof keyChatId === 'string' && /^[A-Za-z0-9-]+$/.test(keyChatId) ? `${keyChatId}:${crypto.randomUUID()}` : crypto.randomUUID())
         if(!beginGeneration(generationKey, { aiModel: DBState.db.aiModel, requestModel: DBState.db.customProxyRequestModel })){
             // A reply is already being generated: leave its key, resume note, busy flag and Stop button alone.
             return

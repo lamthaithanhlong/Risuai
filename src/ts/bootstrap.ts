@@ -132,6 +132,11 @@ export async function loadData() {
                     gotStorage = encodeRisuSaveLegacy({})
                     await forageStorage.setItem('database/database.bin', gotStorage)
                 }
+                if (isNodeServer) {
+                    // which chats a server job is still answering: those are not settled as cut off on load (emptyReply.ts)
+                    const [node, settle] = await Promise.all([import('./storage/nodeStorage'), import('./process/emptyReply')])
+                    settle.setRunningStreamChats(await settle.fetchRunningStreamChats((input, init) => fetch(input, init), node.getNodeServerProxyAuth))
+                }
                 try {
                     const decoded = await decodeRisuSave(gotStorage)
                     console.log(decoded)

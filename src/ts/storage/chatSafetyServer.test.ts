@@ -133,3 +133,35 @@ describe('F5: a second server on the same jobs file', () => {
         up.close()
     }, 60000)
 })
+
+describe('F2: the server says which chats a job is still answering', () => {
+    test('GET /proxy-stream-jobs/running lists the chat of a running job (from its key "<chat id>:<uuid>#n"), then nothing once it is done', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'chat-f2-'))
+        const k = await newKey()
+        // a fake model: 12 chunks, one every 250 ms
+        const up = http.createServer((_req, res) => {
+            res.writeHead(200, { 'content-type': 'text/event-stream' })
+            let i = 0
+            const t = setInterval(() => {
+                if (i < 12) res.write(`data: {"choices":[{"delta":{"content":"w${i++} "}}]}\n\n`)
+                else { res.write('data: [DONE]\n\n'); res.end(); clearInterval(t) }
+            }, 250)
+        })
+        const upPort = await freePort()
+        await new Promise<void>((r) => up.listen(upPort, '127.0.0.1', () => r()))
+        const live = await startServer(root, 'live', [k])
+        const auth = { 'content-type': 'application/json', 'risu-auth': await token(k) }
+        await fetch(`http://127.0.0.1:${live.port}/proxy-stream-jobs`, {
+            method: 'POST', headers: auth,
+            body: JSON.stringify({ url: `http://127.0.0.1:${upPort}/v1/chat/completions`, method: 'POST', bodyBase64: b64u('{}'), idempotencyKey: 'chat-k1:gen-1#0' }),
+        })
+        await sleep(800)
+        const during = await fetch(`http://127.0.0.1:${live.port}/proxy-stream-jobs/running`, { headers: auth })
+        expect(during.status).toBe(200)
+        expect((await during.json()).chats).toEqual(['chat-k1'])
+        await sleep(3500)
+        expect((await (await fetch(`http://127.0.0.1:${live.port}/proxy-stream-jobs/running`, { headers: auth })).json()).chats).toEqual([])
+        await stop(live)
+        up.close()
+    }, 60000)
+})

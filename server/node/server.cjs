@@ -1388,6 +1388,17 @@ app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
     });
 });
 
+// The chats whose reply is still being generated on this server (the idempotency key starts with the chat id). A page that loads a
+// chat marked as streaming asks this before it settles it as cut off: a locked phone stops refreshing its stamp, but the job runs on
+// (specs/chat/uppaal/settle_*.xml).
+app.get('/proxy-stream-jobs/running', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkProxyAuth(req, res)) {
+        return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.send({ chats: jobStore ? jobStore.runningChats() : [] });
+});
+
 app.delete('/proxy-stream-jobs/:jobId', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkProxyAuth(req, res)) {
         return;

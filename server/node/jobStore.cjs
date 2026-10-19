@@ -61,6 +61,7 @@ function openJobStore(file, opts = {}) {
         boots: db.prepare('SELECT boot, beat, pid FROM boots'),
         dropBoot: db.prepare('DELETE FROM boots WHERE boot = ?'),
         oldBoots: db.prepare('DELETE FROM boots WHERE beat < ?'),
+        runningChats: db.prepare("SELECT idem FROM jobs WHERE status = 'running' AND idem IS NOT NULL"),
         lastSeq: db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE job_id = ?'),
         insertEvent: db.prepare('INSERT INTO events (job_id, seq, data) VALUES (?, ?, ?)'),
         touch: db.prepare('UPDATE jobs SET updated = ? WHERE id = ?'),
@@ -131,6 +132,16 @@ function openJobStore(file, opts = {}) {
         beat(now = Date.now()) {
             q.beat.run(boot, now, pid);
             return interruptTx(now);
+        },
+
+        /** The chats with a reply still being generated: the part of each running job's idempotency key before the first ':'. */
+        runningChats() {
+            const chats = new Set();
+            for (const row of q.runningChats.all()) {
+                const i = row.idem.indexOf(':');
+                if (i > 0) chats.add(row.idem.slice(0, i));
+            }
+            return [...chats];
         },
 
         append,

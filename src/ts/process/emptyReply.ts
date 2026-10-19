@@ -36,7 +36,34 @@ export function isStreamAliveElsewhere(streamingAt: number | undefined, now: num
     return typeof streamingAt === 'number' && streamingAt > 0 && now - streamingAt < STREAM_ALIVE_MS
 }
 
+/** The chats whose reply a server stream job is still generating, read once before the save is loaded; null when not known. */
+let runningStreamChats: ReadonlySet<string> | null = null
+export function setRunningStreamChats(ids: Iterable<string> | null): void {
+    runningStreamChats = ids ? new Set(ids) : null
+}
+
+/** GET /proxy-stream-jobs/running (server.cjs): the ids of the chats with a running job, or null when the server cannot say. */
+export async function fetchRunningStreamChats(
+    fetchFn: (input: string, init?: RequestInit) => Promise<Response>,
+    auth: () => Promise<string>,
+    timeoutMs = 3000,
+): Promise<string[] | null> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+        const res = await fetchFn('/proxy-stream-jobs/running', { headers: { 'risu-auth': await auth() }, signal: controller.signal })
+        if (!res.ok) return null
+        const body = await res.json()
+        return Array.isArray(body?.chats) ? body.chats.filter((x: unknown) => typeof x === 'string') : null
+    } catch {
+        return null
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
 interface LoadedChat {
+    id?: string
     isStreaming?: boolean
     message?: { role: string, data: string }[]
 }
@@ -90,8 +117,11 @@ interface LoadedCharacter {
  * settled, unless the character was stamped a moment ago: then another page is generating it right now and the chat is left
  * exactly as saved, flag included, so this page neither rewrites nor saves it.
  */
-export function settleCharacterOnLoad(char: LoadedCharacter, now: number = Date.now()): void {
+export function settleCharacterOnLoad(char: LoadedCharacter, now: number = Date.now(), running: ReadonlySet<string> | null = runningStreamChats): void {
+    // the stamp is refreshed by a timer of the generating page, and a locked phone freezes that timer while the server job goes on;
+    // so a chat the server says is still being generated is alive whatever its stamp says (specs/chat/uppaal/settle_lockfix.xml)
     const aliveElsewhere = isStreamAliveElsewhere(char.streamingAt, now)
+        || (char.chats ?? []).some((c) => c.isStreaming === true && typeof c.id === 'string' && !!running?.has(c.id))
     if (!aliveElsewhere) {
         char.streamingAt = undefined
     }

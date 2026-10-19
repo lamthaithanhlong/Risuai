@@ -13,6 +13,7 @@ type Store = {
     findReusable(idem: string | undefined, maxAgeMs: number, now?: number): { id: string, status: string } | null
     interruptRunning(now?: number): number
     beat(now?: number): number
+    runningChats(): string[]
     prune(before: number): number
     close(): void
 }
@@ -182,6 +183,17 @@ describe('two servers on one jobs file (F5: a test run started a second server.c
         expect(fresh.beat(1000 + 31_000)).toBe(1)
         expect(fresh.getJob('b')?.status).toBe('interrupted')
         fresh.close(); hung.close(); old.close()
+    })
+
+    test('the chats with a running job are read from the key prefix', () => {
+        const s = openJobStore(file)
+        s.createJob('a', 'chat-1:g1#0')
+        s.createJob('b', 'chat-1:g1#1')
+        s.createJob('c', 'chat-2:g2#0')
+        s.createJob('d', 'plain-uuid#0')
+        s.finish('c', 'done')
+        expect(s.runningChats()).toEqual(['chat-1'])
+        s.close()
     })
 })
 
