@@ -98,3 +98,17 @@ test('a good record passes and each breakage fails its own check', () => {
     assert.equal(byId(scoreStory(unsaid, { ...J, pauses: Object.fromEntries(Object.keys(pauses).map((l) => [l, { newThing: true, what: 'a stranger' }])) }), 'dice.events').status, 'PASS')
     assert.equal(byId(scoreStory(goodRecord(), { ...J, sideLife: { t10: { follows: false }, t11: { follows: false }, t12: { follows: true } } }), 'gm.side').status, 'FAIL')
 })
+
+test('dice.events: a pause the GM pace pushed is not counted against the card die; a NEW not told still fails', () => {
+    const rec = goodRecord()
+    const pauses = rec.play.turns.filter((t) => t.kind === 'pause')
+    const judge = { pauses: Object.fromEntries(pauses.map((t) => [t.label, { newThing: false }])) }
+    // the card die quiet, the GM ADVANCE, the prose brings what is already there closer: not a miss
+    pauses[0].net = [{ type: 'completion', kind: 'main', event: '58', eventNew: false, gmPace: 'ADVANCE', gmNote: true }]
+    judge.pauses[pauses[0].label] = { newThing: true, what: 'x' }
+    assert.equal(scoreStory(rec, judge).find((c) => c.id === 'dice.events').status, 'PASS')
+    // the card die NEW, nothing new told: a miss, whatever the GM did
+    for (const t of pauses) t.net = [{ type: 'completion', kind: 'main', event: '9', eventNew: true, gmPace: 'QUIET', gmNote: true }]
+    for (const t of pauses) judge.pauses[t.label] = { newThing: false }
+    assert.equal(scoreStory(rec, judge).find((c) => c.id === 'dice.events').status, 'FAIL')
+})

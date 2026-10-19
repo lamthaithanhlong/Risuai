@@ -109,6 +109,30 @@ export function scoreStory(rec, judge = {}) {
         look ? `asked in ${look.label}` : 'the look was rolled ("Surprise me") but no look question',
         [look && quote(look.label, look.reply.slice(Math.max(0, look.reply.search(/ngoại hình/i) - 20)), 160)]))
 
+    // the player's persona is the character sheet (asked 2026-10-19: "3 truyện phải lấy persona của tui"): its abilities and
+    // companions are in the record. The names are the persona's numbered bold labels ("1. **Thôi miên:**"), a companion the bold
+    // name that opens a line ("**Evelyn — Linh Hồn Dẫn Lối:**")
+    const persona = rec.persona ?? ''
+    const abilities = [...persona.matchAll(/^\s*\d+\.\s*\*\*([^*:\n]{2,40}):\*\*/gm)].map((m) => m[1].trim())
+    const companions = [...persona.matchAll(/^\*\*([^*\n—:]{2,30}?)\s*—/gm)].map((m) => m[1].trim())
+    // a record, not a bare "Được chưa?" asked again after the look answer (SS t2, 2026-10-19)
+    const sheets = [...steps, ...creation].filter((t) => t.ok && asksDuocChua(t.reply) && recordLines(t.reply).length >= 5)
+    const has = (t, name) => t.reply.toLowerCase().includes(name.toLowerCase())
+    const sheetOk = (t) => abilities.filter((a) => has(t, a)).length >= Math.min(3, abilities.length) && companions.every((c) => has(t, c))
+    const noPersona = !abilities.length && !companions.length
+    out.push(check('persona.sheet', "The record takes the persona's abilities and companions", noPersona || !sheets.length ? 'N/A' : pass(sheets.every(sheetOk)),
+        noPersona ? 'no persona abilities in the save' : `${sheets.filter(sheetOk).length}/${sheets.length} records carry them (persona: ${abilities.length} abilities, companions: ${companions.join(', ') || 'none'})`,
+        sheets.map((t) => `${t.label}: ${abilities.filter((a) => has(t, a)).length}/${abilities.length} abilities, ${companions.filter((c) => has(t, c)).join(', ') || 'no companion'}`)))
+
+    // with a persona, step by step asks only what it leaves open: sex and age, name and look come from it (measured the same
+    // evening: Mailman asked the name and twice the look, SS the sex and the name)
+    const FIXED_ITEM = /^\W*(giới tính|tên( nhân vật)?|ngoại hình)\b/i
+    const asking = (t) => [...questionLines(t.reply), ...t.reply.split('\n').filter((l) => /^\s*\*\*[^*\n]{2,40}:\*\*/.test(l))].map((l) => l.replace(/\*/g, '').trim())
+    const reasked = noPersona ? [] : steps.filter((t) => t.ok && !asksDuocChua(t.reply) && asking(t).some((l) => FIXED_ITEM.test(l)))
+    out.push(check('persona.no_reask', 'Step by step with a persona: what it fixes is never asked again', noPersona || !steps.length ? 'N/A' : pass(!reasked.length),
+        noPersona ? 'no persona abilities in the save' : `${reasked.length}/${steps.filter((t) => t.ok).length} step replies ask an item the persona fixes`,
+        reasked.map((t) => quote(t.label, asking(t).find((l) => FIXED_ITEM.test(l)) ?? '', 120))))
+
     const before = [...steps, ...creation].filter((t) => t.ok)
     const early = before.filter((t) => stKeys(t.vars).length || gmKeys(t.vars).length || t.panel || t.reply.length > 2500)
     out.push(check('creation.no_story_before_yes', 'No story, panel or GM before the player says yes', before.length ? pass(!early.length) : 'N/A',
@@ -147,6 +171,18 @@ export function scoreStory(rec, judge = {}) {
     // ---- language and voice ---------------------------------------------------------------------------------------------------
     const proseTurns = after.filter((t) => t.shown)
     const notVi = proseTurns.filter((t) => !viShare(t.shown).isVi)
+    // Future Plan (asked 2026-10-19, "thiếu future plan"): a card whose description has the rule ends every story reply with
+    // "[💡Kế hoạch| names ]"; the player sees it folded, never as text
+    if (rec.planRule) {
+        const PLAN = /\[💡Kế hoạch\|[^\]\n]*\]/
+        const withPlan = story.filter((t) => PLAN.test(t.reply))
+        const shownPlan = story.filter((t) => /\[💡/.test(t.shown ?? ''))
+        out.push(check('plan.line', 'Story replies end with the Future Plan line, shown folded', story.length ? pass(withPlan.length >= Math.ceil(story.length * 0.8) && !shownPlan.length) : 'N/A',
+            `${withPlan.length}/${story.length} story replies carry it; shown as text in ${shownPlan.length}`,
+            [...story.filter((t) => !PLAN.test(t.reply)).slice(0, 3).map((t) => `${t.label}: no line — ${quote('', t.reply.slice(-140), 140).slice(2)}`),
+                ...withPlan.slice(0, 3).map((t) => quote(t.label, t.reply.match(PLAN)[0], 120))]))
+    }
+
     out.push(check('prose.vietnamese', 'Story prose is Vietnamese', proseTurns.length ? pass(notVi.length <= Math.floor(proseTurns.length * 0.1)) : 'N/A',
         `${proseTurns.length - notVi.length}/${proseTurns.length} replies read as Vietnamese`, notVi.map((t) => quote(t.label, t.shown))))
 
@@ -172,12 +208,20 @@ export function scoreStory(rec, judge = {}) {
     const menus = after.filter((t) => menuLines(t.reply).length >= 3)
     const pj = judge.pauses ?? {}
     const judged = pauses.filter((t) => pj[t.label])
-    const agree = judged.filter((t) => { const m = (t.net ?? []).filter((n) => n.kind === 'main').at(-1); return m && m.eventNew != null && !!pj[t.label].newThing === !!m.eventNew })
+    // Two dice, one trouble a reply: the card's die (NEW: a person, thing, clue or threat not yet in the story) and the app's GM
+    // pace (ADVANCE, ESCALATE: the next event, which may be what is already there coming closer). Measured 2026-10-19: LotM t12
+    // ESCALATE and t20 ADVANCE brought a new man, Mailman t18 and t20 ADVANCE had the bear already there break in; both were
+    // scored as misses against the card's die alone. The judge only says whether something NEW came, so a pause where only the
+    // GM pushed is listed but not counted: the card's NEW must bring something new, two quiet dice must bring nothing new.
+    const mainOf = (t) => (t.net ?? []).filter((n) => n.kind === 'main').at(-1)
+    const gmPushed = (m) => !m.eventNew && /^(ADVANCE|ESCALATE)$/.test(m.gmPace ?? '')
+    const counted = judged.filter((t) => { const m = mainOf(t); return m && m.eventNew != null && !gmPushed(m) })
+    const agree = counted.filter((t) => !!pj[t.label].newThing === !!mainOf(t).eventNew)
     const rolledNew = dice.filter((x) => x.main.eventNew).length
     const twoInRow = judged.some((t, i) => i > 0 && pj[t.label].newThing && pj[judged[i - 1].label]?.newThing && story.indexOf(t) === story.indexOf(judged[i - 1]) + 1)
-    out.push(check('dice.events', 'Fate dice: events surface at pauses (~20%), as hooks in prose, never menus', !dice.length && !pauses.length ? 'N/A' : pass(!menus.length && (!judged.length || agree.length >= Math.ceil(judged.length * 0.6)) && !twoInRow),
-        `die read in ${dice.length} requests, NEW rolled ${rolledNew}/${dice.length} (${dice.length ? Math.round(100 * rolledNew / dice.length) : 0}%); pauses judged ${judged.length}, prose agrees with the die ${agree.length}/${judged.length}; menus ${menus.length}`,
-        [...pauses.map((t) => { const m = (t.net ?? []).filter((n) => n.kind === 'main').at(-1); const j = pj[t.label]; return `${t.label} (pause): die ${m?.event ?? '?'}${m?.eventNew ? ' → NEW' : ''}; judge: ${j ? (j.newThing ? 'new: ' + oneLine(j.what, 80) : 'nothing new') : 'n/a'}` }),
+    out.push(check('dice.events', 'Fate dice: events surface at pauses (~20%), as hooks in prose, never menus', !dice.length && !pauses.length ? 'N/A' : pass(!menus.length && (!counted.length || agree.length >= Math.ceil(counted.length * 0.6)) && !twoInRow),
+        `die read in ${dice.length} requests, NEW rolled ${rolledNew}/${dice.length} (${dice.length ? Math.round(100 * rolledNew / dice.length) : 0}%); pauses judged ${judged.length}, prose agrees with the dice ${agree.length}/${counted.length} (${judged.length - counted.length} pushed by the GM pace only, not counted); menus ${menus.length}`,
+        [...pauses.map((t) => { const m = (t.net ?? []).filter((n) => n.kind === 'main').at(-1); const j = pj[t.label]; return `${t.label} (pause): die ${m?.event ?? '?'}${m?.eventNew ? ' → NEW' : ''}, GM ${m?.gmPace ?? '?'}; judge: ${j ? (j.newThing ? 'new: ' + oneLine(j.what, 80) : 'nothing new') : 'n/a'}` }),
             ...menus.map((t) => `${t.label}: menu ${oneLine(menuLines(t.reply).join(' / '), 120)}`)]))
 
     // ---- Game Master ------------------------------------------------------------------------------------------------------------

@@ -87,7 +87,8 @@ async function playStory(key, ctx) {
     const story = STORIES[key]
     const log = (m) => console.log(`[${key}] ${m}`)
     const t0 = Date.now()
-    const rec = { story: key, title: story.title, binaryItem: story.binaryItem ?? null, side: story.side ? { text: story.side.text, match: story.side.match.source } : null, date: ctx.date, port: ctx.port, store: ctx.backend, build: ctx.build, model: ctx.model, voice: story.voice ? { ...story.voice, unbracketed: story.voice.unbracketed?.source ?? null } : null, blocked: [] }
+    const planRule = (() => { try { return /\[💡Kế hoạch\|/.test(fs.readFileSync(path.join(story.src, 'main_description.md'), 'utf8')) } catch { return false } })()
+    const rec = { persona: ctx.persona ?? '', planRule, story: key, title: story.title, binaryItem: story.binaryItem ?? null, side: story.side ? { text: story.side.text, match: story.side.match.source } : null, date: ctx.date, port: ctx.port, store: ctx.backend, build: ctx.build, model: ctx.model, voice: story.voice ? { ...story.voice, unbracketed: story.voice.unbracketed?.source ?? null } : null, blocked: [] }
     const recFile = path.join(OUT, `${key}.json`)
     const { dir, password } = copySave(ctx.runDir, ctx.base, key, { log })
     rec.copyDir = dir
@@ -221,7 +222,7 @@ async function main() {
     const turns = Number(opt('--turns', 20))
     let port = Number(opt('--port', 6101))
     const ctxs = []
-    for (const k of keys) { port = await freePort(port); ctxs.push([k, { runDir, base, backend, build, model, judgeCfg, turns, date: today, port, web, slot }]); port++ }
+    for (const k of keys) { port = await freePort(port); ctxs.push([k, { runDir, base, backend, build, model, judgeCfg, turns, date: today, port, web, slot, persona: ms.persona }]); port++ }
     const results = []
     if (flag('--serial')) for (const [k, c] of ctxs) results.push(await playStory(k, c).catch((e) => ({ title: STORIES[k].title, error: String(e.message || e) })))
     else results.push(...await Promise.all(ctxs.map(([k, c]) => playStory(k, c).catch((e) => ({ title: STORIES[k].title, error: String(e.message || e) })))))

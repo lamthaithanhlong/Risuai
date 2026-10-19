@@ -37,6 +37,7 @@ export function modelSettings(saveDir, backend) {
         autoTranslate: !!root.autoTranslate,
         language: root.language,
         cards: blocks.filter((b) => b.type === 2).map((b) => b.name),
+        persona: String(root.personaPrompt ?? ''),
     }
 }
 
