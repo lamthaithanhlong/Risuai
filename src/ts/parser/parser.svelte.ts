@@ -7,6 +7,7 @@ import { DBState, selIdState } from '../stores.svelte';
 import { learningDisplay } from '../process/learning';
 import { castStrip, stripLooks, stripPictureAsks } from '../process/portraits';
 import { stripGm } from '../process/gameMaster';
+import { closeLeadingThought, tidyDisplay } from '../process/replyTidy';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getChatVar, setChatVar, getGlobalChatVar } from './chatVar.svelte';
@@ -732,7 +733,8 @@ export async function ParseMarkdown(
     let firstParsed = ''
     // The chain of thought leaves the message here: only the reply goes through the stages below. The chat shows a button for it
     // (ChatBody) that opens the thought panel (CoTPanel), so a long thought costs nothing per streamed chunk or per translation.
-    data = splitCoT(data ?? '').main
+    // a thought opened and never closed at the start keeps the story out of the chat: its end goes back where the story starts
+    data = splitCoT(closeLeadingThought(data ?? '')).main
     const additionalAssetMode = (mode === 'back') ? 'back' : 'normal'
     let char = (typeof(charArg) === 'string') ? (findCharacterbyId(charArg)) : (charArg)
 
@@ -753,7 +755,7 @@ export async function ParseMarkdown(
     // the chat passes a slim character (simpleCharacterArgument: no extentions), so the card itself is looked up by its id
     const castCard = char && char.type !== 'group' ? getDatabase().characters.find((c) => c?.chaId === char.chaId) : undefined
     const cast = castCard && castCard.type !== 'group' && mode !== 'pretranslate' ? castStrip(castCard as character, data) : ''
-    data = learningDisplay(stripGm(stripPictureAsks(stripLooks(data)))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]] and the [[GM]] block are hidden
+    data = learningDisplay(tidyDisplay(stripGm(stripPictureAsks(stripLooks(data))))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]], the [[GM]] block, GM notes and planning are hidden (replyTidy.ts)
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {

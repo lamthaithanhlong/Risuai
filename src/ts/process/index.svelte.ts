@@ -18,6 +18,7 @@ import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
 import { gameMasterRequest, noteGameMaster } from "./gameMasterPage";
+import { tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
 import { isNodeServer } from "../platform";
@@ -1919,6 +1920,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
         noteScenePicture(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
@@ -2031,6 +2033,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]
         noteLearningVocab(currentChat)
         notePortraits(sel.char, currentChat)
+        tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
         noteScenePicture(sel.char, currentChat)
         if(outputMessageId){
