@@ -16,7 +16,7 @@ const http = require('http');
 const path = require('path');
 const net = require('net');
 const htmlparser = require('node-html-parser');
-const { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } = require('fs');
+const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('fs');
 const { atomicWriteFile } = require('./atomicWrite.cjs');
 const { applyReasoningDefault } = require('./requestDefaults.cjs');
 const reasoningDefaultLogged = new Set();
@@ -53,12 +53,31 @@ if(!existsSync(savePath)){
     mkdirSync(savePath)
 }
 
+// Where the stored files live (saveStore.cjs): the save/<hex> files, or save.store.sqlite with every file a BLOB (RISU_STORE=sqlite).
+// Everything below reads and writes through it; the HTTP API is the same for both.
+const { openSaveStore, resolveBackend, pidFileOf } = require('./saveStore.cjs');
+let saveStore;
+try {
+    saveStore = openSaveStore({ saveDir: savePath, backend: resolveBackend(), log: (m) => console.log(`[Store] ${m}`) });
+} catch (error) {
+    console.error('[Store] cannot open the save:', error.message);
+    process.exit(1);
+}
+console.log(`[Store] backend ${saveStore.backend}${saveStore.dbFile ? ` (${saveStore.dbFile})` : ''}`);
+// the offline tools (storeMigrate, loreImport) refuse to touch a save that a live server holds
+try { writeFileSync(pidFileOf(savePath), String(process.pid)); } catch (error) { console.error('[Store] pid file:', error.message); }
+process.on('exit', () => {
+    try { if (readFileSync(pidFileOf(savePath), 'utf8').trim() === String(process.pid)) require('fs').rmSync(pidFileOf(savePath), { force: true }); } catch { /* gone */ }
+});
+
 // Writes go through a durable SQLite queue (saveQueue.cjs, specs/core/SaveQueue.tla): acknowledged once committed, applied to the save
 // directory in order by one worker, newest write per key only. Reads and listings look at the queue first.
 const hexToKey = (hex) => Buffer.from(hex, 'hex').toString('utf-8');
 const saveQueue = require('./saveQueue.cjs').openSaveQueue({
     dbFile: savePath + '.queue.sqlite',
     saveDir: savePath,
+    // the store applies the row: an atomic file replace (files) or one SQLite transaction (sqlite)
+    apply: (row) => row.op === 'delete' ? saveStore.removeAsync(row.key) : saveStore.writeAsync(row.key, Buffer.from(row.data)),
     // assets/ are content-addressed and inlays/ (chat pictures, one uuid each) never change once written
     isImmutable: (hex) => { const key = hexToKey(hex); return key.startsWith('assets/') || key.startsWith('inlays/'); },
     log: (kind, key, attempts, error) => console.error(`[SaveQueue] ${kind} ${hexToKey(key)} attempt ${attempts}: ${error && error.message || error}`),
@@ -117,8 +136,7 @@ const clientIdOf = (req) => {
 const currentSaveBytes = (hexKey) => {
     const queued = saveQueue.readPending(hexKey);
     if (queued) return queued.op === 'delete' ? null : Buffer.from(queued.data);
-    const f = path.join(savePath, hexKey);
-    return existsSync(f) ? readFileSync(f) : null;
+    return saveStore.read(hexKey);
 };
 // the story index catches up with the save as it is now (a write made while the server was stopped, e.g. loreImport)
 syncStory(currentSaveBytes(DB_KEY_HEX), dbSync ? dbSync.currentRev() : null);
@@ -129,6 +147,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
         if (shuttingDown) return;
         shuttingDown = true;
         try { await Promise.race([saveQueue.flush(), new Promise((r) => setTimeout(r, 8000))]); await saveQueue.close(); } catch (e) { console.error('[SaveQueue] shutdown:', e); }
+        try { saveStore.close(); } catch (e) { console.error('[Store] shutdown:', e); }
         process.exit(0);
     });
 }
@@ -1604,12 +1623,25 @@ app.get('/api/read', authenticatedRouteLimiter, async (req, res, next) => {
                 res.send(queued.data);
             }
         }
-        else if(!existsSync(path.join(savePath, filePath))){
-            res.send();
+        else if(saveStore.filePath){
+            // files: as it always was
+            if(!existsSync(saveStore.filePath(filePath))){
+                res.send();
+            }
+            else{
+                res.setHeader('Content-Type','application/octet-stream');
+                res.sendFile(saveStore.filePath(filePath));
+            }
         }
         else{
-            res.setHeader('Content-Type','application/octet-stream');
-            res.sendFile(path.join(savePath, filePath));
+            const bytes = saveStore.read(filePath);
+            if(!bytes){
+                res.send();
+            }
+            else{
+                res.setHeader('Content-Type','application/octet-stream');
+                res.send(bytes);
+            }
         }
     } catch (error) {
         next(error);
@@ -1751,7 +1783,7 @@ app.get('/api/list', authenticatedRouteLimiter, async (req, res, next) => {
         // the queue first, then the directory: a row the worker finishes in between is then in the directory listing, and a delete
         // it finishes in between is still in the snapshot. The other order can miss a write or show a deleted key.
         const pending = saveQueue.pendingKeys()
-        const names = new Set(await fs.readdir(path.join(savePath)))
+        const names = new Set(saveStore.list())
         for (const row of pending) {
             if (row.op === 'delete') names.delete(row.key); else names.add(row.key);
         }
@@ -1805,7 +1837,7 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
                     // only the newest RISU_PREMERGE_KEEP pairs (default 20) are kept (premergeRetention.cjs)
                     try {
                         const { premergeToDelete, keepPairsFromEnv } = require('./premergeRetention.cjs');
-                        const names = new Set(readdirSync(savePath));
+                        const names = new Set(saveStore.list());
                         for (const row of saveQueue.pendingKeys()) { if (row.op === 'delete') names.delete(row.key); else names.add(row.key); }
                         const keys = [...names].map(hexToKey).filter((k) => k.startsWith('database/premerge-'));
                         for (const k of premergeToDelete(keys, keepPairsFromEnv())) saveQueue.enqueueDelete(Buffer.from(k, 'utf-8').toString('hex'));

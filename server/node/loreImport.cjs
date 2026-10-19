@@ -16,6 +16,7 @@ const path = require('path')
 const net = require('net')
 const { decodeSave, encodeSave, parseBlock, serializeBlock, validateSave } = require('./dbMerge.cjs')
 const { openDbSync } = require('./dbSync.cjs')
+const { openSaveStore, resolveBackend, servingPid } = require('./saveStore.cjs')
 
 const DB_FILE = '64617461626173652f64617461626173652e62696e'        // hex of database/database.bin
 
@@ -52,19 +53,34 @@ function withLore(bytes, plan) {
     return { out, report }
 }
 
-/** Writes the save changed by `change(current) -> { out, report }`, recorded in dbSync as its own client, so an open page merges. */
-function recordedWrite(saveDir, change, syncFile = saveDir + '.sync.sqlite', client = 'lore-import') {
-    const file = path.join(saveDir, DB_FILE)
-    const current = fs.readFileSync(file)
-    const { out, report } = change(current)
-    let stored = out
-    if (fs.existsSync(syncFile)) {
-        const sync = openDbSync({ dbFile: syncFile, log: () => {} })
-        try { stored = sync.onWrite(client, out, current).bytes } finally { sync.close() }
-    }
-    fs.writeFileSync(file + '.lore-tmp', stored)
-    fs.renameSync(file + '.lore-tmp', file)
-    return report
+/** The save's store (saveStore.cjs, RISU_STORE) unless the caller passes one; `use` gets it and it is closed after. */
+function withStore(saveDir, store, use) {
+    if (store) return use(store)
+    const own = openSaveStore({ saveDir, backend: resolveBackend() })
+    try { return use(own) } finally { own.close() }
+}
+
+/**
+ * Writes the save changed by `change(current) -> { out, report }`, recorded in dbSync as its own client, so an open page merges.
+ * The read, the change and the write are one store.update(): with the sqlite store that is one BEGIN IMMEDIATE transaction, so a
+ * second import running at the same time waits and then changes what this one wrote (specs/core/SaveStore.tla).
+ */
+function recordedWrite(saveDir, change, syncFile = saveDir + '.sync.sqlite', client = 'lore-import', store = null) {
+    return withStore(saveDir, store, (st) => {
+        let report
+        st.update(DB_FILE, (current) => {
+            if (!current) throw new Error(`no database/database.bin in ${saveDir}`)
+            const r = change(current)
+            report = r.report
+            let stored = r.out
+            if (fs.existsSync(syncFile)) {
+                const sync = openDbSync({ dbFile: syncFile, log: () => {} })
+                try { stored = sync.onWrite(client, r.out, current).bytes } finally { sync.close() }
+            }
+            return stored
+        })
+        return report
+    })
 }
 
 /** Replaces the lorebooks and records the write in dbSync as its own client; returns what was written. */
@@ -75,23 +91,26 @@ function importLore(saveDir, plan, syncFile = saveDir + '.sync.sqlite') {
 /** Sets the cards' image: the picture is stored as Risu stores an asset (assets/<sha256>.<ext>), then each card points at it. */
 function setCardImage(saveDir, prefixes, imageBytes, ext = 'png', syncFile = saveDir + '.sync.sqlite') {
     const name = `assets/${require('crypto').createHash('sha256').update(imageBytes).digest('hex')}.${ext}`
-    const assetFile = path.join(saveDir, Buffer.from(name, 'utf-8').toString('hex'))
-    if (!fs.existsSync(assetFile)) fs.writeFileSync(assetFile, imageBytes)
-    return recordedWrite(saveDir, (current) => {
-        const blocks = decodeSave(current)
-        const report = []
-        for (const prefix of prefixes) {
-            const i = blocks.findIndex((b) => b.name.startsWith(prefix))
-            if (i < 0) throw new Error(`no card ${prefix} in the save`)
-            const v = parseBlock(blocks[i])
-            report.push({ prefix, name: v.name, before: v.image || '(none)', after: name })
-            v.image = name
-            blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
-        }
-        const out = encodeSave(blocks)
-        validateSave(out)
-        return { out, report }
-    }, syncFile, 'card-image')
+    const assetKey = Buffer.from(name, 'utf-8').toString('hex')
+    return withStore(saveDir, null, (store) => {
+        // the asset before the database that points at it (the order the save queue keeps too)
+        if (!store.exists(assetKey)) store.write(assetKey, imageBytes)
+        return recordedWrite(saveDir, (current) => {
+            const blocks = decodeSave(current)
+            const report = []
+            for (const prefix of prefixes) {
+                const i = blocks.findIndex((b) => b.name.startsWith(prefix))
+                if (i < 0) throw new Error(`no card ${prefix} in the save`)
+                const v = parseBlock(blocks[i])
+                report.push({ prefix, name: v.name, before: v.image || '(none)', after: name })
+                v.image = name
+                blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
+            }
+            const out = encodeSave(blocks)
+            validateSave(out)
+            return { out, report }
+        }, syncFile, 'card-image', store)
+    })
 }
 
 /** Replaces the cards' trigger scripts (and their low-level access flag) with those of a built card, recorded like a lore import. */
@@ -156,6 +175,14 @@ function clearCardAssets(saveDir, prefixes, syncFile = saveDir + '.sync.sqlite')
     }, syncFile, 'card-assets')
 }
 
+function pendingQueueRows(saveDir) {
+    const file = path.resolve(saveDir) + '.queue.sqlite'
+    if (!fs.existsSync(file)) return 0
+    const Database = require('better-sqlite3')
+    const db = new Database(file, { readonly: true, fileMustExist: true })
+    try { return db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'pending'").get().n ? db.prepare('SELECT COUNT(*) AS n FROM pending').get().n : 0 } finally { db.close() }
+}
+
 function serverRunning(port = 6001) {
     return new Promise((resolve) => {
         const s = net.connect(port, '127.0.0.1')
@@ -168,7 +195,13 @@ if (require.main === module) {
     (async () => {
         const [saveDir, ...pairs] = process.argv.slice(2)
         if (!saveDir || !pairs.length) { console.error('usage: loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> ...'); process.exit(2) }
-        if (await serverRunning()) { console.error('the Risu server is running on :6001; stop it first (its queue flushes on SIGTERM)'); process.exit(1) }
+        const port = Number(process.env.PORT) || 6001
+        if (await serverRunning(port)) { console.error(`the Risu server is running on :${port}; stop it first (its queue flushes on SIGTERM)`); process.exit(1) }
+        const pid = servingPid(saveDir)
+        if (pid) { console.error(`a server (pid ${pid}) is serving ${saveDir}; stop it first (its queue flushes on SIGTERM)`); process.exit(1) }
+        // a write the server acknowledged but never applied would land on top of this import at its next start (SaveStore.tla, QueueFirst)
+        const queued = pendingQueueRows(saveDir)
+        if (queued) { console.error(`the save queue (${saveDir}.queue.sqlite) still holds ${queued} write(s) not applied; start the server and stop it with SIGTERM so it drains, then import`); process.exit(1) }
         if (pairs[0] === '--clear-assets') {
             for (const r of clearCardAssets(saveDir, pairs.slice(1))) console.log(`${r.prefix} ${r.name}: assets ${r.before} -> ${r.after}`)
             return
@@ -199,4 +232,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, recordedWrite, toRisuLore }
+module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, recordedWrite, toRisuLore, pendingQueueRows }

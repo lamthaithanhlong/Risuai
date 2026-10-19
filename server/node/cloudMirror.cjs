@@ -16,6 +16,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const zlib = require('zlib')
+const { openSaveStore, resolveBackend } = require('./saveStore.cjs')
 
 const SAVE = path.join(process.env.RISU_SAVE_DIR || path.join(process.cwd(), 'save'))
 const HUB = process.env.RISU_HUB_URL || 'https://sv.risuai.xyz'
@@ -84,9 +85,29 @@ function readStable(file) {
     return null
 }
 
+// The save as the server stores it (saveStore.cjs): the files, or save.store.sqlite opened read-only (RISU_STORE=sqlite).
+let store = null
+function sqliteStore() {
+    if (resolveBackend() !== 'sqlite') return null
+    if (!store) store = openSaveStore({ saveDir: SAVE, backend: 'sqlite', readonly: true })
+    return store
+}
+
+// the database as one consistent version: a SQLite read transaction, or a file read that did not change while it was read
+function snapshotDb(item) {
+    const st = sqliteStore()
+    if (!st) return readStable(item.file)
+    const hex = Buffer.from(DB_KEY).toString('hex')
+    const snap = st.db.transaction(() => ({ stat: st.stat(hex), buf: st.read(hex) }))()
+    if (!snap.buf || !isCompleteSave(snap.buf)) return null
+    return { buf: snap.buf, size: snap.stat.size, mtimeMs: snap.stat.mtimeMs }
+}
+
 function readToken() {
     if (process.env.RISU_ACCOUNT_TOKEN) return process.env.RISU_ACCOUNT_TOKEN
-    const root = readRootBlock(fs.readFileSync(path.join(SAVE, Buffer.from(DB_KEY).toString('hex'))))
+    const st = sqliteStore()
+    const hex = Buffer.from(DB_KEY).toString('hex')
+    const root = readRootBlock(st ? (st.read(hex) ?? Buffer.alloc(0)) : fs.readFileSync(path.join(SAVE, hex)))
     const token = root.account && root.account.token
     if (!token) throw new Error('no Risu account is logged in on this server (db.account.token is empty)')
     return token
@@ -111,13 +132,24 @@ function saveState(state) {
 // ---- save directory --------------------------------------------------------------------------------------------------
 function listKeys() {
     const out = []
+    const st = sqliteStore()
+    if (st) {
+        for (const r of st.rows()) {
+            const key = Buffer.from(r.key, 'hex').toString('utf8')
+            if (!key.startsWith('assets/') && key !== DB_KEY) continue
+            out.push({ key, hex: r.key, size: r.size, mtimeMs: r.mtime, read: () => st.read(r.key) })
+        }
+        out.sort((a, b) => (a.key === DB_KEY) - (b.key === DB_KEY))
+        return out
+    }
     for (const f of fs.readdirSync(SAVE)) {
         if (!/^[0-9a-f]+$/.test(f) || f.length % 2) continue
         const key = Buffer.from(f, 'hex').toString('utf8')
         // dbbackup-* are local safety copies and remotes/* are pointers into this machine, neither belongs in the account
         if (!key.startsWith('assets/') && key !== DB_KEY) continue
         const st = fs.statSync(path.join(SAVE, f))
-        out.push({ key, file: path.join(SAVE, f), size: st.size, mtimeMs: Math.floor(st.mtimeMs) })
+        const file = path.join(SAVE, f)
+        out.push({ key, file, size: st.size, mtimeMs: Math.floor(st.mtimeMs), read: () => fs.readFileSync(file) })
     }
     // the database goes last, once every asset it points at is already in the account
     out.sort((a, b) => (a.key === DB_KEY) - (b.key === DB_KEY))
@@ -214,7 +246,7 @@ async function pass(cloud, state) {
     const dbItem = todo.find((k) => k.key === DB_KEY)
 
     const one = async (item) => {
-        const body = fs.readFileSync(item.file)
+        const body = item.read()
         const r = await cloud.write(item.key, body)
         if (r.warn) {
             log(`warning response for ${item.key}, will retry on the next pass`)
@@ -251,7 +283,7 @@ async function pass(cloud, state) {
             log(`not sending ${DB_KEY}: the hub renamed some asset(s), the database would point at missing names`)
         } else {
             hooks.beforeDbRead()
-            const snap = readStable(dbItem.file)
+            const snap = snapshotDb(dbItem)
             // The check comes AFTER the read, on purpose. The server writes an asset before the database that points at it, so a
             // database that already contains a reference was read after that asset existed, and the listing taken now includes it.
             // Checked before the read, a chat could add an asset and save in between (specs/mirror/MirrorRace.tla, trace of 8 states).

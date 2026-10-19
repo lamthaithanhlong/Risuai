@@ -9,6 +9,9 @@ import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
 
 const SCRIPT = join(__dirname, '../../../server/node/cloudMirror.cjs')
+const { openSaveStore } = createRequire(import.meta.url)('../../../server/node/saveStore.cjs')
+// every case runs on the files and on the sqlite store (saveStore.cjs, RISU_STORE): the mirror reads the save the way the server keeps it
+let backend: 'files' | 'sqlite' = 'files'
 const hex = (s: string) => Buffer.from(s).toString('hex')
 
 // a database.bin in the block format: magic, then [type, compressed, nameLen, name, len(u32 le), data] blocks
@@ -68,7 +71,9 @@ afterEach(async () => {
 })
 
 function put(key: string, data: Buffer | string) {
-    writeFileSync(join(save, hex(key)), data)
+    if (backend === 'files') { writeFileSync(join(save, hex(key)), data); return }
+    const st = openSaveStore({ saveDir: save, backend: 'sqlite', fullfsync: false })
+    try { st.write(hex(key), data) } finally { st.close() }
 }
 
 function run(extra: string[] = [], env: Record<string, string> = {}) {
@@ -79,6 +84,7 @@ function run(extra: string[] = [], env: Record<string, string> = {}) {
                 RISU_SAVE_DIR: save,
                 RISU_HUB_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
                 RISU_MIRROR_STATE: state,
+                RISU_STORE: backend,
                 ...env,
             },
         })
@@ -89,7 +95,8 @@ function run(extra: string[] = [], env: Record<string, string> = {}) {
     })
 }
 
-describe('cloud mirror', () => {
+describe.each(['files', 'sqlite'] as const)('cloud mirror (%s)', (b) => {
+    beforeEach(() => { backend = b })
     it('sends assets first and the database last, skips backups, and the session and token ride along', async () => {
         put('database/database.bin', makeDb())
         put('database/dbbackup-1.bin', 'backup')
@@ -189,6 +196,7 @@ describe('cloud mirror', () => {
         process.env.RISU_SAVE_DIR = save
         process.env.RISU_HUB_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
         process.env.RISU_MIRROR_STATE = state
+        process.env.RISU_STORE = backend
         const req = createRequire(import.meta.url)
         const path = req.resolve(SCRIPT)
         delete req.cache[path]

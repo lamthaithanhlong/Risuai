@@ -54,3 +54,7 @@ Cargo.lock
 save.queue.sqlite*
 save.sync.sqlite*
 save.story.sqlite*
+
+# the save as one SQLite file (saveStore.cjs) and the running server's pid next to it
+save.store.sqlite*
+save.server.pid
