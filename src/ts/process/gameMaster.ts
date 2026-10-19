@@ -69,6 +69,9 @@ export function gmBlocks(text: string): string[] {
     return out
 }
 
+/** A beat's step: its number, or its first field when it has none. */
+const beatStep = (v: string) => { const f = (v ?? '').split('|')[0].trim().toLowerCase(); const n = /\d+/.exec(f); return n ? n[0] : f }
+
 /** The state after one reply's blocks. `charCount` is the number of story replies, this one included (for the pace). */
 export function applyGm(state: GmState, bodies: string[], charCount: number): GmState {
     const next: GmState = { ...state }
@@ -105,7 +108,12 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                     next.gm_arc = value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
                 }
             } else if (key === 'beat') {
-                if (value !== (state.gm_beat ?? '')) { next.gm_beat = isDash(value) ? '' : value; next.gm_beat_at = String(charCount) }
+                // the beat moved when its number (its first field) changed, not its wording: measured with the bookkeeper, which
+                // rewrites the beat line every reply, the stall counter reset every reply and the dice held at 10% advance
+                // (2 advances in 10 replies, 4 quiet replies in a row in one room)
+                const was = state.gm_beat ?? ''
+                next.gm_beat = isDash(value) ? '' : value
+                if (beatStep(value) !== beatStep(was)) next.gm_beat_at = String(charCount)
             } else if (key === 'threat') {
                 const name = nameOf(value)
                 if (!name) continue
@@ -395,7 +403,7 @@ ${cut(reply, 3500)}
 Write the notes this reply changed, as one block and nothing else:
 [[GM
 arc: <hook> | <antagonist> | <goal> | <stakes>
-beat: <n> | <what is happening now> | <what is due next>
+beat: <n> | <what is happening now> | <what is due next>   (n goes up only when a new event, enemy or obstacle arrived)
 threat: <name> | <progress, e.g. 2/4> | <what happens when it fills>
 path: <side> | <stage> | <standing>
 enemy: <who> | <why they oppose the player>

@@ -46,6 +46,13 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
         expect(applyGm({}, ['arc: hook|a debt|antagonist|Kelber|goal|survive|stakes|death'], 1).gm_arc).toBe('a debt | Kelber | survive | death')
         expect(applyGm({}, ['arc: <hook> | a debt | Goal'], 1).gm_arc).toBe('a debt')
     })
+    it('the beat moved only when its number changed, not its wording (the bookkeeper rewrites it every reply)', () => {
+        const s = applyGm({ gm_beat: '2 | a knock | the door', gm_beat_at: '4' }, ['beat: 2 | the knock again | the door opens'], 6)
+        expect(s.gm_beat).toBe('2 | the knock again | the door opens')
+        expect(s.gm_beat_at).toBe('4')
+        expect(applyGm(s, ['beat: 3 | the door opens | a stranger'], 7).gm_beat_at).toBe('7')
+        expect(applyGm({ gm_beat: 'arrival | x', gm_beat_at: '1' }, ['beat: arrival | y'], 3).gm_beat_at).toBe('1')
+    })
     it('a closed arc clears arc, beat and threats and keeps what it left behind for the next one', () => {
         const s = applyGm(FULL, ['arc: done | she burned the ledger; Varn swore revenge'], 9)
         expect(s.gm_arc).toBe('')
