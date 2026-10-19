@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { readJobEvents } from './proxyJobHttp'
+import { createJob, readJobEvents } from './proxyJobHttp'
 import type { ProxyJobWsEvent } from './proxyJobWs'
 
 const enc = new TextEncoder()
@@ -194,4 +194,53 @@ describe('readJobEvents: a connection that goes silent', () => {
         expect(result).toBe('done')
         expect(froms).toEqual([1])
     }, 3000)
+})
+
+// Measured 2026-10-19 (Toxiproxy J3): the answer to POST /proxy-stream-jobs was lost after the server had started the job. The page
+// failed the generation while the job ran on; the reroll was a new key, so the model was asked twice. The server hands back the job
+// for the same idempotency key (reused: true), so the create is asked again with the same body.
+describe('createJob: the answer to the create is lost', () => {
+    test('asks again with the same body (same idempotency key) and gets the job', async () => {
+        const bodies: string[] = []
+        let n = 0
+        const created = await createJob({
+            post: async (body) => { bodies.push(body); if (n++ === 0) throw new TypeError('Load failed'); return new Response(JSON.stringify({ jobId: 'j1', reused: true })) },
+            body: JSON.stringify({ url: 'x', idempotencyKey: 'chat:gen#0' }),
+            sleep: async () => {},
+        })
+        expect(created.jobId).toBe('j1')
+        expect(bodies.length).toBe(2)
+        expect(bodies[1]).toBe(bodies[0])
+    })
+
+    test('without an idempotency key a lost answer is not asked again (it would start a second job)', async () => {
+        let n = 0
+        await expect(createJob({
+            post: async () => { n++; throw new TypeError('Load failed') },
+            body: JSON.stringify({ url: 'x' }),
+            sleep: async () => {},
+        })).rejects.toThrow()
+        expect(n).toBe(1)
+    })
+
+    test('a refusal (4xx) is not asked again; it is reported with its status', async () => {
+        let n = 0
+        await expect(createJob({
+            post: async () => { n++; return new Response('Too many', { status: 413 }) },
+            body: JSON.stringify({ idempotencyKey: 'k#0' }),
+            sleep: async () => {},
+        })).rejects.toThrow(/413/)
+        expect(n).toBe(1)
+    })
+
+    test('stops when the generation is aborted', async () => {
+        let n = 0
+        await expect(createJob({
+            post: async () => { n++; throw new TypeError('Load failed') },
+            body: JSON.stringify({ idempotencyKey: 'k#0' }),
+            sleep: async () => {},
+            isAborted: () => n >= 1,
+        })).rejects.toThrow()
+        expect(n).toBe(1)
+    })
 })

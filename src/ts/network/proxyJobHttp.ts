@@ -121,3 +121,41 @@ export async function readJobEvents(opt: JobReaderOptions): Promise<JobReadResul
         await opt.sleep(Math.min(500 * 2 ** (attempt - 1), 5000))
     }
 }
+
+export interface CreateJobOptions {
+    /** POST /proxy-stream-jobs with this JSON body */
+    post: (body: string) => Promise<Response>
+    body: string
+    sleep: (ms: number) => Promise<void>
+    isAborted?: () => boolean
+    maxAttempts?: number
+}
+
+/**
+ * POST /proxy-stream-jobs. The server may have started the job when its answer is lost (measured with Toxiproxy, J3); asking again
+ * with the same idempotency key gets that job back instead of a second model call. Only a lost answer or a 502/503/504 is asked again,
+ * and only when the body carries an idempotency key (without one the server cannot tell the two asks apart).
+ */
+export async function createJob(opt: CreateJobOptions): Promise<{ jobId?: string, reused?: boolean }> {
+    let keyed = false
+    try { keyed = typeof JSON.parse(opt.body)?.idempotencyKey === 'string' } catch { /* not JSON: no key */ }
+    const maxAttempts = keyed ? (opt.maxAttempts ?? 4) : 1
+    for (let attempt = 1; ; attempt++) {
+        let res: Response
+        try {
+            res = await opt.post(opt.body)
+        } catch (error) {
+            if (attempt >= maxAttempts || opt.isAborted?.()) throw error
+            await opt.sleep(500 * 2 ** (attempt - 1))
+            continue
+        }
+        if (res.ok) {
+            return await res.json()
+        }
+        if ([502, 503, 504].includes(res.status) && attempt < maxAttempts && !opt.isAborted?.()) {
+            await opt.sleep(500 * 2 ** (attempt - 1))
+            continue
+        }
+        throw new Error(`Proxy stream job creation failed: ${res.status} ${await res.text()}`)
+    }
+}

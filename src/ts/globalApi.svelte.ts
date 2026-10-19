@@ -1,7 +1,7 @@
 import { pickBackupsToKeep } from "./storage/backupRetention"
 import { getBasename, getUncleanablesSync } from "./storage/uncleanable"
 export { getBasename, getUncleanablesSync }
-import { readJobEvents } from "./network/proxyJobHttp";
+import { createJob, readJobEvents } from "./network/proxyJobHttp";
 import { createSaveTracker, shouldTrackChatContent, shouldWriteBackup } from "./storage/saveTracker";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
@@ -1615,12 +1615,17 @@ async function fetchViaProxyJobHttp(url: string, arg: {
     const baseUrl = getProxyStreamJobBaseUrl();
     const requestSignal = arg.signal;
 
-    const createRes = await fetch(`${baseUrl}/proxy-stream-jobs`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'risu-auth': auth
-        },
+    // the key is taken once: a create whose answer was lost is asked again with the same key and gets the same job (createJob)
+    const created = await createJob({
+        post: (body) => fetch(`${baseUrl}/proxy-stream-jobs`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'risu-auth': auth
+            },
+            body,
+            signal: requestSignal
+        }),
         body: JSON.stringify({
             url,
             method: arg.method,
@@ -1630,12 +1635,9 @@ async function fetchViaProxyJobHttp(url: string, arg: {
             heartbeatSec: defaultProxyJobHeartbeatSec,
             idempotencyKey: nextJobKey()
         }),
-        signal: requestSignal
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        isAborted: () => !!requestSignal?.aborted,
     });
-    if (!createRes.ok) {
-        throw new Error(`Proxy stream job creation failed: ${createRes.status} ${await createRes.text()}`);
-    }
-    const created = await createRes.json() as { jobId?: string };
     if (!created.jobId) {
         throw new Error('Proxy stream job creation returned no jobId');
     }
