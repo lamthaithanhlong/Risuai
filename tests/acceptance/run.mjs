@@ -19,7 +19,7 @@
 //
 // Setup once: (cd tests/acceptance && npm install && npx playwright install chromium).
 // Never touches the live server (:6001) or the real save: the save is snapshotted read-only into ~/.risu-story-work/acceptance/<stamp>
-// (the newest 3 runs are kept) and the owner's settings are used from the copy as they are. Outputs are not committed.
+// (only the newest run is kept: --rejudge needs that run's copy) and the owner's settings are used from the copy as they are. Outputs are not committed.
 import fs from 'fs'
 import os from 'os'
 import path from 'path'

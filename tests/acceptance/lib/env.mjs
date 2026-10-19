@@ -19,7 +19,6 @@ const require = createRequire(import.meta.url)
 export const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..')
 export const WORK_ROOT = path.join(os.homedir(), '.risu-story-work', 'acceptance')
 const LIVE_PORT = 6001
-const KEEP_RUNS = 3
 
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts })
 
@@ -46,11 +45,21 @@ export function storeBackend(live, override) {
     return resolveBackend(live?.env ?? {})
 }
 
-/** Old run directories beyond the newest KEEP_RUNS are removed (they are clones of the save; only this harness writes them). */
-export function pruneRuns() {
+/**
+ * Called before a new run: every earlier run directory is removed, so only the newest copy of the save is ever on disk (each copy
+ * carries its own ~600 MB SQLite backup of the store, and the disk runs near full). A run whose copy a server still serves (another
+ * run going on in parallel) is left alone. Only this harness writes these directories.
+ */
+export function pruneRuns({ log = console.log } = {}) {
     if (!fs.existsSync(WORK_ROOT)) return
-    const runs = fs.readdirSync(WORK_ROOT).filter((d) => /^\d{8}-\d{6}$/.test(d)).sort()
-    for (const d of runs.slice(0, Math.max(0, runs.length - KEEP_RUNS))) fs.rmSync(path.join(WORK_ROOT, d), { recursive: true, force: true })
+    const { servingPid } = require(path.join(REPO, 'server/node/saveStore.cjs'))
+    for (const d of fs.readdirSync(WORK_ROOT).filter((x) => /^\d{8}-\d{6}$/.test(x))) {
+        const run = path.join(WORK_ROOT, d)
+        const busy = fs.readdirSync(run, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => servingPid(path.join(run, e.name, 'save'))).find(Boolean)
+        if (busy) { log(`[env] keeping ${run}: a server (pid ${busy}) still serves a copy in it`); continue }
+        fs.rmSync(run, { recursive: true, force: true })
+        log(`[env] removed the earlier run ${run}`)
+    }
 }
 
 export function newRunDir() {
