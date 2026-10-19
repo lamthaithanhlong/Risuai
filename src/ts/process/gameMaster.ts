@@ -16,7 +16,7 @@
 // status.lua keeps st_*); the screen hides a block still being streamed. Every turn the app puts one short note after the
 // player's message (a system note alone is not read on this route, see playerAgency.ts): the state, and this turn's dice,
 // rolled by the app (crypto), not by the model's whim. Before the character is confirmed (the card's "Được chưa?" step) the
-// GM says nothing; the reply that answers the yes seeds the first arc.
+// GM says nothing, and the reply to the yes (the card's Initialization) is left to the card; the reply after it seeds the arc.
 
 export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past'] as const
 export type GmKey = (typeof GM_KEYS)[number]
@@ -28,6 +28,8 @@ const MAX_DUE = 3
 const MAX_PAST = 3
 
 const BLOCK = /\[\[GM\b([\s\S]*?)\]\]/g
+/** a field name the model copied as a value ("hook|the debt|antagonist|Varn") */
+const ARC_LABEL = /^<?(hook|antagonist|rival|goal|stakes?)>?$/i
 const OPEN_TAIL = /\[\[GM\b[\s\S]*$/
 
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, MAXLEN)
@@ -75,7 +77,7 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                     next.gm_beat = ''
                     next.gm_beat_at = String(charCount)
                     threats = []
-                } else if (value) next.gm_arc = value
+                } else if (value) next.gm_arc = value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
             } else if (key === 'beat') {
                 if (value !== (state.gm_beat ?? '')) { next.gm_beat = isDash(value) ? '' : value; next.gm_beat_at = String(charCount) }
             } else if (key === 'threat') {
@@ -128,16 +130,20 @@ export function isYes(text: string): boolean {
 export type GmPhase = 'silent' | 'seed' | 'run'
 
 /**
- * When the GM speaks. Silent before the first reply and while a character is being made; 'seed' on the turn that confirms it
- * (or the first turn with no arc yet), 'run' after.
+ * When the GM speaks. Silent before the first reply, while a character is being made and on the Initialization reply that
+ * answers the yes; 'seed' on the first turn after it with no arc yet, 'run' after.
  * A card with no creation step and no panel is not a story (a companion chat): silent.
  */
 export function gmPhase(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState, storyLike = false): GmPhase {
     const replies = messages.filter((m) => m.role === 'char')
     if (!replies.length) return 'silent'
-    // confirmed: the panel was written, the GM already ran, or a "Được chưa?" was answered yes (this turn or before)
-    const confirmed = hasPanel(vars) || !!state.gm_arc || !!state.gm_past
-        || messages.some((m, i) => m.role === 'user' && i > 0 && messages[i - 1].role === 'char' && ASKED.test(messages[i - 1].data ?? '') && isYes(m.data))
+    // confirmed: the panel was written, the GM already ran, or a "Được chưa?" was answered yes before this turn. The turn that
+    // answers the yes is the card's Initialization and stays the card's own: seeding there wrote no block in 6 of 6 replies
+    // (2 cards x 3 runs, 2026-10-19) and once printed the model's planning into the story; the next reply seeds.
+    const yesAt = messages.findIndex((m, i) => m.role === 'user' && i > 0 && messages[i - 1].role === 'char' && ASKED.test(messages[i - 1].data ?? '') && isYes(m.data))
+    const initializing = yesAt >= 0 && !messages.slice(yesAt + 1).some((m) => m.role === 'char')
+    if (initializing && !hasPanel(vars)) return 'silent'
+    const confirmed = hasPanel(vars) || !!state.gm_arc || !!state.gm_past || yesAt >= 0
     if (!confirmed && (hasCreationStep(card) || !storyLike)) return 'silent'
     return state.gm_arc ? 'run' : 'seed'
 }
@@ -208,12 +214,14 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         parts.push(`Dice: ${PACE[dice.pace]}; surfaces: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
     }
     parts.push(`Canon: ${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}; canon people live their own lives off-screen: news or a distant sighting only${dice.canon ? ' (some may come up now)' : ''}, a meeting only if paths cross naturally; never rewrite canon.`)
-    const fields = phase === 'seed'
-        ? 'arc: hook|antagonist|goal|stakes, beat: n|now|due next, threat: name|progress|when full (up to 3), reward: what|when, consequence: what|when, canon: date|off-screen'
-        : 'the keys above, fields split by |; arc: done|how ends the arc'
+    // measured 2026-10-19 (DeepSeek v4.1 flash, 10 turns x 2 cards): "only changed lines" left the block out of 13 of 22
+    // replies and the field names were copied as words ("hook|…|antagonist|…"); one seeding reply printed its planning
+    const block = phase === 'seed'
+        ? '[[GM\narc: <hook> | <antagonist> | <goal> | <stakes>\nbeat: 1 | <what is happening> | <what is due next>\nthreat: <name> | <progress> | <when full>\ncanon: <date> | <off-screen>\n]]'
+        : '[[GM\nbeat: <n> | <now> | <due next>\n]] plus any line above that changed (also reward:/consequence: <what> | <when>; arc: done | <how> ends it)'
     return '\n\n[GM, hidden, never named in the story: the player\'s own arc, not the novel\'s plot. ' + parts.join(' ')
-        + ' The player\'s action still happens; at most one new trouble a reply, the card\'s own dice included. Success pays, failure costs, inside the world\'s rules (no free rank, Sequence, stamp or power).'
-        + ` Last, after any panel: [[GM]] with only changed lines (${fields}).]`
+        + ' The player\'s action still happens; at most one new trouble a reply, card dice included. Success pays, failure costs, within the world\'s rules (no free rank, Sequence, stamp or power).'
+        + ` The reply is only the story (no planning notes); end it, after any panel, with ${block}]`
 }
 
 /** The note at the end of the player's last message; unchanged without a note or a text message. */

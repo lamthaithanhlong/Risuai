@@ -24,8 +24,10 @@ describe('the Game Master on the page', () => {
         expect(gameMasterRequest(req(), { ...card, type: 'group' } as never, ok as never)[1].content).toBe('Tui đi xuống hầm.')
     })
 
-    it('seeds on the yes to "Được chưa?"', () => {
+    it('stays out of the Initialization reply to "Được chưa?", seeds on the next turn', () => {
         const c = chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa? Sửa dòng nào cứ nói' }, { role: 'user', data: 'được' }])
+        expect(gameMasterRequest(req(), card as never, c as never)[1].content).toBe('Tui đi xuống hầm.')
+        c.message.push({ role: 'char', data: 'Mai bước qua.' }, { role: 'user', data: 'tui đi' })
         expect(gameMasterRequest(req(), card as never, c as never)[1].content).toContain('No arc yet')
     })
 

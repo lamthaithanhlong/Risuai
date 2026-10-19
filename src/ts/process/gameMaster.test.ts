@@ -42,6 +42,10 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
         expect(s2.gm_beat_at).toBe('5')           // the beat did not move
         expect(applyGm(s2, ['threat: B | -'], 7).gm_threats).toBe('A | 1 | x\nC | 1 | x')
     })
+    it('drops field names the model copied as values (measured: "hook|…|antagonist|…")', () => {
+        expect(applyGm({}, ['arc: hook|a debt|antagonist|Kelber|goal|survive|stakes|death'], 1).gm_arc).toBe('a debt | Kelber | survive | death')
+        expect(applyGm({}, ['arc: <hook> | a debt | Goal'], 1).gm_arc).toBe('a debt')
+    })
     it('a closed arc clears arc, beat and threats and keeps what it left behind for the next one', () => {
         const s = applyGm(FULL, ['arc: done | she burned the ledger; Varn swore revenge'], 9)
         expect(s.gm_arc).toBe('')
@@ -75,8 +79,8 @@ describe('silent before the character is confirmed', () => {
         expect(gmPhase(SS, [msg('user', 'surprise me'), asked, msg('user', 'sửa tên thành Lan')], {}, {})).toBe('silent')
         expect(gmPhase(SS, [msg('user', 'surprise me'), asked, msg('user', 'được nhưng đổi tuổi')], {}, {})).toBe('silent')
     })
-    it('seeds on the yes, and runs once an arc exists or the panel was written', () => {
-        expect(gmPhase(SS, [msg('user', 'surprise me'), asked, msg('user', 'được')], {}, {})).toBe('seed')
+    it('leaves the Initialization reply to the card, seeds on the turn after it, and runs once an arc exists', () => {
+        expect(gmPhase(SS, [msg('user', 'surprise me'), asked, msg('user', 'được')], {}, {})).toBe('silent')
         expect(gmPhase(SS, [asked, msg('user', 'ok'), msg('char', 'story'), msg('user', 'tui đi')], {}, {})).toBe('seed')
         expect(gmPhase(SS, [msg('char', 'story')], { $st_name: 'Mai' }, {})).toBe('seed')
         expect(gmPhase(SS, [msg('char', 'story')], { $st_name: '-' }, {})).toBe('silent')
@@ -128,12 +132,13 @@ describe('the note', () => {
         expect(n).toContain('never rewrite canon'); expect(n).toContain('a meeting only if paths cross naturally')
         expect(n).toContain('The player\'s action still happens')
         expect(n).toContain('no free rank, Sequence, stamp or power')
-        expect(n).toContain('[[GM]]')
+        expect(n).toContain('[[GM\nbeat: <n> | <now> | <due next>'); expect(n).toContain('no planning notes')
         expect(gmNote('run', FULL, { ...dice, pace: 'quiet', consequence: false, canon: false }, 'x')).not.toMatch(/lands now|come up now/)
     })
     it('seeds an arc of the player\'s own, grown from the last one, with world flavour', () => {
         const n = gmNote('seed', { gm_past: 'debt / Varn → Varn swore revenge' }, dice, worldFlavour(SS))
         expect(n).toContain('No arc yet')
+        expect(n).toContain('arc: <hook> | <antagonist> | <goal> | <stakes>')
         expect(n).toContain('never a canon villain')
         expect(n).toContain('Varn swore revenge')
         expect(n).toContain('rival Sleeper')
@@ -141,8 +146,13 @@ describe('the note', () => {
     })
     it('stays compact with a full state (rides every turn)', () => {
         const n = gmNote('run', FULL, dice, 'x')
-        // ~4 characters a token for English: ~315 tokens (cl100k) with every slot full, ~240 seeding
-        expect(n.length).toBeLessThan(1300)
+        // ~4 characters a token for English: ~350 tokens (cl100k) with every slot full
+        expect(n.length).toBeLessThan(1400)
+    })
+    it('stays near 250 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
+        const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
+        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1100)
+        expect(gmNote('seed', {}, dice, worldFlavour(SS)).length).toBeLessThan(1000)
     })
 })
 
