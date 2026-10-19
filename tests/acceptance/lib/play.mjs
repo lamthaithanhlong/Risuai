@@ -155,14 +155,32 @@ export class Player {
         })
     }
 
-    /** scroll every message into view (lazy pictures load only on screen), then read the chat */
+    /**
+     * Scroll every message into view (lazy pictures load only on screen), then read the chat. Measured 2026-10-19: the chat
+     * renders its last 30 messages and the older ones only when its scroller (.default-chat-screen, column-reverse) comes within
+     * 100 px of the top, which scrolling a message into view never did: the first story reply's picture was never on screen and
+     * was scored "not loaded" in three runs, while the same picture loads as soon as it is scrolled to. So the scroller is taken
+     * to the top until no more messages come, then each message is visited by its own index, waiting for its pictures.
+     */
     async domAll() {
-        const n = await this.page.locator('.risu-chat[data-chat-index]').count()
-        for (let i = n - 1; i >= 0; i--) {
-            await this.page.locator('.risu-chat[data-chat-index]').nth(i).scrollIntoViewIfNeeded().catch(() => {})
-            await this.page.waitForTimeout(250)
+        const rows = this.page.locator('.risu-chat[data-chat-index]')
+        let last = -1
+        for (let k = 0; k < 40; k++) {
+            const n = await rows.count()
+            if (n === last) break
+            last = n
+            await this.page.evaluate(() => { const s = document.querySelector('.default-chat-screen'); if (s) { s.scrollTop = -s.scrollHeight; s.dispatchEvent(new Event('scroll')) } })
+            await this.page.waitForTimeout(900)
         }
-        await this.page.waitForTimeout(3000)
+        const indexes = [...new Set(await rows.evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-chat-index')))))].sort((a, b) => b - a)
+        for (const i of indexes) {
+            const row = this.page.locator(`.risu-chat[data-chat-index="${i}"]`).first()
+            await row.scrollIntoViewIfNeeded().catch(() => {})
+            await row.evaluate((e) => Promise.all([...e.querySelectorAll('img')].map((img) => img.complete ? null
+                : new Promise((r) => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); setTimeout(r, 4000) })))).catch(() => {})
+            await this.page.waitForTimeout(100)
+        }
+        await this.page.waitForTimeout(1500)
         return this.dom()
     }
 
