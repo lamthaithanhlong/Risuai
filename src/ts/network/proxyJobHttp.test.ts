@@ -135,3 +135,63 @@ describe('readJobEvents', () => {
         })
     })
 })
+
+// Measured 2026-10-19 (Toxiproxy, ~/.backend-review/work/risu-chat-measure/toxiproxy J4): the phone's connection to the events stream
+// went silent at 6 s (no data, no FIN: a dead Wi-Fi path) while the job ran on; the reader sat on it for 80.5 s, until the server ended
+// the response, although the server pings every 15 s. A connection that has said nothing for idleMs is given up and opened again.
+describe('readJobEvents: a connection that goes silent', () => {
+    /** sends `lines`, then nothing ever again (a half-open connection); cancel() is what the reader may do to it */
+    function silent(lines: string[]) {
+        let cancelled = false
+        let sent = false
+        const res = new Response(new ReadableStream<Uint8Array>({
+            pull(c) {
+                if (!sent) { sent = true; for (const l of lines) c.enqueue(enc.encode(l)); return }
+                return new Promise<void>(() => {})   // never another byte
+            },
+            cancel() { cancelled = true },
+        }), { status: 200 })
+        return { res, cancelled: () => cancelled }
+    }
+
+    test('is given up after idleMs and read again from the next sequence number', async () => {
+        const dead = silent([line(1, chunk(1)), line(2, chunk(2))])
+        const froms: number[] = []
+        const events: ProxyJobWsEvent[] = []
+        let i = 0
+        const result = await readJobEvents({
+            openEvents: async (from) => { froms.push(from); return i++ === 0 ? dead.res : response([line(3, chunk(3)), line(4, { type: 'done' })]) },
+            onEvent: (e) => events.push(e),
+            isAborted: () => false,
+            sleep: async () => {},
+            idleMs: 50,
+        })
+        expect(result).toBe('done')
+        expect(froms).toEqual([1, 3])
+        expect(events.map((e) => (e.type === 'chunk' ? e.dataBase64 : e.type))).toEqual(['1', '2', '3', 'done'])
+        expect(dead.cancelled()).toBe(true)
+    }, 3000)
+
+    test('pings keep a quiet connection alive: no reconnect while they arrive', async () => {
+        const lines = [line(1, chunk(1))]
+        let n = 0
+        const res = new Response(new ReadableStream<Uint8Array>({
+            async pull(c) {
+                if (n === 0) { n++; for (const l of lines) c.enqueue(enc.encode(l)); return }
+                await new Promise((r) => setTimeout(r, 20))
+                if (n++ < 6) c.enqueue(enc.encode('{"type":"ping"}\n'))
+                else { c.enqueue(enc.encode(line(2, { type: 'done' }))); c.close() }
+            },
+        }), { status: 200 })
+        const froms: number[] = []
+        const result = await readJobEvents({
+            openEvents: async (from) => { froms.push(from); return res },
+            onEvent: () => {},
+            isAborted: () => false,
+            sleep: async () => {},
+            idleMs: 60,
+        })
+        expect(result).toBe('done')
+        expect(froms).toEqual([1])
+    }, 3000)
+})
