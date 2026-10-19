@@ -1,36 +1,39 @@
-% Canon and consistency checks of a Shadow Slave story, over facts exported from story.sqlite (server/node/storyLogic.cjs).
-% Run by story/runner.pl, which reads the facts as data (never consults them) and accepts only the predicates declared dynamic here.
+% Generic canon and consistency checks of a story, over facts exported from story.sqlite (server/node/storyLogic.cjs). They hold in
+% every world; what a world adds (its advancement words, its own rules) is in story/worlds/<world>.pl, loaded after this file.
+% Which world a chat plays is picked from its card by storyWorlds.cjs (the card name, its lore titles, the st_* keys its panel uses).
+% Run by story/runner.pl, which reads the facts as data (never consults them) and accepts only the predicates declared dynamic.
 %
 % Facts (every text is a lower-cased atom):
 %   event(Seq, At, Day, Part, Text)  the timeline (led_ev) in order; Day = cal(N) for d/m/yyyy, count(N) for "Day N"/"Ngày N",
 %                                    unknown otherwise; Part = 1..8 for dawn..midnight, or unknown
 %   event_seen(Seq, Rev)             the save revision at which that timeline line first appeared
-%   rank_change(Rev, From, To)       st_rank changed at Rev (normalized: aspirant, sleeper, awakened, ascended, ...)
+%   rank_change(Rev, From, To)       the world's rank key changed at Rev (normalized by the world profile: sleeper, seq8, low, ...)
+%   rank_level(Rank, N)              the world's rank order, from its profile (code, not chat data): higher N = higher rank
 %   npc(Name)                        a person the ledger knows (relations, memory subjects), not the player
-%   mem_slot(Slot, Name)             st_mem<Slot> holds the Memory called Name
-%   fragments(X, Cap)                st_frag "X/Cap"
-%   cores(C)                         soul cores formed (st_cores "C/..."; 1 when the panel has no cores key)
+%   slot(Group, Slot, Name)          slot <Slot> of a slot group (memory, stamp, item, artifact) holds the thing called Name
 %
-% violation(Rule, Detail):
-%   rank_without_event       the Rank changed with no Nightmare or Gateway in the timeline since the previous change (Module 04:
-%                            "a full frag counter does not raise the Rank: only a Nightmare does")
-%   dead_npc_acts            an NPC the timeline recorded dead is in a later line that is not about the body, a grave or an Echo
-%   timeline_backwards       a line is dated before the line before it (same kind of date)
-%   memory_in_two_slots      the same Memory in two mem slots
-%   fragments_over_capacity  more Soul Fragments than the cores hold (1000 per core formed)
-%   fragment_cap_mismatch    the "x/N" counter shows a capacity other than 1000 per core formed
-:- dynamic event/5, event_seen/2, rank_change/3, npc/1, mem_slot/2, fragments/2, cores/1.
+% violation(Rule, Detail), generic:
+%   rank_without_event   the rank changed with no advancement event of the world in the timeline since the previous change
+%   rank_skipped         the rank rose more than one step at once
+%   rank_lowered         the rank went down (no world here has a way back down)
+%   dead_npc_acts        an NPC the timeline recorded dead is in a later line that is not about the body, a grave or an Echo
+%   timeline_backwards   a line is dated before the line before it (same kind of date)
+%   <Group>_in_two_slots the same thing in two slots of one group (memory_in_two_slots, stamp_in_two_slots, ...)
+%
+% World hooks (multifile, defined by story/worlds/*.pl; none defined = the generic rule has nothing to accept):
+%   advance_word(W)        a timeline word that is an advancement event to any rank
+%   advance_to(Rank, W)    a word that is an advancement event to that rank only
+%   advance_exclude(T,B,L) the match of length L at B in T is not one (e.g. "Nightmare Creature")
+%   remains_word(W)        more words that make a later mention of a dead NPC not an act
+%   rank_can_fall          the world allows a rank to go down
+%
+% Every violation clause below is preceded by a "% rule: <name>" line and followed by a blank line: the tests remove a rule by
+% that marker and check that its red case goes silent.
+:- dynamic event/5, event_seen/2, rank_change/3, rank_level/2, npc/1, slot/3.
+:- multifile violation/2, advance_word/1, advance_to/2, advance_exclude/3, remains_word/1, rank_can_fall/0.
+:- discontiguous violation/2.
 
 % ---- words ------------------------------------------------------------------------------------------------------------------------
-advance_word('nightmare').
-advance_word('ác mộng').
-advance_word('gateway').
-advance_word('cánh cổng').
-advance_word('thử thách đầu tiên').
-% "Nightmare Creature" / "Sinh Vật Ác Mộng" is a monster, not a Nightmare
-creature_context(T, B, _L) :- B >= 9, B0 is B - 9, sub_atom(T, B0, 9, _, 'sinh vật ').
-creature_context(T, B, L) :- E is B + L, sub_atom(T, E, 9, _, ' creature').
-
 death_word('died').
 death_word('dies').
 death_word('is dead').
@@ -74,7 +77,9 @@ word_at(T, W, B) :-
     (   atom_length(T, E) -> true ; sub_atom(T, E, 1, _, C2), \+ letter(C2) ).
 mentions(T, N) :- word_at(T, N, _), !.
 
-advance_text(T) :- advance_word(W), sub_atom(T, B, L, _, W), \+ creature_context(T, B, L), !.
+advancement_word(_, W) :- advance_word(W).
+advancement_word(To, W) :- advance_to(To, W).
+advance_text(T, To) :- advancement_word(To, W), sub_atom(T, B, L, _, W), \+ advance_exclude(T, B, L), !.
 
 % the death word applies to the nearest npc name before it
 died_in(T, N) :-
@@ -82,16 +87,30 @@ died_in(T, N) :-
     npc(N), word_at(T, N, P), P < Q,
     \+ ( npc(M), M \== N, word_at(T, M, P2), P2 > P, P2 < Q ).
 
-% ---- rules ---------------------------------------------------------------------------------------------------------------------
 previous_change(Rev, Prev) :-
     findall(R, (rank_change(R, _, _), R < Rev), Rs),
     ( Rs = [] -> Prev = 0 ; max_list(Rs, Prev) ).
 
+% a timeline line that first appeared after the previous rank change and no later than this one
+event_between(Prev, Rev, T) :- event_seen(S, R), R > Prev, R =< Rev, event(S, _, _, _, T).
+
+% ---- rules ---------------------------------------------------------------------------------------------------------------------
+% rule: rank_without_event
 violation(rank_without_event, [rev-Rev, from-From, to-To]) :-
     rank_change(Rev, From, To), From \== To,
     previous_change(Rev, Prev),
-    \+ ( event_seen(S, R), R > Prev, R =< Rev, event(S, _, _, _, T), advance_text(T) ).
+    \+ ( event_between(Prev, Rev, T), advance_text(T, To) ).
 
+% rule: rank_skipped
+violation(rank_skipped, [rev-Rev, from-From, to-To]) :-
+    rank_change(Rev, From, To), rank_level(From, A), rank_level(To, B), B > A + 1.
+
+% rule: rank_lowered
+violation(rank_lowered, [rev-Rev, from-From, to-To]) :-
+    \+ rank_can_fall,
+    rank_change(Rev, From, To), rank_level(From, A), rank_level(To, B), B < A.
+
+% rule: dead_npc_acts
 violation(dead_npc_acts, [npc-N, died_at-A1, acts_at-A2, line-T2]) :-
     npc(N),
     event(S1, A1, _, _, T1), died_in(T1, N),
@@ -104,17 +123,13 @@ before(cal(A), cal(B)) :- A < B.
 before(count(A), count(B)) :- A < B.
 same_day(cal(A), cal(A)).
 same_day(count(A), count(A)).
+% rule: timeline_backwards
 violation(timeline_backwards, [earlier-A0, later-A1]) :-
     event(S0, A0, D0, P0, _), S1 is S0 + 1, event(S1, A1, D1, P1, _),
     (   before(D1, D0)
     ;   same_day(D0, D1), integer(P0), integer(P1), P1 < P0 ).
 
-violation(memory_in_two_slots, [memory-N, slot-A, other_slot-B]) :-
-    mem_slot(A, N), mem_slot(B, N), A < B.
-
-formed(C) :- cores(C), !.
-formed(1).
-violation(fragments_over_capacity, [fragments-X, capacity-Max]) :-
-    fragments(X, _), formed(C), Max is 1000 * C, X > Max.
-violation(fragment_cap_mismatch, [shown-Cap, expected-Max]) :-
-    fragments(_, Cap), integer(Cap), formed(C), Max is 1000 * C, Cap =\= Max.
+% rule: in_two_slots
+violation(Rule, [Group-N, slot-A, other_slot-B]) :-
+    slot(Group, A, N), slot(Group, B, N), A < B,
+    atom_concat(Group, '_in_two_slots', Rule).

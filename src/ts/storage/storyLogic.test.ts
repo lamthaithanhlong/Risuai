@@ -1,5 +1,6 @@
 // @vitest-environment node
-// Canon checks (server/node/story/canon.pl via SWI-Prolog) and plans (story/shadow_slave.*.pddl via story/pddl.cjs) over story.sqlite.
+// Canon checks (server/node/story/canon.pl + worlds/shadow_slave.pl via SWI-Prolog) and plans (story/shadow_slave.*.pddl via
+// story/pddl.cjs) over story.sqlite: the Shadow Slave world. The other worlds and the profile pick are in storyWorlds.test.ts.
 import { describe, expect, test } from 'vitest'
 import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
@@ -12,7 +13,10 @@ const { openStoryStore } = req('../../../server/node/storyStore.cjs')
 const L = req('../../../server/node/storyLogic.cjs')
 const P = req('../../../server/node/story/pddl.cjs')
 const STORY = join(__dirname, '../../../server/node/story')
-const CANON = readFileSync(join(STORY, 'canon.pl'), 'utf8')
+const W = req('../../../server/node/storyWorlds.cjs')
+const CANON_FILE = join(STORY, 'canon.pl')
+const SS_FILE = join(STORY, 'worlds', 'shadow_slave.pl')
+const SS = { world: 'shadow-slave' }
 const DOMAIN = readFileSync(join(STORY, 'shadow_slave.domain.pddl'), 'utf8')
 const WORLD = readFileSync(join(STORY, 'shadow_slave.world.pddl'), 'utf8')
 const HAS_SWIPL = !!L.findSwipl()
@@ -27,15 +31,17 @@ event_seen(1, 5). event_seen(2, 6). event_seen(3, 7). event_seen(4, 9).
 rank_change(6, aspirant, sleeper).
 rank_change(9, sleeper, awakened).
 npc(aiko). npc(mara).
-mem_slot(1, 'mảnh vỡ bình minh'). mem_slot(2, 'chuông bạc').
+slot(memory, 1, 'mảnh vỡ bình minh'). slot(memory, 2, 'chuông bạc').
 fragments(1200, 2000). cores(2).
-`
+` + W.shadowSlave.ranks.map(([id]: [string], i: number) => `rank_level(${id}, ${i}).`).join('\n') + '\n'
 // each case breaks exactly one rule
 const BROKEN: Record<string, string> = {
     rank_without_event: CLEAN.replace('rank_change(9, sleeper, awakened).', 'rank_change(9, sleeper, awakened).\nrank_change(12, awakened, ascended).'),
     dead_npc_acts: CLEAN + "event(5, 'day 4, dawn', count(4), 1, 'mara laughs and draws her sword').\nevent_seen(5, 10).\n",
     timeline_backwards: CLEAN.replace("event(4, 'day 3, night', count(3), 7,", "event(4, 'day 1, noon', count(1), 3,"),
-    memory_in_two_slots: CLEAN.replace("mem_slot(2, 'chuông bạc')", "mem_slot(2, 'mảnh vỡ bình minh')"),
+    memory_in_two_slots: CLEAN.replace("slot(memory, 2, 'chuông bạc')", "slot(memory, 2, 'mảnh vỡ bình minh')"),
+    rank_skipped: CLEAN.replace('rank_change(9, sleeper, awakened).', 'rank_change(9, sleeper, awakened).\nevent_seen(5, 12).\nevent(5, \'day 4\', count(4), unknown, \'kenji enters the second nightmare\').\nrank_change(12, awakened, transcendent).'),
+    rank_lowered: CLEAN.replace('rank_change(9, sleeper, awakened).', 'rank_change(9, sleeper, awakened).\nevent_seen(5, 12).\nevent(5, \'day 4\', count(4), unknown, \'kenji enters the second nightmare\').\nrank_change(12, awakened, sleeper).'),
     fragments_over_capacity: CLEAN.replace('fragments(1200, 2000). cores(2).', 'fragments(1200, 1000).'),
     fragment_cap_mismatch: CLEAN.replace('fragments(1200, 2000)', 'fragments(1200, 1000)'),
 }
@@ -43,14 +49,14 @@ const rules = (r: any) => (r.violations ?? []).map((v: any) => v.rule).sort()
 
 describe.skipIf(!HAS_SWIPL)('canon rules (SWI-Prolog)', () => {
     test('a clean story has no violation', async () => {
-        const r = await L.runProlog(CLEAN)
+        const r = await L.runProlog(CLEAN, SS)
         expect(r.status).toBe('ok')
         expect(r.violations).toEqual([])
     })
 
     for (const [rule, facts] of Object.entries(BROKEN)) {
         test(`${rule}: red when broken`, async () => {
-            const r = await L.runProlog(facts)
+            const r = await L.runProlog(facts, SS)
             expect(r.status).toBe('ok')
             expect(rules(r)).toContain(rule)
             // and only the rules this case breaks (fragments over capacity also shows the capacity it should have)
@@ -60,32 +66,38 @@ describe.skipIf(!HAS_SWIPL)('canon rules (SWI-Prolog)', () => {
     }
 
     test('details say what is wrong', async () => {
-        const r = await L.runProlog(BROKEN.dead_npc_acts)
+        const r = await L.runProlog(BROKEN.dead_npc_acts, SS)
         expect(r.violations[0].detail).toMatchObject({ npc: 'mara', died_at: 'day 1, dusk', acts_at: 'day 4, dawn' })
-        const t = await L.runProlog(BROKEN.timeline_backwards)
+        const t = await L.runProlog(BROKEN.timeline_backwards, SS)
         expect(t.violations[0].detail).toEqual({ earlier: 'day 2, noon', later: 'day 1, noon' })
     })
 
     test('canon nuances: a Nightmare Creature is not a Nightmare; a dead NPC as an Echo or a body is not acting', async () => {
         const creature = CLEAN.replace("'kenji passes the gateway'", "'kenji kills a nightmare creature'")
-        expect(rules(await L.runProlog(creature))).toContain('rank_without_event')
+        expect(rules(await L.runProlog(creature, SS))).toContain('rank_without_event')
         const viet = CLEAN.replace("'kenji passes the gateway'", "'kenji giết một sinh vật ác mộng'")
-        expect(rules(await L.runProlog(viet))).toContain('rank_without_event')
+        expect(rules(await L.runProlog(viet, SS))).toContain('rank_without_event')
         const echo = CLEAN + "event(5, 'day 4, dawn', count(4), 1, 'the echo of mara follows kenji').\nevent_seen(5, 10).\n"
-        expect(rules(await L.runProlog(echo))).toEqual([])
+        expect(rules(await L.runProlog(echo, SS))).toEqual([])
         const vn = CLEAN + "event(5, 'day 4, dawn', count(4), 1, 'aiko mang xác mara về').\nevent_seen(5, 10).\n"
-        expect(rules(await L.runProlog(vn))).toEqual([])
+        expect(rules(await L.runProlog(vn, SS))).toEqual([])
     })
 
     test('every rule is load-bearing: with its clause removed, its red case goes silent', async () => {
         const dir = mkdtempSync(join(tmpdir(), 'canon-mut-'))
+        // each rule's clauses sit between "% rule: <marker>" and the next blank line (canon.pl's header says so)
+        const marker = (rule: string) => (rule.endsWith('_in_two_slots') ? 'in_two_slots' : rule)
         for (const rule of Object.keys(BROKEN)) {
-            // drop the violation clause of this rule (from its head to the next blank line or violation head)
-            const re = new RegExp(`violation\\(${rule}, [\\s\\S]*?\\.\\n(?=\\n|violation|before|same_day|formed|previous|$)`)
-            expect(re.test(CANON), rule).toBe(true)
-            const file = join(dir, `${rule}.pl`)
-            writeFileSync(file, CANON.replace(re, ''))
-            const r = await L.runProlog(BROKEN[rule], { rules: file })
+            const re = new RegExp(`% rule: ${marker(rule)}\\n[\\s\\S]*?(?:\\n\\n|$)`)
+            const files = [CANON_FILE, SS_FILE].map((f) => {
+                const text = readFileSync(f, 'utf8')
+                if (!re.test(text)) return f
+                const out = join(dir, `${rule}-${f.split('/').pop()}`)
+                writeFileSync(out, text.replace(re, '\n'))
+                return out
+            })
+            expect(files.filter((f) => f.startsWith(dir)).length, rule).toBe(1)
+            const r = await L.runProlog(BROKEN[rule], { rules: files })
             expect(r.status, rule).toBe('ok')
             expect(rules(r), rule).not.toContain(rule)
         }

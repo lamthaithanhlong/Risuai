@@ -5,7 +5,9 @@
 % (no :- or -->), and its predicate is one the rules file declared `:- dynamic`. A line like `:- shell('rm -rf ~').` in a fact
 % file is therefore refused, not run. Detail is a list of Key-Value pairs; each value becomes a JSON string or number.
 %
-%   swipl runner.pl --rules canon.pl --facts facts.pl [--timeout 5]     (--facts - reads stdin)
+%   swipl runner.pl --rules canon.pl [--rules world.pl ...] --facts facts.pl [--timeout 5]     (--facts - reads stdin)
+% Every --rules file is loaded in order (the generic canon rules, then the world's own); rule files share violation/2 and the
+% world hooks through `:- multifile`.
 % Output: {"ok":true,"facts":N,"violations":[{"rule":"...","detail":{...}}]}; exit 0
 %         {"ok":false,"error":"..."}; exit 2 (bad input) or 3 (timeout)
 :- use_module(library(http/json)).
@@ -18,7 +20,7 @@ main :-
     ->  true
     ;   fail_json(usage('--rules <file> --facts <file|-> [--timeout seconds]'), 2)
     ),
-    catch(load_files(Rules, [if(true)]), E1, fail_json(rules(E1), 2)),
+    catch(forall(member(R, Rules), load_files(R, [if(true)])), E1, fail_json(rules(E1), 2)),
     catch(read_facts(Facts, N), E2, fail_json(E2, 2)),
     catch(call_with_time_limit(Timeout, findall(R-D, user:violation(R, D), Vs)),
           E3, (E3 = time_limit_exceeded -> fail_json(timeout, 3) ; fail_json(E3, 2))),
@@ -27,10 +29,11 @@ main :-
     nl.
 
 args(Argv, Rules, Facts, Timeout) :-
-    opt(Argv, '--rules', Rules), opt(Argv, '--facts', Facts),
+    findall(R, opts(Argv, '--rules', R), Rules), Rules \== [], opt(Argv, '--facts', Facts),
     (   opt(Argv, '--timeout', T) -> atom_number(T, Timeout) ; Timeout = 5 ).
 opt([K, V|_], K, V) :- !.
 opt([_|T], K, V) :- opt(T, K, V).
+opts([K, V|T], K2, R) :- ( K == K2, R = V ; opts([V|T], K2, R) ).
 
 read_facts('-', N) :- !,   % read all of stdin first: reading user_input term by term prints a prompt into the JSON
     set_stream(user_input, encoding(utf8)), read_string(user_input, _, Text),
