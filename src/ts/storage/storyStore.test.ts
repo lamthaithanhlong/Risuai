@@ -95,7 +95,7 @@ describe('sync', () => {
     test('the Game Master state (gm_*) is kept with its history, without the page\'s rollback bookkeeping', () => {
         const s = fresh()
         s.sync(saveOf([card([chat1({ gm_path: 'Song clan | servant | low', gm_prev: '{}', gm_at: 'r1' })])]), 1)
-        s.sync(saveOf([card([chat1({ gm_path: 'Nephis\'s cohort | newcomer | distrusted', gm_left: 'Song clan | left', gm_prev: '{"x":1}', gm_at: 'r2' })])]), 2)
+        s.sync(saveOf([card([chat1({ gm_path: 'Nephis\'s cohort | newcomer | distrusted', gm_left: 'Song clan | left', gm_prev: '{"x":1}', gm_at: 'r2', gm_path_at: '9', gm_beat_at: '9' })])]), 2)
         expect(s.story('k1').state.gm_path).toBe('Nephis\'s cohort | newcomer | distrusted')
         const h = s.history('k1').filter((x: any) => x.key.startsWith('gm_'))
         expect(h.map((x: any) => [x.key, x.rev, x.old_value, x.new_value])).toEqual([

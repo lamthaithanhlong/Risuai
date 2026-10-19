@@ -921,6 +921,8 @@ export interface Database{
     jevReferee?: boolean
     /** The Game Master runs the player's own arc and the canon clock (gameMaster.ts); on unless false. */
     gameMaster?: boolean
+    /** After each reply the submodel writes the GM notes that changed (gameMasterPage.ts bookkeep); on unless false. */
+    gmBookkeeper?: boolean
     storyVoice?: boolean
     storyTerms?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'. */

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const db: { gameMaster?: boolean; characters: unknown[] } = { characters: [] }
+const db: { gameMaster?: boolean; gmBookkeeper?: boolean; characters: unknown[] } = { characters: [] }
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
+const asks: string[] = []
+vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: '[[GM\nbeat: 1 | x | y\n]]' } } }))
 
 const { bookkeep, gameMasterRequest, noteGameMaster } = await import('./gameMasterPage')
 
@@ -11,7 +13,7 @@ const chatOf = (message: M[], scriptstate: Record<string, string> = {}) => ({ me
 const req = () => [{ role: 'system', content: 'sys' }, { role: 'user', content: 'Tui đi xuống hầm.' }]
 
 describe('the Game Master on the page', () => {
-    beforeEach(() => { db.gameMaster = undefined; db.characters = [card] })
+    beforeEach(() => { db.gameMaster = undefined; db.gmBookkeeper = undefined; db.characters = [card] })
 
     it('adds nothing before the character is confirmed, nor when turned off, nor in a group', () => {
         const c = chatOf([{ role: 'user', data: 'surprise me' }, { role: 'char', data: 'Tên: Mai\nĐược chưa?' }, { role: 'user', data: 'sửa tên' }])
@@ -70,5 +72,24 @@ describe('the Game Master on the page', () => {
         expect(await bookkeep(() => c as never, { data: 'Lão gật đầu.', chatId: 'r2' }, 2, 'x', async () => '[[GM\npath: other | x | y\n]]')).toBe(false)
         expect(c.scriptstate.$gm_path).toBe('the slavers | new hand | watched')
         expect(await bookkeep(() => c as never, c.message[4], 3, 'x', async () => null)).toBe(false)
+    })
+
+    it('the bookkeeper runs after a reply unless its setting is off; off, the narrator\'s block still counts', async () => {
+        const mk = () => chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' },
+            { role: 'char', data: 'Văn.\n[[GM\narc: debt | Varn | pay | brother\n]]', chatId: 'r2' }], { $st_name: 'Mai' })
+        asks.length = 0
+        const on = mk()
+        noteGameMaster(0, on as never)
+        await new Promise((r) => setTimeout(r, 20))
+        expect(asks.length).toBe(1)
+        expect(on.scriptstate.$gm_beat).toBe('1 | x | y')
+        db.gmBookkeeper = false
+        asks.length = 0
+        const off = mk()
+        noteGameMaster(0, off as never)
+        await new Promise((r) => setTimeout(r, 20))
+        expect(asks.length).toBe(0)
+        expect(off.scriptstate.$gm_arc).toBe('debt | Varn | pay | brother')
+        expect(off.scriptstate.$gm_beat).toBe('')
     })
 })

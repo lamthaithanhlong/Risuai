@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, sideAge, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
 } from './gameMaster'
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
@@ -173,6 +173,42 @@ describe('the side the player chose (path, enemies, what it gave)', () => {
         // measured: "path: — | — | —" and "path: — | chưa chọn bên | …" were written while no side was taken
         expect(applyGm({}, ['path: — | — | —'], 2).gm_path).toBe('')
         expect(applyGm({}, ['path: chưa chọn bên | - | -'], 2).gm_path).toBe('')
+    })
+    it('a side newly taken re-seeds the arc from it and sends the GM\'s own antagonist to the background', () => {
+        const st: GmState = { gm_arc: 'a debt | Varn | pay | brother', gm_beat: '3 | x | y', gm_threats: 'Collection | 2/4 | z' }
+        const s = applyGm(st, ['path: the garrison | new recruit | watched'], 7)
+        expect(s.gm_path_at).toBe('7')
+        expect(s.gm_arc).toBe('')
+        expect(s.gm_beat).toBe('')
+        expect(s.gm_threats).toBe('Varn | background | may return\nCollection | 2/4 | z')
+        expect(s.gm_past).toContain('set aside for the side')
+        // an arc written with the side (the bookkeeper seeding from it) is kept; the old antagonist still steps back
+        const k = applyGm(st, ['path: the garrison | recruit | watched\narc: the wall watch | Otto, the sergeant | earn a post | a place inside'], 7)
+        expect(k.gm_arc).toBe('the wall watch | Otto, the sergeant | earn a post | a place inside')
+        expect(k.gm_threats).toContain('Varn | background')
+        // the same side written again is not a new side
+        expect(applyGm({ ...k, gm_path_at: '7' }, ['path: the garrison | sergeant\'s man | trusted'], 9).gm_path_at).toBe('7')
+    })
+    it('the side\'s first order comes due at once and stays the focus for the next beats', () => {
+        const st: GmState = { gm_arc: 'a | b | c | d', gm_path: 'the garrison | recruit | low', gm_path_at: '7', gm_beat_at: '7' }
+        expect(sideAge(st, 7)).toBe(0)
+        for (let i = 0; i < 30; i++) {
+            const d = rollGm(st, 7)
+            expect(d.firstOrder).toBe(true)
+            expect(['advance', 'escalate']).toContain(d.pace)
+            expect(d.surface).toBe('the side (the garrison)')
+        }
+        expect(rollGm(st, 9).surface).toBe('the side (the garrison)')
+        expect(rollGm(st, 9).firstOrder).toBeUndefined()
+        const later = new Set(Array.from({ length: 200 }, () => rollGm(st, 10).surface))
+        expect(later.size).toBeGreaterThan(1)
+        expect(sideAge({ gm_path: 'x' }, 5)).toBe(-1)
+        const first = gmNote('run', st, rollGm(st, 7), 'x')
+        expect(first).toContain('the side\'s first order or test comes due now')
+        const seed = gmNote('seed', { gm_path: 'the garrison | recruit | low', gm_path_at: '7' }, rollGm({ gm_path: 'the garrison | recruit | low', gm_path_at: '7' }, 7), 'x')
+        expect(seed).toContain('seed it from the side the player took (the garrison)')
+        expect(seed).toContain('first order or test, due now')
+        expect(seed).not.toContain('never a canon villain')
     })
     it('the note carries the path, its enemies, what it gave and who remembers; without one it says how a side opens', () => {
         const st: GmState = { ...FULL, gm_path: 'Nighthawks | probationary member | trusted by Dunn', gm_enemies: 'the Aurora Order | I burned their altar', gm_gained: 'a revolver', gm_left: 'a heretic cell | left' }

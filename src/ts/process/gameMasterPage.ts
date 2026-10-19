@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, bookkeepPrompt, GM_KEYS, gmNote, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, GM_KEYS, gmNote, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, type GmState } from './gameMaster'
 import { storyShape } from './replyFormat'
 
 type Room = character | groupChat
@@ -15,7 +15,7 @@ export function gameMasterOn(card: Room | undefined): card is character {
 function writeState(chat: Chat, state: GmState): void {
     chat.scriptstate ??= {}
     // every key, so a value the rolled-back reply had added is cleared too
-    for (const k of [...GM_KEYS, 'gm_beat_at', 'gm_at', 'gm_prev'] as const) chat.scriptstate['$' + k] = state[k] ?? ''
+    for (const k of [...GM_KEYS, ...BOOK_KEYS]) chat.scriptstate['$' + k] = state[k] ?? ''
 }
 
 /** This turn's note at the end of the player's message (fresh dice every request); unchanged while the GM is silent. */
@@ -45,7 +45,8 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
         chat.message[at] = { ...reply, data: taken.text }
         writeState(chat, taken.state)
     }
-    // the bookkeeper, once the character is confirmed (not awaited: the chat goes on)
+    // the bookkeeper, once the character is confirmed (not awaited: the chat goes on); Settings can turn the extra call off
+    if (getDatabase().gmBookkeeper === false) return
     const shape = storyShape(chat.message.filter((m) => m.role === 'char').map((m) => m.data ?? ''))
     if (gmPhase(card, chat.message, chat.scriptstate, gmStateOf(chat.scriptstate), shape.head.length + shape.tail.length > 0) === 'silent') return
     // the chat is read again when the answer comes: it may have been replaced meanwhile (as scenePicturesPage does)

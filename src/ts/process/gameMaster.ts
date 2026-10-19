@@ -28,7 +28,10 @@
 export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past',
     'gm_path', 'gm_enemies', 'gm_gained', 'gm_left'] as const
 export type GmKey = (typeof GM_KEYS)[number]
-export type GmState = Partial<Record<GmKey | 'gm_beat_at' | 'gm_at' | 'gm_prev', string>>
+/** The page's bookkeeping next to the notes: when the beat moved, when a side was taken, the reply that last changed them
+ *  and the state before it (rollback). */
+export const BOOK_KEYS = ['gm_beat_at', 'gm_path_at', 'gm_at', 'gm_prev'] as const
+export type GmState = Partial<Record<GmKey | (typeof BOOK_KEYS)[number], string>>
 
 const MAXLEN = 140
 const MAX_THREATS = 3
@@ -74,6 +77,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
     let threats = lines(state.gm_threats)
     let enemies = lines(state.gm_enemies)
     let gained: string[] | null = null
+    let arcWritten = false
+    let sideTaken = false
     for (const body of bodies) {
         for (const raw of body.split(/\r?\n/)) {
             const m = /^\s*[-*•]?\s*([a-z_]+)\s*:\s*(.*)$/i.exec(raw)
@@ -95,7 +100,10 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                     next.gm_beat = ''
                     next.gm_beat_at = String(charCount)
                     threats = []
-                } else if (value) next.gm_arc = value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
+                } else if (value) {
+                    arcWritten = true
+                    next.gm_arc = value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
+                }
             } else if (key === 'beat') {
                 if (value !== (state.gm_beat ?? '')) { next.gm_beat = isDash(value) ? '' : value; next.gm_beat_at = String(charCount) }
             } else if (key === 'threat') {
@@ -118,6 +126,7 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 // "path: — | chưa chọn bên" (measured: written while no side was taken) is no side
                 const now = isDash(value.split('|')[0]) || NO_SIDE.test(value.split('|')[0].trim()) ? '' : value
                 if (nameOf(was) && nameOf(was) !== nameOf(now)) next.gm_left = [...lines(next.gm_left), clean(`${was.split('|')[0].trim()} | left`)].slice(-MAX_LEFT).join('\n')
+                if (now && nameOf(now) !== nameOf(was)) sideTaken = true
                 next.gm_path = now
             } else if (key === 'enemy' || key === 'enemies') {
                 const name = nameOf(value)
@@ -130,6 +139,20 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 if (isDash(value)) gained = []
                 else gained.push(value)
             }
+        }
+    }
+    // a side newly taken drives the story: its first order or test comes due, the arc is seeded again from it, and the GM's own
+    // antagonist steps back to a background threat (measured on Shadow Slave path play: the GM's antagonist pulled focus from
+    // the side the player had joined, 1 of 6 verdicts; the arm without a GM let the side drive the story)
+    if (sideTaken) {
+        next.gm_path_at = String(charCount)
+        const old = (state.gm_arc ?? '').split('|').map((x) => x.trim())
+        if (old[1] && !threats.some((t) => nameOf(t) === old[1].toLowerCase())) threats.unshift(clean(`${old[1]} | background | may return`))
+        if (!arcWritten && state.gm_arc) {
+            next.gm_past = [...lines(next.gm_past), clean(`${old.slice(0, 2).filter(Boolean).join(' / ')} → set aside for the side`)].slice(-MAX_PAST).join('\n')
+            next.gm_arc = ''
+            next.gm_beat = ''
+            next.gm_beat_at = String(charCount)
         }
     }
     next.gm_threats = threats.slice(-MAX_THREATS).join('\n')
@@ -191,7 +214,15 @@ export function cryptoRandom(): number {
     return a[0] / 2 ** 32
 }
 
-export type GmDice = { pace: 'quiet' | 'build' | 'advance' | 'escalate'; surface: string; consequence: boolean; canon: boolean }
+export type GmDice = { pace: 'quiet' | 'build' | 'advance' | 'escalate'; surface: string; consequence: boolean; canon: boolean; firstOrder?: boolean }
+
+/** Replies since the player took their side, or -1 (no side, or taken before this was tracked). */
+export function sideAge(state: GmState, charCount: number): number {
+    if (!state.gm_path || !state.gm_path_at) return -1
+    return Math.max(0, charCount - (Number(state.gm_path_at) || 0))
+}
+/** For this many replies after a side is taken, the side is the focus. */
+export const SIDE_FOCUS = 3
 
 /** Advance chance by replies since the beat last moved: a beat that just moved rests, a stalled one is pushed. */
 const ADVANCE = [0.1, 0.3, 0.45, 0.6, 0.75, 0.85]
@@ -211,9 +242,15 @@ export function rollGm(state: GmState, charCount: number, rng: () => number = cr
         ...(state.gm_path ? [`the path (${state.gm_path.split('|')[0].trim()}): an event of its own`, `the path (${state.gm_path.split('|')[0].trim()}): an event of its own`] : []),
         ...lines(state.gm_enemies).map((e) => `the enemy "${e.split('|')[0].trim()}"`),
     ].filter(Boolean)
-    const surface = threads.length ? threads[Math.floor(rng() * threads.length)] : 'the arc'
+    let surface = threads.length ? threads[Math.floor(rng() * threads.length)] : 'the arc'
     const consequence = !!lines(state.gm_consequences_due).length && rng() < 0.35
     const canon = rng() < 0.25
+    // a side just taken: its first order or test comes due at once, and it stays the focus for the next beats
+    const age = sideAge(state, charCount)
+    if (age >= 0 && age < SIDE_FOCUS) {
+        surface = `the side (${state.gm_path!.split('|')[0].trim()})`
+        if (age === 0) return { pace: hot ? 'escalate' : 'advance', surface, consequence, canon, firstOrder: true }
+    }
     return { pace, surface, consequence, canon }
 }
 
@@ -253,7 +290,10 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
     const parts: string[] = []
     if (phase === 'seed') {
         const past = lines(state.gm_past).pop()
-        parts.push(`No arc yet: seed one fitted to who the character is (hook; an antagonist of their own, e.g. ${flavour}, never a canon villain; goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}; in prose at most the hook.`)
+        const side = state.gm_path ? state.gm_path.split('|')[0].trim() : ''
+        const fresh = dice.surface.startsWith('the side (')
+        if (side) parts.push(`No arc yet: seed it from the side the player took (${short(side, 60)}): hook = its ${fresh ? 'first order or test, due now' : 'next order, job or test'}; antagonist = whom it is against or a rival inside the side; goal = to rise in it; stakes = their standing.`)
+        else parts.push(`No arc yet: seed one fitted to who the character is (hook; an antagonist of their own, e.g. ${flavour}, never a canon villain; goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}; in prose at most the hook.`)
     } else {
         parts.push(`Arc: ${short(state.gm_arc, 130)}.`)
         if (state.gm_beat) parts.push(`Beat: ${short(state.gm_beat, 100)}.`)
@@ -262,7 +302,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         const rewards = lines(state.gm_rewards_due), costs = lines(state.gm_consequences_due)
         if (rewards.length) parts.push(`Reward: ${rewards.map((r) => short(r, 70)).join('; ')}.`)
         if (costs.length) parts.push(`Consequence: ${costs.map((c) => short(c, 70)).join('; ')}.`)
-        parts.push(`Dice: ${PACE[dice.pace]}; focus: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
+        parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
     }
     parts.push(pathLine(state))
     parts.push(`Canon (${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}): canon people live their own lives off-screen, heard as news or seen afar${dice.canon ? ' (some may come up now)' : ''}; met only when paths cross or the player seeks them, never forced; canon events still happen.`)
@@ -287,7 +327,7 @@ export function gmRequest<T extends { role: string; content: unknown }>(formated
 /** The GM's values from the chat's variables ("$gm_*", as setChatVar keeps them). */
 export function gmStateOf(vars: Record<string, unknown> | undefined): GmState {
     const s: GmState = {}
-    for (const k of [...GM_KEYS, 'gm_beat_at', 'gm_at', 'gm_prev'] as const) {
+    for (const k of [...GM_KEYS, ...BOOK_KEYS]) {
         const v = vars?.['$' + k]
         if (v !== undefined && v !== null && String(v) !== 'null') s[k] = String(v)
     }
@@ -364,7 +404,7 @@ reward: <what> | <when it is paid>
 consequence: <what> | <when it lands>
 canon: <in-world date> | <what canon people are doing off-screen>
 ]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (not a route they walked; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (not a route they walked; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
 }
 
 /** The block in the helper's answer (a bare list of lines counts too), or null. */
