@@ -88,19 +88,20 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
     })
 
     describe('output: the STATUS block becomes variables', () => {
-        test('reads each key, keeps the pipe in item and skill values, and removes the block from the message', async () => {
-            const out = await output([{ role: 'char', data: 'The door opens.\n\n[[STATUS\nhp: 70\nhpmax: 100\nitem3: Rusty key | opens the cellar door\nskill1: Shadow Step | slips through cover | 2\n]]' }])
+        test('reads each rune key, keeps the pipe in Memory and Ability values, and removes the block from the message', async () => {
+            const out = await output([{ role: 'char', data: 'The door opens.\n\n[[STATUS\nfrag: 70/1000\nrank: Dreamer\nmem3: Rusty key | Dormant, tier 1 | opens the cellar door\nability1: Shadow Step | Dormant | slips through cover\n]]' }])
             expect(vars).toMatchObject({
-                st_hp: '70', st_hpmax: '100',
-                st_item3: 'Rusty key | opens the cellar door',
-                st_skill1: 'Shadow Step | slips through cover | 2',
+                st_frag: '70/1000', st_rank: 'Dreamer',
+                st_mem3: 'Rusty key | Dormant, tier 1 | opens the cellar door',
+                st_ability1: 'Shadow Step | Dormant | slips through cover',
             })
             expect(out[0].data).toBe('The door opens.')
         })
 
         test('ignores unknown keys and keys that are not on the panel', async () => {
-            await output([{ role: 'char', data: 'Text.\n[[STATUS\nhp: 5\nsecret_plan: kill them\nitem11: ghost\nname: Mara\n]]' }])
-            expect(Object.keys(vars).sort()).toEqual(['st_hp', 'st_name'])
+            // the novel's runes have no stats or health: hp and str are ignored like any unknown key
+            await output([{ role: 'char', data: 'Text.\n[[STATUS\nhp: 5\nstr: 7\nsecret_plan: kill them\nmem11: ghost\nname: Mara\n]]' }])
+            expect(Object.keys(vars).sort()).toEqual(['st_name'])
         })
 
         test('a key set to "-" is cleared, and the key is case-insensitive', async () => {
@@ -127,14 +128,14 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
         })
 
         test('two blocks in one reply are both applied and both removed', async () => {
-            const out = await output([{ role: 'char', data: 'A\n[[STATUS\nhp: 60\n]]\nB\n[[STATUS\nfatigue: 30\n]]' }])
-            expect(vars).toMatchObject({ st_hp: '60', st_fatigue: '30' })
+            const out = await output([{ role: 'char', data: 'A\n[[STATUS\nfrag: 60/1000\n]]\nB\n[[STATUS\ncondition: worn out\n]]' }])
+            expect(vars).toMatchObject({ st_frag: '60/1000', st_condition: 'worn out' })
             expect(out[0].data).not.toContain('STATUS')
         })
 
         test('the STATUS block and the [[img: ...]] line in one reply are both handled', async () => {
-            const out = await output([{ role: 'char', data: 'Scene.\n\n[[img: a vaulted stone hall lit by torches]]\n\nMore.\n\n[[STATUS\nhp: 90\n]]' }])
-            expect(vars.st_hp).toBe('90')
+            const out = await output([{ role: 'char', data: 'Scene.\n\n[[img: a vaulted stone hall lit by torches]]\n\nMore.\n\n[[STATUS\nfrag: 90/1000\n]]' }])
+            expect(vars.st_frag).toBe('90/1000')
             expect(generateAIImage).toHaveBeenCalledTimes(1)
             expect(out[0].data).toBe('Scene.\n\n{{inlay::pic1.png}}\n\nMore.')
         })
@@ -163,9 +164,9 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
         })
 
         test('dashes are tidied together with a STATUS block in the same reply', async () => {
-            const out = await run('A — b — c.\n[[STATUS\nhp: 50\n]]')
+            const out = await run('A — b — c.\n[[STATUS\nfrag: 50/1000\n]]')
             expect(out).toBe('A — b, c.')
-            expect(vars.st_hp).toBe('50')
+            expect(vars.st_frag).toBe('50/1000')
         })
     })
 
@@ -221,17 +222,17 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
         })
 
         test('a STATUS block and a LEDGER block in one reply are both applied and removed', async () => {
-            const out = await output([{ role: 'char', data: 'Scene.\n[[STATUS\nhp: 50\ndate: Day 4, dusk\n]]\n[[LEDGER\nmem: the east gate fell\n]]' }])
-            expect(vars).toMatchObject({ st_hp: '50', st_date: 'Day 4, dusk', led_mem: 'the east gate fell' })
+            const out = await output([{ role: 'char', data: 'Scene.\n[[STATUS\nfrag: 50/1000\ndate: Day 4, dusk\n]]\n[[LEDGER\nmem: the east gate fell\n]]' }])
+            expect(vars).toMatchObject({ st_frag: '50/1000', st_date: 'Day 4, dusk', led_mem: 'the east gate fell' })
             expect(out[0].data).toBe('Scene.')
         })
 
         test('the panel shows relations, timeline (newest first) and memory, escaped, and appears even with only a ledger', async () => {
             vars = { led_mem: 'Aiko | promised <b>dawn</b>', led_rel: 'Aiko | Mara | trusts', led_ev: 'Day 1 | arrived\nDay 2 | the gate fell' }
             const html = await display([{ role: 'char', data: 'Text.' }], 0)
-            expect(html).toContain('Relations')
-            expect(html).toContain('Timeline')
-            expect(html).toContain('Memory')
+            expect(html).toContain('Quan hệ')
+            expect(html).toContain('Dòng thời gian')
+            expect(html).toContain('Ghi nhớ')
             expect(html).toContain('<b>Aiko</b> ↔ <b>Mara</b><br>trusts')
             expect(html.indexOf('the gate fell')).toBeLessThan(html.indexOf('arrived'))
             expect(html).toContain('promised &lt;b&gt;dawn&lt;/b&gt;')
@@ -256,29 +257,28 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
         const base: Msg[] = [{ role: 'user', data: 'I wait.' }, { role: 'char', data: 'Night falls.' }]
 
         test('the latest character reply gets the panel built from the variables', async () => {
-            vars = { st_name: 'Mara Quill', st_rank: 'Sleeper', st_hp: '70', st_hpmax: '100', st_item3: 'Rusty key | opens the cellar door' }
+            vars = { st_name: 'Mara Quill', st_rank: 'Dreamer', st_frag: '700/1000', st_mem3: 'Rusty key | Dormant, tier 1 | opens the cellar door' }
             const html = await display(base, 1)
             expect(html.startsWith('Night falls.')).toBe(true)
             expect(html).toContain('<details class="sp">')
             expect(html).toContain('Mara Quill')
             expect(html).toContain('width:70%')
             expect(html).toContain('Rusty key')
-            expect(html).toContain('title="opens the cellar door"')
+            expect(html).toContain('title="Dormant, tier 1 · opens the cellar door"')
         })
 
-        test('there are always 10 item slots and 6 skill slots, the empty ones dimmed', async () => {
-            vars = { st_name: 'Mara', st_item1: 'Torch' }
+        test('only the Memories the soul holds are shown, no empty slots', async () => {
+            vars = { st_name: 'Mara', st_mem1: 'Torch | Dormant | light' }
             const html = await display(base, 1)
-            expect((html.match(/class="sp-it(?: sp-dim)?"/g) ?? []).length).toBe(10)
-            expect((html.match(/class="sp-it sp-dim"/g) ?? []).length).toBe(9)
-            expect((html.match(/class="sp-sk(?: sp-dim)?"/g) ?? []).length).toBe(6)
+            expect((html.match(/class="sp-it"/g) ?? []).length).toBe(1)
         })
 
-        test('a skill shows its mastery as three diamonds', async () => {
-            vars = { st_name: 'Mara', st_skill1: 'Shadow Step | slips through cover | 2' }
+        test('an Ability shows its tier and what it does; the panel has no stats and no health bar', async () => {
+            vars = { st_name: 'Mara', st_ability1: 'Shadow Step | Dormant | slips through cover' }
             const html = await display(base, 1)
-            expect(html).toContain('◆◆◇')
+            expect(html).toContain('<i>Dormant</i><b>Shadow Step</b>')
             expect(html).toContain('slips through cover')
+            for (const gone of ['Strength', 'Health', '♥']) expect(html).not.toContain(gone)
         })
 
         test('values are escaped and cannot open a tag or a macro', async () => {
@@ -292,10 +292,10 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
         })
 
         test('a meter above its maximum is clamped to 100% and a non-number is empty', async () => {
-            vars = { st_name: 'Mara', st_hp: '150', st_hpmax: '100', st_se: 'lots', st_semax: '10' }
-            const html = await display(base, 1)
-            expect(html).toContain('sp-hp" style="width:100%')
-            expect(html).toContain('sp-se" style="width:0%')
+            vars = { st_name: 'Mara', st_frag: '1500/1000' }
+            expect(await display(base, 1)).toContain('sp-se" style="width:100%')
+            vars = { st_name: 'Mara', st_frag: 'lots' }
+            expect(await display(base, 1)).toContain('sp-se" style="width:0%')
         })
 
         test('an earlier reply, a user message, and a chat with no state get no panel', async () => {
@@ -315,11 +315,11 @@ describe.skipIf(!FILES.every(existsSync))('status panel script', () => {
 
         test('a block that is still streaming, a finished one, and an unfinished [[img: are hidden', async () => {
             vars = { st_name: 'Mara' }
-            const partial = await display([{ role: 'char', data: 'Text.\n\n[[STATUS\nhp: 5' }], 0)
+            const partial = await display([{ role: 'char', data: 'Text.\n\n[[STATUS\nfrag: 5/1000' }], 0)
             expect(partial).not.toContain('STATUS')
             expect(partial.startsWith('Text.')).toBe(true)
-            const done = await display([{ role: 'char', data: 'Text.\n[[STATUS\nhp: 5\n]]' }], 0)
-            expect(done).not.toContain('hp: 5')
+            const done = await display([{ role: 'char', data: 'Text.\n[[STATUS\nfrag: 5/1000\n]]' }], 0)
+            expect(done).not.toContain('frag: 5/1000')
             const img = await display([{ role: 'char', data: 'Text.\n[[img: a hall at' }], 0)
             expect(img).not.toContain('[[img')
         })
