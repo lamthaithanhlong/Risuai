@@ -151,7 +151,7 @@ Answer only JSON: {"follows": true|false, "how": "<one sentence, quoting the rep
     const rules = rulesOf(story)
     for (const t of picks) {
         try {
-            const a = await ask(cfg, `You are a strict canon reviewer for an interactive fiction game set in the world of the novel "${story.title}". The player is an original character, not a canon protagonist. Judge ONE narrator reply for canon fit: the world's rules, power system, terminology (as the Vietnamese translation names it), places, factions, timeline, how canon characters behave, and the game's own rules below. Report concrete slips only (quote the words), not style. Something the player did in an earlier turn (an item picked up, a place reached) is established, not a slip.
+            const a = await ask(cfg, `You are a strict canon reviewer for an interactive fiction game set in the world of the novel "${story.title}". The player is an original character, not a canon protagonist. Judge ONE narrator reply for canon fit: the world's rules, power system, terminology (as the Vietnamese translation names it), places, factions, timeline, how canon characters behave, and the game's own rules below. Report concrete slips only (quote the words), not style. Something the player did in an earlier turn (an item picked up, a place reached) is established, not a slip.${rec.persona ? " The player's own profile (persona) gives the character abilities and companions" + (companions(rec) ? companions(rec).replace(/^, and the character's own companions from the player's profile/, '') : '') + "; they belong to the character and are not a canon slip." : ''}
 
 GAME RULES (excerpt of the card):
 ${rules}

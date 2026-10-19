@@ -218,7 +218,7 @@ const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
 // does not type, and a fast model follows the note at the end of the message over the system prompt. So both notes say it.
 // Measured on the same evening's run: with the persona the step-by-step interview asked the name, the sex and the look again
 // (Mailman asked the look twice) and offered the persona's look as one choice of three; the items it fixes are named once.
-const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included, and list its abilities and companions in the record (Năng lực, Đồng hành). Step by step: the first reply opens with one line "Từ persona: …" naming what it fixes; then ask only the items it leaves open, in the card\'s order; an item it fixes is never asked or offered again ("lấy như profile" = the persona\'s line).'
+const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included, and list its abilities and companions in the record (Năng lực, Đồng hành). Step by step: the first reply opens with one line "Từ persona: …" naming what it fixes; then ask only the items it leaves open, in the card\'s order. Never ask the name, sex, age or look it gives, and never offer another name or look ("lấy như profile" = the persona\'s line).'
 /** A card with a Future Plan rule (the Kairos Academy card's "Request Profile", asked 2026-10-19: "thiếu future plan"): the reply
  *  ends with "[💡Kế hoạch| names ]", whose names wake their lore next turn; the card's status.lua folds it and keeps only the newest. */
 /** A card whose rules say the player's persona is the character sheet (the three story cards' "The Player's Persona"). */
@@ -238,7 +238,7 @@ export function creationNote(card: Card, messages: Msg[], vars: Record<string, u
     const first = before.length === 0
     return '\n\n[Character creation (hidden, never named): the character is not confirmed yet. Answer only the creation step this message answers'
         + (first ? '; the reply opens with one line naming the difficulty the player chose, e.g. "Độ khó: Khó" (Hard when none was named)' : '')
-        + '. Step by step: ask the next item only, as one question line ending in "?", with exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" (an item with only two possible values offers both).'
+        + '. Step by step: ask the next item only, as one question line ending in "?", then exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" as a fourth line (an item with only two possible values offers both).'
         + (persona ? PERSONA_CREATION : '')
         + ' A record: show it again with what changed and end with "Được chưa?". Only the player\'s yes ("được", "ok", "bắt đầu") starts the story: until then no story prose, no [[STATUS]], [[LEDGER]] or [[GM]] block.]'
 }

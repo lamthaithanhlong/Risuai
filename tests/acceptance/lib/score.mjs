@@ -126,7 +126,8 @@ export function scoreStory(rec, judge = {}) {
 
     // with a persona, step by step asks only what it leaves open: sex and age, name and look come from it (measured the same
     // evening: Mailman asked the name and twice the look, SS the sex and the name)
-    const FIXED_ITEM = /^\W*(giới tính|tên( nhân vật)?|ngoại hình)\b/i
+    // anywhere in the question ("Bạn muốn chọn tên, ngoại hình…?", LotM s4 of the third run), not only at its start
+    const FIXED_ITEM = /(giới tính|tên nhân vật|chọn tên|tên là gì|tên gì|^\W*tên\b|ngoại hình)/i
     const asking = (t) => [...questionLines(t.reply), ...t.reply.split('\n').filter((l) => /^\s*\*\*[^*\n]{2,40}:\*\*/.test(l))].map((l) => l.replace(/\*/g, '').trim())
     const reasked = noPersona ? [] : steps.filter((t) => t.ok && !asksDuocChua(t.reply) && asking(t).some((l) => FIXED_ITEM.test(l)))
     out.push(check('persona.no_reask', 'Step by step with a persona: what it fixes is never asked again', noPersona || !steps.length ? 'N/A' : pass(!reasked.length),
