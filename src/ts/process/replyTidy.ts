@@ -119,9 +119,25 @@ export function tidyLastReply(chat: { message: { role: string; data: string }[] 
 const OPENER = /^([ \t]*)(?:【{1,2}|［{1,2}|〔{1,2}|\[(?!\[)|\[\[\s+)\s*(STATUS|LEDGER|GM)\b/gm
 const CLOSER = /^([ \t]*)(?:】{1,2}|］{1,2}|〕{1,2})[ \t]*$/gm
 
+// Measured 2026-10-19 afternoon (the story slot answering through ChatGPT web, acceptance: 44 of 50 replies over three cards):
+// the text comes back as Markdown copied from the rendered page. "[[STATUS" arrives as "\[\[STATUS  " (escaped, a hard-break
+// double space), the Spell's line as "\[Ứng viên! …\]", and the cards' tags as links: "[[LOOK Elias Mercer | <look>]]" as
+// "[<look>](<LOOK Elias Mercer.md>)", "[[img: <scene>]]" as "[img: <scene>](<img: <scene>.md>)". No block reached the card's
+// script: no panel, no GM notes, every block shown to the player. Both are put back first.
+const WIKILINK = /\[([^[\]\n]*)\]\(<([^<>\n]+?)\.md>\)/g
+const MD_ESCAPE = /\\([\\`*_{}[\]()#+\-.!|>~=])/g
+
+/** A reply written as rendered-then-copied Markdown, back in the plain text the cards read; any other reply unchanged. */
+export function unMarkdown(text: string): string {
+    let t = text ?? ''
+    if (/\]\(<[^<>\n]+?\.md>\)/.test(t)) t = t.replace(WIKILINK, (_, alias: string, target: string) => alias.trim() === target.trim() ? `[[${target.trim()}]]` : `[[${target.trim()} | ${alias.trim()}]]`)
+    if (/\\[[\]]/.test(t)) t = t.replace(MD_ESCAPE, '$1').replace(/[ \t]+$/gm, '').replace(/^([ \t]*)\]{3,}$/gm, '$1]]')
+    return t
+}
+
 /** The reply with its hidden blocks opened "[[STATUS", "[[LEDGER", "[[GM" and closed "]]" whatever brackets the model used. */
 export function fixBlockBrackets(text: string): string {
-    const t = text ?? ''
+    const t = unMarkdown(text ?? '')
     if (!/(【|［|〔|\[(?!\[)|\[\[\s+)\s*(STATUS|LEDGER|GM)\b/.test(t)) return t
     return t.replace(OPENER, '$1[[$2').replace(CLOSER, '$1]]')
 }

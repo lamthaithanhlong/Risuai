@@ -101,3 +101,26 @@ describe('measured 2026-10-19 (gpt-6-luna, Mailman t3): a panel block opened wit
         expect(fixLastReplyBlocks(chat)).toBe(false)
     })
 })
+
+describe('measured 2026-10-19 (story slot through ChatGPT web): the reply came back as copied Markdown, no block reached the card', async () => {
+    const { fixBlockBrackets, fixLastReplyBlocks, unMarkdown } = await import('./replyTidy')
+    // shortened from the acceptance record (Shadow Slave t3/t4)
+    const WEB = 'Màn hình máy theo dõi bỗng tối đen.\n\n\\[Ứng viên! Chào mừng đến với Ác Mộng Ma Pháp.\\]\n\n'
+        + '[img: A crumbling stone temple under cold rain](<img: A crumbling stone temple under cold rain.md>)\n\n'
+        + '[Dark brown hair, grey eyes, plain grey linen tunic](<LOOK Elias Mercer.md>)\n\n'
+        + '\\[\\[STATUS  \nname: Elias Mercer  \nplace: Đền đổ nát  \n\\]\\]\n\n\\[\\[GM  \nbeat: 2 | Elias kiểm tra | chờ  \n\\]\\]\\]'
+    it('puts back the blocks, the Spell\'s brackets and the tags the copy turned into links', () => {
+        expect(fixBlockBrackets(WEB)).toBe('Màn hình máy theo dõi bỗng tối đen.\n\n[Ứng viên! Chào mừng đến với Ác Mộng Ma Pháp.]\n\n'
+            + '[[img: A crumbling stone temple under cold rain]]\n\n'
+            + '[[LOOK Elias Mercer | Dark brown hair, grey eyes, plain grey linen tunic]]\n\n'
+            + '[[STATUS\nname: Elias Mercer\nplace: Đền đổ nát\n]]\n\n[[GM\nbeat: 2 | Elias kiểm tra | chờ\n]]')
+        const chat = { message: [{ role: 'user', data: 'đi' }, { role: 'char', data: WEB }] }
+        expect(fixLastReplyBlocks(chat)).toBe(true)
+        expect(chat.message[1].data).toMatch(/^\[\[STATUS\nname: Elias Mercer$/m)
+    })
+    it('leaves a plain reply alone, a real link and prose with backslashes included', () => {
+        const plain = 'Văn.\n\n[[STATUS\nplace: X\n]]\n[Ứng viên!]  \nGiá 5*3 \\ không đổi. Xem [trang](https://x.vn).'
+        expect(unMarkdown(plain)).toBe(plain)
+        expect(fixBlockBrackets(plain)).toBe(plain)
+    })
+})
