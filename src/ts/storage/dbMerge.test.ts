@@ -324,16 +324,21 @@ describe('per page bookkeeping', () => {
         expect(() => merge.validateSave(ok.subarray(0, ok.length - 2))).toThrow()
     })
 
-    test('a base that was pruned: the page file is stored as it is, and said so', () => {
+    test('a page open for longer than `keep` revisions keeps its base: its write is merged, not stored whole (F4)', () => {
         const s = openDbSync({ dbFile: ':memory:', keep: 2 })
         s.onRead('phone', base)
         let cur = base
         for (let i = 0; i < 6; i++) {
             const f = edit(cur, (g, set) => { const r = g('root'); r.maxResponse = 100 + i; set('root', r) })
             cur = s.onWrite('mac', f, cur).bytes
-            if (i === 5) s.onRead('mac', cur)
+            if (i === 5) s.onRead('mac', cur)   // a read prunes revisions older than rev - keep
         }
         const r = s.onWrite('phone', edit(base, (g, set) => { const c = g('c1'); c.name = 'z'; set('c1', c) }), cur)
-        expect(r.how).toBe('base pruned')
+        expect(r.how).toBe('merged')
+        expect(read(r.bytes, 'root').maxResponse).toBe(105)   // was 1000 again: the stale file was stored whole ('base pruned')
+        expect(read(r.bytes, 'c1').name).toBe('z')
+        // revisions nobody has as a base are still pruned
+        const kept = s.db.prepare('SELECT rev FROM sync_manifest ORDER BY rev').all().map((x: any) => x.rev)
+        expect(kept).toEqual([1, 7])
     })
 })

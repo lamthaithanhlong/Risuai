@@ -40,8 +40,11 @@ function openDbSync(opts) {
     const foreignWrites = db.prepare('SELECT COUNT(*) AS n FROM sync_write WHERE rev > ? AND client <> ?')
     const getClient = db.prepare('SELECT base_rev FROM sync_client WHERE client = ?')
     const putClient = db.prepare('INSERT OR REPLACE INTO sync_client (client, base_rev, updated) VALUES (?, ?, ?)')
-    const prune = db.prepare('DELETE FROM sync_manifest WHERE rev < ?')
-    const pruneWrites = db.prepare('DELETE FROM sync_write WHERE rev < ?')
+    // A revision some page still has as its base is never pruned, nor the write rows after it: a page left open for days (650 saves
+    // a day were measured, so 3000 revisions last ~4.6 days) used to lose its base and have its stale file stored whole
+    // ('base pruned'), erasing everything written since (specs/chat/DbSync.tla, PinBases).
+    const prune = db.prepare('DELETE FROM sync_manifest WHERE rev < ? AND rev NOT IN (SELECT base_rev FROM sync_client)')
+    const pruneWrites = db.prepare('DELETE FROM sync_write WHERE rev < MIN(?, COALESCE((SELECT MIN(base_rev) FROM sync_client), ?))')
 
     const currentRev = () => getRev.get().rev
 
@@ -57,7 +60,7 @@ function openDbSync(opts) {
             putClient.run(client, rev, now())
             if (rev > keep) {
                 prune.run(rev - keep)
-                pruneWrites.run(rev - keep)
+                pruneWrites.run(rev - keep, rev - keep)
             }
         } catch (error) {
             log(`sync: could not record the read of ${client.slice(0, 8)}: ${error.message}`)
