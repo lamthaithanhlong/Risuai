@@ -92,4 +92,14 @@ describe('the Game Master on the page', () => {
         expect(off.scriptstate.$gm_arc).toBe('debt | Varn | pay | brother')
         expect(off.scriptstate.$gm_beat).toBe('')
     })
+
+    it('an advance the dice roll is marked on the chat, so the next turns rest and a stall gets pushed', () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' }], { $st_name: 'Mai', $gm_arc: 'a | b | c | d', $gm_adv_at: '0', $gm_beat_at: '1' })
+        gameMasterRequest(req(), card as never, c as never, () => 0.01)     // advance
+        expect(c.scriptstate.$gm_adv_at).toBe('1')
+        expect(c.scriptstate.$gm_adv_prev).toBe('0')
+        const quiet = { ...c.scriptstate }
+        gameMasterRequest(req(), card as never, c as never, () => 0.99)     // quiet: no mark
+        expect(c.scriptstate).toEqual(quiet)
+    })
 })

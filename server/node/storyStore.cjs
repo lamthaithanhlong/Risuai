@@ -37,7 +37,7 @@ function lines(v) {
 const parts = (l) => l.split('|').map((x) => x.trim())
 
 /** st_* (the panel) and gm_* (the Game Master) keep their history; gm_prev / gm_at are the page's rollback bookkeeping */
-const GM_BOOK = new Set(['gm_prev', 'gm_at', 'gm_beat_at', 'gm_path_at'])
+const GM_BOOK = new Set(['gm_prev', 'gm_at', 'gm_beat_at', 'gm_path_at', 'gm_adv_at', 'gm_adv_prev'])
 const keepsHistory = (k) => k.startsWith('st_') || (k.startsWith('gm_') && !GM_BOOK.has(k))
 
 /** chat variables as the cards wrote them: scriptstate keys are '$' + name (src/ts/parser/chatVar.svelte.ts setChatVar) */

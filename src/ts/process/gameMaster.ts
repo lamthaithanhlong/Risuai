@@ -31,7 +31,9 @@ export type GmKey = (typeof GM_KEYS)[number]
 /** The page's bookkeeping next to the notes: when the beat moved, when a side was taken, the reply that last changed them
  *  and the state before it (rollback). */
 export const BOOK_KEYS = ['gm_beat_at', 'gm_path_at', 'gm_at', 'gm_prev'] as const
-export type GmState = Partial<Record<GmKey | (typeof BOOK_KEYS)[number], string>>
+/** The pace clock, written by the request (the app's own dice), never by a reply or a rollback. */
+export const PACE_KEYS = ['gm_adv_at', 'gm_adv_prev'] as const
+export type GmState = Partial<Record<GmKey | (typeof BOOK_KEYS)[number] | (typeof PACE_KEYS)[number], string>>
 
 const MAXLEN = 140
 const MAX_THREATS = 3
@@ -235,9 +237,34 @@ export const SIDE_FOCUS = 3
 /** Advance chance by replies since the beat last moved: a beat that just moved rests, a stalled one is pushed. */
 const ADVANCE = [0.1, 0.3, 0.45, 0.6, 0.75, 0.85]
 
+/**
+ * Replies since the app's dice last advanced the story. Measured 2026-10-19: counted from the model's beat number, the
+ * narrator and the bookkeeper raised the number almost every reply, so the dice always saw a beat that had just moved and
+ * rolled 7-8 quiet replies in 10. The clock is the app's own: the request that rolls ADVANCE or ESCALATE marks the reply
+ * it asks for (gm_adv_at = replies before it); a reroll of that reply goes back to the mark before (gm_adv_prev).
+ * Without any mark yet (an older chat), the model's beat clock.
+ */
+export function sinceAdvance(state: GmState, charCount: number): number {
+    if (state.gm_adv_at === undefined || state.gm_adv_at === '') return Math.max(0, charCount - (Number(state.gm_beat_at ?? '') || 0))
+    const at = Number(state.gm_adv_at) || 0
+    if (charCount > at) return charCount - at - 1
+    // the reply that advance was rolled for is gone (rerolled): the mark before it
+    const prev = state.gm_adv_prev ? Number(state.gm_adv_prev) || 0 : null
+    return prev === null ? charCount : Math.max(0, charCount - prev - 1)
+}
+
+/** The pace clock after this request's dice: moved when they advance, the old mark kept for a reroll. */
+export function markAdvance(state: GmState, charCount: number, dice: GmDice): Pick<GmState, 'gm_adv_at' | 'gm_adv_prev'> | null {
+    if (dice.pace !== 'advance' && dice.pace !== 'escalate') return null
+    const at = state.gm_adv_at === undefined || state.gm_adv_at === '' ? null : Number(state.gm_adv_at) || 0
+    // rolling again for the same reply (a reroll) keeps the earlier mark as the one before
+    const prev = at !== null && at >= charCount ? (state.gm_adv_prev ?? '') : (at === null ? '' : String(at))
+    return { gm_adv_at: String(charCount), gm_adv_prev: prev }
+}
+
 /** This turn's dice, rolled fresh every request. */
 export function rollGm(state: GmState, charCount: number, rng: () => number = cryptoRandom): GmDice {
-    const since = Math.max(0, charCount - (Number(state.gm_beat_at ?? '') || 0))
+    const since = sinceAdvance(state, charCount)
     const advance = rng() < ADVANCE[Math.min(since, ADVANCE.length - 1)]
     const hot = rng() < 0.4
     const pace: GmDice['pace'] = advance ? (hot ? 'escalate' : 'advance') : (hot ? 'build' : 'quiet')
@@ -335,7 +362,7 @@ export function gmRequest<T extends { role: string; content: unknown }>(formated
 /** The GM's values from the chat's variables ("$gm_*", as setChatVar keeps them). */
 export function gmStateOf(vars: Record<string, unknown> | undefined): GmState {
     const s: GmState = {}
-    for (const k of [...GM_KEYS, ...BOOK_KEYS]) {
+    for (const k of [...GM_KEYS, ...BOOK_KEYS, ...PACE_KEYS]) {
         const v = vars?.['$' + k]
         if (v !== undefined && v !== null && String(v) !== 'null') s[k] = String(v)
     }

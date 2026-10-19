@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, sideAge, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
 } from './gameMaster'
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
@@ -111,6 +111,24 @@ describe('the GM dice come from the app, fresh every turn', () => {
     it('follows the dice it is given: advance or hold, hot or calm, which thread, whether a cost lands', () => {
         expect(rollGm(FULL, 6, seq(0.01, 0.9, 0.0, 0.1, 0.9))).toEqual({ pace: 'advance', surface: 'the antagonist (Varn, a crew enforcer who wants her Memory)', consequence: true, canon: false })
         expect(rollGm(FULL, 6, seq(0.99, 0.1, 0.99, 0.9, 0.1))).toEqual({ pace: 'build', surface: 'the goal', consequence: false, canon: true })
+    })
+    it('the pace clock is the app\'s own advances, not the model\'s beat number (measured: 7-8 quiet replies in 10)', () => {
+        // the model raised the beat number every reply; the clock ignores it once the app has marked an advance
+        const st: GmState = { gm_beat_at: '9', gm_adv_at: '4' }
+        expect(sinceAdvance(st, 9)).toBe(4)
+        const d = (pace: 'quiet' | 'advance' | 'escalate' | 'build') => ({ pace, surface: 'x', consequence: false, canon: false })
+        expect(markAdvance(st, 9, d('quiet'))).toBeNull()
+        expect(markAdvance(st, 9, d('build'))).toBeNull()
+        const m = markAdvance(st, 9, d('advance'))!
+        expect(m).toEqual({ gm_adv_at: '9', gm_adv_prev: '4' })
+        const after = { ...st, ...m }
+        expect(sinceAdvance(after, 10)).toBe(0)          // the reply it asked for is in: rest
+        expect(sinceAdvance(after, 12)).toBe(2)
+        expect(sinceAdvance(after, 9)).toBe(4)           // that reply was rerolled away: the mark before
+        expect(markAdvance(after, 9, d('escalate'))).toEqual({ gm_adv_at: '9', gm_adv_prev: '4' })
+        expect(sinceAdvance({ gm_beat_at: '3' }, 7)).toBe(4)   // no mark yet: the beat clock
+        const pushed = Array.from({ length: 400 }, () => rollGm({ gm_beat_at: '20', gm_adv_at: '10' }, 20)).filter((x) => x.pace === 'advance' || x.pace === 'escalate').length / 400
+        expect(pushed).toBeGreaterThan(0.7)
     })
     it('a beat that just moved rests; a stalled beat is pushed', () => {
         const at = (since: number) => Array.from({ length: 400 }, () => rollGm({ ...FULL, gm_beat_at: '10' }, 10 + since)).filter((d) => d.pace === 'advance' || d.pace === 'escalate').length / 400

@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, GM_KEYS, gmNote, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, GM_KEYS, gmNote, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, type GmState } from './gameMaster'
 import { storyShape } from './replyFormat'
 
 type Room = character | groupChat
@@ -28,8 +28,11 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     const replies = messages.filter((m) => m.role === 'char')
     const shape = storyShape(replies.map((m) => m.data ?? ''))
     const phase = gmPhase(card, messages, chat.scriptstate, state, shape.head.length + shape.tail.length > 0)
-    const note = gmNote(phase, state, rollGm(state, replies.length, rng), worldFlavour(card))
-    return gmRequest(formated, note)
+    const dice = rollGm(state, replies.length, rng)
+    // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
+    const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
+    if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
+    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)))
 }
 
 /** After a reply: its [[GM]] block leaves the message and its values go to the chat's variables. */
