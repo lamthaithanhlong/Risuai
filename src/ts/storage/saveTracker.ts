@@ -72,3 +72,31 @@ export function createSaveTracker(): SaveTracker {
         },
     }
 }
+
+/** "Something changed since the last save started": set by the debounced change effect, taken by the autosave loop. */
+export interface SaveSignal {
+    mark(): void
+    /** true once per change: the loop then saves */
+    take(): boolean
+    /** the save that took it failed: what it carried is still only in this page, so the loop saves again without a new change */
+    failed(): void
+}
+
+export function createSaveSignal(): SaveSignal {
+    let pending = false
+    return {
+        mark() { pending = true },
+        take() { const p = pending; pending = false; return p },
+        failed() { pending = true },
+    }
+}
+
+/** How long the autosave loop waits after its n-th failed save in a row before trying again (setItem has retried for ~12 s itself). */
+export function saveRetryDelayMs(failuresInARow: number): number {
+    return Math.min(2000 * 2 ** (Math.max(1, failuresInARow) - 1), 30_000)
+}
+
+/** The error is shown once, at the 5th failed save in a row; the later ones go to the console while the loop keeps trying. */
+export function shouldAlertSaveFailure(failuresInARow: number): boolean {
+    return failuresInARow === 5
+}

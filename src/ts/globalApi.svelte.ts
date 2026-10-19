@@ -2,7 +2,7 @@ import { pickBackupsToKeep } from "./storage/backupRetention"
 import { getBasename, getUncleanablesSync } from "./storage/uncleanable"
 export { getBasename, getUncleanablesSync }
 import { createJob, readJobEvents } from "./network/proxyJobHttp";
-import { createSaveTracker, shouldTrackChatContent, shouldWriteBackup } from "./storage/saveTracker";
+import { createSaveSignal, createSaveTracker, saveRetryDelayMs, shouldAlertSaveFailure, shouldTrackChatContent, shouldWriteBackup } from "./storage/saveTracker";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
 import {
@@ -308,7 +308,8 @@ export let requiresFullEncoderReload = $state({
     state: false
 })
 export async function saveDb() {
-    let changed = false
+    // set by the debounced change effect, taken by the loop below; a failed save puts it back (saveTracker.ts createSaveSignal)
+    const changed = createSaveSignal()
     syncDrive()
     let gotChannel = false
     const sessionID = v4()
@@ -362,7 +363,7 @@ export async function saveDb() {
                 clearTimeout(saveTimeout);
             }
             saveTimeout = setTimeout(() => {
-                changed = true;
+                changed.mark();
             }, debounceTime);
         }
 
@@ -430,13 +431,12 @@ export async function saveDb() {
     let lastDbData = new Uint8Array(0)
     await sleep(1000)
     while (true) {
-        if (!changed) {
+        if (!changed.take()) {
             await sleep(500)
             continue
         }
 
         saving.state = true
-        changed = false
         const seqAtStart = saveTracker.current()
         try {
 
@@ -502,12 +502,18 @@ export async function saveDb() {
             await sleep(500)
         } catch (error) {
             savetrys += 1
-            if (savetrys > 4) {
+            // what this save carried is still only in this page (the server was unreachable: setItem retried ~12 s and gave up). It
+            // used to wait for the next change; a page closed or reloaded before that lost it (Toxiproxy S6, 2026-10-19).
+            changed.failed()
+            if (shouldAlertSaveFailure(savetrys)) {
                 alertError(error)
             }
             else {
                 console.error(error)
             }
+            saving.state = false
+            await sleep(saveRetryDelayMs(savetrys))
+            continue
         }
 
         saving.state = false

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { createSaveTracker } from './saveTracker'
+import { createSaveSignal, createSaveTracker, saveRetryDelayMs, shouldAlertSaveFailure } from './saveTracker'
 
 describe('saveTracker.flush', () => {
     test('nothing changed: resolves at once', async () => {
@@ -80,5 +80,29 @@ describe('shouldWriteBackup', () => {
     test('a clock that went backwards does not stop backups for ever', async () => {
         const { shouldWriteBackup } = await import('./saveTracker')
         expect(shouldWriteBackup(2_000_000, 1_000_000)).toBe(true)
+    })
+})
+
+// Measured 2026-10-19 (Toxiproxy, S6): with the phone cut off, setItem gave up after its 6 attempts (12.5 s) and threw. The autosave
+// loop had already cleared its "changed" flag when the save started and did not set it again, so what that save carried (the reply that
+// just finished, say) stayed only in the page until some other change happened; a page closed or reloaded before that lost it.
+describe('save signal: a failed save is tried again without a new change', () => {
+    test('take() hands out a change once', () => {
+        const s = createSaveSignal()
+        expect(s.take()).toBe(false)
+        s.mark()
+        expect(s.take()).toBe(true)
+        expect(s.take()).toBe(false)
+    })
+    test('failed() puts the save back: the loop takes it again', () => {
+        const s = createSaveSignal()
+        s.mark()
+        expect(s.take()).toBe(true)
+        s.failed()
+        expect(s.take()).toBe(true)
+    })
+    test('the retry waits longer each time, at most 30 s, and the error is shown once (the 5th failure in a row)', () => {
+        expect([1, 2, 3, 4, 5, 6, 9].map(saveRetryDelayMs)).toEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000])
+        expect([1, 2, 3, 4, 5, 6, 7].map(shouldAlertSaveFailure)).toEqual([false, false, false, false, true, false, false])
     })
 })
