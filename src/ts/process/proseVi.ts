@@ -18,17 +18,33 @@
 // A stranger treated the player as known (reported on a new Shadow Slave chat: Elise named herself and asked Kenji for a way
 // out the moment he appeared): with only this chat's cast in the portrait note still 2 of 8 openings, with the first-meeting
 // line 0 of 8.
+// Reported 2026-10-19 "văn đọc thấy ngu ngu": the prose read like a report, not a translated novel. The old dialogue rule ("mở
+// bằng emoji rồi tên và động từ") put "😐 Evelyn nói khẽ: “…”" on every line, and the save's Prose Style module ("one idea per
+// sentence, under 25 words") made every paragraph a run of short facts. This reminder now asks for novel rhythm, a voice, no
+// record read out, no "English (Việt)" glosses, and varied speaker forms with the speaker's name or gesture in the line's own
+// paragraph; the emoji only where a feeling shows or changes. Measured (DeepSeek V4.1 Flash, the story model is refused to
+// workers; SS/LotM/Mailman x opening and a stranger-and-danger turn x 6 replies, with the new Prose Style and emoji modules):
+// blind judge 32 of 36 pairs for the new prose in both orders; mean sentence 9.6 -> 14.9 words, under 8 words 43% -> 30%,
+// runs of three short sentences 54 -> 22, emoji lines 106/145 -> 42/121, a line with no speaker in its paragraph 11 -> 7
+// (with the speaker named by the sentence just before: 8 -> 5). Logs: ~/.backend-review/work/risu-prose-v2/.
 export function viProseReminder(player = 'nhân vật chính'): string {
-    return '\n\n' + "[Viết văn tiếng Việt tự nhiên như tiểu thuyết dịch tốt: \"một người phụ nữ\" (không viết \"một phụ nữ\"); xưng hô theo tuổi so với "
-        + "nhân vật chính, tính bằng số: hơn dưới 15 tuổi là chị/anh (người 40 tuổi với người 25 tuổi là chị hoặc cô, không phải bà), hơn "
-        + "15–30 tuổi là cô/chú, từ khoảng 60 tuổi là bà/ông; nếu đoạn trước gọi sai thì từ đây gọi thẳng cách đúng, không viết cả hai (không "
-        + `"Bà… chị"); mỗi câu thoại một dòng, kể cả lời nhân vật chính (${player} hỏi: “…”), mở bằng emoji cảm xúc (nếu có) rồi tên hoặc cách `
-        + "gọi người nói và động từ, rồi lời: 😨 Người phụ nữ thì thào: “…”; không bao giờ để emoji đứng một mình trước dấu ngoặc (không viết "
-        + "😨 “…”), kể cả khi luật emoji ở trên bảo đặt emoji ngay trước lời thoại — luật này thắng; lời kể chỉ nói điều nhân vật chính thấy, "
-        + "nghe, biết (không kể vị, mùi, cảm giác hay ý nghĩ trong đầu người khác, chỉ kể dấu hiệu nhìn thấy được: ông ta nhăn mặt); chưa rõ "
-        + "nguồn thì tả cái nghe thấy (\"tiếng gõ\", \"một giọng gọi\"), không khẳng định \"có người\" hay \"ai đó\"; giữ đúng chỗ đứng và đồ vật đã "
-        + "kể; người lạ mới gặp lần đầu thì phản ứng như người lạ (giật mình, đề phòng, hỏi là ai, không tin ngay), không tự kể đời mình hay "
-        + "nhờ vả như người quen, trừ khi truyện đã cho họ quen nhau.]"
+    return '\n\n' + "[Viết văn tiếng Việt như bản dịch tiểu thuyết mạng hay, không như bản tường thuật: câu dài ngắn đan xen, nối những gì liền nhau "
+        + "vào một câu bằng \"rồi\", \"nhưng\", \"mà\", \"khi\" (không viết chuỗi câu cụt \"Anh đứng đó. Gió thổi. Áo có vết vá.\"); chi tiết lồng vào "
+        + `hành động và vào cái ${player} để ý, lời kể mang giọng của nhân vật ấy (một nhận xét khô khan, một điều thấy là lạ) nhưng không quyết `
+        + "định thay; không kể lại hồ sơ, quá khứ, nghề, năng lực của nhân vật chính và không đọc bảng trạng thái ra trong lời kể (không \"Trước "
+        + "đêm nay, anh là…\", \"Những dòng chữ ghi tên…\"), để chúng lộ ra qua việc làm; không viết kiểu \"Tiếng Anh (tiếng Việt)\" trong lời kể; "
+        + "\"một người phụ nữ\" (không viết \"một phụ nữ\"); xưng hô theo tuổi so với nhân vật chính, tính bằng số: hơn dưới 15 tuổi là chị/anh "
+        + "(người 40 tuổi với người 25 tuổi là chị hoặc cô, không phải bà), hơn 15–30 tuổi là cô/chú, từ khoảng 60 tuổi là bà/ông; nếu đoạn trước "
+        + "gọi sai thì từ đây gọi thẳng cách đúng, không viết cả hai (không \"Bà… chị\"); luôn rõ ai nói, kể cả lời nhân "
+        + `vật chính (${player} hỏi: “…”), nhưng đổi cách như tiểu thuyết: tên và động từ trước lời (Evelyn nói khẽ: “…”), sau lời (“…” Evelyn `
+        + "nói khẽ.), hoặc một cử chỉ của người nói ngay trước lời trong cùng đoạn (Evelyn liếc chiếc chìa khóa. “…”), không mở mọi câu thoại cùng "
+        + "một kiểu; tên, cách gọi hay cử chỉ của người nói nằm trong chính đoạn có lời, không xuống dòng giữa cử chỉ và lời (viết liền một đoạn: Gã gõ gậy vào thành xe. “Tỉnh rồi à.”), nên không đoạn nào chỉ có lời thoại trơ trọi, kể cả khi đoạn trước vừa tả người ấy; emoji cảm xúc chỉ khi cảm xúc người nói lộ ra hay đổi, đặt ở đầu đoạn trước tên hoặc cử chỉ của họ, không bao giờ đứng một "
+        + "mình trước dấu ngoặc (không viết 😨 “…”), không gắn vào mọi câu thoại (phần lớn lượt chỉ một đến ba) — điều này thắng mọi luật emoji ở "
+        + "trên; lời kể chỉ nói điều nhân vật chính thấy, nghe, biết (không kể vị, mùi, cảm giác hay ý nghĩ trong đầu người khác, chỉ kể dấu hiệu "
+        + "nhìn thấy được: ông ta nhăn mặt); chưa rõ nguồn thì tả cái nghe thấy (\"tiếng gõ\", \"một giọng gọi\"), không khẳng định \"có người\" hay "
+        + "\"ai đó\"; giữ đúng chỗ đứng và đồ vật đã kể; người nhân vật chính đã quen (trong persona hay đã gặp) thì là người quen, lần đầu họ xuất "
+        + "hiện trong truyện thì một vế câu cho biết họ là ai với nhân vật chính; người lạ mới gặp lần đầu thì phản ứng như người lạ (giật mình, "
+        + "đề phòng, hỏi là ai, không tin ngay), không tự kể đời mình hay nhờ vả như người quen, trừ khi truyện đã cho họ quen nhau.]"
 }
 
 const VI_LETTERS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỷỹỵ]/gi
