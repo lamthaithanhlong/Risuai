@@ -67,7 +67,7 @@ const LOTM_BROKEN: Record<string, [string, string[]]> = {
     rank_without_event: [LOTM_CLEAN.replace("'klein uống ma dược danh sách 8: thằng hề'", "'klein tập đóng vai thằng hề'"), []],
     rank_skipped: [LOTM_CLEAN.replace('rank_change(8, seq9, seq8).', 'rank_change(8, seq9, seq7).'), []],
     rank_lowered: [LOTM_CLEAN + "event(3, 'năm 1350', unknown, unknown, 'klein uống ma dược danh sách 9').\nevent_seen(3, 12).\nrank_change(12, seq8, seq9).\npotion_changed(12).\n", []],
-    potion_not_digested: [LOTM_CLEAN.replace('digestion_before(8, complete)', 'digestion_before(8, in_progress)'), []],
+    early_advance_unmarked: [LOTM_CLEAN.replace('digestion_before(8, complete)', 'digestion_before(8, in_progress)'), []],
     seq_without_new_potion: [LOTM_CLEAN.replace('potion_changed(8).', ''), []],
     pathway_changed: [LOTM_CLEAN + 'pathway_change(8, fool, sun).\n', []],
     grade0_artifact_carried: [LOTM_CLEAN.replace('artifact_grade(2, 3)', 'artifact_grade(2, 0)'), []],
@@ -218,8 +218,22 @@ describe.skipIf(!HAS_SWIPL)('check over story.sqlite picks the world of the chat
         expect(ok).toMatchObject({ status: 'ok', world: 'lotm', violations: [] })
         s.sync(saveOf(LOTM_NAME, { ...first, st_seq: 'Danh Sách 7: Ma thuật sư', st_potion: 'chưa tiêu hoá | x', led_ev: first.led_ev + '\nnăm 1349, sáng | uống ma dược Danh Sách 7' }), 3)
         const bad = await L.check(s, 'k1')
-        expect(rules(bad)).toEqual(['potion_not_digested', 'rank_skipped'])
+        expect(rules(bad)).toEqual(['early_advance_unmarked', 'rank_skipped'])
         expect(L.promptLine(bad)).toContain('Sequence jumped Sequence 9 -> Sequence 7')
+    })
+    test('Lord of the Mysteries: drinking the next potion before digestion stands when the same write records the loss-of-control risk (B1 Ch154)', async () => {
+        const s = openStoryStore({ dbFile: ':memory:' })
+        s.sync(saveOf(LOTM_NAME, KLEIN), 1)
+        const first = { ...KLEIN, st_pathway: 'con đường Nhà bói toán (Seer)', st_seq: 'Danh Sách 9: Nhà bói toán', st_potion: 'đang tiêu hoá | đóng vai thầy bói', st_control: 'chưa có dấu hiệu', led_ev: 'năm 1349, đêm | uống ma dược Danh Sách 9: Nhà bói toán' }
+        s.sync(saveOf(LOTM_NAME, first), 2)
+        const early = { ...first, st_seq: 'Danh Sách 8: Thằng hề', st_potion: 'chưa tiêu hoá | vừa uống', led_ev: first.led_ev + '\nnăm 1349, sáng | uống ma dược Danh Sách 8: Thằng hề' }
+        s.sync(saveOf(LOTM_NAME, { ...early, st_control: 'nghe tiếng thì thầm, mất ngủ' }), 3)
+        expect(rules(await L.check(s, 'k1'))).toEqual([])
+        const t = openStoryStore({ dbFile: ':memory:' })
+        t.sync(saveOf(LOTM_NAME, KLEIN), 1); t.sync(saveOf(LOTM_NAME, first), 2); t.sync(saveOf(LOTM_NAME, early), 3)
+        const bad = await L.check(t, 'k1')
+        expect(rules(bad)).toEqual(['early_advance_unmarked'])
+        expect(L.promptLine(bad)).toContain('the advance stands')
     })
     test('Lord of the Mysteries: an ordinary person given a Sequence with no potion drunk; one sealed artifact in two slots', async () => {
         const s = openStoryStore({ dbFile: ':memory:' })

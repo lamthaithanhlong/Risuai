@@ -7,19 +7,23 @@
 %   pathway_change(Rev, From, To)   st_pathway changed at Rev (normalized: fool, door, visionary, ...)
 %   digestion_before(Rev, State)    the potion's digestion just before Rev: not_started, in_progress, close, complete, unknown
 %   potion_changed(Rev)             st_potion was written at Rev
+%   control_changed(Rev)            st_control was written at Rev
 %   artifact_grade(Slot, Grade)     st_artifact<Slot> is a sealed artifact of that grade (0..3)
 %   ability_seq(Slot, Name, N)      st_ability<Slot> comes from Sequence N
 %   seq_now(N)                      the character's Sequence now (10 = ordinary person)
 %
 % violation(Rule, Detail):
-%   potion_not_digested      the next potion was drunk before the current one was digested (Module 03, 07)
+%   early_advance_unmarked   the next potion was drunk before the current one was digested, and the same write did not record the
+%                            loss-of-control risk in st_control. Drinking early is possible in the novel (Dunn advanced twice
+%                            undigested, B1 Ch154; the Craftsman reached Sequence 0 undigested and had to fight madness, B1 Ch1826),
+%                            so the advance stands; what it may not do is come without its cost.
 %   seq_without_new_potion   the Sequence rose and the same write did not set the new potion's digestion (Module 07)
 %   pathway_changed          the Pathway changed to one that is not its neighbour, or not by drinking the next Sequence's potion
 %                            ("drinking a potion from a different Pathway causes loss of control"; only neighbouring Pathways,
 %                            the groups below, exchange)
 %   grade0_artifact_carried  a grade-0 sealed artifact in the character's hands (grade 0 is sealed only under the Holy Cathedral)
 %   ability_above_sequence   an ability from a stronger Sequence than the character's (Module 03: never a higher Sequence's ability)
-:- dynamic pathway_change/3, digestion_before/2, potion_changed/1, artifact_grade/2, ability_seq/3, seq_now/1.
+:- dynamic pathway_change/3, digestion_before/2, potion_changed/1, control_changed/1, artifact_grade/2, ability_seq/3, seq_now/1.
 :- multifile violation/2, advance_word/1, advance_to/2, advance_exclude/3, remains_word/1, rank_can_fall/0.
 :- discontiguous violation/2.
 
@@ -54,10 +58,11 @@ neighbours(A, B) :- pathway_group(_, Ps), memberchk(A, Ps), memberchk(B, Ps), A 
 one_step(Rev) :- rank_change(Rev, F, T), rank_level(F, A), rank_level(T, B), B =:= A + 1.
 rose(Rev, From, To) :- rank_change(Rev, From, To), rank_level(From, A), rank_level(To, B), B > A.
 
-% rule: potion_not_digested
-violation(potion_not_digested, [rev-Rev, from-From, to-To, digestion-S]) :-
+% rule: early_advance_unmarked
+violation(early_advance_unmarked, [rev-Rev, from-From, to-To, digestion-S]) :-
     rose(Rev, From, To), From \== ordinary,
-    digestion_before(Rev, S), S \== complete, S \== unknown.
+    digestion_before(Rev, S), S \== complete, S \== unknown,
+    \+ control_changed(Rev).
 
 % rule: seq_without_new_potion
 violation(seq_without_new_potion, [rev-Rev, from-From, to-To]) :-

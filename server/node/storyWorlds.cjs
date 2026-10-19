@@ -198,6 +198,7 @@ const lotm = {
                 if (from && to && from !== to) out.push(`pathway_change(${Number(h.rev) || 0}, ${atom(from)}, ${atom(to)}).`)
             }
             if (h.key === 'st_potion') out.push(`potion_changed(${Number(h.rev) || 0}).`)
+            if (h.key === 'st_control') out.push(`control_changed(${Number(h.rev) || 0}).`)
             if (h.key === lotm.rankKey) {
                 const rev = Number(h.rev) || 0
                 out.push(`digestion_before(${rev}, ${digestion(valueBefore(hist, st, 'st_potion', rev))}).`)
@@ -221,7 +222,7 @@ const lotm = {
         return [...new Set(out)]
     },
     say: {
-        potion_not_digested: (d) => `the potion of ${lotm.showRank(d.to)} was drunk before ${lotm.showRank(d.from)} was digested (${String(d.digestion).replace('_', ' ')})`,
+        early_advance_unmarked: (d) => `the potion of ${lotm.showRank(d.to)} was drunk before ${lotm.showRank(d.from)} was digested (${String(d.digestion).replace('_', ' ')}): the advance stands, but the panel shows no sign of mất khống chế; write the risk into control and the story`,
         seq_without_new_potion: (d) => `the Sequence rose to ${lotm.showRank(d.to)} with no new potion digestion state`,
         pathway_changed: (d) => `the Pathway changed ${d.from} -> ${d.to}${d.reason === 'not_neighbour' ? ', which is not a neighbouring Pathway' : ' without drinking the next Sequence potion'}`,
         grade0_artifact_carried: (d) => `grade-0 sealed artifact "${d.artifact}" is in the character's hands, but grade 0 stays sealed under the Holy Cathedral`,
