@@ -18,6 +18,7 @@ import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
+import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
 import { isNodeServer } from "../platform";
 import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
 import { glossaryOf, termsRequest } from "./storyTermsPage";
@@ -1547,6 +1548,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = viProseRequest(formated, DBState.db.viProseGuard !== false, wantsVietnameseProse(currentChat?.message ?? [], currentChar?.firstMessage ?? '', DBState.db.translator), getUserName())
     // the player's turn is carried out: their plan happens, no detail invented to refuse it (playerAgency.ts)
     formated = agencyRequest(formated, DBState.db.playerAgency !== false)
+    // Settings → Jev referee (on unless turned off): a turn past the character, or one that writes someone else's outcome, gets a note (jevReferee.ts)
+    if(DBState.db.jevReferee !== false && isNodeServer){
+        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+        const { turn, scene } = turnAndScene(currentChat?.message)
+        formated = refereeRequest(formated, await brTimed('jev referee', () => fetchRefereeNote(currentChat?.id, turn, scene, { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth }), 0))
+    }
     // Settings → story consistency check (off unless turned on): the canon rules' findings on this chat, one system line (storyCheck.ts)
     if(DBState.db.storyCheckInPrompt === true && isNodeServer){
         const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')

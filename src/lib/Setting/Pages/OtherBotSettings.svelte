@@ -287,6 +287,10 @@
             </div>
         {/if}
         <div class="mb-4 flex flex-col gap-1">
+            <Check check={DBState.db.jevReferee !== false} onChange={(v) => { DBState.db.jevReferee = v }} name="Trọng tài Jev cho lượt chơi (mặc định bật)"/>
+            <span class="text-textcolor2 text-xs">Chỉ khi chạy bằng server Node và có khoá Jev trên máy chủ. Trước mỗi lượt, Jev chấm lượt của người chơi theo bảng trạng thái và cảnh vừa kể: hành động vượt sức nhân vật, hoặc người chơi tự viết kết quả (giết được, nhận thưởng, người khác tin hay nghe theo) thì model được nhắc để thế giới tự quyết. Lượt bình thường không thêm gì.</span>
+        </div>
+        <div class="mb-4 flex flex-col gap-1">
             <Check check={DBState.db.storyCheckInPrompt === true} onChange={(v) => { DBState.db.storyCheckInPrompt = v }} name="Kiểm tra mạch truyện và nhắc model sửa (mặc định tắt)"/>
             <span class="text-textcolor2 text-xs">Chỉ khi chạy bằng server Node. Trước mỗi lượt, server soát trạng thái truyện của chat này (bậc tăng mà không qua Ác Mộng hay Cánh Cổng, NPC đã chết lại hành động, ngày lùi, một Ký Ức ở hai ô, Mảnh Linh Hồn vượt sức chứa) và nếu có lỗi thì thêm một dòng hệ thống ngắn để model tự sửa. Không có lỗi, không có SWI-Prolog hay server chậm thì không thêm gì.</span>
         </div>

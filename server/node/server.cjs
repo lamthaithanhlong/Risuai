@@ -83,6 +83,7 @@ if (process.env.RISU_DB_MERGE !== '0') {
 // RISU_STORY=0 turns it off. It never writes the save and a failure here never fails a write.
 let storyStore = null;
 const storyLogic = require('./storyLogic.cjs');
+const jevReferee = require('./jevReferee.cjs');
 if (process.env.RISU_STORY !== '0') {
     try {
         storyStore = require('./storyStore.cjs').openStoryStore({
@@ -1694,6 +1695,18 @@ app.get('/api/story/:chatId/plan', authenticatedRouteLimiter, async (req, res, n
         if(!storyStore.story(id)) return notFound(res, id);
         const r = storyLogic.plan(storyStore, id, String(req.query.goal ?? ''));
         res.status(r.status === 'error' ? 400 : 200).send(r);
+    } catch (error) { next(error); }
+});
+
+// Jev referee (jevReferee.cjs): judges the player's turn against the chat's panel and the last narration; the page appends the note
+app.post('/api/story/referee', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        if(!await checkAuth(req, res)) return;
+        const body = req.body ?? {};
+        const id = String(body.chatId || '');
+        const state = (storyStore && /^[A-Za-z0-9-]{1,80}$/.test(id) && storyStore.story(id)?.state) || {};
+        const r = await jevReferee.referee({ state, scene: String(body.scene ?? '').slice(-6000), turn: String(body.turn ?? '').slice(0, 4000) });
+        res.send(r ? { status: 'ok', ...r } : { status: 'unavailable', note: '' });
     } catch (error) { next(error); }
 });
 
