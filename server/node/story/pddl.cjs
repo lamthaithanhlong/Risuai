@@ -11,6 +11,10 @@
 // Search: 'bfs' (shortest plan; default) or 'gbfs' (greedy best-first on the number of goal literals not yet true). A search that
 // empties its frontier answers {ok:false, reason:'unsolvable'}: the goal is not reachable from the initial state. One that hits
 // maxExpansions or timeoutMs answers reason 'limit' or 'timeout', which says nothing about reachability.
+// Before searching, a delete-relaxed reachability pass (every add kept, every delete ignored; an action whose negative precondition
+// names an atom true at the start and deleted by no action never applies) answers 'unsolvable' with relaxed:true when a positive
+// goal atom cannot be reached even so. That is sound (the relaxation only over-approximates) and needs no search, so a world with
+// a large state space still proves "impossible" quickly, e.g. joining an organization whose only leader is dead.
 
 class PddlError extends Error {}
 
@@ -220,17 +224,40 @@ function ground(domain, problem) {
 }
 
 // ---- search ----------------------------------------------------------------------------------------------------------------------
+/** the ops that can ever apply under the delete relaxation, and (as .reached) every atom they can make true */
+function relaxedReachable(ops, init) {
+    const deleted = new Set(ops.flatMap((o) => o.del))
+    const usable = ops.filter((o) => o.pre.every((l) => !l.neg || !init.has(l.k) || deleted.has(l.k)))
+    const reached = new Set(init)
+    const fired = new Set()
+    for (let changed = true; changed;) {
+        changed = false
+        for (const o of usable) {
+            if (fired.has(o) || !o.pre.every((l) => l.neg || reached.has(l.k))) continue
+            fired.add(o)
+            for (const a of o.add) if (!reached.has(a)) { reached.add(a); changed = true }
+            changed = true
+        }
+    }
+    const live = usable.filter((o) => fired.has(o))
+    live.reached = reached
+    return live
+}
+
 function plan(domain, problem, opts = {}) {
     const search = opts.search ?? 'bfs'
     const maxExpansions = opts.maxExpansions ?? 200000
     const deadline = Date.now() + (opts.timeoutMs ?? 10000)
     const goal = (opts.goal ?? problem.goal).map((l) => ({ neg: l.neg, k: key(l.atom), eq: l.atom[0] === '=' ? l.atom : null }))
-    const { ops, init } = ground(domain, problem)
+    const grounded = ground(domain, problem)
+    const init = grounded.init
+    const ops = relaxedReachable(grounded.ops, init)
+    if (goal.some((l) => !l.neg && !l.eq && !ops.reached.has(l.k))) return { ok: false, reason: 'unsolvable', relaxed: true, expanded: 0, grounded: grounded.ops.length }
     const sat = (st, lits) => lits.every((l) => (l.eq ? (l.eq[1] === l.eq[2]) !== l.neg : st.has(l.k) !== l.neg))
     const h = (st) => goal.reduce((n, l) => n + (sat(st, [l]) ? 0 : 1), 0)
     const id = (st) => [...st].sort().join('|')
     const start = { st: init, parent: null, op: null, g: 0 }
-    if (sat(init, goal)) return { ok: true, plan: [], expanded: 0, grounded: ops.length }
+    if (sat(init, goal)) return { ok: true, plan: [], expanded: 0, grounded: grounded.ops.length }
     const seen = new Set([id(init)])
     // bfs: a FIFO; gbfs: a binary heap on (h, insertion order) so ties keep breadth-first order
     let frontier = [start]
@@ -268,8 +295,8 @@ function plan(domain, problem, opts = {}) {
     else frontier = [start]
     let expanded = 0
     for (let n = pop(); n; n = pop()) {
-        if (++expanded > maxExpansions) return { ok: false, reason: 'limit', expanded: expanded - 1, grounded: ops.length }
-        if ((expanded & 255) === 0 && Date.now() > deadline) return { ok: false, reason: 'timeout', expanded, grounded: ops.length }
+        if (++expanded > maxExpansions) return { ok: false, reason: 'limit', expanded: expanded - 1, grounded: grounded.ops.length }
+        if ((expanded & 255) === 0 && Date.now() > deadline) return { ok: false, reason: 'timeout', expanded, grounded: grounded.ops.length }
         for (const op of ops) {
             if (!op.pre.every((l) => n.st.has(l.k) !== l.neg)) continue
             const next = new Set(n.st)
@@ -282,12 +309,12 @@ function plan(domain, problem, opts = {}) {
             if (sat(next, goal)) {
                 const steps = []
                 for (let c = child; c.parent; c = c.parent) steps.push(c.op)
-                return { ok: true, plan: steps.reverse(), expanded, grounded: ops.length }
+                return { ok: true, plan: steps.reverse(), expanded, grounded: grounded.ops.length }
             }
             push(child)
         }
     }
-    return { ok: false, reason: 'unsolvable', expanded, grounded: ops.length }
+    return { ok: false, reason: 'unsolvable', expanded, grounded: grounded.ops.length }
 }
 
 /** replays a plan from the initial state: every step's precondition must hold and the goal must hold at the end */
