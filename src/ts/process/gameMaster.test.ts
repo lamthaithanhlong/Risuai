@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, cardEvent, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
 } from './gameMaster'
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
@@ -178,6 +178,29 @@ describe('the note', () => {
         const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
         expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300)
         expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150)
+    })
+})
+
+describe('the card\'s own fate die reaches the note', () => {
+    const sys = (die: string) => [{ role: 'system', content: `MODULE 10: FATE DICE\nTHIS REPLY'S DICE\n${die}\n* Kind: a stranger.` }, { role: 'user', content: 'Tôi ngồi nghỉ.' }]
+    it('reads NEW/quiet (Lord of the Mysteries) and a number under the card\'s own bound (Shadow Slave, Infinite Mailman)', () => {
+        expect(cardEvent(sys('* Event: NEW. At a natural pause (arriving somewhere, resting), NEW means something new surfaces'))).toBe(true)
+        expect(cardEvent(sys('* Event: quiet. At a natural pause (arriving somewhere, resting), NEW means something new surfaces'))).toBe(false)
+        expect(cardEvent(sys('* Event: 9. At a natural pause (arriving, resting, travelling, a day passing), 1–20 means something new surfaces; otherwise the scene goes on.'))).toBe(true)
+        expect(cardEvent(sys('* Event: 20. At a natural pause (resting at home), 1–20 means something new surfaces (a person, thing)'))).toBe(true)
+        expect(cardEvent(sys('* Event: 21. At a natural pause (resting at home), 1–20 means something new surfaces (a person, thing)'))).toBe(false)
+        expect(cardEvent([{ role: 'system', content: 'a card with no fate dice' }, { role: 'user', content: 'x' }])).toBeNull()
+        expect(cardEvent([{ role: 'system', content: '* Event: {{randint::1::100}}' }])).toBeNull()
+    })
+    it('a NEW die is named in the note and outranks a QUIET pace; a quiet one adds nothing', () => {
+        const quiet = { pace: 'quiet' as const, surface: 'the goal', consequence: false, canon: false }
+        const n = gmNote('run', FULL, { ...quiet, cardNew: true }, 'x')
+        expect(n).toContain('QUIET')
+        expect(n).toContain('Card fate die: NEW EVENT')
+        expect(n).toContain('overrides a QUIET or BUILD pace')
+        expect(n.indexOf('Card fate die')).toBeGreaterThan(n.indexOf('Dice: QUIET'))
+        expect(gmNote('run', FULL, quiet, 'x')).not.toContain('Card fate die')
+        expect(gmNote('run', FULL, { ...quiet, cardNew: true }, 'x').length).toBeLessThan(1550 + 360)
     })
 })
 

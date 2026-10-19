@@ -319,7 +319,26 @@ export function cryptoRandom(): number {
     return a[0] / 2 ** 32
 }
 
-export type GmDice = { pace: 'quiet' | 'build' | 'advance' | 'escalate'; surface: string; consequence: boolean; canon: boolean; firstOrder?: boolean }
+/** `cardNew`: the card's own fate die in this request said a new event surfaces at a pause (cardEvent); absent when it rolls none. */
+export type GmDice = { pace: 'quiet' | 'build' | 'advance' | 'escalate'; surface: string; consequence: boolean; canon: boolean; firstOrder?: boolean; cardNew?: boolean }
+
+/**
+ * The card's own fate die as this request rolled it (the cards' Module 10: "* Event: NEW" / "* Event: quiet", or a number with
+ * "1–20 means something new surfaces"): true when a new event is due at a pause, false when quiet, null when the card has none.
+ * Measured 2026-10-19 (narrator gpt-6-luna, the three cards, acceptance runs): of 7 pauses where the card's die said NEW, 3
+ * surfaced something new; 3 of the 4 misses carried this note's "QUIET: no new trouble", the 3 hits ADVANCE: the note at the end
+ * of the player's message overruled the die in the system prompt. So the note says what the card's die said.
+ */
+export function cardEvent(formated: { content: unknown }[]): boolean | null {
+    for (const m of formated) {
+        if (typeof m.content !== 'string' || !m.content.includes('* Event:')) continue
+        const word = /^\* Event: (NEW|quiet)\b/m.exec(m.content)
+        if (word) return word[1] === 'NEW'
+        const num = /^\* Event: (\d+)\.[^\n]*?\b1\s*[–-]\s*(\d+) means something new/m.exec(m.content)
+        if (num) return Number(num[1]) <= Number(num[2])
+    }
+    return null
+}
 
 /** Replies since the player took their side, or -1 (no side, or taken before this was tracked). */
 export function sideAge(state: GmState, charCount: number): number {
@@ -393,6 +412,9 @@ const PACE: Record<GmDice['pace'], string> = {
     escalate: 'ESCALATE: the next beat hits and the stakes rise',
 }
 
+/** The card's fate die said NEW: it outranks a QUIET or BUILD pace, and it is the one new trouble of the reply. */
+const CARD_NEW = 'Card fate die: NEW EVENT. If this reply reaches a natural pause (rest, waiting, a walk or journey, time passing), something new surfaces now, a person, creature, clue, message or threat not yet in the story, shown as a hook in the prose (the card\'s dice say what and how); it overrides a QUIET or BUILD pace and is this reply\'s one new trouble.'
+
 /** Flavour only: the kind of personal trouble that fits the card's world (the GM itself is the same for every world). */
 export function worldFlavour(card: Card): string {
     const text = `${card?.name ?? ''}\n${(card?.globalLore ?? []).map((l) => l?.comment ?? '').join('\n')}`
@@ -435,6 +457,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         if (rewards.length) parts.push(`Reward: ${rewards.map((r) => short(r, 70)).join('; ')}.`)
         if (costs.length) parts.push(`Consequence: ${costs.map((c) => short(c, 70)).join('; ')}.`)
         parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
+        if (dice.cardNew) parts.push(CARD_NEW)
     }
     parts.push(pathLine(state))
     parts.push(`Canon (${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}): canon people live their own lives off-screen, heard as news or seen afar${dice.canon ? ' (some may come up now)' : ''}; met only when paths cross or the player seeks them, never forced; canon events still happen.`)

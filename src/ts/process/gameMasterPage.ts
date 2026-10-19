@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, creationNote, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 
@@ -30,6 +30,8 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     const shape = storyShape(replies.map((m) => m.data ?? ''))
     const phase = gmPhase(card, messages, chat.scriptstate, state, shape.head.length + shape.tail.length > 0)
     const dice = rollGm(state, replies.length, rng)
+    // the card's own fate die, as this request rolled it, is named in the note, which the model follows over the system prompt
+    if (cardEvent(formated)) dice.cardNew = true
     // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }

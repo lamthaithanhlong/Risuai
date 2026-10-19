@@ -28,6 +28,15 @@ describe('the Game Master on the page', () => {
         expect(gameMasterRequest(req(), { ...card, type: 'group' } as never, ok as never)[1].content).toBe('Tui đi xuống hầm.')
     })
 
+    it('names the card\'s fate die in the note when it rolled a new event, and only then', () => {
+        const ok = chatOf([{ role: 'char', data: 'story', chatId: 'r1' }, { role: 'user', data: 'đi' }, { role: 'char', data: 'story 2', chatId: 'r2' }],
+            { $st_name: 'Mai', $gm_arc: 'debt | Varn | pay | brother', $gm_beat: '1 | x | y' })
+        const withDie = (n: number) => [{ role: 'system', content: `THIS REPLY'S DICE\n* Event: ${n}. At a natural pause (arriving, resting, travelling, a day passing), 1–20 means something new surfaces; otherwise the scene goes on.` }, { role: 'user', content: 'Tôi ngồi nghỉ.' }]
+        expect(gameMasterRequest(withDie(7), card as never, ok as never)[1].content).toContain('Card fate die: NEW EVENT')
+        expect(gameMasterRequest(withDie(64), card as never, ok as never)[1].content).not.toContain('Card fate die')
+        expect(gameMasterRequest(req(), card as never, ok as never)[1].content).not.toContain('Card fate die')
+    })
+
     it('stays out of the Initialization reply to "Được chưa?", seeds on the next turn', () => {
         const c = chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa? Sửa dòng nào cứ nói' }, { role: 'user', data: 'được' }])
         expect(gameMasterRequest(req(), card as never, c as never)[1].content).toBe('Tui đi xuống hầm.')
