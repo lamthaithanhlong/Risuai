@@ -282,6 +282,8 @@ describe('the bookkeeper (the submodel keeps the notes the narrator forgot)', ()
         expect(s.gm_arc).toBe('a | b | c | d')
         expect(s.gm_path).toBe('Marlowe | probation | watched')
         expect(s.gm_enemies).toBe('Whitlock | wants the nail back')
+        expect(applyGm({}, ['beat: 2 | the threat: a wolf at the door | dusk'], 4).gm_beat).toBe('2 | the threat: a wolf at the door | dusk')
+        expect(applyGm({}, ['enemy: Aldric — now named. enemy: Aldric, the gate\'s Aspirant | kills me if I open the bar'], 4).gm_enemies).toBe('Aldric, the gate\'s Aspirant | kills me if I open the bar')
         expect(applyGm({}, ['beat: 2 | a knock | who sent him?\nenemy: the cloaked one | do they oppose?'], 4)).toMatchObject({ gm_beat: '2 | a knock | who sent him?', gm_enemies: '' })
     })
     it('reads a block, or bare lines, and nothing else', () => {

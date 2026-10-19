@@ -89,7 +89,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
             const m = /^\s*[-*•]?\s*([a-z_]+)\s*:\s*(.*)$/i.exec(raw)
             if (!m) continue
             const key = m[1].toLowerCase()
-            const value = clean(m[2])
+            // "enemy: Aldric — now named. enemy: Aldric, the gate's Aspirant | …" (measured): the last value on the line counts
+            const value = clean(m[2].replace(new RegExp(`^.*\\b${key}\\s*:\\s*`, 'i'), ''))
             // measured on the bookkeeper: "arc: unchanged (still …)", "enemy: no change.", "path: player avoided … — did they com…"
             if (NOTE_TALK.test(value) || ((key === 'path' || key === 'enemy') && /\?\s*$/.test(value))) continue
             if (key === 'arc') {
