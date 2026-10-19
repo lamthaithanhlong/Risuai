@@ -132,3 +132,47 @@ describe('two pages write one database over HTTP', () => {
         expect(w.json.merged).toBe(false)
     }, 60000)
 })
+
+describe('a page that fell back to a backup (F7)', () => {
+    async function put(p: Page, key: string, body: Buffer) {
+        const r = await fetch(`http://127.0.0.1:${port}/api/write`, { method: 'POST', body: body as unknown as BodyInit, headers: { 'content-type': 'application/octet-stream', 'file-path': hex(key), 'risu-auth': await token(p) } })
+        return r.status
+    }
+    async function loaded(p: Page, key: string) {
+        const r = await fetch(`http://127.0.0.1:${port}/api/sync/loaded`, { method: 'POST', headers: { 'file-path': hex(key), 'risu-auth': await token(p) } })
+        return { status: r.status, json: await r.json() }
+    }
+    const chatIds = (buf: Buffer) => val(buf, 'c1').chats.map((c: any) => c.id).sort()
+    // the server has chats k1 and k2 (k2 restored after the backup was taken); the backup has only k1
+    const withChats = (ids: string[], extra = '') => {
+        const chat = { chaId: 'c1', name: 'Story' + extra, globalLore: [], chats: ids.map((id) => ({ id, message: [id] })) }
+        return merge.encodeSave([merge.serializeBlock(1, 0, 'root', { maxResponse: 1, __directory: ['c1'] }), merge.serializeBlock(2, 0, 'c1', chat), { type: 0, comp: 0, name: 'config', data: Buffer.from('{}') }])
+    }
+
+    test('it tells the server what it loaded, and its first save keeps the chat the backup did not have', async () => {
+        expect((await write(A, withChats(['k1', 'k2']))).status).toBe(200)
+        expect(await put(A, 'database/dbbackup-100.bin', withChats(['k1']))).toBe(200)
+        await read(B)                                         // B reads database.bin: base = the file with k1 and k2
+        const l = await loaded(B, 'database/dbbackup-100.bin')  // ... but it decoded the backup instead
+        expect(l.status).toBe(200)
+        expect(l.json.base).toBeLessThan(0)
+        const w = await write(B, withChats(['k1'], ' edited'))
+        expect(w.json.merged).toBe(true)
+        const now = (await read(A)).body
+        expect(chatIds(now)).toEqual(['k1', 'k2'])
+        expect(val(now, 'c1').name).toBe('Story edited')
+    }, 60000)
+
+    test('without telling it (the code before), the same save deletes the chat it never had', async () => {
+        expect((await write(A, withChats(['k1', 'k2']))).status).toBe(200)
+        await read(B)
+        const w = await write(B, withChats(['k1'], ' edited'))
+        expect(w.json.merged).toBe(false)                    // fast path: stored whole
+        expect(chatIds((await read(A)).body)).toEqual(['k1'])
+    }, 60000)
+
+    test('only a dbbackup path is accepted', async () => {
+        expect((await loaded(B, 'database/database.bin')).status).toBe(400)
+        expect((await loaded(B, 'database/dbbackup-999.bin')).status).toBe(404)
+    }, 60000)
+})

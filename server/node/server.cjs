@@ -1588,6 +1588,33 @@ app.get('/api/read', authenticatedRouteLimiter, async (req, res, next) => {
     }
 });
 
+// A page that fell back to a dbbackup-*.bin (bootstrap.ts, when database.bin does not decode) holds that backup, not the file it read:
+// its base becomes the backup, so its writes cannot delete what it never loaded (dbSync.cjs onLoaded, F7).
+app.post('/api/sync/loaded', authenticatedRouteLimiter, async (req, res, next) => {
+    if(!await checkAuth(req, res)){
+        return;
+    }
+    const filePath = req.headers['file-path'];
+    if(!filePath || !isHex(filePath) || !/^database\/dbbackup-\d+\.bin$/.test(hexToKey(filePath))){
+        res.status(400).send({ error: 'a database/dbbackup-<n>.bin path is required' });
+        return;
+    }
+    if(!dbSync){
+        res.send({ success: true, base: null });
+        return;
+    }
+    try {
+        const bytes = currentSaveBytes(filePath);
+        if(!bytes || bytes.length === 0){
+            res.status(404).send({ error: 'no such backup' });
+            return;
+        }
+        res.send({ success: true, base: dbSync.onLoaded(clientIdOf(req), bytes) });
+    } catch (error) {
+        next(error);
+    }
+});
+
 app.get('/api/remove', authenticatedRouteLimiter, async (req, res, next) => {
     if(!await checkAuth(req, res)){
         return;

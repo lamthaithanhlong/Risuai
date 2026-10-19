@@ -342,3 +342,68 @@ describe('per page bookkeeping', () => {
         expect(kept).toEqual([1, 7])
     })
 })
+
+describe('a page that holds something other than what it read (F7: a backup, read-without-replace)', () => {
+    // 2026-10-19: chat 4c9bb225 was restored at rev 1688 and gone again at 1699. The page then DID hold it (its first save, rev 1692,
+    // and the backup it wrote with it list both chats), so that loss was the page's own removal. But one path really deletes what a page
+    // never had: the server records the base at GET database.bin, and bootstrap.ts loads a dbbackup-*.bin when that file does not
+    // decode. The page then holds the backup, while its base says it holds the served file; everything newer than the backup is
+    // "missing from the page" = deleted by it.
+    const served = world()   // the server's file: chats k1 and k2
+    const backup = edit(served, (g, set) => { const c = g('c1'); c.chats = [c.chats[0]]; set('c1', c) })   // older: only k1
+
+    test('without onLoaded (the code before): the page writes its backup plus an edit and the chat it never had (k2) is deleted', () => {
+        const s = openDbSync({ dbFile: ':memory:' })
+        s.onRead('A', served)
+        const ours = edit(backup, (g, set) => { const c = g('c1'); c.chats[0].message.push('after reload'); set('c1', c) })
+        const r = s.onWrite('A', ours, served)
+        // this is what the server did: fast path, the page's file stored whole
+        expect(r.how).toBe('fast')
+        expect(read(r.bytes, 'c1').chats.map((c: any) => c.id)).toEqual(['k1'])
+    })
+
+    test('with the fix: the page says what it loaded (onLoaded), its write is merged against that, and k2 stays', () => {
+        const s = openDbSync({ dbFile: ':memory:' })
+        s.onRead('A', served)
+        s.onLoaded('A', backup)
+        const ours = edit(backup, (g, set) => { const c = g('c1'); c.chats[0].message.push('after reload'); set('c1', c) })
+        const r = s.onWrite('A', ours, served)
+        expect(r.how).toBe('merged')
+        const chats = read(r.bytes, 'c1').chats
+        expect(chats.map((c: any) => c.id).sort()).toEqual(['k1', 'k2'])
+        expect(chats.find((c: any) => c.id === 'k1').message).toEqual(['hi', 'after reload'])
+        // and it stays merged on the next write (its memory is still the backup plus its edits), until it reads again
+        const r2 = s.onWrite('A', edit(ours, (g, set) => { const c = g('c1'); c.name = 'n'; set('c1', c) }), r.bytes)
+        expect(r2.how).toBe('merged')
+        expect(read(r2.bytes, 'c1').chats.map((c: any) => c.id).sort()).toEqual(['k1', 'k2'])
+        s.onRead('A', r2.bytes)
+        expect(s.onWrite('A', r2.bytes, r2.bytes).how).toBe('fast')
+    })
+
+    test('a page that deletes a chat it DID load still deletes it (the rule is unchanged for what it holds)', () => {
+        const s = openDbSync({ dbFile: ':memory:' })
+        s.onRead('A', served)
+        s.onLoaded('A', served)
+        const ours = edit(served, (g, set) => { const c = g('c1'); c.chats = [c.chats[0]]; set('c1', c) })
+        const r = s.onWrite('A', ours, served)
+        expect(read(r.bytes, 'c1').chats.map((c: any) => c.id)).toEqual(['k1'])
+    })
+
+    test('the loaded base is pinned against pruning and does not stop write rows from being pruned', () => {
+        const s = openDbSync({ dbFile: ':memory:', keep: 2 })
+        s.onRead('A', served)
+        s.onLoaded('A', backup)
+        let cur = served
+        for (let i = 0; i < 6; i++) {
+            const f = edit(cur, (g, set) => { const r = g('root'); r.maxResponse = 100 + i; set('root', r) })
+            cur = s.onWrite('B', f, cur).bytes
+            s.onRead('B', cur)
+        }
+        const r = s.onWrite('A', edit(backup, (g, set) => { const c = g('c1'); c.name = 'z'; set('c1', c) }), cur)
+        expect(r.how).toBe('merged')
+        expect(read(r.bytes, 'root').maxResponse).toBe(105)
+        expect(read(r.bytes, 'c1').chats.map((c: any) => c.id).sort()).toEqual(['k1', 'k2'])
+        const writes = s.db.prepare('SELECT COUNT(*) AS n FROM sync_write').get().n
+        expect(writes).toBeLessThan(7)
+    })
+})

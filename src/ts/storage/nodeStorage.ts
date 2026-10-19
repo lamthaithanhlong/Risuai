@@ -115,6 +115,22 @@ export class NodeStorage{
             await new Promise<void>((resolve) => setTimeout(resolve, delay))
         }
     }
+    /**
+     * This page holds `key` (a dbbackup-*.bin it fell back to), not the database.bin it read: the server merges its writes against
+     * that, so the chats and lore newer than the backup are not read as deleted by this page (server/node/dbSync.cjs onLoaded, F7).
+     */
+    async declareLoaded(key:string):Promise<boolean> {
+        await this.checkAuth()
+        const da = await fetch('/api/sync/loaded', {
+            method: "POST",
+            headers: {
+                'file-path': Buffer.from(key, 'utf-8').toString('hex'),
+                'risu-auth': await this.createAuth(),
+                'x-risu-tab': tabId(),
+            }
+        })
+        return da.status >= 200 && da.status < 300
+    }
     async getItem(key:string):Promise<Buffer> {
         await this.checkAuth()
         const da = await fetch('/api/read', {

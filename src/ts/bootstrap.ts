@@ -155,6 +155,13 @@ export async function loadData() {
                                 await decodeRisuSave(backupData)
                             )
                             backupLoaded = true
+                            // the server took the database.bin it served as this page's base; this page holds the backup instead, and
+                            // everything newer than it would read as deleted by this page on its first save (F7, dbSync.cjs onLoaded)
+                            if (isNodeServer) {
+                                const real = (forageStorage as unknown as { realStorage?: { declareLoaded?: (k: string) => Promise<boolean> } }).realStorage
+                                const told = await real?.declareLoaded?.(`database/dbbackup-${backup}.bin`).catch(() => false)
+                                if (!told) console.warn('[save] loaded a backup but could not tell the server; the first save may drop newer chats')
+                            }
                             break
                         } catch (error) { }
                     }

@@ -1,6 +1,8 @@
 // Remembers, per page, which version of database.bin it loaded, and merges its writes against that (dbMerge.cjs).
 //
 //   onRead(client, bytes)   a page read the database: that is now its base. A manifest of hashes is kept for the revision.
+//   onLoaded(client, bytes) a page holds `bytes`, not the file it read (bootstrap.ts loads a dbbackup-*.bin when database.bin does not
+//                           decode): that is its base from now on, and its writes are always merged against it (F7, see below).
 //   onWrite(client, bytes, current) a page writes: returns the bytes to store (the page's own file when nobody else wrote since it
 //                           loaded, else the merge of its file with what the server has) and the new revision.
 //
@@ -44,7 +46,16 @@ function openDbSync(opts) {
     // a day were measured, so 3000 revisions last ~4.6 days) used to lose its base and have its stale file stored whole
     // ('base pruned'), erasing everything written since (specs/chat/DbSync.tla, PinBases).
     const prune = db.prepare('DELETE FROM sync_manifest WHERE rev < ? AND rev NOT IN (SELECT base_rev FROM sync_client)')
-    const pruneWrites = db.prepare('DELETE FROM sync_write WHERE rev < MIN(?, COALESCE((SELECT MIN(base_rev) FROM sync_client), ?))')
+    // a loaded base (negative id, below) is not a revision: it must not hold back the pruning of write rows
+    const pruneWrites = db.prepare('DELETE FROM sync_write WHERE rev < MIN(?, COALESCE((SELECT MIN(base_rev) FROM sync_client WHERE base_rev > 0), ?))')
+    // F7. The base is recorded when a page GETs database.bin, but the page may then hold something else: bootstrap.ts falls back to
+    // the newest dbbackup-*.bin when the file does not decode. Its memory is then that backup, and every chat (lore, setting) newer
+    // than the backup is "missing from the page", which the merge reads as "deleted by the page" -- or, with no foreign write since
+    // the read, the fast path stores the backup whole. A page can only delete what it has loaded, so such a page tells the server
+    // what it loaded; that manifest is kept under a negative id (it is no revision of the file) and the page's writes are always
+    // merged against it (specs/chat/DbSync.tla, LoadedBase). Unreferenced loaded manifests are dropped.
+    const minLoaded = db.prepare('SELECT MIN(rev) AS m FROM sync_manifest WHERE rev < 0')
+    const pruneLoaded = db.prepare('DELETE FROM sync_manifest WHERE rev < 0 AND rev NOT IN (SELECT base_rev FROM sync_client)')
 
     const currentRev = () => getRev.get().rev
 
@@ -68,6 +79,15 @@ function openDbSync(opts) {
         return rev
     }
 
+    /** a page holds `bytes` (not the file it last read): that is its base; its writes are merged against it until it reads again */
+    function onLoaded(client, bytes) {
+        const id = Math.min(0, minLoaded.get().m ?? 0) - 1
+        putManifest.run(id, now(), JSON.stringify(manifestOf(bytes)))
+        putClient.run(client, id, now())
+        pruneLoaded.run()
+        return id
+    }
+
     /** a page writes `bytes`; `current` is what the server has (Buffer or null) */
     function onWrite(client, bytes, current) {
         const cur = currentRev()
@@ -80,7 +100,7 @@ function openDbSync(opts) {
             how = 'first'
         } else if (!row) {
             how = 'unknown page'
-        } else if (foreignWrites.get(row.base_rev, client).n === 0) {
+        } else if (row.base_rev > 0 && foreignWrites.get(row.base_rev, client).n === 0) {
             how = 'fast'
         } else {
             const mrow = getManifest.get(row.base_rev)
@@ -124,7 +144,7 @@ function openDbSync(opts) {
         db.close()
     }
 
-    return { onRead, onWrite, currentRev, close, db }
+    return { onRead, onLoaded, onWrite, currentRev, close, db }
 }
 
 module.exports = { openDbSync }
