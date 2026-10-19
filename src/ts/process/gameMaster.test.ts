@@ -126,12 +126,12 @@ describe('the GM dice come from the app, fresh every turn', () => {
         expect(sinceAdvance(after, 12)).toBe(2)
         expect(sinceAdvance(after, 9)).toBe(4)           // that reply was rerolled away: the mark before
         expect(markAdvance(after, 9, d('escalate'))).toEqual({ gm_adv_at: '9', gm_adv_prev: '4' })
-        expect(sinceAdvance({ gm_beat_at: '3' }, 7)).toBe(4)   // no mark yet: the beat clock
+        expect(sinceAdvance({ gm_beat_at: '6' }, 7)).toBe(7)   // no advance rolled yet: every reply counts, whatever the beat says
         const pushed = Array.from({ length: 400 }, () => rollGm({ gm_beat_at: '20', gm_adv_at: '10' }, 20)).filter((x) => x.pace === 'advance' || x.pace === 'escalate').length / 400
         expect(pushed).toBeGreaterThan(0.7)
     })
     it('a beat that just moved rests; a stalled beat is pushed', () => {
-        const at = (since: number) => Array.from({ length: 400 }, () => rollGm({ ...FULL, gm_beat_at: '10' }, 10 + since)).filter((d) => d.pace === 'advance' || d.pace === 'escalate').length / 400
+        const at = (since: number) => Array.from({ length: 400 }, () => rollGm({ ...FULL, gm_adv_at: '9' }, 10 + since)).filter((d) => d.pace === 'advance' || d.pace === 'escalate').length / 400
         expect(at(0)).toBeLessThan(0.25)
         expect(at(6)).toBeGreaterThan(0.7)
     })

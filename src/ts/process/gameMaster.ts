@@ -242,10 +242,12 @@ const ADVANCE = [0.1, 0.3, 0.45, 0.6, 0.75, 0.85]
  * narrator and the bookkeeper raised the number almost every reply, so the dice always saw a beat that had just moved and
  * rolled 7-8 quiet replies in 10. The clock is the app's own: the request that rolls ADVANCE or ESCALATE marks the reply
  * it asks for (gm_adv_at = replies before it); a reroll of that reply goes back to the mark before (gm_adv_prev).
- * Without any mark yet (an older chat), the model's beat clock.
+ * Before the first advance every reply counts.
  */
 export function sinceAdvance(state: GmState, charCount: number): number {
-    if (state.gm_adv_at === undefined || state.gm_adv_at === '') return Math.max(0, charCount - (Number(state.gm_beat_at ?? '') || 0))
+    // no advance rolled yet: every reply so far counts (measured: falling back to the model's beat clock, which moved every
+    // reply, Shadow Slave never rolled a first advance in 8 replies, so no mark was ever written)
+    if (state.gm_adv_at === undefined || state.gm_adv_at === '') return charCount
     const at = Number(state.gm_adv_at) || 0
     if (charCount > at) return charCount - at - 1
     // the reply that advance was rolled for is gone (rerolled): the mark before it
