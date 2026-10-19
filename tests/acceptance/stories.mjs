@@ -89,6 +89,8 @@ export const STORIES = {
         side: { kind: 'side', text: 'Tôi quyết định rồi: tôi không gia nhập đoàn nào cả, tôi sẽ đi một mình và tự gây dựng tên tuổi bằng những lá thư mình giao.', match: /một mình|tên tuổi|không gia nhập|độc hành|tự mình/i },
         sideLife: ['Tôi nhận lá thư tiếp theo một mình, chuẩn bị kỹ trước khi đi.', 'Tôi từ chối lời mời của người khác muốn kéo tôi vào nhóm, lịch sự nhưng dứt khoát.', 'Mấy ngày trôi qua: tôi giao thư một mình, ghi chép lại từng chuyến để rút kinh nghiệm.'].map((text) => ({ kind: 'side-life', text })),
         title: 'Infinite Mailman',
+        // the starting point has two values (NEW, SURVIVOR) and the card offers both
+        binaryItem: 'Sống sót|SURVIVOR',
         cardId: 'aa7f021d-b690-4f02-8e64-9e28aa0aff01',
         nameMatch: 'Infinite Mailman',
         src: path.join(home, 'Downloads/nguoi-dua-thu-khung-bo/fate-simulator'),

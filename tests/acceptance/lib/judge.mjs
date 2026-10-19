@@ -74,6 +74,13 @@ Answer only JSON: {"speaks": true|false, "decides": true|false, "quote": "<the w
     return out
 }
 
+// the player's persona companions (e.g. the ghost Evelyn) are always with the character: never a new event (measured
+// 2026-10-19: Mailman t6 was judged "new: Evelyn xuất hiện")
+const companions = (rec) => {
+    const names = [...String(rec.persona ?? '').matchAll(/^\*\*([^*\n—:]{2,30}?)\s*—/gm)].map((m) => m[1].trim())
+    return names.length ? `, and the character's own companions from the player's profile (${names.join(', ')}), who are always with them` : ''
+}
+
 /** judge the record: { pauses: {label: {newThing, what}}, impossible: {granted, why}, canon: [{label, fit, summary, slips}] } */
 export async function judgeRecord(rec, story, cfg, log = console.log) {
     cfg = { ...cfg }
@@ -85,7 +92,7 @@ export async function judgeRecord(rec, story, cfg, log = console.log) {
     for (const t of storyTurns.filter((x) => x.kind === 'pause')) {
         try {
             out.pauses[t.label] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese). The player paused (rest, a walk, travel or time passing).
-Did the narrator's reply introduce a NEW EVENT: a person, creature, clue, rumour, message or threat not in the story before, entering the scene and asking for the player's attention? These do NOT count: time passing, weather, the scenery, furniture or objects of a place the player walks into, the character's own thoughts, and people or things already present or already announced in the previous reply. Also say whether the reply ends with a menu of options for the player.
+Did the narrator's reply introduce a NEW EVENT: a person, creature, clue, rumour, message or threat not in the story before, entering the scene and asking for the player's attention? These do NOT count: time passing, weather, the scenery, furniture or objects of a place the player walks into, the character's own thoughts, and people or things already present or already announced in the previous reply${companions(rec)}. Also say whether the reply ends with a menu of options for the player.
 
 PREVIOUS REPLY (end):
 ${String(prevOf(t)).slice(-1500)}
