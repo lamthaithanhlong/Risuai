@@ -187,3 +187,53 @@ describe('F6: a merged write keeps only the newest RISU_PREMERGE_KEEP premerge p
         await stop(s)
     }, 60000)
 })
+
+// Measured 2026-10-19 (Toxiproxy S4b, 18 KB/s): a 6 MB save that took 330 s to upload got 408 from Node's requestTimeout (300 s) and
+// nothing was stored; past that, checkAuth runs only once the body is in, so a token valid when the upload started (exp = 5 min) was
+// "Token Expired" by then. The autosave now retries a failed save, so on a slow link every retry failed the same way.
+describe('S4b: a slow upload of database.bin', () => {
+    async function tokenExp(k: Key, secs: number) {
+        const header = b64u(JSON.stringify({ alg: 'ES256', typ: 'JWT' }))
+        const now = Math.floor(Date.now() / 1000)
+        const payload = b64u(JSON.stringify({ iat: now, exp: now + secs, pub: k.jwk }))
+        const sig = await webcrypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k.priv, Buffer.from(`${header}.${payload}`))
+        return `${header}.${payload}.${b64u(Buffer.from(sig))}`
+    }
+    /** POST /api/write, the body sent in `parts` pieces spread over `ms` */
+    function slowWrite(s: Srv, auth: string, body: Buffer, ms: number, parts = 8): Promise<{ status: number, text: string }> {
+        return new Promise((resolve, reject) => {
+            const r = http.request({ host: '127.0.0.1', port: s.port, path: '/api/write', method: 'POST', headers: { 'content-type': 'application/octet-stream', 'content-length': body.length, 'file-path': hex(DB), 'risu-auth': auth } }, (res) => {
+                let text = ''
+                res.on('data', (d) => { text += d })
+                res.on('end', () => resolve({ status: res.statusCode ?? 0, text }))
+            })
+            r.on('error', reject)
+            const size = Math.ceil(body.length / parts)
+            let i = 0
+            const t = setInterval(() => {
+                r.write(body.subarray(i * size, (i + 1) * size))
+                if (++i >= parts) { clearInterval(t); r.end() }
+            }, ms / parts)
+        })
+    }
+
+    test('a token valid when the upload started is accepted when the upload ends after its exp', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'chat-s4b-'))
+        const k = await newKey()
+        const s = await startServer(root, 'srv', [k], {}, (save) => writeFileSync(join(save, hex(DB)), root0({ maxResponse: 1 })))
+        const r = await slowWrite(s, await tokenExp(k, 2), root0({ maxResponse: 2 }), 3500)
+        expect(r.status).toBe(200)
+        expect(rootOf(await read(s, k)).maxResponse).toBe(2)
+        await stop(s)
+    }, 60000)
+
+    test('RISU_REQUEST_TIMEOUT_MS sets how long an upload may take (Node cuts at 300 s by default)', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'chat-s4b-'))
+        const k = await newKey()
+        const s = await startServer(root, 'srv', [k], { RISU_REQUEST_TIMEOUT_MS: '1500' }, (save) => writeFileSync(join(save, hex(DB)), root0({ maxResponse: 1 })))
+        const r = await slowWrite(s, await token(k), root0({ maxResponse: 2 }), 4000).catch((e) => ({ status: 0, text: String(e) }))
+        expect([0, 408]).toContain(r.status)
+        expect(rootOf(await read(s, k)).maxResponse).toBe(1)
+        await stop(s)
+    }, 60000)
+})

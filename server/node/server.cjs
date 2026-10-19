@@ -1,5 +1,12 @@
 const express = require('express');
 const app = express();
+// When the request arrived: checkAuth runs only after the body is in, and a 6 MB save on a slow link takes minutes to upload, so a token
+// is checked against this, not against the time the upload ended (Toxiproxy S4b, 2026-10-19: 330 s upload, Token Expired / 408).
+app.use((req, res, next) => { req.risuArrivedAt = Date.now(); next(); });
+// How long one request may take to arrive (Node's own default, 300 s, cut that upload with 408). RISU_REQUEST_TIMEOUT_MS, default 30 min.
+const REQUEST_TIMEOUT_MS = Number(process.env.RISU_REQUEST_TIMEOUT_MS) > 0 ? Number(process.env.RISU_REQUEST_TIMEOUT_MS) : 30 * 60 * 1000;
+// Node checks that timeout every connectionsCheckingInterval (30 s by default)
+const SERVER_TIMEOUTS = { requestTimeout: REQUEST_TIMEOUT_MS, connectionsCheckingInterval: Math.max(250, Math.min(30_000, Math.floor(REQUEST_TIMEOUT_MS / 2))) };
 // RISU_ACCESS_LOG=1: one line per request (method, path, status, ms, user agent). For finding where a phone stops loading.
 if (process.env.RISU_ACCESS_LOG) {
     app.use((req, res, next) => {
@@ -883,8 +890,8 @@ async function checkAuth(req, res, returnOnlyStatus = false){
         const signature = Buffer.from(signatureB64, 'base64url');
 
         
-        //check expiration
-        const now = Math.floor(Date.now() / 1000);
+        //check expiration, as of when the request arrived (a slow upload ends long after it started)
+        const now = Math.floor((req.risuArrivedAt ?? Date.now()) / 1000);
         if(jsonPayload.exp < now){
             console.log('Token expired')
             if(returnOnlyStatus){
@@ -2077,7 +2084,7 @@ async function startServer() {
 
         if (httpsOptions) {
             // HTTPS
-            server = https.createServer(httpsOptions, app);
+            server = https.createServer({ ...httpsOptions, ...SERVER_TIMEOUTS }, app);
             setupProxyStreamWebSocket(server);
             server.listen(port, () => {
                 console.log("[Server] HTTPS server is running.");
@@ -2085,7 +2092,7 @@ async function startServer() {
             });
         } else {
             // HTTP
-            server = http.createServer(app);
+            server = http.createServer(SERVER_TIMEOUTS, app);
             setupProxyStreamWebSocket(server);
             server.listen(port, () => {
                 console.log("[Server] HTTP server is running.");
