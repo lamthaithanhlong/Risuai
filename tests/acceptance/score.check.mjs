@@ -46,6 +46,8 @@ test('helpers', () => {
     assert.equal(completionText('data: {"choices":[{"delta":{"content":"Xin"}}]}\ndata: {"choices":[{"delta":{"content":" chào"}}]}\ndata: [DONE]'), 'Xin chào')
     const r = readMainRequest(JSON.stringify({ model: 'story', messages: [{ role: 'system', content: 'x\n* Event: 7. At a natural pause\n* Kind: a stranger.\n' }, { role: 'user', content: 'Tôi nghỉ.\n\n[Referee: beyond]\n\n[GM, hidden ... Dice: BUILD: no new event' }] }))
     assert.equal(r.kind, 'main'); assert.equal(r.eventNew, true); assert.equal(r.gmPace, 'BUILD'); assert.equal(r.referee, 'beyond')
+    assert.equal(r.cardNew, false)
+    assert.equal(readMainRequest(JSON.stringify({ messages: [{ role: 'system', content: '* Event: 7. x' }, { role: 'user', content: 'Tôi nghỉ.\n\n[GM (hidden, never named): Dice: QUIET: x. Card fate die: NEW EVENT. If this reply' }] })).cardNew, true)
     assert.equal(readMainRequest(JSON.stringify({ messages: [{ role: 'system', content: 'You are a literary translator. ...' }] })).kind, 'translate')
 })
 

@@ -53,6 +53,8 @@ export function readMainRequest(bodyText) {
         eventKind: kindDie ? kindDie[1].trim() : null,
         gmNote: gmAt >= 0, sideFocus: /focus: the side \(|the side's first order/.test(lu), gmSeed: /No arc yet: seed one/.test(lu), gmPace: pace ? pace[1] : null,
         referee: ref ? ref[1] : null,
+        // the GM note named the card's fate die (gameMaster.ts cardEvent): the app passed a NEW on to the narrator
+        cardNew: /Card fate die: NEW/.test(lu),
         storyCheckLine: /\[Story consistency check:/.test(lu),
         lastUserHead: lu.slice(0, 400),
     }
