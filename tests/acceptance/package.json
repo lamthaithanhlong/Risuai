@@ -1,0 +1,9 @@
+{
+  "name": "risu-acceptance",
+  "private": true,
+  "type": "module",
+  "description": "Acceptance playtest: plays the story cards through the real Risu app (copy of the save, second server, headless Chromium).",
+  "dependencies": {
+    "playwright": "1.48.2"
+  }
+}
