@@ -90,15 +90,23 @@ const hashValue = (v) => crypto.createHash('sha1').update(stable(v)).digest('hex
 const hashBytes = (b) => crypto.createHash('sha1').update(b).digest('hex').slice(0, 16)
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
-/** a list of objects that all have a unique string id: it can be merged element by element */
-function idsOf(arr) {
+/** a list of objects that all have a unique string id (`key`): it can be merged element by element */
+function idsOf(arr, key = 'id') {
     if (!Array.isArray(arr) || arr.length === 0) return null
     const ids = new Map()
     for (const el of arr) {
-        if (!isPlainObject(el) || typeof el.id !== 'string' || ids.has(el.id)) return null
-        ids.set(el.id, el)
+        if (!isPlainObject(el) || typeof el[key] !== 'string' || ids.has(el[key])) return null
+        ids.set(el[key], el)
     }
     return ids
+}
+/** the messages of a chat, by their chatId: {chatId: hash}, or undefined when they cannot be merged one by one */
+function messageHashes(el) {
+    const ids = isPlainObject(el) ? idsOf(el.message, 'chatId') : null
+    if (!ids) return undefined
+    const out = {}
+    for (const [id, m] of ids) out[id] = hashValue(m)
+    return out
 }
 const isStringList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string')
 
@@ -110,16 +118,22 @@ function manifestOfBlock(block) {
         const keys = {}
         const lists = {}
         const elems = {}
+        const msgs = {}
         for (const k of Object.keys(value)) {
             keys[k] = hashValue(value[k])
             if (k === '__directory' && isStringList(value[k])) lists[k] = value[k]
             const ids = idsOf(value[k])
             if (ids) {
                 elems[k] = {}
-                for (const [id, el] of ids) elems[k][id] = hashValue(el)
+                for (const [id, el] of ids) {
+                    elems[k][id] = hashValue(el)
+                    // a chat: also each message, so that a chat both pages changed can be merged message by message
+                    const mh = messageHashes(el)
+                    if (mh) ((msgs[k] ??= {})[id] = mh)
+                }
             }
         }
-        return { type: block.type, kind: 'obj', keys, lists, elems }
+        return { type: block.type, kind: 'obj', keys, lists, elems, msgs }
     }
     const ids = idsOf(value)
     const m = { type: block.type, kind: 'arr', h: hashValue(value) }
@@ -138,31 +152,58 @@ function manifestOf(buf) {
 }
 
 // ---- merging one list of objects with ids ---------------------------------------------------------------------------------------
-// bElems: {id: hash} of the base, or undefined when the base did not have the list.
-function mergeById(bElems, oursArr, theirsArr, report) {
-    const oIds = idsOf(oursArr)
-    const tIds = idsOf(theirsArr)
+// bElems: {id: hash} of the base, or undefined when the base did not have the list. bMsgs: {id: {chatId: hash}} of the base's chats
+// (the messages of each element), when known. key: the field that names an element ('id' for chats and modules, 'chatId' for messages).
+// specs/chat/MessageMerge.dfy proves this rule for any list (no element twice, nothing the other side added is lost, the page's own
+// additions and edits are kept, an element the page did not touch follows the server) and specs/chat/ChatMerge.als checks it per id.
+function mergeById(bElems, oursArr, theirsArr, report, bMsgs, key = 'id') {
+    const oIds = idsOf(oursArr, key)
+    const tIds = idsOf(theirsArr, key)
     if (!oIds || !tIds || !bElems) return null
-    const out = []
+    const fromPage = []
     for (const [id, o] of oIds) {
         const t = tIds.get(id)
         const untouched = bElems[id] !== undefined && hashValue(o) === bElems[id]
         if (t && untouched) {
             if (hashValue(t) !== bElems[id]) report.fromServer++
-            out.push(t)                    // the page did not touch it: follow the server
+            fromPage.push(t)               // the page did not touch it: follow the server
         } else if (!t && untouched) {
             report.fromServer++            // deleted by the server, untouched by the page: gone (a deleted chat used to come back here)
+        } else if (t && bElems[id] !== undefined && hashValue(t) !== bElems[id] && bMsgs && bMsgs[id]) {
+            // both pages changed this chat (the Mac sent a message in it while the phone chatted there too). Taking the page's
+            // copy whole erased the other device's messages (43 on 2026-10-15); merge it once more, message by message.
+            const message = mergeById(bMsgs[id], o.message, t.message, report, undefined, 'chatId')
+            fromPage.push(message ? { ...o, message } : o)
+            if (message) report.chatsMerged++
         } else {
-            out.push(o)                    // changed or added by the page
+            fromPage.push(o)               // changed or added by the page
         }
     }
+    const fromServer = []
     for (const [id, t] of tIds) {
         if (oIds.has(id)) continue
         if (bElems[id] === undefined || hashValue(t) !== bElems[id]) {
-            out.push(t)                    // added by the server, or changed by it after the page deleted it
+            fromServer.push(t)             // added by the server, or changed by it after the page deleted it
             report.fromServer++
         }                                  // else deleted by the page and untouched by the server: gone
     }
+    return key === 'chatId' ? interleaveByTime(fromPage, fromServer) : [...fromPage, ...fromServer]
+}
+
+/**
+ * Messages: the page's in the page's order, the server's new ones after them. When every message carries a time, the two runs are
+ * merged by time instead (each keeps its own order), so a conversation held on two devices reads in the order it was written.
+ */
+function interleaveByTime(a, b) {
+    if (b.length === 0) return a
+    const timed = (m) => typeof m.time === 'number' && Number.isFinite(m.time)
+    if (!a.every(timed) || !b.every(timed)) return [...a, ...b]
+    const out = []
+    let i = 0
+    let j = 0
+    while (i < a.length && j < b.length) out.push(b[j].time < a[i].time ? b[j++] : a[i++])
+    while (i < a.length) out.push(a[i++])
+    while (j < b.length) out.push(b[j++])
     return out
 }
 
@@ -199,7 +240,7 @@ function mergeObjects(bm, ours, theirs, report) {
                     out[k] = mergeStringList(bm.lists && bm.lists[k], ours[k], theirs[k])
                     continue
                 }
-                const merged = bm && bm.elems ? mergeById(bm.elems[k], ours[k], theirs[k], report) : null
+                const merged = bm && bm.elems ? mergeById(bm.elems[k], ours[k], theirs[k], report, bm.msgs && bm.msgs[k]) : null
                 if (merged) { out[k] = merged; continue }
             }
             out[k] = ours[k]
@@ -225,7 +266,7 @@ function mergeObjects(bm, ours, theirs, report) {
  * @returns {buf, merged, report} merged is false when ours was used as it is (no base, or a file that could not be read)
  */
 function mergeSaves(base, oursBuf, theirsBuf) {
-    const report = { blocksFromServer: 0, keysFromServer: 0, fromServer: 0, conflicts: 0, reason: '' }
+    const report = { blocksFromServer: 0, keysFromServer: 0, fromServer: 0, conflicts: 0, chatsMerged: 0, reason: '' }
     if (!base) { report.reason = 'no base'; return { buf: oursBuf, merged: false, report } }
     let ours, theirs
     try {
