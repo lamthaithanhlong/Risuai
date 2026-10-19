@@ -136,8 +136,19 @@ export function unMarkdown(text: string): string {
 }
 
 /** The reply with its hidden blocks opened "[[STATUS", "[[LEDGER", "[[GM" and closed "]]" whatever brackets the model used. */
+// Measured 2026-10-19 evening (Infinite Mailman t10, gpt-6-luna): after a right "[[GM … ]]" the narrator wrote a block of its
+// own name, "[[CHANGE\nenemy: … | …\nthreat: … | …\n]]" (the GM note said "[[GM …]] + changed lines"); no script knows CHANGE,
+// so the player read it. A block whose every line is a GM note line is a GM block, whatever it is called.
+const STRAY = /^([ \t]*)\[\[([A-Z][A-Z_]{1,20})[ \t]*\n([\s\S]*?)\n[ \t]*\]\]/gm
+const KNOWN_BLOCK = new Set(['STATUS', 'LEDGER', 'GM', 'LOOK', 'IMG'])
+const GM_NOTE_ROW = /^[ \t]*(arc|beat|threat|path|enemy|enemies|gained|reward|consequence|canon)[ \t]*:/i
+const strayToGm = (t: string) => t.replace(STRAY, (all, pad: string, name: string, body: string) => {
+    const rows = body.split('\n').filter((l) => l.trim())
+    return !KNOWN_BLOCK.has(name) && rows.length && rows.every((l) => GM_NOTE_ROW.test(l)) ? `${pad}[[GM\n${body}\n]]` : all
+})
+
 export function fixBlockBrackets(text: string): string {
-    const t = unMarkdown(text ?? '')
+    const t = strayToGm(unMarkdown(text ?? ''))
     if (!/(【|［|〔|\[(?!\[)|\[\[\s+)\s*(STATUS|LEDGER|GM)\b/.test(t)) return t
     return t.replace(OPENER, '$1[[$2').replace(CLOSER, '$1]]')
 }

@@ -8,7 +8,7 @@ const asks: string[] = []
 const answer = { text: '[[GM\nbeat: 1 | x | y\n]]' }
 vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: answer.text } } }))
 
-const { bookkeep, creationRequest, gameMasterRequest, noteGameMaster } = await import('./gameMasterPage')
+const { bookkeep, creationRequest, gameMasterRequest, noteGameMaster, storyNotesRequest } = await import('./gameMasterPage')
 const { statusSpec } = await import('./statusBook')
 
 const card = { type: 'character', name: 'Shadow Slave', desc: 'Character Creation … Được chưa?', firstMessage: '', globalLore: [] }
@@ -191,33 +191,51 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
 
     it('the player\'s persona is the character sheet: creation takes it, and the story keeps its abilities from the yes on', () => {
         // the owner's Mailman chat, 2026-10-19: the look answer was "Lấy như profile" and the record kept none of the ten abilities
+        const RULE = " The Player's Persona: the persona is the character sheet."
+        const pCard = { ...panelCard, desc: panelCard.desc + RULE }, sCard = { ...card, desc: card.desc + RULE }
         const KENJI = '[{{user}} = Kenji Park, nam, 25 tuổi ... **10 năng lực bí mật:** 1. **Thôi miên** ... **Evelyn — Linh Hồn Dẫn Lối** ...]'
         const look = chatOf([{ role: 'user', data: 'Từng bước' }, { role: 'char', data: '**Ngoại hình của Kenji Park?**\n- a\n- b\n- c\n- Để thế giới chọn.' }, { role: 'user', data: 'Lấy như profile' }])
         persona.text = ''
-        expect(creationRequest(req(), panelCard as never, look as never)[1].content).not.toContain('persona')
+        expect(creationRequest(req(), pCard as never, look as never)[1].content).not.toContain('persona')
         persona.text = KENJI
-        const note = creationRequest(req(), panelCard as never, look as never)[1].content
+        const note = creationRequest(req(), pCard as never, look as never)[1].content
         expect(note).toContain('it is the character sheet')
         expect(note).toContain('Năng lực, Đồng hành')
         // story turns, the Initialization reply (GM silent) included; none before the yes, none without a persona
         const init = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }])
-        expect(gameMasterRequest(req(), card as never, init as never)[1].content).toContain('[Persona (hidden')
+        expect(storyNotesRequest(req(), sCard as never, init as never)[1].content).toContain('[Persona (hidden')
         const story = chatOf([{ role: 'char', data: 'story' }], { $st_name: 'Kenji Park' })
-        expect(gameMasterRequest(req(), card as never, story as never)[1].content).toContain('[Persona (hidden')
-        expect(gameMasterRequest(req(), card as never, look as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(storyNotesRequest(req(), sCard as never, story as never)[1].content).toContain('[Persona (hidden')
+        expect(storyNotesRequest(req(), sCard as never, look as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(storyNotesRequest(req(), card as never, story as never)[1].content).not.toContain('[Persona (hidden')   // a card without the rule
+        expect(creationRequest(req(), panelCard as never, look as never)[1].content).not.toContain('character sheet')
         persona.text = '   '
-        expect(gameMasterRequest(req(), card as never, story as never)[1].content).not.toContain('[Persona (hidden')
+        expect(storyNotesRequest(req(), sCard as never, story as never)[1].content).not.toContain('[Persona (hidden')
         persona.text = ''
     })
 
     it('a card with a Future Plan rule gets the line asked for from the yes on; other cards and creation do not', () => {
-        const planCard = { ...card, desc: card.desc + ' Future Plan … [💡Kế hoạch| Nephis, Cassie ] …' }
+        const planCard = { ...card, desc: card.desc + " The Player's Persona … Future Plan … [💡Kế hoạch| Nephis, Cassie ] …" }
         const story = chatOf([{ role: 'char', data: 'story' }], { $st_name: 'Kenji Park' })
-        expect(gameMasterRequest(req(), planCard as never, story as never)[1].content).toContain('[💡Kế hoạch| names ]')
+        expect(storyNotesRequest(req(), planCard as never, story as never)[1].content).toContain('[💡Kế hoạch| names ]')
         const init = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }])
-        expect(gameMasterRequest(req(), planCard as never, init as never)[1].content).toContain('[Future Plan (hidden')
+        expect(storyNotesRequest(req(), planCard as never, init as never)[1].content).toContain('[Future Plan (hidden')
         const pre = chatOf([{ role: 'user', data: 'Từng bước' }, { role: 'char', data: 'Tên?\n- a\n- b\n- c' }, { role: 'user', data: 'Kenji' }])
-        expect(gameMasterRequest(req(), planCard as never, pre as never)[1].content).toBe('Tui đi xuống hầm.')
-        expect(gameMasterRequest(req(), card as never, story as never)[1].content).not.toContain('Future Plan')
+        expect(storyNotesRequest(req(), planCard as never, pre as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(storyNotesRequest(req(), card as never, story as never)[1].content).not.toContain('Future Plan')
+    })
+
+    it('the persona and Future Plan notes stay with the GM switched off, and come on a card with no creation step (Z3 counterexamples)', () => {
+        persona.text = '[{{user}} = Kenji Park ... 1. **Thôi miên:** ...]'
+        const planCard = { ...card, desc: "The Player's Persona … Future Plan … [💡Kế hoạch| a ] …" }      // no "Được chưa?": no creation step
+        const story = chatOf([{ role: 'user', data: 'xin chào' }, { role: 'char', data: 'Mưa quất vào cửa kính, từng hạt nặng như sỏi. Kenji kéo cổ áo lên, nhìn con phố vắng dưới ánh đèn vàng.\n\nỞ cuối phố, một bóng người đứng yên dưới mái hiên.' }, { role: 'user', data: 'đi tiếp' }])
+        db.gameMaster = false
+        const out = storyNotesRequest(req(), planCard as never, story as never)[1].content
+        expect(out).toContain('[Persona (hidden')
+        expect(out).toContain('[Future Plan (hidden')
+        expect(gameMasterRequest(req(), planCard as never, story as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(storyNotesRequest(req(), planCard as never, chatOf([{ role: 'user', data: 'xin chào' }]) as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(storyNotesRequest(req(), { ...planCard, type: 'group' } as never, story as never)[1].content).toBe('Tui đi xuống hầm.')
+        persona.text = ''
     })
 })

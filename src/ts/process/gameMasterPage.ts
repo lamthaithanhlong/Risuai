@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, PERSONA_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, PERSONA_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
@@ -36,11 +36,26 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
-    // the persona's abilities stand from the yes on, the Initialization reply included (the GM itself is silent there)
-    const confirmed = yesAt(messages) >= 0 || hasPanel(chat.scriptstate) || !!state.gm_arc || !!state.gm_past
-    const persona = confirmed && hasPersona() ? PERSONA_STORY : ''
-    const plan = confirmed && hasFuturePlan(card) ? PLAN_STORY : ''
-    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)) + persona + plan)
+    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)))
+}
+
+/**
+ * The persona and Future Plan notes, whether the GM is on or off: they belong to the card and the player, not to the GM
+ * (Z3 on the note conditions, 2026-10-19: inside gameMasterRequest they were gone with the GM switched off, and on a card with
+ * no creation step they never came, since nothing there confirms a character). From the yes on, the Initialization reply
+ * included; on a card with no creation step, once a story reply exists.
+ */
+export function storyNotesRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
+    if (!card || card.type === 'group' || !chat) return formated
+    const messages = chat.message ?? []
+    const state = gmStateOf(chat.scriptstate)
+    // never while a character is being made (the creation note's turns); a card with no creation step has none, so from its
+    // first reply (the GM's own "story-like" test needs panels, which such a card may never write)
+    const running = yesAt(messages) >= 0 || hasPanel(chat.scriptstate) || !!state.gm_arc || !!state.gm_past
+        || (!hasCreationStep(card) && messages.some((m) => m.role === 'char'))
+    if (!running) return formated
+    // only a card that says the persona is the character sheet gets the persona note (another card keeps its own rules)
+    return gmRequest(formated, (hasPersona() && hasPersonaRule(card) ? PERSONA_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : ''))
 }
 
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */
@@ -51,7 +66,7 @@ function hasPersona(): boolean {
 /** The note at the end of the player's message while the character is being made (gameMaster.ts creationNote); none after. */
 export function creationRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
     if (!card || card.type === 'group' || !chat) return formated
-    return gmRequest(formated, creationNote(card, chat.message ?? [], chat.scriptstate, gmStateOf(chat.scriptstate), hasPersona()))
+    return gmRequest(formated, creationNote(card, chat.message ?? [], chat.scriptstate, gmStateOf(chat.scriptstate), hasPersona() && hasPersonaRule(card)))
 }
 
 /** The status panel's keys are kept once the character is confirmed: the yes was given, or the GM already runs (statusBook.ts). */

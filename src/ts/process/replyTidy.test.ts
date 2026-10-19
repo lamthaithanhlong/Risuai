@@ -124,3 +124,22 @@ describe('measured 2026-10-19 (story slot through ChatGPT web): the reply came b
         expect(fixBlockBrackets(plain)).toBe(plain)
     })
 })
+
+describe('measured 2026-10-19 evening (gpt-6-luna, Mailman t10): a block of the narrator\'s own name, full of GM lines, was shown', async () => {
+    const { fixBlockBrackets } = await import('./replyTidy')
+    const { gmBlocks, stripGm } = await import('./gameMaster')
+    const T10 = 'Hắn bước tới, cành gãy kéo trên đá ken két. Hắn nâng cành lên lần nữa, ánh mắt không rời hòn đá.\n\n[[GM\nbeat: 8 | Tôn Minh Hạo nép bờ kè, nắm hòn đá; kẻ lạ áp sát | Quyết định cách đối phó với đòn tiếp theo\n]]\n[[CHANGE\nenemy: Kẻ lạ cầm cành trúc | Áp sát, tiếp tục tấn công\nthreat: Bờ kè chặn một hướng lùi | Đòn cành trúc sắp tới\n]]'
+    it('becomes a GM block: its lines reach the notes and the player sees none of it', () => {
+        const fixed = fixBlockBrackets(T10)
+        expect(fixed).not.toContain('[[CHANGE')
+        expect(gmBlocks(fixed).join('\n')).toContain('enemy: Kẻ lạ cầm cành trúc')
+        expect(gmBlocks(fixed).join('\n')).toContain('threat: Bờ kè chặn một hướng lùi')
+        expect(stripGm(fixed)).not.toMatch(/\[\[|enemy:|threat:/)
+    })
+    it('a known block, or one with any line that is not a GM line, is left as it is', () => {
+        const look = '[[LOOK\nbeat: x\n]]'
+        expect(fixBlockBrackets(look)).toBe(look)
+        const other = 'Văn.\n\n[[NOTE\nenemy: a | b\nhắn cười\n]]'
+        expect(fixBlockBrackets(other)).toBe(other)
+    })
+})

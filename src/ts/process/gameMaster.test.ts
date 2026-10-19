@@ -248,6 +248,9 @@ describe('the side the player chose (path, enemies, what it gave)', () => {
         }
         expect(rollGm(st, 9).surface).toBe('the side (the garrison)')
         expect(rollGm(st, 9).firstOrder).toBeUndefined()
+        // a side not here yet (SS 2026-10-19: Nephis's group from inside the First Nightmare): the note asks for a step toward it
+        expect(gmNote('run', st, rollGm(st, 7), 'x')).toContain('not here yet: a step toward it')
+        expect(gmNote('run', { gm_arc: 'a | b | c | d' }, rollGm({ gm_arc: 'a | b | c | d' }, 7), 'x')).not.toContain('not here yet')
         const later = new Set(Array.from({ length: 200 }, () => rollGm(st, 10).surface))
         expect(later.size).toBeGreaterThan(1)
         expect(sideAge({ gm_path: 'x' }, 5)).toBe(-1)

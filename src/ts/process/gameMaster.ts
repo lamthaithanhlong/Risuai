@@ -216,9 +216,13 @@ const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
 // Mailman chat the persona (Kenji Park: ten secret abilities, the ghost Evelyn) was in every request, the look answer was
 // "Lấy như profile", and the record and the story kept none of the abilities: the cards' creation rule rolls what the player
 // does not type, and a fast model follows the note at the end of the message over the system prompt. So both notes say it.
-const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included; do not ask a question it already answers ("lấy như profile" = the persona\'s line), and list its abilities and companions in the record (Năng lực, Đồng hành).'
+// Measured on the same evening's run: with the persona the step-by-step interview asked the name, the sex and the look again
+// (Mailman asked the look twice) and offered the persona's look as one choice of three; the items it fixes are named once.
+const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included, and list its abilities and companions in the record (Năng lực, Đồng hành). Step by step: the first reply opens with one line "Từ persona: …" naming what it fixes; then ask only the items it leaves open, in the card\'s order; an item it fixes is never asked or offered again ("lấy như profile" = the persona\'s line).'
 /** A card with a Future Plan rule (the Kairos Academy card's "Request Profile", asked 2026-10-19: "thiếu future plan"): the reply
  *  ends with "[💡Kế hoạch| names ]", whose names wake their lore next turn; the card's status.lua folds it and keeps only the newest. */
+/** A card whose rules say the player's persona is the character sheet (the three story cards' "The Player's Persona"). */
+export const hasPersonaRule = (card: Card | undefined) => /The Player's Persona/.test(card?.desc ?? '')
 export const hasFuturePlan = (card: Card | undefined) => /\[💡Kế hoạch\|/.test(card?.desc ?? '')
 export const PLAN_STORY = '\n\n[Future Plan (hidden, never named): end the reply with one line "[💡Kế hoạch| names ]" naming the characters of the novel the next scene needs (or "[💡Kế hoạch| Không ]"), before any STATUS, LEDGER or GM block. A character of the novel enters only after an earlier reply named them there.]'
 /** After the yes: the persona's abilities and companions are the character's own, every turn. */
@@ -234,7 +238,7 @@ export function creationNote(card: Card, messages: Msg[], vars: Record<string, u
     const first = before.length === 0
     return '\n\n[Character creation (hidden, never named): the character is not confirmed yet. Answer only the creation step this message answers'
         + (first ? '; the reply opens with one line naming the difficulty the player chose, e.g. "Độ khó: Khó" (Hard when none was named)' : '')
-        + '. Step by step: ask the next item only, with exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" (an item with only two possible values offers both).'
+        + '. Step by step: ask the next item only, as one question line ending in "?", with exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" (an item with only two possible values offers both).'
         + (persona ? PERSONA_CREATION : '')
         + ' A record: show it again with what changed and end with "Được chưa?". Only the player\'s yes ("được", "ok", "bắt đầu") starts the story: until then no story prose, no [[STATUS]], [[LEDGER]] or [[GM]] block.]'
 }
@@ -469,7 +473,10 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         const rewards = lines(state.gm_rewards_due), costs = lines(state.gm_consequences_due)
         if (rewards.length) parts.push(`Reward: ${rewards.map((r) => short(r, 70)).join('; ')}.`)
         if (costs.length) parts.push(`Consequence: ${costs.map((c) => short(c, 70)).join('; ')}.`)
-        parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${dice.consequence ? '; a due consequence lands now' : ''}.`)
+        // a side not here yet (SS t14-t17, 2026-10-19: "join Nephis's group" from inside the First Nightmare; 0 of 3 replies
+        // followed it): what comes is a step toward it
+        const away = dice.surface.startsWith('the side (') ? ' (not here yet: a step toward it, news or someone tied to it)' : ''
+        parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${away}${dice.consequence ? '; a due consequence lands now' : ''}.`)
         if (dice.cardNew) parts.push(CARD_NEW)
     }
     parts.push(pathLine(state))
@@ -478,7 +485,8 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
     // replies and the field names were copied as words ("hook|…|antagonist|…"); one seeding reply printed its planning
     const block = phase === 'seed'
         ? '[[GM\narc: <hook> | <antagonist> | <goal> | <stakes>\nbeat: 1 | <what is happening> | <what is due next>\nthreat: <name> | <progress> | <when full>\ncanon: <date> | <off-screen>\n]]'
-        : '[[GM\nbeat: <n> | <now> | <due next>\n]] + changed lines (arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when>, canon; arc: done | <how> ends it)'
+        // "[[GM …]] + changed lines" was read as a second block named CHANGE (Mailman t10, 2026-10-19): the lines go inside it
+        : '[[GM\nbeat: <n> | <now> | <due next>\n<only the changed lines, in this block: arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when>, canon; arc: done | <how> ends it>\n]]'
     return '\n\n[GM (hidden, never named): the player\'s own story, not the novel\'s plot. ' + parts.join(' ')
         + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs, within world rules (no free rank, Sequence, stamp, power).'
         + ` Story only, no planning notes; end, after any panel, with ${block}]`
