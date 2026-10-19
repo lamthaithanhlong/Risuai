@@ -53,3 +53,4 @@ Cargo.lock
 # server save bookkeeping (durable write queue, page revisions for merging)
 save.queue.sqlite*
 save.sync.sqlite*
+save.story.sqlite*

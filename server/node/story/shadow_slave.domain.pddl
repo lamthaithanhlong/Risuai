@@ -1,0 +1,57 @@
+; The Shadow Slave world as the Fate Simulator card plays it (fate-simulator Module 04 Progression, Module 09 Dream Realm, the
+; region cards in regions/*.md). The rules a plan must respect, each one a precondition:
+;  - an Aspirant becomes a Sleeper only by entering and surviving the First Nightmare (Module 04: "only a Nightmare" raises Rank)
+;  - a Sleeper is taken into the Dream Realm when they sleep, and becomes Awakened only through a Gateway (regions: the only
+;    confirmed Gateway of the Forgotten Shore lies inside Crimson Spire; "the Gateway allows Sleepers to ... become Awakened")
+;  - an Awakened becomes Ascended (Master) only through the Second Nightmare
+;  - a dangerous place (not safe) leaves you exhausted; you move again only after resting in a shelter
+;  - you meet only the living, and join a faction only through its leader, in its seat, after meeting them, and not as an Aspirant
+(define (domain shadow-slave)
+  (:requirements :strips :typing :negative-preconditions)
+  (:types place person item faction)
+  (:predicates
+    (at ?p - place) (connected ?a ?b - place) (safe ?p - place) (shelter ?p - place)
+    (waking ?p - place) (dream ?p - place) (arrival ?p - place) (gateway ?p - place) (return-point ?p - place)
+    (exhausted) (aspirant) (in-nightmare) (sleeper) (awakened) (in-second-nightmare) (ascended)
+    (person-at ?x - person ?p - place) (met ?x - person) (dead ?x - person)
+    (item-at ?i - item ?p - place) (has ?i - item)
+    (faction-seat ?f - faction ?p - place) (leads ?x - person ?f - faction) (member ?f - faction) (in-faction))
+
+  (:action travel :parameters (?from ?to - place)
+    :precondition (and (at ?from) (connected ?from ?to) (safe ?to) (not (exhausted)) (not (in-nightmare)) (not (in-second-nightmare)))
+    :effect (and (at ?to) (not (at ?from))))
+  (:action venture :parameters (?from ?to - place)
+    :precondition (and (at ?from) (connected ?from ?to) (not (safe ?to)) (not (exhausted)) (not (in-nightmare)) (not (in-second-nightmare)))
+    :effect (and (at ?to) (not (at ?from)) (exhausted)))
+  (:action rest :parameters (?p - place)
+    :precondition (and (at ?p) (shelter ?p) (exhausted))
+    :effect (not (exhausted)))
+
+  (:action enter-nightmare :parameters ()
+    :precondition (and (aspirant) (not (in-nightmare)))
+    :effect (in-nightmare))
+  (:action survive-nightmare :parameters ()
+    :precondition (and (aspirant) (in-nightmare))
+    :effect (and (not (in-nightmare)) (not (aspirant)) (sleeper) (exhausted)))
+  (:action fall-asleep :parameters (?w ?d - place)
+    :precondition (and (sleeper) (at ?w) (waking ?w) (dream ?d) (arrival ?d))
+    :effect (and (at ?d) (not (at ?w)) (not (exhausted))))
+  (:action pass-gateway :parameters (?g ?w - place)
+    :precondition (and (sleeper) (at ?g) (gateway ?g) (return-point ?w))
+    :effect (and (awakened) (not (sleeper)) (at ?w) (not (at ?g))))
+  (:action enter-second-nightmare :parameters ()
+    :precondition (and (awakened) (not (exhausted)) (not (in-second-nightmare)))
+    :effect (in-second-nightmare))
+  (:action survive-second-nightmare :parameters ()
+    :precondition (and (awakened) (in-second-nightmare))
+    :effect (and (not (in-second-nightmare)) (not (awakened)) (ascended) (exhausted)))
+
+  (:action meet :parameters (?x - person ?p - place)
+    :precondition (and (at ?p) (person-at ?x ?p) (not (dead ?x)) (not (in-nightmare)))
+    :effect (met ?x))
+  (:action take :parameters (?i - item ?p - place)
+    :precondition (and (at ?p) (item-at ?i ?p) (not (exhausted)))
+    :effect (and (has ?i) (not (item-at ?i ?p))))
+  (:action join-faction :parameters (?f - faction ?x - person ?p - place)
+    :precondition (and (at ?p) (faction-seat ?f ?p) (leads ?x ?f) (met ?x) (not (dead ?x)) (not (in-faction)) (not (aspirant)))
+    :effect (and (member ?f) (in-faction))))

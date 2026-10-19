@@ -79,6 +79,31 @@ if (process.env.RISU_DB_MERGE !== '0') {
         console.error('[Sync] disabled:', error.message);
     }
 }
+// story.sqlite (storyStore.cjs): the story state of every chat, derived from the save after each stored write, read by /api/story.
+// RISU_STORY=0 turns it off. It never writes the save and a failure here never fails a write.
+let storyStore = null;
+const storyLogic = require('./storyLogic.cjs');
+if (process.env.RISU_STORY !== '0') {
+    try {
+        storyStore = require('./storyStore.cjs').openStoryStore({
+            dbFile: process.env.RISU_STORY_DB || savePath + '.story.sqlite',
+            log: (m) => console.log(`[Story] ${m}`),
+        });
+    } catch (error) {
+        console.error('[Story] disabled:', error.message);
+    }
+}
+const syncStory = (bytes, rev) => {
+    if (!storyStore || !bytes) return;
+    setImmediate(() => {
+        try {
+            const r = storyStore.sync(bytes, rev);
+            if (r.error) console.error('[Story] sync:', r.error);
+        } catch (error) {
+            console.error('[Story] sync:', error.message);
+        }
+    });
+};
 // A page is its browser's signing key AND its tab: the key lives in IndexedDB, so every tab of one browser shares it, and two tabs
 // counted as one page never saw each other's writes as foreign, so the last one to save replaced the other's work whole
 // (specs/chat/DbSync.tla, SameBrowser). The tab id comes from the page's sessionStorage (nodeStorage.ts tabId).
@@ -94,6 +119,8 @@ const currentSaveBytes = (hexKey) => {
     const f = path.join(savePath, hexKey);
     return existsSync(f) ? readFileSync(f) : null;
 };
+// the story index catches up with the save as it is now (a write made while the server was stopped, e.g. loreImport)
+syncStory(currentSaveBytes(DB_KEY_HEX), dbSync ? dbSync.currentRev() : null);
 let lastPremergeAt = 0;
 let shuttingDown = false;
 for (const sig of ['SIGTERM', 'SIGINT']) {
@@ -1615,6 +1642,61 @@ app.post('/api/sync/loaded', authenticatedRouteLimiter, async (req, res, next) =
     }
 });
 
+// The story of a chat as story.sqlite has it (read only): state (st_* panel variables), npcs, timeline, memories, relations.
+// /check runs the canon rules (story/canon.pl, SWI-Prolog) over it; /plan?goal=<PDDL> plans from it (story/*.pddl). Both answer
+// {status: 'unavailable'} when their engine is missing; nothing here changes the save or the game.
+const storyChat = async (req, res) => {
+    if(!await checkAuth(req, res)){
+        return null;
+    }
+    if(!storyStore){
+        res.status(503).send({ status: 'unavailable', reason: 'story index is off (RISU_STORY=0) or failed to open' });
+        return null;
+    }
+    const id = String(req.params.chatId || '');
+    if(!/^[A-Za-z0-9-]{1,80}$/.test(id)){
+        res.status(400).send({ status: 'error', reason: 'bad chat id' });
+        return null;
+    }
+    return id;
+};
+const notFound = (res, id) => {
+    const row = storyStore.chatRow(id);
+    if(row && row.deleted_at !== null){
+        res.status(410).send({ status: 'archived', chatId: id, deleted_at: row.deleted_at, deleted_rev: row.deleted_rev });
+    } else {
+        res.status(404).send({ status: 'not_found', chatId: id });
+    }
+};
+app.get('/api/story/:chatId', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        const id = await storyChat(req, res);
+        if(!id) return;
+        const s = storyStore.story(id);
+        if(!s) return notFound(res, id);
+        res.send({ status: 'ok', ...s });
+    } catch (error) { next(error); }
+});
+app.get('/api/story/:chatId/check', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        const id = await storyChat(req, res);
+        if(!id) return;
+        if(!storyStore.story(id)) return notFound(res, id);
+        const r = await storyLogic.check(storyStore, id);
+        // line: what the optional prompt setting puts in the request (storyCheck.ts), '' when there is nothing to correct
+        res.send({ ...r, line: storyLogic.promptLine(r) });
+    } catch (error) { next(error); }
+});
+app.get('/api/story/:chatId/plan', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        const id = await storyChat(req, res);
+        if(!id) return;
+        if(!storyStore.story(id)) return notFound(res, id);
+        const r = storyLogic.plan(storyStore, id, String(req.query.goal ?? ''));
+        res.status(r.status === 'error' ? 400 : 200).send(r);
+    } catch (error) { next(error); }
+});
+
 app.get('/api/remove', authenticatedRouteLimiter, async (req, res, next) => {
     if(!await checkAuth(req, res)){
         return;
@@ -1723,6 +1805,9 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
         }
         // committed to SQLite before we answer; the worker moves it to the directory (atomically) in order
         saveQueue.enqueueWrite(filePath, toStore);
+        if(filePath === DB_KEY_HEX && Buffer.isBuffer(toStore)){
+            syncStory(toStore, dbSync ? dbSync.currentRev() : null);
+        }
         res.send({
             success: true,
             merged
