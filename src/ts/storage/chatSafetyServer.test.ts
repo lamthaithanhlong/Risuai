@@ -165,3 +165,25 @@ describe('F2: the server says which chats a job is still answering', () => {
         up.close()
     }, 60000)
 })
+
+describe('F6: a merged write keeps only the newest RISU_PREMERGE_KEEP premerge pairs', () => {
+    test('3 old pairs on disk, N = 2: after one merge, the newest old pair and the new pair are left', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'chat-f6-'))
+        const mac = await newKey()
+        const phone = await newKey()
+        const tags = ['2026-10-01T00-00-00-000Z', '2026-10-02T00-00-00-000Z', '2026-10-03T00-00-00-000Z']
+        const s = await startServer(root, 'srv', [mac, phone], { RISU_PREMERGE_KEEP: '2' }, (save) => {
+            writeFileSync(join(save, hex(DB)), root0({ a: 1, b: 1 }))
+            for (const t of tags) for (const side of ['server', 'page']) writeFileSync(join(save, hex(`database/premerge-${t}-${side}.bin`)), 'x')
+        })
+        const m = await read(s, mac)
+        const p = await read(s, phone)
+        await write(s, phone, withRoot(p, { a: 2 }))
+        expect((await write(s, mac, withRoot(m, { b: 2 }))).merged).toBe(true)
+        const list = await (await fetch(`http://127.0.0.1:${s.port}/api/list`, { headers: { 'risu-auth': await token(mac) } })).json()
+        const pre = (list.content as string[]).filter((n) => n.startsWith('database/premerge-')).sort()
+        expect(pre).toHaveLength(4)
+        expect(pre.slice(0, 2)).toEqual([`database/premerge-${tags[2]}-page.bin`, `database/premerge-${tags[2]}-server.bin`])
+        await stop(s)
+    }, 60000)
+})

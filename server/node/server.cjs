@@ -16,7 +16,7 @@ const http = require('http');
 const path = require('path');
 const net = require('net');
 const htmlparser = require('node-html-parser');
-const { existsSync, mkdirSync, readFileSync, writeFileSync } = require('fs');
+const { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } = require('fs');
 const { atomicWriteFile } = require('./atomicWrite.cjs');
 const { applyReasoningDefault } = require('./requestDefaults.cjs');
 const reasoningDefaultLogged = new Set();
@@ -1680,6 +1680,14 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
                     const tag = new Date().toISOString().replace(/[:.]/g, '-');
                     if(cur) saveQueue.enqueueWrite(Buffer.from(`database/premerge-${tag}-server.bin`).toString('hex'), cur);
                     saveQueue.enqueueWrite(Buffer.from(`database/premerge-${tag}-page.bin`).toString('hex'), fileContent);
+                    // only the newest RISU_PREMERGE_KEEP pairs (default 20) are kept (premergeRetention.cjs)
+                    try {
+                        const { premergeToDelete, keepPairsFromEnv } = require('./premergeRetention.cjs');
+                        const names = new Set(readdirSync(savePath));
+                        for (const row of saveQueue.pendingKeys()) { if (row.op === 'delete') names.delete(row.key); else names.add(row.key); }
+                        const keys = [...names].map(hexToKey).filter((k) => k.startsWith('database/premerge-'));
+                        for (const k of premergeToDelete(keys, keepPairsFromEnv())) saveQueue.enqueueDelete(Buffer.from(k, 'utf-8').toString('hex'));
+                    } catch (error) { console.error('[Sync] premerge retention:', error.message); }
                 }
             } catch (error) {
                 // never lose a write because the merge failed: store what the page wrote
