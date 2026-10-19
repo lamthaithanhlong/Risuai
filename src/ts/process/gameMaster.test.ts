@@ -210,8 +210,18 @@ describe('the bookkeeper (the submodel keeps the notes the narrator forgot)', ()
         expect(p).toContain('Tui xin theo đoàn.')
         expect(p).toContain('Lão gật đầu.')
         expect(p).toContain('the villains\' side included')
+        expect(p).toContain('not a route they walked')
+        expect(p).toContain('never write "unchanged"')
         expect(p).toContain('never a canon villain')
         expect(stateLines({})).toBe('none')
+    })
+    it('drops commentary the helper wrote instead of a value (measured)', () => {
+        const st: GmState = { gm_arc: 'a | b | c | d', gm_path: 'Marlowe | probation | watched' }
+        const s = applyGm(st, ['arc: unchanged (still a)\npath: player avoided the front gate, went back way — did they commit?\nenemy: no change.\nenemy: Whitlock | wants the nail back'], 4)
+        expect(s.gm_arc).toBe('a | b | c | d')
+        expect(s.gm_path).toBe('Marlowe | probation | watched')
+        expect(s.gm_enemies).toBe('Whitlock | wants the nail back')
+        expect(applyGm({}, ['beat: 2 | a knock | who sent him?\nenemy: the cloaked one | do they oppose?'], 4)).toMatchObject({ gm_beat: '2 | a knock | who sent him?', gm_enemies: '' })
     })
     it('reads a block, or bare lines, and nothing else', () => {
         expect(parseBookkeep('ok\n[[GM\npath: the slavers | new hand | watched\n]]')).toEqual(['\npath: the slavers | new hand | watched\n'])

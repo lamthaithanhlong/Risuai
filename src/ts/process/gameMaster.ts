@@ -40,6 +40,8 @@ const MAX_LEFT = 2
 
 const BLOCK = /\[\[GM\b([\s\S]*?)\]\]/g
 /** a field name the model copied as a value ("hook|the debt|antagonist|Varn") */
+/** a line that is commentary, not a value */
+const NOTE_TALK = /^(\(?(unchanged|no change|not changed|same( as before)?|still the same|n\/a)\b|the player\b|player (committed|avoided|went|did)\b)/i
 const NO_SIDE = /^(none|no side|chưa( chọn| có)?( bên| phe)?|không|<side>)$/i
 const ARC_LABEL = /^<?(hook|antagonist|rival|goal|stakes?)>?$/i
 const OPEN_TAIL = /\[\[GM\b[\s\S]*$/
@@ -78,6 +80,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
             if (!m) continue
             const key = m[1].toLowerCase()
             const value = clean(m[2])
+            // measured on the bookkeeper: "arc: unchanged (still …)", "enemy: no change.", "path: player avoided … — did they com…"
+            if (NOTE_TALK.test(value) || ((key === 'path' || key === 'enemy') && /\?\s*$/.test(value))) continue
             if (key === 'arc') {
                 const [head, ...rest] = value.split('|')
                 if (/^(done|resolved|xong|kết thúc)$/i.test(head.trim()) || isDash(value)) {
@@ -360,7 +364,7 @@ reward: <what> | <when it is paid>
 consequence: <what> | <when it lands>
 canon: <in-world date> | <what canon people are doing off-screen>
 ]]
-Rules: only lines that changed; always the beat line. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain), or "arc: done | <how>" when this reply resolved it. path: when the player committed to, rose in, or left a side, road or master in this reply (a faction, a person they serve, a crew, the villains' side included; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (not a route they walked; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
 }
 
 /** The block in the helper's answer (a bare list of lines counts too), or null. */
