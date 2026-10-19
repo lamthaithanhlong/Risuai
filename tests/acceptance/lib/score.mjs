@@ -158,6 +158,14 @@ export function scoreStory(rec, judge = {}) {
         `${forb.length} replies with game-stat words; ${brackets.length} bracket lines${rec.voice?.bracketLines ? '' : ' (this world has no system voice)'}; ${unbr.length} unbracketed system lines`,
         [...forb.map((x) => quote(x.t.label, `«${x.w}» in ${oneLine(x.t.shown.slice(Math.max(0, x.t.shown.indexOf(x.w) - 60)), 120)}`)), ...unbr.map((t) => `${t.label}: unbracketed system line`), ...brackets.slice(0, 5).map((x) => quote(x.t.label, x.b, 120))]))
 
+    // ---- the player's character is the player's ---------------------------------------------------------------------------------
+    const vj = judge.voice ?? {}
+    const vTurns = story.filter((t) => vj[t.label])
+    const played = vTurns.filter((t) => vj[t.label].speaks || vj[t.label].decides)
+    out.push(check('voice.player', 'The narrator never speaks or decides for the player\'s character', vTurns.length ? pass(played.length <= Math.floor(vTurns.length * 0.1)) : 'N/A',
+        vTurns.length ? `${played.length}/${vTurns.length} replies speak or decide for the character (${vTurns.filter((t) => vj[t.label].speaks).length} speak, ${vTurns.filter((t) => vj[t.label].decides).length} decide)` : 'not judged',
+        played.map((t) => `${t.label}: ${[vj[t.label].speaks && 'speaks', vj[t.label].decides && 'decides'].filter(Boolean).join(' + ')} — «${oneLine(vj[t.label].quote, 140)}» (player: ${oneLine(t.text, 70)})`)))
+
     // ---- fate dice --------------------------------------------------------------------------------------------------------------
     const dice = story.map((t) => ({ t, main: (t.net ?? []).filter((n) => n.type === 'completion' && n.kind === 'main').at(-1) })).filter((x) => x.main?.event != null)
     const pauses = story.filter((t) => t.kind === 'pause')

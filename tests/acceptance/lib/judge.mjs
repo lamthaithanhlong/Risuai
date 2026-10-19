@@ -43,6 +43,37 @@ const rulesOf = (story) => {
     try { return fs.readFileSync(path.join(story.src, 'main_description.md'), 'utf8').slice(0, 7000) } catch { return '' }
 }
 
+/**
+ * Did the narrator speak or choose for the player's character? Every story turn: { label: {speaks, decides, quote} }.
+ * Carrying out what the player wrote is the narrator's job; words the player did not write, or a choice the player was owed
+ * (answering a question, agreeing, going somewhere new, deciding the next step), are not.
+ */
+export async function judgeVoice(rec, story, cfg, errors = []) {
+    const out = {}
+    const play = rec.play?.turns ?? []
+    const prevOf = (t) => { const i = play.indexOf(t); return i > 0 ? play[i - 1].shown || play[i - 1].reply : '' }
+    const name = (t) => oneLine(t.vars?.st_name ?? '', 40)
+    for (const t of play.filter((x) => x.phase === 'story' && x.ok)) {
+        try {
+            out[t.label] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese). The player controls ONE character${name(t) ? ` (${name(t)})` : ''}; the narrator controls everyone and everything else. The narrator must carry out what the player wrote and must not play the player's character beyond it.
+Read the player's turn and the reply. Answer:
+- speaks: the reply gives the player's character words the player did not write: a quoted line, or reported speech ("anh đáp rằng…", "cô hỏi…", "anh đồng ý"). Putting what the player wrote into a quoted line is fine (the player wrote "I ask her name" and the character asks her name aloud); only words with content the player did not write count: a new question, an answer, a promise, a joke, a reply to someone. Other characters' words do not count.
+- decides: the reply makes a choice the player had not made: answers an NPC's question or offer for them, agrees or refuses, picks a side, sets off somewhere the player did not say, or takes a new significant action after finishing what the player wrote. The physical steps of carrying out the player's own action, reflexes (flinching, a gasp), sensations, and the character's immediate reaction to something sudden do NOT count.
+
+PREVIOUS REPLY (end):
+${String(prevOf(t)).slice(-1200)}
+
+PLAYER: ${t.text}
+
+REPLY:
+${String(t.shown || t.reply).slice(0, 5000)}
+
+Answer only JSON: {"speaks": true|false, "decides": true|false, "quote": "<the words of the reply that do it, or empty>"}`, { maxTokens: 400 })
+        } catch (e) { errors.push(`voice ${t.label}: ${e.message}`) }
+    }
+    return out
+}
+
 /** judge the record: { pauses: {label: {newThing, what}}, impossible: {granted, why}, canon: [{label, fit, summary, slips}] } */
 export async function judgeRecord(rec, story, cfg, log = console.log) {
     cfg = { ...cfg }
@@ -101,6 +132,8 @@ ${String(t.shown || t.reply).slice(0, 5000)}
 Answer only JSON: {"follows": true|false, "how": "<one sentence, quoting the reply>"}`)
         } catch (e) { out.errors.push(`side ${t.label}: ${e.message}`) }
     }
+
+    out.voice = await judgeVoice(rec, story, cfg, out.errors)
 
     // five replies spread over the story part
     const picks = []

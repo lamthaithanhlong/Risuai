@@ -50,9 +50,10 @@ test('helpers', () => {
 })
 
 test('a good record passes and each breakage fails its own check', () => {
-    const J = { impossible: { granted: false, why: 'failed' }, sideLife: { t10: { follows: true }, t11: { follows: true }, t12: { follows: true } } }
+    const quietVoice = Object.fromEntries(['t3', 't4', 't5', 't6', 't7', 't8', 't9', 't10', 't11', 't12'].map((l) => [l, { speaks: false, decides: false, quote: '' }]))
+    const J = { impossible: { granted: false, why: 'failed' }, sideLife: { t10: { follows: true }, t11: { follows: true }, t12: { follows: true } }, voice: quietVoice }
     const good = scoreStory(goodRecord(), J)
-    for (const id of ['creation.difficulty', 'creation.step_by_step', 'creation.record', 'creation.duoc_chua', 'creation.look_question', 'creation.no_story_before_yes', 'creation.starts_after_yes', 'panel.present', 'panel.updated', 'panel.hidden_blocks', 'prose.vietnamese', 'voice.system', 'dice.events', 'gm.arc', 'jev.referee', 'prolog.check', 'images.scene', 'run.turns', 'gm.side', 'prose.no_leaks']) {
+    for (const id of ['creation.difficulty', 'creation.step_by_step', 'creation.record', 'creation.duoc_chua', 'creation.look_question', 'creation.no_story_before_yes', 'creation.starts_after_yes', 'panel.present', 'panel.updated', 'panel.hidden_blocks', 'prose.vietnamese', 'voice.system', 'dice.events', 'gm.arc', 'jev.referee', 'prolog.check', 'images.scene', 'run.turns', 'gm.side', 'prose.no_leaks', 'voice.player']) {
         assert.equal(byId(good, id)?.status, 'PASS', `${id}: ${byId(good, id)?.summary}`)
     }
     const breaks = [
@@ -83,5 +84,15 @@ test('a good record passes and each breakage fails its own check', () => {
         assert.equal(byId(scoreStory(r, J), id).status, 'FAIL', `${id} did not go red`)
     }
     assert.equal(byId(scoreStory(goodRecord(), { ...J, impossible: { granted: true, why: 'it worked' } }), 'jev.referee').status, 'FAIL')
+    // the narrator plays the character in 2 of 10 replies: a line the player never wrote, an offer accepted for them
+    assert.equal(byId(scoreStory(goodRecord(), { ...J, voice: { ...quietVoice, t4: { speaks: true, decides: false, quote: '"Được," anh đáp.' }, t7: { speaks: false, decides: true, quote: 'Anh nhận lời đi theo bà ta.' } } }), 'voice.player').status, 'FAIL')
+    assert.equal(byId(scoreStory(goodRecord(), { ...J, voice: { ...quietVoice, t4: { speaks: true, decides: false, quote: 'x' } } }), 'voice.player').status, 'PASS')
+    assert.equal(byId(scoreStory(goodRecord(), { ...J, voice: {} }), 'voice.player').status, 'N/A')
+    // the die said NEW at the pauses and the judge saw nothing new: the dice check goes red
+    const unsaid = goodRecord()
+    for (const t of unsaid.play.turns.filter((x) => x.kind === 'pause')) t.net = [{ type: 'completion', kind: 'main', event: '9', eventNew: true, gmNote: true }]
+    const pauses = Object.fromEntries(unsaid.play.turns.filter((x) => x.kind === 'pause').map((t) => [t.label, { newThing: false, what: '' }]))
+    assert.equal(byId(scoreStory(unsaid, { ...J, pauses }), 'dice.events').status, 'FAIL')
+    assert.equal(byId(scoreStory(unsaid, { ...J, pauses: Object.fromEntries(Object.keys(pauses).map((l) => [l, { newThing: true, what: 'a stranger' }])) }), 'dice.events').status, 'PASS')
     assert.equal(byId(scoreStory(goodRecord(), { ...J, sideLife: { t10: { follows: false }, t11: { follows: false }, t12: { follows: true } } }), 'gm.side').status, 'FAIL')
 })
