@@ -17,7 +17,7 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { gameMasterRequest, noteGameMaster } from "./gameMasterPage";
+import { creationRequest, gameMasterRequest, noteGameMaster } from "./gameMasterPage";
 import { tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
@@ -1572,6 +1572,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
     formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+    // while the character is being made (the card's "Được chưa?" step): only the creation step is answered, no story yet
+    formated = creationRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)

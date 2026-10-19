@@ -197,6 +197,100 @@ export function isYes(text: string): boolean {
     return t.length > 0 && t.length <= 120 && YES.test(t) && !CHANGE.test(t.replace(YES, ''))
 }
 
+/** Where the player answered a "Được chưa?" with a yes (the character is locked from there), or -1. */
+export function yesAt(messages: Msg[]): number {
+    return messages.findIndex((m, i) => m.role === 'user' && i > 0 && messages[i - 1].role === 'char' && ASKED.test(messages[i - 1].data ?? '') && isYes(m.data))
+}
+
+// ---- the creation gate -----------------------------------------------------------------------------------------------------
+// Measured 2026-10-19 on the story combo moved to a faster narrator (gpt-6-luna): Infinite Mailman answered the look question
+// ("Giữ ngoại hình của persona.") as if it were the yes and ran the story, panel and GM included, three replies before the yes;
+// Shadow Slave's step-by-step offered two suggestions instead of three (0 of 4 question replies), and the first reply of two
+// runs did not record the difficulty. The card says all of it; a fast model drops it. So until the character is confirmed the
+// app puts its own short note at the end of the player's message, as it does for the GM (a system note alone is not followed).
+
+const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
+
+/** The note for a turn of character creation, or '' once the character is confirmed (st_* written, or the yes given). */
+export function creationNote(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState): string {
+    if (!hasCreationStep(card) || hasPanel(vars) || state.gm_arc || state.gm_past) return ''
+    const last = messages.map((m) => m.role).lastIndexOf('user')
+    if (last < 0 || yesAt(messages) >= 0) return ''
+    const before = messages.slice(0, last).filter((m) => m.role === 'char')
+    const asked = before.length ? before[before.length - 1].data ?? '' : card?.firstMessage ?? ''
+    if (!CREATION_ASK.test(asked) && !ASKED.test(asked)) return ''
+    const first = before.length === 0
+    return '\n\n[Character creation (hidden, never named): the character is not confirmed yet. Answer only the creation step this message answers'
+        + (first ? '; the reply opens with one line naming the difficulty the player chose, e.g. "Độ khó: Khó" (Hard when none was named)' : '')
+        + '. Step by step: ask the next item only, with exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" (an item with only two possible values offers both).'
+        + ' A record: show it again with what changed and end with "Được chưa?". Only the player\'s yes ("được", "ok", "bắt đầu") starts the story: until then no story prose, no [[STATUS]], [[LEDGER]] or [[GM]] block.]'
+}
+
+// ---- the side the player takes, in their own words -----------------------------------------------------------------------
+// Measured 2026-10-19 (narrator gpt-6-luna): Shadow Slave's player wrote "tôi sẽ tìm mọi cách gia nhập nhóm của Nephis (Ngôi Sao
+// Đổi Thay)" and the bookkeeper recorded "path: trại tù binh | 1 | mới được giao việc bổ củi" (the camp and the chore of that
+// reply); Lord of the Mysteries' "tôi sẽ nộp đơn xin gia nhập Kẻ Gác Đêm (Nighthawks)" was never recorded (the reply showed no
+// joining yet). The commitment is in the player's message, so it is read from there: the side they name is the path, and once
+// a side is held, a model line naming another one stands only when the player's own turn joins or leaves a side.
+
+const COMMIT = /(gia nhập|xin vào|xin theo|đầu quân (?:cho|vào)|làm thuộc hạ (?:cho|của)|làm tay sai (?:cho|của)|phục vụ(?: cho)?|thề trung thành (?:với|cho)|quy phục|đứng về phía|về phe|theo phe|bái sư|\bjoin(?:s|ing)?\b|\bserve\b|\bswear (?:fealty|allegiance|loyalty) to\b|\bpledge (?:myself |my loyalty )?to\b|\benlist (?:in|with)\b|\bside with\b)\s+(\S.*)$/i
+const NEGATED = /(?<!\p{L})(?:không|chẳng|chả|chưa|đừng|never|not|won't|don't|do not|no)(?!\p{L})(?:\s+\S+)?\s*$/iu
+const LEAVE = /(rời (?:bỏ|khỏi)|bỏ (?:phe|nhóm|đội|hội)|phản bội|ly khai|rút khỏi|thoát ly|\bleave\b|\bleaves\b|\bquit\b|\bbetray|\bdefect)/i
+const SIDE_STOP = /^\s(?:và|rồi|dù|để|nhưng|mà|ở|tại|trong|nếu|khi|vì|sau|and|but|even|so|then|because|in|at|to|until)\s/i
+const SIDE_NOISE = new Set(['nhóm', 'của', 'phe', 'đội', 'hội', 'bọn', 'đám', 'the', 'of', 'and', 'group', 'crew', 'side', 'người'])
+
+/** The side the player's own message commits to ("gia nhập nhóm của Nephis …" → "nhóm của Nephis (…)"), or ''. */
+export function playerSide(text: string): string {
+    const t = (text ?? '').replace(/\s+/g, ' ').trim()
+    const m = COMMIT.exec(t)
+    if (!m || NEGATED.test(t.slice(0, m.index))) return ''
+    const rest = m[2]
+    let depth = 0, end = rest.length
+    for (let i = 0; i < rest.length; i++) {
+        const c = rest[i]
+        if (c === '(') depth++
+        else if (c === ')') depth = Math.max(0, depth - 1)
+        else if (depth === 0 && (/[,.;!?:]/.test(c) || (c === ' ' && SIDE_STOP.test(rest.slice(i))))) { end = i; break }
+    }
+    const side = rest.slice(0, end).replace(/^(the|a|an)\s+/i, '').trim()
+    return side.length >= 2 ? clean(side).slice(0, 90) : ''
+}
+
+const sideWords = (v: string) => new Set((v ?? '').split('|')[0].toLowerCase().normalize('NFC').split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 && !SIDE_NOISE.has(w)))
+/** Two path values name the same side (a word of the name in common). */
+export function sameSide(a: string, b: string): boolean {
+    const x = sideWords(a), y = sideWords(b)
+    return [...x].some((w) => y.has(w))
+}
+
+const PATH_LINE = /^\s*[-*•]?\s*(path|allegiance|faction)\s*:\s*(.*)$/i
+/**
+ * The blocks with their path lines checked against the player's turn: a side the player committed to is the path (a model line
+ * naming something else is dropped, and the player's side is written when no line names it); with a side already held and no
+ * join or leave in the player's turn, only lines about that same side stand.
+ */
+export function sidePaths(bodies: string[], state: GmState, player: string): string[] {
+    const side = playerSide(player)
+    const cue = !!side || LEAVE.test(player ?? '')
+    const held = state.gm_path ?? ''
+    let named = false
+    const out = bodies.map((body) => body.split(/\r?\n/).filter((line) => {
+        const m = PATH_LINE.exec(line)
+        if (!m) return true
+        const v = m[2].replace(/^.*\b(path|allegiance|faction)\s*:\s*/i, '')
+        if (side) { const ok = sameSide(v, side); named ||= ok; return ok }
+        if (cue || !nameOf(held)) return true
+        return sameSide(v, held)
+    }).join('\n'))
+    if (side && !named && !sameSide(held, side)) {
+        const vi = /[àáảãạăâđèéẻẽẹêìíỉĩịòóỏõọôơùúủũụưỳýỷỹỵ]/i.test(player)
+        const line = `path: ${side} | ${vi ? 'muốn gia nhập | chưa được nhận' : 'wants to join | not yet accepted'}`
+        if (out.length) out[out.length - 1] = out[out.length - 1].trim() ? `${out[out.length - 1]}\n${line}` : line
+        else out.push(line)
+    }
+    return out
+}
+
 export type GmPhase = 'silent' | 'seed' | 'run'
 
 /**
@@ -210,10 +304,10 @@ export function gmPhase(card: Card, messages: Msg[], vars: Record<string, unknow
     // confirmed: the panel was written, the GM already ran, or a "Được chưa?" was answered yes before this turn. The turn that
     // answers the yes is the card's Initialization and stays the card's own: seeding there wrote no block in 6 of 6 replies
     // (2 cards x 3 runs, 2026-10-19) and once printed the model's planning into the story; the next reply seeds.
-    const yesAt = messages.findIndex((m, i) => m.role === 'user' && i > 0 && messages[i - 1].role === 'char' && ASKED.test(messages[i - 1].data ?? '') && isYes(m.data))
-    const initializing = yesAt >= 0 && !messages.slice(yesAt + 1).some((m) => m.role === 'char')
+    const yes = yesAt(messages)
+    const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
     if (initializing && !hasPanel(vars)) return 'silent'
-    const confirmed = hasPanel(vars) || !!state.gm_arc || !!state.gm_past || yesAt >= 0
+    const confirmed = hasPanel(vars) || !!state.gm_arc || !!state.gm_past || yes >= 0
     if (!confirmed && (hasCreationStep(card) || !storyLike)) return 'silent'
     return state.gm_arc ? 'run' : 'seed'
 }
@@ -383,10 +477,14 @@ export function settleGm(state: GmState, messages: Msg[]): { state: GmState; rol
     return { state: { ...prev, gm_at: '', gm_prev: '' }, rolledBack: true }
 }
 
-/** After a reply: the state to keep (with what to roll back to) and the reply without its blocks; null when it has none. */
-export function takeGm(state: GmState, reply: Msg, charCount: number): { state: GmState; text: string } | null {
-    const bodies = gmBlocks(reply.data)
-    if (!bodies.length) return null
+/**
+ * After a reply: the state to keep (with what to roll back to) and the reply without its blocks; null when it changes nothing.
+ * `player` is the turn the reply answers: a side it commits to is recorded even when the reply wrote no block (sidePaths).
+ */
+export function takeGm(state: GmState, reply: Msg, charCount: number, player = ''): { state: GmState; text: string } | null {
+    const blocks = gmBlocks(reply.data)
+    const bodies = sidePaths(blocks, state, player)
+    if (!blocks.length && !bodies.length) return null
     const { gm_prev: _p, gm_at: _a, ...before } = state
     const next = applyGm(before, bodies, charCount)
     return { state: { ...next, gm_prev: JSON.stringify(before), gm_at: reply.chatId ?? '' }, text: stripGm(reply.data) }
@@ -416,21 +514,27 @@ export function stateLines(state: GmState): string {
     return out.length ? out.join('\n') : 'none'
 }
 
-/** The helper's request: the notes, the player's turn and the reply; it answers with one [[GM]] block. */
-export function bookkeepPrompt(state: GmState, player: string, reply: string, flavour: string): string {
+/**
+ * The helper's request: the notes, the player's turn and the reply; it answers with one [[GM]] block. `status` is the card's
+ * own panel part (statusBook.ts), asked in the same call so a turn costs one helper call; `state` null leaves the GM part out.
+ */
+export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = ''): string {
     const cut = (s: string, n: number) => { const t = (s ?? '').trim(); return t.length > n ? '…' + t.slice(-n) : t }
+    const turn = `THE PLAYER'S LAST ACTION:
+${cut(player, 800)}
+
+THE STORY'S REPLY:
+${cut(reply, 3500)}`
+    if (!state) return `You keep the status panel of an interactive story.\n\n${turn}\n\n${status}`
+    const side = playerSide(player)
     return `You keep the Game Master's notes for an interactive story: the player's own story inside a novel's world, not the novel's plot.
 
 NOTES NOW:
 ${stateLines(state)}
 
-THE PLAYER'S LAST ACTION:
-${cut(player, 800)}
-
-THE STORY'S REPLY:
-${cut(reply, 3500)}
-
-Write the notes this reply changed, as one block and nothing else:
+${turn}
+${side ? `\nTHE PLAYER COMMITTED TO A SIDE IN THEIR OWN WORDS: ${side} (the app records it as the path; write path: only with that side's name).\n` : ''}
+Write the notes this reply changed, as one block:
 [[GM
 arc: <hook> | <antagonist> | <goal> | <stakes>
 beat: <n> | <what is happening now> | <what is due next>   (n goes up only when a new event, enemy or obstacle arrived)
@@ -442,20 +546,21 @@ reward: <what> | <when it is paid>
 consequence: <what> | <when it lands>
 canon: <in-world date> | <what canon people are doing off-screen>
 ]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (not a route they walked; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${status ? `\n\n${status}` : ''}`
 }
 
-/** The block in the helper's answer (a bare list of lines counts too), or null. */
+/** The block in the helper's answer (a bare list of lines counts too), or null. Its [[STATUS]] block is not part of it. */
 export function parseBookkeep(text: string): string[] | null {
-    const bodies = gmBlocks(text ?? '')
+    const t = (text ?? '').replace(/\[\[STATUS\b[\s\S]*?(\]\]|$)/g, '')
+    const bodies = gmBlocks(t)
     if (bodies.length) return bodies
-    const bare = (text ?? '').split('\n').filter((l) => /^\s*(arc|beat|threat|path|enemy|gained|reward|consequence|canon)\s*:/i.test(l))
+    const bare = t.split('\n').filter((l) => /^\s*(arc|beat|threat|path|enemy|gained|reward|consequence|canon)\s*:/i.test(l))
     return bare.length ? [bare.join('\n')] : null
 }
 
 /** The state after the helper's notes, attributed to the same reply as the narrator's (one rollback undoes both). */
-export function applyBookkeep(state: GmState, bodies: string[], replyId: string, charCount: number): GmState {
+export function applyBookkeep(state: GmState, bodies: string[], replyId: string, charCount: number, player = ''): GmState {
     const { gm_prev, gm_at, ...cur } = state
     const prev = gm_at === replyId && gm_prev ? gm_prev : JSON.stringify(cur)
-    return { ...applyGm(cur, bodies, charCount), gm_prev: prev, gm_at: replyId }
+    return { ...applyGm(cur, sidePaths(bodies, cur, player), charCount), gm_prev: prev, gm_at: replyId }
 }
