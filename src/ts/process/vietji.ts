@@ -3,7 +3,8 @@
 // Reading: every word keeps its own script large (kanji, hanzi, hangul, Spanish), Japanese and Chinese show kana or pinyin small
 // above (furigana), and every word has its reading in Vietnamese letters small underneath: やめて → da-mê-tê. The model gives the
 // reading of kanji and hanzi in brackets (今日[きょう], 你好[nǐhǎo]); a bare kanji run is dimmed so the learner knows it is unread.
-// Korean and Spanish are read by rule (vietjiLang.ts).
+// Korean and Spanish are read by rule (vietjiLang.ts), Thai too (vietjiThai.ts): a run of Thai has no spaces, so it is cut into
+// syllables and each is shown with its reading (สวัส ดี → xạ-oặt đi).
 // Typing (Japanese): a message written entirely in Việt-ji syllables ("da me te") is turned into kana (やめて) in the request the
 // model gets; the chat keeps what the learner typed.
 //
@@ -12,6 +13,7 @@
 
 import TABLE from './vietjiTable.json'
 import { frenchToVietji, hangulToVietji, pinyinToVietji, spanishToVietji } from './vietjiLang'
+import { THAI, THAI_RUN, thaiToVietji, thaiUnits } from './vietjiThai'
 
 const VJ: Record<string, string> = TABLE.table
 const ALIAS: Record<string, string> = TABLE.alias
@@ -105,7 +107,7 @@ export function fromVietji(text: string): string | null {
 }
 
 
-export type LearningLang = 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en'
+export type LearningLang = 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'
 
 /** Languages written in Latin letters: their lines sit inside «» and are read word by word. */
 export const isLatinLang = (lang: string | undefined): boolean => lang === 'es' || lang === 'fr' || lang === 'en'
@@ -136,24 +138,31 @@ export function hasKana(text: string): boolean {
     return KANA.test(text ?? '')
 }
 
-/** True when the text holds a line in a language being learned: kana, hanzi/kanji, hangul, or a «Spanish» line. */
+/** True when the text holds a line in a language being learned: kana, hanzi/kanji, hangul, Thai, or a «Spanish» line. */
 export function hasForeign(text: string): boolean {
-    return KANA.test(text ?? '') || new RegExp(`[${HAN}]`).test(text ?? '') || HANGUL.test(text ?? '') || /«[^»]+»/.test(text ?? '')
+    return KANA.test(text ?? '') || new RegExp(`[${HAN}]`).test(text ?? '') || HANGUL.test(text ?? '') || THAI.test(text ?? '') || /«[^»]+»/.test(text ?? '')
 }
 
 const SUB_STYLE = 'font-size:.55em;color:#c8cbe6;font-weight:500;letter-spacing:.02em'     // kana / pinyin, small, above
 const VJ_STYLE = 'font-size:.68em;color:#f2c76b;font-weight:600;letter-spacing:.03em;white-space:nowrap'   // Việt-ji, below
 const WORD_STYLE = 'display:inline-flex;flex-direction:column;align-items:center;vertical-align:bottom;margin:0 .14em;line-height:1.3'
 const UNREAD_STYLE = 'border-bottom:1px dotted #8e97cf;opacity:.6'
+// a Thai syllable sits next to the one before it in the same word: less space between them than between words
+const THAI_WORD_STYLE = WORD_STYLE.replace('margin:0 .14em', 'margin:0 .05em')
 
 function esc(s: string): string {
     return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 }
 
 /** One word: the original script large, its reading in Việt-ji small underneath. */
-function wordUnit(baseHtml: string, vietji: string | null): string {
+function wordUnit(baseHtml: string, vietji: string | null, style = WORD_STYLE): string {
     if (!vietji) return baseHtml
-    return `<span style="${WORD_STYLE}"><span style="font-size:1.12em">${baseHtml}</span><span style="${VJ_STYLE}">${esc(vietji)}</span></span>`
+    return `<span style="${style}"><span style="font-size:1.12em">${baseHtml}</span><span style="${VJ_STYLE}">${esc(vietji)}</span></span>`
+}
+
+/** A run of Thai (no spaces between its words): each syllable as Thai readers cut it, with its reading underneath. */
+function thaiRun(run: string): string {
+    return thaiUnits(run).map((u) => wordUnit(u.text, u.vietji, THAI_WORD_STYLE)).join('')
 }
 
 // A Japanese or Chinese word: kanji/hanzi with their reading in brackets (今日[きょう], 你好[nǐhǎo]), kana, or both (今日[きょう]は).
@@ -206,7 +215,7 @@ function readKanji(t: string, i: number): { han: string; reading: string } | nul
 
 /** The speaker button put after a line with a foreign phrase (tapToSpeak.ts reads the line when it is pressed). */
 export const SAY_BUTTON = '<span title="Nghe" style="cursor:pointer;opacity:.7;font-size:.85em;margin-left:.3em;user-select:none">🔊</span>'
-const FOREIGN_LINE = /[\u3041-\u30FA\u4E00-\u9FFF\uAC00-\uD7A3]|«[^»\n]+»/
+const FOREIGN_LINE = /[\u3041-\u30FA\u4E00-\u9FFF\uAC00-\uD7A3\u0E01-\u0E4E]|«[^»\n]+»/
 
 /** Each line with a foreign phrase gets the speaker button at its end, so it is plain that the phrase can be heard. */
 export function addSayButtons(text: string): string {
@@ -258,6 +267,7 @@ function readText(text: string): string {
             '«' + line.replace(LATIN_WORD, (w) => wordUnit(w, latinReader(w))) + '»')
         .replace(/[가-힣]+/g, (w) => wordUnit(w, hangulToVietji(w)))
         .replace(CJK_WORD, (w) => cjkWord(w))
+        .replace(THAI_RUN, (run) => thaiRun(run))
 }
 
 /**
@@ -284,9 +294,10 @@ export function addReadings(message: string): string {
 export function phraseVietji(text: string): string | null {
     const out: string[] = []
     const t = text.replace(/[«»「」『』“”"()（）]/g, ' ')
-    for (const m of t.matchAll(new RegExp(`${CJK_WORD.source}|[\\uAC00-\\uD7A3]+|${LATIN_WORD.source}`, 'g'))) {
+    for (const m of t.matchAll(new RegExp(`${CJK_WORD.source}|[\\uAC00-\\uD7A3]+|${THAI_RUN.source}|${LATIN_WORD.source}`, 'g'))) {
         const w = m[0]
         if (HANGUL.test(w)) { const v = hangulToVietji(w); if (v) out.push(v); continue }
+        if (THAI.test(w)) { const v = thaiToVietji(w); if (v) out.push(v); continue }
         if (/^[A-Za-zÀ-ÖØ-öø-ÿœŒ'’]+$/.test(w)) { const v = latinReader(w); if (v) out.push(v); continue }
         const html = cjkWord(w)
         const v = /<span style="[^"]*white-space:nowrap">([^<]*)<\/span><\/span>$/.exec(html)?.[1]
@@ -339,7 +350,7 @@ export function splitReplies(message: string, withReadings = true): { main: stri
     const main = (message ?? '').replace(/\n*\[\[REPLIES[\s\S]*?\]\]/, '').replace(/\[\[REPLIES[\s\S]*$/, '')
     if (!replies.length) return { main, box: '' }
     const line = (r: SuggestedReply) => {
-        const shown = /[«\uAC00-\uD7A3\u3041-\u30FA\u4E00-\u9FFF]/.test(r.text) ? r.text : `«${r.text}»`
+        const shown = /[«\uAC00-\uD7A3\u3041-\u30FA\u4E00-\u9FFF\u0E01-\u0E4E]/.test(r.text) ? r.text : `«${r.text}»`
         const tag = r.kind ? ` <span style="font-size:.75em;padding:0 .35em;border:1px solid #f2c76b55;border-radius:.6em;opacity:.8">${KIND_LABEL[r.kind]}</span>` : ''
         return `<div>${withReadings ? readText(shown) : esc(stripReadings(shown))} <span style="opacity:.75">— ${esc(r.meaning)}</span>${tag}${SAY_BUTTON}</div>`
     }
@@ -354,15 +365,15 @@ export function renderReplies(message: string): string {
     return main + box
 }
 
-/** Each foreign phrase the speaker said with its meaning ("「…」 (nghĩa)", "«…» (nghĩa)", a hangul phrase), and the replies. */
+/** Each foreign phrase the speaker said with its meaning ("「…」 (nghĩa)", "«…» (nghĩa)", a hangul or Thai phrase), and the replies. */
 export function collectVocab(message: string): SuggestedReply[] {
     const out: SuggestedReply[] = []
-    const re = new RegExp(`(?:「([^」\\n]{1,120})」|«([^»\\n]{1,160})»|([\\uAC00-\\uD7A3][\\uAC00-\\uD7A3\\s?.!,]{0,80}))\\s*[”"]?\\s*\\(([^)]{1,80})\\)`, 'g')
+    const re = new RegExp(`(?:「([^」\\n]{1,120})」|«([^»\\n]{1,160})»|([\\uAC00-\\uD7A3][\\uAC00-\\uD7A3\\s?.!,]{0,80})|([\\u0E01-\\u0E4E][\\u0E01-\\u0E4E\\s?.!,]{0,120}))\\s*[”"]?\\s*\\(([^)]{1,80})\\)`, 'g')
     for (const m of (message ?? '').matchAll(re)) {
-        const text = (m[1] ?? m[2] ?? m[3]).trim()
+        const text = (m[1] ?? m[2] ?? m[3] ?? m[4]).trim()
         if (!hasForeign(text) && !m[2]) continue
         const vietji = phraseVietji(text)
-        if (vietji) out.push({ text, vietji, meaning: m[4].trim() })
+        if (vietji) out.push({ text, vietji, meaning: m[5].trim() })
     }
     return [...out, ...parseReplies(message)]
 }

@@ -917,7 +917,7 @@ export interface Database{
     playerAgency?: boolean
     storyVoice?: boolean
     storyTerms?: boolean
-    /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr'. */
+    /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'. */
     learningLang?: string
     /** The learner's notebook per language (learningStore.ts): phrases, mistakes, right/wrong history, as JSON strings. */
     learningNotebook?: { [lang: string]: { vocab?: string; mistakes?: string; history?: string } }

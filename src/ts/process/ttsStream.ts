@@ -30,10 +30,11 @@ export class FrameParser {
     }
 }
 
-/** Korean voices a phone or Mac ships with that are women's (Yuna, Sora on Apple; Heami, SunHi on Windows; Google 한국의). */
-export const FEMALE_VOICE = /yuna|sora|heami|sunhi|jimin|seoyeon|female|여성|google 한국/i
+/** Korean and Thai voices a phone or Mac ships with that are women's (Yuna, Sora, Kanya, Narisa on Apple; Heami, SunHi,
+ *  Premwadee on Windows; Google 한국의). */
+export const FEMALE_VOICE = /yuna|sora|heami|sunhi|jimin|seoyeon|kanya|narisa|premwadee|female|여성|google 한국/i
 
-/** The voice that reads a learning language (kokoro has no Korean voice: Korean uses the device's own voice). */
+/** The voice that reads a learning language (kokoro has no Korean or Thai voice: those use the device's own voice). */
 export const FOREIGN_VOICE: Record<string, { model: 'kokoro'; voice: string } | { device: string }> = {
     ja: { model: 'kokoro', voice: 'jf_alpha' },
     zh: { model: 'kokoro', voice: 'zf_xiaobei' },
@@ -41,6 +42,7 @@ export const FOREIGN_VOICE: Record<string, { model: 'kokoro'; voice: string } | 
     fr: { model: 'kokoro', voice: 'ff_siwis' },
     en: { model: 'kokoro', voice: 'af_heart' },                 // the model card's best English voice (grade A), a woman's
     ko: { device: 'ko-KR' },
+    th: { device: 'th-TH' },
 }
 
 export interface StreamDeps {

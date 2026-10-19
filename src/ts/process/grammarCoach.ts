@@ -40,9 +40,9 @@ let readAloud: (s: string) => string | null = () => null
 export function setReader(r: (s: string) => string | null) { readAloud = r }
 const reading = (s: string) => { const v = readAloud(s); return v ? `<span style="${VJ}">${esc(v)}</span>` : '' }
 
-/** Text of an explanation with the Việt-ji after each run of Korean, Chinese or Japanese in it (reported: "Dạng lịch sự của
+/** Text of an explanation with the Việt-ji after each run of Korean, Chinese, Japanese or Thai in it (reported: "Dạng lịch sự của
  *  아프다" and "bạn viết: 병" had none). Escaped: the text is the model's. */
-const FOREIGN_RUN = /[\uAC00-\uD7A3\u3040-\u30ff\u3400-\u9fff々ー]+(?:\s+[\uAC00-\uD7A3]+)*/g
+const FOREIGN_RUN = /[\uAC00-\uD7A3\u3040-\u30ff\u3400-\u9fff\u0E01-\u0E4E々ー]+(?:\s+[\uAC00-\uD7A3\u0E01-\u0E4E]+)*/g
 export function readInline(text: string): string {
     let out = '', at = 0
     for (const m of (text ?? '').matchAll(FOREIGN_RUN)) {

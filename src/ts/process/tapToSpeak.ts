@@ -1,16 +1,17 @@
 // Tap a foreign word in a chat message to hear it. Works on any message, the learner's own too ("我 有 问题" typed by the
 // player has no reading markup), so the word is found from the text at the tap, not from markup: the run of foreign script
-// around the tapped character (Japanese, Chinese, Korean), or the «guillemet» phrase for Spanish and French (the learning
+// around the tapped character (Japanese, Chinese, Korean, Thai), or the «guillemet» phrase for Spanish and French (the learning
 // note puts those in «»; a Vietnamese word next to it must not be read in a Spanish voice). Reading lines are left out: the
 // Việt-ji line under each word and furigana in <rt>.
 
 import { speakForeign, warmVoice, type StreamDeps } from './ttsStream'
 import { isLatinLang } from './vietji'
 
-const FOREIGN = /[぀-ヿ㐀-鿿豈-﫿가-힣ᄀ-ᇿ㄰-㆏々〆ー]/
+const FOREIGN = /[぀-ヿ㐀-鿿豈-﫿가-힣ᄀ-ᇿ㄰-㆏々〆ー\u0E01-\u0E4E]/
 const JOINS = /[ 　、。，．！？!?・…「」『』〜~,.]/
 const HANGUL = /[가-힣ᄀ-ᇿ㄰-㆏]/
 const KANA = /[぀-ヿ]/
+const THAI = /[\u0E01-\u0E4E]/
 
 /** The foreign text at position `pos` of a message's text, and its language; null when the tap is not on one. */
 export function foreignAt(text: string, pos: number, lang: string): { text: string; lang: string } | null {
@@ -32,7 +33,7 @@ export function foreignAt(text: string, pos: number, lang: string): { text: stri
         }
         const run = text.slice(a, b).replace(/\[[^\]\n]{1,40}\]/g, '').replace(/^[\s、。，,.!?！？」』]+|[\s「『]+$/g, '').trim()
         if (!run) return null
-        const runLang = HANGUL.test(run) ? 'ko' : KANA.test(run) ? 'ja' : lang === 'ja' ? 'ja' : 'zh'
+        const runLang = HANGUL.test(run) ? 'ko' : THAI.test(run) ? 'th' : KANA.test(run) ? 'ja' : lang === 'ja' ? 'ja' : 'zh'
         return { text: run, lang: runLang }
     }
     if (isLatinLang(lang)) {
@@ -81,7 +82,7 @@ export function foreignOfLine(text: string, lang: string): string {
     if (isLatinLang(lang)) {
         for (const m of text.matchAll(/«([^»]+)»/g)) out.push(m[1].trim())
     }
-    for (const m of text.matchAll(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー][\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3々〆ー \u3000、。，！？!?・…〜~]*/g)) {
+    for (const m of text.matchAll(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3\u0e01-\u0e4e々〆ー][\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7a3\u0e01-\u0e4e々〆ー \u3000、。，！？!?・…〜~]*/g)) {
         const run = m[0].trim()
         if (run) out.push(run)
     }
@@ -116,7 +117,7 @@ export function installTapToSpeak(deps: StreamDeps, getLang: () => string) {
             for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!skipped(n, block)) text += n.textContent ?? ''
             const say = foreignOfLine(text, getLang())
             if (say && allowTap()) {
-                const lang = /[\uac00-\ud7a3]/.test(say) ? 'ko' : /[\u3040-\u30ff]/.test(say) ? 'ja' : getLang()
+                const lang = /[\uac00-\ud7a3]/.test(say) ? 'ko' : /[\u0e01-\u0e4e]/.test(say) ? 'th' : /[\u3040-\u30ff]/.test(say) ? 'ja' : getLang()
                 speakForeign(deps, say, lang).catch((err) => console.warn('[tts] speaker button failed', err))
             }
             return

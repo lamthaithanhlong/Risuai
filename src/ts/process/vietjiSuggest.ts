@@ -89,6 +89,10 @@ const STARTER: Record<LearningLang, [string, string][]> = {
         ['Hello', 'Xin chào'], ['Thank you', 'Cảm ơn'], ['Yes', 'Vâng'], ['No', 'Không'], ['Sorry', 'Xin lỗi'],
         ["I don't understand", 'Tôi không hiểu'], ['How much is it?', 'Bao nhiêu tiền?'], ['Please', 'Làm ơn'], ["It's okay", 'Không sao'], ['Goodbye', 'Tạm biệt'],
     ],
+    th: [
+        ['สวัสดีครับ', 'Xin chào'], ['ขอบคุณครับ', 'Cảm ơn'], ['ใช่', 'Vâng / Phải'], ['ไม่ใช่', 'Không phải'], ['ขอโทษครับ', 'Xin lỗi'],
+        ['ไม่เข้าใจ', 'Tôi không hiểu'], ['เท่าไหร่ครับ', 'Bao nhiêu tiền?'], ['ช่วยหน่อยครับ', 'Giúp tôi với'], ['ไม่เป็นไร', 'Không sao'], ['ลาก่อน', 'Tạm biệt'],
+    ],
 }
 
 export function starterSet(lang: LearningLang): Suggestion[] {
