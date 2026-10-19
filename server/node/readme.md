@@ -5,8 +5,8 @@
 This is the Node.js server for Risuai, for self-hosting purposes, who want to run Risuai on their own server remotely, without using official server for privacy or other reasons.
 ## Where the save lives (`RISU_STORE`)
 
-`RISU_STORE=files` keeps every stored file as `save/<hex of its path>`. `RISU_STORE=sqlite` keeps them all, images included, as
-BLOBs in one file, `save.store.sqlite` (`saveStore.cjs`). The HTTP file API (`/api/read`, `/api/write`, `/api/list`, `/api/remove`)
+`RISU_STORE=sqlite` (the default) keeps every stored file, images included, as a BLOB in one file, `save.store.sqlite`
+(`saveStore.cjs`). `RISU_STORE=files` keeps each one as `save/<hex of its path>`, as before. The HTTP file API (`/api/read`, `/api/write`, `/api/list`, `/api/remove`)
 is the same on both.
 
 - `node server/node/storeMigrate.cjs save --to sqlite` copies every `save/<hex>` file into the store and verifies each one by

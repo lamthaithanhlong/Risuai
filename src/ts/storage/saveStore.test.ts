@@ -23,8 +23,8 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 const open = (backend: 'files' | 'sqlite', extra: Record<string, unknown> = {}) => openSaveStore({ saveDir: save, backend, fullfsync: false, ...extra })
 
 describe('RISU_STORE', () => {
-    it('picks the backend, defaults to files, refuses anything else', () => {
-        expect(resolveBackend({})).toBe('files')
+    it('picks the backend, defaults to sqlite, refuses anything else', () => {
+        expect(resolveBackend({})).toBe('sqlite')
         expect(resolveBackend({ RISU_STORE: 'sqlite' })).toBe('sqlite')
         expect(resolveBackend({ RISU_STORE: ' Files ' })).toBe('files')
         expect(() => resolveBackend({ RISU_STORE: 'sqlite3' })).toThrow(/RISU_STORE/)

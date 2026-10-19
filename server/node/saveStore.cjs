@@ -5,7 +5,7 @@
 // and a copy, a backup or a sync of the save meant walking 586 MB of small files. Now the bytes can live in one SQLite file,
 // save.store.sqlite, next to save.queue.sqlite and the others: images as BLOBs, not base64.
 //
-// Two backends, chosen by RISU_STORE=sqlite|files (resolveBackend):
+// Two backends, chosen by RISU_STORE=sqlite|files (resolveBackend, default sqlite):
 //   files   the directory, exactly as before (atomic rename on write, readdir on list).
 //   sqlite  table files(key, path, data BLOB, size, mtime, sha256). WAL, synchronous=FULL and fullfsync like the save queue: the
 //           queue deletes its row once apply() returns, so the store's commit must be on the disk by then.
@@ -34,7 +34,8 @@ const path = require('path')
 const crypto = require('crypto')
 const { atomicWriteFile } = require('./atomicWrite.cjs')
 
-const DEFAULT_BACKEND = 'files'
+// sqlite since the copy of the live save passed the store gate (2026-10-19); RISU_STORE=files is the rollback
+const DEFAULT_BACKEND = 'sqlite'
 const BACKENDS = ['files', 'sqlite']
 const KEY_RE = /^[0-9a-fA-F]+$/
 
