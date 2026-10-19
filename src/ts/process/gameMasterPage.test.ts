@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const db: { gameMaster?: boolean; gmBookkeeper?: boolean; characters: unknown[] } = { characters: [] }
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
+const persona = { text: '' }
+vi.mock('../util', () => ({ getPersonaPrompt: () => persona.text }))
 const asks: string[] = []
 const answer = { text: '[[GM\nbeat: 1 | x | y\n]]' }
 vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: answer.text } } }))
@@ -185,5 +187,26 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         expect(creationRequest(req(), panelCard as never, pre as never)[1].content).toContain('[Character creation (hidden')
         const yes = chatOf([{ role: 'user', data: 'Hard. Surprise me.' }, { role: 'char', data: RECORD }, { role: 'user', data: 'Được.' }])
         expect(creationRequest(req(), panelCard as never, yes as never)[1].content).toBe('Tui đi xuống hầm.')
+    })
+
+    it('the player\'s persona is the character sheet: creation takes it, and the story keeps its abilities from the yes on', () => {
+        // the owner's Mailman chat, 2026-10-19: the look answer was "Lấy như profile" and the record kept none of the ten abilities
+        const KENJI = '[{{user}} = Kenji Park, nam, 25 tuổi ... **10 năng lực bí mật:** 1. **Thôi miên** ... **Evelyn — Linh Hồn Dẫn Lối** ...]'
+        const look = chatOf([{ role: 'user', data: 'Từng bước' }, { role: 'char', data: '**Ngoại hình của Kenji Park?**\n- a\n- b\n- c\n- Để thế giới chọn.' }, { role: 'user', data: 'Lấy như profile' }])
+        persona.text = ''
+        expect(creationRequest(req(), panelCard as never, look as never)[1].content).not.toContain('persona')
+        persona.text = KENJI
+        const note = creationRequest(req(), panelCard as never, look as never)[1].content
+        expect(note).toContain('it is the character sheet')
+        expect(note).toContain('Năng lực, Đồng hành')
+        // story turns, the Initialization reply (GM silent) included; none before the yes, none without a persona
+        const init = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }])
+        expect(gameMasterRequest(req(), card as never, init as never)[1].content).toContain('[Persona (hidden')
+        const story = chatOf([{ role: 'char', data: 'story' }], { $st_name: 'Kenji Park' })
+        expect(gameMasterRequest(req(), card as never, story as never)[1].content).toContain('[Persona (hidden')
+        expect(gameMasterRequest(req(), card as never, look as never)[1].content).toBe('Tui đi xuống hầm.')
+        persona.text = '   '
+        expect(gameMasterRequest(req(), card as never, story as never)[1].content).not.toContain('[Persona (hidden')
+        persona.text = ''
     })
 })

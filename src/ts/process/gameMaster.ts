@@ -212,7 +212,15 @@ export function yesAt(messages: Msg[]): number {
 const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
 
 /** The note for a turn of character creation, or '' once the character is confirmed (st_* written, or the yes given). */
-export function creationNote(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState): string {
+// The player's persona is their own character sheet (asked 2026-10-19: "3 truyện phải lấy persona của tui"). In the owner's
+// Mailman chat the persona (Kenji Park: ten secret abilities, the ghost Evelyn) was in every request, the look answer was
+// "Lấy như profile", and the record and the story kept none of the abilities: the cards' creation rule rolls what the player
+// does not type, and a fast model follows the note at the end of the message over the system prompt. So both notes say it.
+const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included; do not ask a question it already answers ("lấy như profile" = the persona\'s line), and list its abilities and companions in the record (Năng lực, Đồng hành).'
+/** After the yes: the persona's abilities and companions are the character's own, every turn. */
+export const PERSONA_STORY = '\n\n[Persona (hidden, never named): the character is the player\'s persona. Its abilities and companions are real, with the limits it sets; they work whenever the player uses them, and secret ones stay unknown to NPCs without evidence. Do not use them for the player.]'
+
+export function creationNote(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState, persona = false): string {
     if (!hasCreationStep(card) || hasPanel(vars) || state.gm_arc || state.gm_past) return ''
     const last = messages.map((m) => m.role).lastIndexOf('user')
     if (last < 0 || yesAt(messages) >= 0) return ''
@@ -223,6 +231,7 @@ export function creationNote(card: Card, messages: Msg[], vars: Record<string, u
     return '\n\n[Character creation (hidden, never named): the character is not confirmed yet. Answer only the creation step this message answers'
         + (first ? '; the reply opens with one line naming the difficulty the player chose, e.g. "Độ khó: Khó" (Hard when none was named)' : '')
         + '. Step by step: ask the next item only, with exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" (an item with only two possible values offers both).'
+        + (persona ? PERSONA_CREATION : '')
         + ' A record: show it again with what changed and end with "Được chưa?". Only the player\'s yes ("được", "ok", "bắt đầu") starts the story: until then no story prose, no [[STATUS]], [[LEDGER]] or [[GM]] block.]'
 }
 
