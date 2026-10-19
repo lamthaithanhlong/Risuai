@@ -238,3 +238,27 @@ it('an undrawn [[img:]] is hidden on screen (reported: shown as an English line 
     expect(stripPictureAsks('Chị gật đầu.\n[[img: half written')).toBe('Chị gật đầu.\n')
     expect(stripPictureAsks('{{inlay::abc}}\nKenji')).toBe('{{inlay::abc}}\nKenji')            // a drawn picture stays
 })
+
+describe('measured 2026-10-19 (gpt-6-luna): portraits of unnamed extras put 131 pictures in one chat', async () => {
+    const { castStrip, isUnnamed } = await import('./portraits')
+    const LUNA = 'Người nấu bếp khuấy nồi.\n[[LOOK Người nấu bếp | heavy-set woman, apron]]\n[[LOOK Lính gác cầm giáo | tall soldier, spear]]\n'
+        + '[[LOOK Thanh niên tù binh | thin young man]]\n[[LOOK Chàng trai tù binh | boy, rope]]\n[[LOOK Người lạ dưới đèn tắt | hooded figure]]\n'
+        + '[[LOOK <name> | x]]\n[[LOOK Edmund Hale | grey coat, forties]]\n[[LOOK Mặt Sẹo | scarred face]]\n[[LOOK Ông Silas Ward | white beard]]\n[[LOOK the old guard | grey]]'
+    it('only named characters get a LOOK (a role word before a capitalised name is a name)', () => {
+        expect(parseLooks(LUNA).map((l) => l.name)).toEqual(['Edmund Hale', 'Mặt Sẹo', 'Ông Silas Ward'])
+        for (const n of ['Người', 'Lính', 'người gác sổ', 'Người đánh xe', 'Guard', 'the old man', 'a woman']) expect(isUnnamed(n)).toBe(true)
+        for (const n of ['Kenji Park', 'Elise', 'An', 'Bé', 'Old Neil', 'Bà Lan', 'The Hanged Man']) expect(isUnnamed(n)).toBe(false)
+    })
+    it('a role already drawn on the save is never shown nor sent as a reference ("Người" is in every reply)', () => {
+        const card: CardLike = {
+            additionalAssets: [['Người nấu bếp', 'assets/a.webp', 'webp'], ['Edmund Hale', 'assets/b.webp', 'webp']],
+            extentions: { vjPortraits: { 'người nấu bếp': { name: 'Người nấu bếp', look: 'x', status: 'done', at: 0, asset: 'assets/a.webp' }, 'edmund hale': { name: 'Edmund Hale', look: 'y', status: 'done', at: 0, asset: 'assets/b.webp' } } },
+        }
+        const text = 'Mấy người đứng chờ. Edmund nhìn sang.'
+        expect(referencesFor(stateOf(card), text).map((e) => e.name)).toEqual(['Edmund Hale'])
+        expect(castStrip(card, text)).toContain('{{path::Edmund Hale}}')
+        expect(castStrip(card, text)).not.toContain('Người nấu bếp')
+        expect(castStrip(card, 'Một người đàn ông ngoái lại.')).toBe('')
+        expect(portraitNote(stateOf(card), 'Kenji')).not.toContain('Người nấu bếp')
+    })
+})

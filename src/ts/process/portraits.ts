@@ -23,12 +23,39 @@ export const MAX_REFS = 3
 
 export const keyOf = (name: string) => (name ?? '').trim().toLowerCase().normalize('NFC')
 
-/** The LOOK lines in a reply, one per name (the first wins). */
+// Measured 2026-10-19 (narrator gpt-6-luna, Shadow Slave): the story wrote LOOK lines for "Người nấu bếp", "Người đánh xe",
+// "Lính gác cầm giáo", "Thanh niên tù binh"…; each was drawn, and since a portrait shows under every reply that names it by its
+// first word, "Người" and "Lính" (any person, any soldier) put 131 pictures in one chat. Only a named character has a portrait.
+const ROLE_WORDS = new Set([
+    'người', 'lính', 'ông', 'bà', 'cô', 'chú', 'bác', 'anh', 'chị', 'em', 'cậu', 'lão', 'gã', 'tên', 'kẻ', 'thằng', 'con', 'đứa',
+    'bé', 'cụ', 'ả', 'mụ', 'nàng', 'hắn', 'chàng', 'cô gái', 'chàng trai', 'thanh niên', 'thiếu niên', 'thiếu nữ', 'đàn ông', 'đàn bà',
+    'phụ nữ', 'cô bé', 'cậu bé', 'ông lão', 'bà lão', 'người lạ', 'lính gác',
+    'the', 'a', 'an', 'man', 'woman', 'men', 'women', 'guard', 'guards', 'soldier', 'soldiers', 'old', 'young', 'boy', 'girl',
+    'stranger', 'someone', 'figure', 'person', 'child', 'kid', 'merchant', 'vendor', 'prisoner', 'driver', 'cook', 'servant', 'maid',
+    'priest', 'officer', 'clerk', 'innkeeper', 'shopkeeper', 'elder', 'youth', 'lady', 'gentleman',
+])
+/** One word alone: only these are a role (a character may be called An, Anh or Bé). */
+const ROLE_ALONE = new Set(['người', 'lính', 'kẻ', 'gã', 'lão', 'hắn', 'guard', 'soldier', 'man', 'woman', 'stranger', 'someone', 'figure', 'person', 'child', 'boy', 'girl'])
+
+/** A LOOK name that is a role, not a name ("Người nấu bếp", "Lính", "the old guard"); a role word before a capitalised name
+ *  ("Ông Silas", "Bà Lan") is a name. */
+export function isUnnamed(name: string): boolean {
+    const n = (name ?? '').trim().normalize('NFC')
+    if (!n || /[<>{}]/.test(n)) return true
+    const words = n.split(/\s+/)
+    if (words.length === 1) return ROLE_ALONE.has(words[0].toLowerCase())
+    const two = words.slice(0, 2).join(' ').toLowerCase()
+    const lead = ROLE_WORDS.has(two) ? 2 : ROLE_WORDS.has(words[0].toLowerCase()) ? 1 : 0
+    if (!lead) return false
+    return !words.slice(lead).some((w) => /^\p{Lu}/u.test(w))
+}
+
+/** The LOOK lines in a reply, one per name (the first wins); a role with no name ("Người gác sổ") gets none. */
 export function parseLooks(text: string): Look[] {
     const out: Look[] = []
     for (const m of (text ?? '').matchAll(LOOK)) {
         const name = m[1].trim(), look = m[2].trim()
-        if (name && look && !out.some((l) => keyOf(l.name) === keyOf(name))) out.push({ name, look })
+        if (name && look && !isUnnamed(name) && !out.some((l) => keyOf(l.name) === keyOf(name))) out.push({ name, look })
     }
     return out
 }
@@ -85,6 +112,7 @@ export function metInChat(state: PortraitState, chatText: string, player?: strin
     const text = (chatText ?? '').toLowerCase().normalize('NFC')
     const out: PortraitState = {}
     for (const [k, e] of Object.entries(state)) {
+        if (isUnnamed(e.name)) continue
         const full = keyOf(e.name)
         const first = full.split(/\s+/)[0]
         if (full === keyOf(player ?? '') || namedIn(text, full) || (first.length >= 3 && namedIn(text, first))) out[k] = e
@@ -94,8 +122,8 @@ export function metInChat(state: PortraitState, chatText: string, player?: strin
 
 /** The note for the story: which names to describe once, which are drawn already. */
 export function portraitNote(state: PortraitState, player: string): string {
-    const drawn = Object.values(state).filter((e) => e.status !== 'error').map((e) => e.name)
-    return 'CHARACTER LOOKS. When a named character with no look yet appears or speaks, the player\'s own character'
+    const drawn = Object.values(state).filter((e) => e.status !== 'error' && !isUnnamed(e.name)).map((e) => e.name)
+    return 'CHARACTER LOOKS. When a named character (a proper name, never a role such as "người lính" or "the guard") with no look yet appears or speaks, the player\'s own character'
         + (player ? ` (${player})` : '') + ' included (and characters met earlier in the story too), add one hidden line with how they look, so their picture stays the same:'
         + ' [[LOOK <name> | <hair, eyes, face, build, age, clothes, in English, one line>]]. Keep each look for the rest of the story.'
         + (drawn.length ? ` Already described, never again: ${drawn.join(', ')}.` : '')
@@ -108,8 +136,8 @@ export function portraitNote(state: PortraitState, player: string): string {
  * The learning note behaved the same way: a system note alone is not followed, the end of the player's message is.
  */
 export function portraitReminder(state: PortraitState): string {
-    const drawn = Object.values(state).filter((e) => e.status !== 'error').map((e) => e.name)
-    return '\n\n[Also this reply: for each named character in the scene with no look yet'
+    const drawn = Object.values(state).filter((e) => e.status !== 'error' && !isUnnamed(e.name)).map((e) => e.name)
+    return '\n\n[Also this reply: for each character in the scene with a proper name (not a role like "người gác") and no look yet'
         + (drawn.length ? ` (described already, never again: ${drawn.join(', ')})` : '')
         + ', add one hidden line at the very end: [[LOOK <name> | <hair, eyes, face, build, age, clothes, in English>]].]'
 }
@@ -155,7 +183,7 @@ export function referencesFor(state: PortraitState, prompt: string, message = ''
         const has = (w: string) => w.length >= 2 && new RegExp(`[^\\p{L}]${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\p{L}]`, 'u').test(t)
         return has(full) || (first !== full && has(first))
     }
-    const done = Object.values(state).filter((e) => e.status === 'done' && e.asset)
+    const done = Object.values(state).filter((e) => e.status === 'done' && e.asset && !isUnnamed(e.name))
     const inPrompt = done.filter((e) => named(e, prompt))
     const inMessage = done.filter((e) => !inPrompt.includes(e) && named(e, message))
     return [...inPrompt, ...inMessage].slice(0, max)
