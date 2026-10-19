@@ -27,7 +27,7 @@ export function modelSettings(saveDir, backend) {
     return {
         aiModel: root.aiModel,
         slot: active ? active.name : null,
-        slots: slots.map((x) => ({ id: x.id, name: x.name, req: x.req })),
+        slots: slots.map((x) => ({ id: x.id, name: x.name, model: x.model, req: x.req })),
         requestModel: active?.req || root.customProxyRequestModel || root.proxyRequestModel,
         url,
         key: root.proxyKey || '',

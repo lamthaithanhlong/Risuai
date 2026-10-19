@@ -92,7 +92,9 @@ async function playStory(key, ctx) {
     const { dir, password } = copySave(ctx.runDir, ctx.base, key, { log })
     rec.copyDir = dir
     if (ctx.slot) {
-        const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, { activeModelSlot: ctx.slot.id })
+        // the request goes out with customProxyRequestModel, and the app's slot watcher (modelSlotsRuntime) detaches a slot whose
+        // fields disagree with it: setting activeModelSlot alone left the copy on the live save's model
+        const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, { activeModelSlot: ctx.slot.id, aiModel: ctx.slot.model, customProxyRequestModel: ctx.slot.req })
         rec.narratorSlot = `slot "${ctx.slot.name}" (${ctx.slot.req}); the live save has ${was.activeModelSlot === ctx.slot.id ? 'the same' : 'another'} slot active`
         log(rec.narratorSlot)
     }
