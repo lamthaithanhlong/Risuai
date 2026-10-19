@@ -12,7 +12,8 @@ describe('the side, from the player\'s own words', () => {
     it('reads the side the player commits to, not a route, a chore or a refusal', () => {
         expect(playerSide(SS_SIDE)).toBe('nhóm của Nephis (Ngôi Sao Đổi Thay)')
         expect(playerSide(LOTM_SIDE)).toBe('Kẻ Gác Đêm (Nighthawks) của Giáo hội Nữ Thần Đêm Tối')
-        expect(playerSide(MAILMAN_SIDE)).toBe('')                                                   // "không gia nhập"
+        // going alone is the side (the card's "Going alone" path; the acceptance gm.side check asks for it): not a refusal
+        expect(playerSide(MAILMAN_SIDE)).toBe('đi một mình')
         expect(playerSide('Tôi đi theo con đường chính ra khỏi chỗ này, vừa đi vừa để ý xung quanh.')).toBe('')
         expect(playerSide('Tôi làm việc được giao trong nhóm, cố cho mọi người thấy mình có ích.')).toBe('')
         expect(playerSide('Tôi làm theo thủ tục và yêu cầu mà bên đó đặt ra cho người mới.')).toBe('')

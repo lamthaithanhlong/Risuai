@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, cardEvent, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
 } from './gameMaster'
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
@@ -330,5 +330,17 @@ describe('the bookkeeper (the submodel keeps the notes the narrator forgot)', ()
         // a reply the narrator left without a block: the helper's notes roll back to the state before it
         const alone = applyBookkeep(before, ['beat: 1 | x | y'], 'r6', 6)
         expect(JSON.parse(alone.gm_prev!)).toEqual(before)
+    })
+})
+
+describe('going alone is a side (Mailman, 2026-10-19)', () => {
+    it('"no group at all, I go alone" is the path đi một mình; turning down one group is not', () => {
+        const solo = 'Tôi quyết định rồi: tôi không gia nhập đoàn nào cả, tôi sẽ đi một mình và tự gây dựng tên tuổi bằng những lá thư mình giao.'
+        expect(playerSide(solo)).toBe('đi một mình')
+        expect(sidePaths([''], {}, solo).join('\n')).toContain('path: đi một mình | tự đi | chưa có tên tuổi')
+        expect(playerSide('Tôi không gia nhập nhóm của Nephis.')).toBe('')
+        expect(playerSide('Tôi không đi một mình nữa, tôi gia nhập Liệp Cẩu đoàn.')).toBe('Liệp Cẩu đoàn')
+        expect(playerSide("I'll go it alone from now on.")).toBe('alone')
+        expect(playerSide('Tôi sẽ gia nhập Kẻ Gác Đêm.')).toBe('Kẻ Gác Đêm')
     })
 })

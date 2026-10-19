@@ -257,8 +257,15 @@ const SIDE_STOP = /^\s(?:và|rồi|dù|để|nhưng|mà|ở|tại|trong|nếu|kh
 const SIDE_NOISE = new Set(['nhóm', 'của', 'phe', 'đội', 'hội', 'bọn', 'đám', 'the', 'of', 'and', 'group', 'crew', 'side', 'người'])
 
 /** The side the player's own message commits to ("gia nhập nhóm của Nephis …" → "nhóm của Nephis (…)"), or ''. */
+// Going alone is a side of its own (Mailman's "Going alone" path card). Measured 2026-10-19: "tôi không gia nhập đoàn nào cả,
+// tôi sẽ đi một mình và tự gây dựng tên tuổi…" was read as a negated join and no path was ever written. Turning down one named
+// group ("không gia nhập nhóm của Nephis") is not going alone: only "no group at all" or "alone" is.
+const SOLO = /(không (?:gia nhập|vào|theo|đầu quân cho) (?:đoàn|nhóm|phe|hội|tổ chức|băng)(?: đội)? nào|(?<!không )(?:sẽ |cứ |tự )?đi một mình|độc lai độc vãng|đơn thương độc mã|\bgo(?:ing)? (?:it )?alone\b|\bon my own\b|\bjoin no (?:one|side|group|faction|crew)\b)/i
+const VI_LETTER = /[àáảãạăâđèéẻẽẹêìíỉĩịòóỏõọôơùúủũụưỳýỷỹỵ]/i
+
 export function playerSide(text: string): string {
     const t = (text ?? '').replace(/\s+/g, ' ').trim()
+    if (SOLO.test(t)) return VI_LETTER.test(t) ? 'đi một mình' : 'alone'
     const m = COMMIT.exec(t)
     if (!m || NEGATED.test(t.slice(0, m.index))) return ''
     const rest = m[2]
@@ -300,8 +307,9 @@ export function sidePaths(bodies: string[], state: GmState, player: string): str
         return sameSide(v, held)
     }).join('\n'))
     if (side && !named && !sameSide(held, side)) {
-        const vi = /[àáảãạăâđèéẻẽẹêìíỉĩịòóỏõọôơùúủũụưỳýỷỹỵ]/i.test(player)
-        const line = `path: ${side} | ${vi ? 'muốn gia nhập | chưa được nhận' : 'wants to join | not yet accepted'}`
+        const vi = VI_LETTER.test(player)
+        const solo = side === 'đi một mình' || side === 'alone'
+        const line = `path: ${side} | ${solo ? (vi ? 'tự đi | chưa có tên tuổi' : 'on their own | no name yet') : vi ? 'muốn gia nhập | chưa được nhận' : 'wants to join | not yet accepted'}`
         if (out.length) out[out.length - 1] = out[out.length - 1].trim() ? `${out[out.length - 1]}\n${line}` : line
         else out.push(line)
     }
