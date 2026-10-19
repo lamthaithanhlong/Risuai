@@ -915,6 +915,8 @@ export interface Database{
     oneSystemMessage?: boolean
     historyIndex?: boolean
     playerAgency?: boolean
+    /** Put the canon violations of the chat (story.sqlite + canon.pl, /api/story/:id/check) in the request as one line; off unless true. */
+    storyCheckInPrompt?: boolean
     storyVoice?: boolean
     storyTerms?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'. */

@@ -286,6 +286,10 @@
                 <span class="text-textcolor2 text-xs">Mọi chat, mọi nhà cung cấp ảnh: mỗi nhân vật có tên (kể cả nhân vật của bạn, lấy ảnh persona) có một chân dung, lưu vào Additional Assets và dùng chung cho các bản sao cùng tên của truyện. Ảnh cảnh có nhân vật đó được ghi ngoại hình, và với OpenAI-compatible (9router) được gửi kèm chân dung làm ảnh mẫu.</span>
             </div>
         {/if}
+        <div class="mb-4 flex flex-col gap-1">
+            <Check check={DBState.db.storyCheckInPrompt === true} onChange={(v) => { DBState.db.storyCheckInPrompt = v }} name="Kiểm tra mạch truyện và nhắc model sửa (mặc định tắt)"/>
+            <span class="text-textcolor2 text-xs">Chỉ khi chạy bằng server Node. Trước mỗi lượt, server soát trạng thái truyện của chat này (bậc tăng mà không qua Ác Mộng hay Cánh Cổng, NPC đã chết lại hành động, ngày lùi, một Ký Ức ở hai ô, Mảnh Linh Hồn vượt sức chứa) và nếu có lỗi thì thêm một dòng hệ thống ngắn để model tự sửa. Không có lỗi, không có SWI-Prolog hay server chậm thì không thêm gì.</span>
+        </div>
 
         {#if DBState.db.sdProvider === 'webui'}
         <span class="text-draculared text-xs mb-2">You must use WebUI with --api flag</span>

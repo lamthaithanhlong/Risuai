@@ -17,6 +17,8 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
+import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
+import { isNodeServer } from "../platform";
 import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
 import { glossaryOf, termsRequest } from "./storyTermsPage";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
@@ -1545,6 +1547,11 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     formated = viProseRequest(formated, DBState.db.viProseGuard !== false, wantsVietnameseProse(currentChat?.message ?? [], currentChar?.firstMessage ?? '', DBState.db.translator), getUserName())
     // the player's turn is carried out: their plan happens, no detail invented to refuse it (playerAgency.ts)
     formated = agencyRequest(formated, DBState.db.playerAgency !== false)
+    // Settings → story consistency check (off unless turned on): the canon rules' findings on this chat, one system line (storyCheck.ts)
+    if(DBState.db.storyCheckInPrompt === true && isNodeServer){
+        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+        formated = storyCheckRequest(formated, await brTimed('story check', () => fetchStoryCheckLine(currentChat?.id, { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth }), 0))
+    }
     // the story's own voice (the Spell, a System) speaks when it should, read once from the card's rules (storyVoice.ts)
     formated = voiceRequest(formated, await brTimed('story voice', () => voiceProfileOf(currentChar), 0))
     // the story's own words the player used ("tiếng vọng" = Echo), read once from the card's rules (storyTerms.ts)
