@@ -9,6 +9,7 @@
 //   node server/node/loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> [...]
 //   node server/node/loreImport.cjs <save dir> --image <picture.png> <chaId prefix> [...]   (the card's icon)
 //   node server/node/loreImport.cjs <save dir> --script <card.json> <chaId prefix> [...]     (the card's trigger scripts, e.g. a new status.lua)
+//   node server/node/loreImport.cjs <save dir> --clear-assets <chaId prefix> [...]            (drop the card's image library; the files stay on disk)
 const fs = require('fs')
 const path = require('path')
 const net = require('net')
@@ -114,6 +115,25 @@ function setCardScript(saveDir, prefixes, triggerscript, lowLevelAccess, syncFil
     }, syncFile, 'card-script')
 }
 
+/** Drops the cards' additional assets (an image library the card no longer uses); the asset files are left on disk. */
+function clearCardAssets(saveDir, prefixes, syncFile = saveDir + '.sync.sqlite') {
+    return recordedWrite(saveDir, (current) => {
+        const blocks = decodeSave(current)
+        const report = []
+        for (const prefix of prefixes) {
+            const i = blocks.findIndex((b) => b.name.startsWith(prefix))
+            if (i < 0) throw new Error(`no card ${prefix} in the save`)
+            const v = parseBlock(blocks[i])
+            report.push({ prefix, name: v.name, before: (v.additionalAssets ?? []).length, after: 0 })
+            v.additionalAssets = []
+            blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
+        }
+        const out = encodeSave(blocks)
+        validateSave(out)
+        return { out, report }
+    }, syncFile, 'card-assets')
+}
+
 function serverRunning(port = 6001) {
     return new Promise((resolve) => {
         const s = net.connect(port, '127.0.0.1')
@@ -127,6 +147,10 @@ if (require.main === module) {
         const [saveDir, ...pairs] = process.argv.slice(2)
         if (!saveDir || !pairs.length) { console.error('usage: loreImport.cjs <save dir> <chaId prefix>=<risu_lorebook.json> ...'); process.exit(2) }
         if (await serverRunning()) { console.error('the Risu server is running on :6001; stop it first (its queue flushes on SIGTERM)'); process.exit(1) }
+        if (pairs[0] === '--clear-assets') {
+            for (const r of clearCardAssets(saveDir, pairs.slice(1))) console.log(`${r.prefix} ${r.name}: assets ${r.before} -> ${r.after}`)
+            return
+        }
         if (pairs[0] === '--script') {
             // loreImport.cjs <save dir> --script <card.json> <chaId prefix> ...
             const [, cardFile, ...prefixes] = pairs
@@ -146,4 +170,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, setCardScript, recordedWrite, toRisuLore }
+module.exports = { importLore, withLore, setCardImage, setCardScript, clearCardAssets, recordedWrite, toRisuLore }
