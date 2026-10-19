@@ -10,6 +10,7 @@
 //   node server/node/loreImport.cjs <save dir> --image <picture.png> <chaId prefix> [...]   (the card's icon)
 //   node server/node/loreImport.cjs <save dir> --script <card.json> <chaId prefix> [...]     (the card's trigger scripts, e.g. a new status.lua)
 //   node server/node/loreImport.cjs <save dir> --clear-assets <chaId prefix> [...]            (drop the card's image library; the files stay on disk)
+//   node server/node/loreImport.cjs <save dir> --text <card.json> <chaId prefix> [...]       (the card's description and first message, e.g. a new opening)
 const fs = require('fs')
 const path = require('path')
 const net = require('net')
@@ -115,6 +116,27 @@ function setCardScript(saveDir, prefixes, triggerscript, lowLevelAccess, syncFil
     }, syncFile, 'card-script')
 }
 
+/** Replaces the cards' description and first message with those of a built card (chats already started keep what they show). */
+function setCardText(saveDir, prefixes, desc, firstMessage, syncFile = saveDir + '.sync.sqlite') {
+    if (typeof desc !== 'string' || !desc.trim() || typeof firstMessage !== 'string' || !firstMessage.trim()) throw new Error('the card has no description or first message')
+    return recordedWrite(saveDir, (current) => {
+        const blocks = decodeSave(current)
+        const report = []
+        for (const prefix of prefixes) {
+            const i = blocks.findIndex((b) => b.name.startsWith(prefix))
+            if (i < 0) throw new Error(`no card ${prefix} in the save`)
+            const v = parseBlock(blocks[i])
+            report.push({ prefix, name: v.name, before: [String(v.desc ?? '').length, String(v.firstMessage ?? '').length], after: [desc.length, firstMessage.length] })
+            v.desc = desc
+            v.firstMessage = firstMessage
+            blocks[i] = serializeBlock(blocks[i].type, blocks[i].comp, blocks[i].name, v)
+        }
+        const out = encodeSave(blocks)
+        validateSave(out)
+        return { out, report }
+    }, syncFile, 'card-text')
+}
+
 /** Drops the cards' additional assets (an image library the card no longer uses); the asset files are left on disk. */
 function clearCardAssets(saveDir, prefixes, syncFile = saveDir + '.sync.sqlite') {
     return recordedWrite(saveDir, (current) => {
@@ -159,6 +181,13 @@ if (require.main === module) {
             for (const r of setCardScript(saveDir, prefixes, risu.triggerscript, risu.lowLevelAccess)) console.log(`${r.prefix} ${r.name}: trigger script ${r.before} -> ${r.after} chars`)
             return
         }
+        if (pairs[0] === '--text') {
+            // loreImport.cjs <save dir> --text <card.json> <chaId prefix> ...
+            const [, cardFile, ...prefixes] = pairs
+            const d = (c => c.data ?? c)(JSON.parse(fs.readFileSync(cardFile, 'utf8')))
+            for (const r of setCardText(saveDir, prefixes, d.description, d.first_mes)) console.log(`${r.prefix} ${r.name}: description ${r.before[0]} -> ${r.after[0]}, first message ${r.before[1]} -> ${r.after[1]} chars`)
+            return
+        }
         if (pairs[0] === '--image') {
             // loreImport.cjs <save dir> --image <picture> <chaId prefix> ...
             const [, pic, ...prefixes] = pairs
@@ -170,4 +199,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, setCardScript, clearCardAssets, recordedWrite, toRisuLore }
+module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, recordedWrite, toRisuLore }

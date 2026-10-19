@@ -9,7 +9,7 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore, setCardImage, setCardScript, clearCardAssets, toRisuLore } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage, setCardScript, setCardText, clearCardAssets, toRisuLore } = req('../../../server/node/loreImport.cjs')
 // characters.ts updateLorebooks, copied (it needs a browser to import); the test below fails if the original changes
 const updateLorebooks = (book: any[]) => book.map((v) => {
     v.bookVersion ??= 1
@@ -81,6 +81,23 @@ describe('lore import while a page is open', () => {
         expect(read(w.bytes).triggerscript[0].effect[0].code).toBe('runes')
         expect(read(w.bytes).lowLevelAccess).toBe(true)
         expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+    })
+
+    test('a new opening (description + first message) survives the next write of a page that loaded the old one', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'loreimp-t-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const syncFile = saveDir + '.sync.sqlite'
+        const old = { ...card(['lore'], ['hi']), desc: 'old rules', firstMessage: 'old prologue' }
+        const loaded = save(old)
+        writeFileSync(join(saveDir, FILE), loaded)
+        let sync = openDbSync({ dbFile: syncFile, log: () => {} }); sync.onRead('page', loaded); sync.close()
+        const [r] = setCardText(saveDir, ['ss'], 'new rules: ask "Được chưa?"', 'new prologue, two ways to begin')
+        expect(r.before).toEqual([9, 12])
+        sync = openDbSync({ dbFile: syncFile, log: () => {} })
+        const w = sync.onWrite('page', save({ ...old, chats: [{ id: 'k1', message: ['hi', 'more'] }] }), readFileSync(join(saveDir, FILE))); sync.close()
+        expect(read(w.bytes).desc).toBe('new rules: ask "Được chưa?"')
+        expect(read(w.bytes).firstMessage).toBe('new prologue, two ways to begin')
+        expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+        expect(() => setCardText(saveDir, ['ss'], '', 'x')).toThrow()
     })
 
     test('clearing the image library survives the next write of a page that loaded it', () => {
