@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db: { gameMaster?: boolean; characters: unknown[] } = { characters: [] }
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 
-const { gameMasterRequest, noteGameMaster } = await import('./gameMasterPage')
+const { bookkeep, gameMasterRequest, noteGameMaster } = await import('./gameMasterPage')
 
 const card = { type: 'character', name: 'Shadow Slave', desc: 'Character Creation … Được chưa?', firstMessage: '', globalLore: [] }
 type M = { role: string; data: string; chatId?: string }
@@ -56,5 +56,19 @@ describe('the Game Master on the page', () => {
         const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }], { $st_name: 'Mai', $gm_arc: 'debt | Varn | pay | brother', $gm_beat_at: '0' })
         const notes = new Set(Array.from({ length: 30 }, () => gameMasterRequest(req(), card as never, c as never)[1].content))
         expect(notes.size).toBeGreaterThan(2)
+    })
+
+    it('the bookkeeper writes the side the player took, only while its reply is still the last one', async () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'Tui xin theo đoàn buôn nô lệ.' }, { role: 'char', data: 'Lão gật đầu.', chatId: 'r2' }], { $st_name: 'Mai' })
+        let asked = ''
+        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\npath: the slavers | new hand | watched\nbeat: 1 | joined | first order at dawn\n]]' })
+        expect(ok).toBe(true)
+        expect(asked).toContain('Tui xin theo đoàn buôn nô lệ.')
+        expect(c.scriptstate.$gm_path).toBe('the slavers | new hand | watched')
+        expect(c.scriptstate.$gm_at).toBe('r2')
+        c.message.push({ role: 'user', data: 'đi' }, { role: 'char', data: 'reroll', chatId: 'r3' })
+        expect(await bookkeep(() => c as never, { data: 'Lão gật đầu.', chatId: 'r2' }, 2, 'x', async () => '[[GM\npath: other | x | y\n]]')).toBe(false)
+        expect(c.scriptstate.$gm_path).toBe('the slavers | new hand | watched')
+        expect(await bookkeep(() => c as never, c.message[4], 3, 'x', async () => null)).toBe(false)
     })
 })

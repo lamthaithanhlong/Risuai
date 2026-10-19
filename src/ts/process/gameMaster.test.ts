@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyGm, gmBlocks, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
 } from './gameMaster'
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
@@ -199,5 +199,37 @@ describe('world flavour only from the card', () => {
         expect(worldFlavour({ name: 'Lord of the Mysteries — Fate' })).toContain('Beyonder')
         expect(worldFlavour({ name: 'x', globalLore: [{ comment: 'Module: Delivery World rules' }] })).toContain('mailman')
         expect(worldFlavour(PLAIN)).toContain('rival')
+    })
+})
+
+describe('the bookkeeper (the submodel keeps the notes the narrator forgot)', () => {
+    it('asks with the notes, the player\'s turn and the reply, and names what a side is', () => {
+        const p = bookkeepPrompt({ gm_arc: 'a | b | c | d', gm_path: 'Song clan | servant | low' }, 'Tui xin theo đoàn.', 'Lão gật đầu.', 'a rival')
+        expect(p).toContain('arc: a | b | c | d')
+        expect(p).toContain('path: Song clan | servant | low')
+        expect(p).toContain('Tui xin theo đoàn.')
+        expect(p).toContain('Lão gật đầu.')
+        expect(p).toContain('the villains\' side included')
+        expect(p).toContain('never a canon villain')
+        expect(stateLines({})).toBe('none')
+    })
+    it('reads a block, or bare lines, and nothing else', () => {
+        expect(parseBookkeep('ok\n[[GM\npath: the slavers | new hand | watched\n]]')).toEqual(['\npath: the slavers | new hand | watched\n'])
+        expect(parseBookkeep('path: the slavers | new hand | watched\nblah')).toEqual(['path: the slavers | new hand | watched'])
+        expect(parseBookkeep('Nothing changed.')).toBeNull()
+    })
+    it('adds to the same reply\'s rollback point: one reroll undoes the narrator\'s and the helper\'s notes', () => {
+        const before: GmState = { gm_arc: 'old | A | g | s' }
+        const narr = takeGm(before, msg('char', 'x\n[[GM\nbeat: 2 | y | z\n]]', 'r5'), 5)!.state
+        const both = applyBookkeep(narr, ['path: the slavers | new hand | watched\nenemy: the girl\'s mother | I sold her child'], 'r5', 5)
+        expect(both.gm_path).toBe('the slavers | new hand | watched')
+        expect(both.gm_enemies).toContain('the girl\'s mother')
+        expect(JSON.parse(both.gm_prev!)).toEqual(before)
+        const back = settleGm(both, [msg('char', 'x', 'r4')])
+        expect(back.state.gm_path ?? '').toBe('')
+        expect(back.state.gm_arc).toBe('old | A | g | s')
+        // a reply the narrator left without a block: the helper's notes roll back to the state before it
+        const alone = applyBookkeep(before, ['beat: 1 | x | y'], 'r6', 6)
+        expect(JSON.parse(alone.gm_prev!)).toEqual(before)
     })
 })

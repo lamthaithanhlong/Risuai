@@ -309,3 +309,71 @@ export function takeGm(state: GmState, reply: Msg, charCount: number): { state: 
     const next = applyGm(before, bodies, charCount)
     return { state: { ...next, gm_prev: JSON.stringify(before), gm_at: reply.chatId ?? '' }, text: stripGm(reply.data) }
 }
+
+// ---- the bookkeeper ------------------------------------------------------------------------------------------------------------
+// The narrator alone keeps the notes badly (measured 2026-10-19, DeepSeek v4.1 flash, 10 turns per run): Shadow Slave wrote the
+// block in 3 of 10 replies and took 5 replies to seed an arc, and in two runs where the player committed to a side (offering
+// a girl to the slavers to join them; a pact with the voice in a trunk) no reply ever wrote path:, so the side would be lost
+// in a long chat. So after every reply a small helper call (the submodel, as storyVoice uses) reads the reply and writes the
+// notes that changed; its block goes through applyGm like the narrator's. A failed or slow helper changes nothing.
+
+/** The current notes as lines for the helper ('none' when empty). */
+export function stateLines(state: GmState): string {
+    const out: string[] = []
+    if (state.gm_arc) out.push(`arc: ${state.gm_arc}`)
+    if (state.gm_beat) out.push(`beat: ${state.gm_beat}`)
+    for (const t of lines(state.gm_threats)) out.push(`threat: ${t}`)
+    if (state.gm_path) out.push(`path: ${state.gm_path}`)
+    for (const e of lines(state.gm_enemies)) out.push(`enemy: ${e}`)
+    for (const g of lines(state.gm_gained)) out.push(`gained: ${g}`)
+    for (const r of lines(state.gm_rewards_due)) out.push(`reward: ${r}`)
+    for (const c of lines(state.gm_consequences_due)) out.push(`consequence: ${c}`)
+    if (state.gm_canon) out.push(`canon: ${state.gm_canon}`)
+    for (const l of lines(state.gm_left)) out.push(`(left side: ${l.split('|')[0].trim()})`)
+    for (const p of lines(state.gm_past)) out.push(`(past arc: ${p})`)
+    return out.length ? out.join('\n') : 'none'
+}
+
+/** The helper's request: the notes, the player's turn and the reply; it answers with one [[GM]] block. */
+export function bookkeepPrompt(state: GmState, player: string, reply: string, flavour: string): string {
+    const cut = (s: string, n: number) => { const t = (s ?? '').trim(); return t.length > n ? '…' + t.slice(-n) : t }
+    return `You keep the Game Master's notes for an interactive story: the player's own story inside a novel's world, not the novel's plot.
+
+NOTES NOW:
+${stateLines(state)}
+
+THE PLAYER'S LAST ACTION:
+${cut(player, 800)}
+
+THE STORY'S REPLY:
+${cut(reply, 3500)}
+
+Write the notes this reply changed, as one block and nothing else:
+[[GM
+arc: <hook> | <antagonist> | <goal> | <stakes>
+beat: <n> | <what is happening now> | <what is due next>
+threat: <name> | <progress, e.g. 2/4> | <what happens when it fills>
+path: <side> | <stage> | <standing>
+enemy: <who> | <why they oppose the player>
+gained: <what a side or deed gave>
+reward: <what> | <when it is paid>
+consequence: <what> | <when it lands>
+canon: <in-world date> | <what canon people are doing off-screen>
+]]
+Rules: only lines that changed; always the beat line. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain), or "arc: done | <how>" when this reply resolved it. path: when the player committed to, rose in, or left a side, road or master in this reply (a faction, a person they serve, a crew, the villains' side included; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.`
+}
+
+/** The block in the helper's answer (a bare list of lines counts too), or null. */
+export function parseBookkeep(text: string): string[] | null {
+    const bodies = gmBlocks(text ?? '')
+    if (bodies.length) return bodies
+    const bare = (text ?? '').split('\n').filter((l) => /^\s*(arc|beat|threat|path|enemy|gained|reward|consequence|canon)\s*:/i.test(l))
+    return bare.length ? [bare.join('\n')] : null
+}
+
+/** The state after the helper's notes, attributed to the same reply as the narrator's (one rollback undoes both). */
+export function applyBookkeep(state: GmState, bodies: string[], replyId: string, charCount: number): GmState {
+    const { gm_prev, gm_at, ...cur } = state
+    const prev = gm_at === replyId && gm_prev ? gm_prev : JSON.stringify(cur)
+    return { ...applyGm(cur, bodies, charCount), gm_prev: prev, gm_at: replyId }
+}
