@@ -209,4 +209,15 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         expect(gameMasterRequest(req(), card as never, story as never)[1].content).not.toContain('[Persona (hidden')
         persona.text = ''
     })
+
+    it('a card with a Future Plan rule gets the line asked for from the yes on; other cards and creation do not', () => {
+        const planCard = { ...card, desc: card.desc + ' Future Plan … [💡Kế hoạch| Nephis, Cassie ] …' }
+        const story = chatOf([{ role: 'char', data: 'story' }], { $st_name: 'Kenji Park' })
+        expect(gameMasterRequest(req(), planCard as never, story as never)[1].content).toContain('[💡Kế hoạch| names ]')
+        const init = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }])
+        expect(gameMasterRequest(req(), planCard as never, init as never)[1].content).toContain('[Future Plan (hidden')
+        const pre = chatOf([{ role: 'user', data: 'Từng bước' }, { role: 'char', data: 'Tên?\n- a\n- b\n- c' }, { role: 'user', data: 'Kenji' }])
+        expect(gameMasterRequest(req(), planCard as never, pre as never)[1].content).toBe('Tui đi xuống hầm.')
+        expect(gameMasterRequest(req(), card as never, story as never)[1].content).not.toContain('Future Plan')
+    })
 })

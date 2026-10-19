@@ -217,6 +217,10 @@ const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
 // "Lấy như profile", and the record and the story kept none of the abilities: the cards' creation rule rolls what the player
 // does not type, and a fast model follows the note at the end of the message over the system prompt. So both notes say it.
 const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included; do not ask a question it already answers ("lấy như profile" = the persona\'s line), and list its abilities and companions in the record (Năng lực, Đồng hành).'
+/** A card with a Future Plan rule (the Kairos Academy card's "Request Profile", asked 2026-10-19: "thiếu future plan"): the reply
+ *  ends with "[💡Kế hoạch| names ]", whose names wake their lore next turn; the card's status.lua folds it and keeps only the newest. */
+export const hasFuturePlan = (card: Card | undefined) => /\[💡Kế hoạch\|/.test(card?.desc ?? '')
+export const PLAN_STORY = '\n\n[Future Plan (hidden, never named): end the reply with one line "[💡Kế hoạch| names ]" naming the characters of the novel the next scene needs (or "[💡Kế hoạch| Không ]"), before any STATUS, LEDGER or GM block. A character of the novel enters only after an earlier reply named them there.]'
 /** After the yes: the persona's abilities and companions are the character's own, every turn. */
 export const PERSONA_STORY = '\n\n[Persona (hidden, never named): the character is the player\'s persona. Its abilities and companions are real, with the limits it sets; they work whenever the player uses them, and secret ones stay unknown to NPCs without evidence. Do not use them for the player.]'
 
