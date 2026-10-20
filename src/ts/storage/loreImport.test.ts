@@ -180,6 +180,15 @@ describe.each(['files', 'sqlite'] as const)('lore import while a page is open (%
         expect(written.content).toBe('He says @@depth 0 and {{user}} meets {{char}}.')
     })
 
+    test('a shelf (a Risu lore folder) and the books on it keep their folder through the import (2026-10-20)', () => {
+        const shelf = toRisuLore({ key: '\uf000folder:rules-fights', comment: 'Rules — fights and injury', content: '', mode: 'folder' })
+        const book = toRisuLore({ key: 'đánh, fight', comment: 'Combat adjudication', content: 'A fight is judged.', folder: '\uf000folder:rules-fights' })
+        expect(shelf).toMatchObject({ mode: 'folder', key: '\uf000folder:rules-fights' })
+        expect(book.folder).toBe('\uf000folder:rules-fights')
+        expect('folder' in toRisuLore({ key: 'a', comment: 'c', content: 'x' })).toBe(false)          // no folder: the shape as before
+        expect(updateLorebooks([structuredClone(book)] as any)[0]).toEqual(book)
+    })
+
     test('the incident: a page that loaded the first import still holds it when the second import lands, and keeps the second', () => {
         const dir = mkdtempSync(join(tmpdir(), 'loreimp2-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
         const syncFile = saveDir + '.sync.sqlite'

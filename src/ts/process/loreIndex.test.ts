@@ -130,3 +130,85 @@ describe('the Future Plan line as the lore passes read it (Alloy PlanMerge.als: 
         expect(recentText(merged)).toContain('Cassie')
     })
 })
+
+// asked 2026-10-20: "lore work like a librarian: index → shelf → book", the shelves being Risu's lore folders
+describe('the librarian: shelves first, then the books on them', async () => {
+    const { buildShelves, shelfPickPrompt, shelfBooks, bookPickPrompt, fromSub, creationItems, WHOLE_SHELF_TOKENS, setLorePicks, loreForced, lorePicked, clearLorePicks, loreStats, fitBudget } = await import('./loreIndex')
+    const words = (n: number) => 'word '.repeat(Math.round(n * 3.9 / 5))                           // ~n tokens
+    const SHELVED = [
+        { comment: 'Module 07 — Status Panel', content: 'panel rules', alwaysActive: true },
+        { mode: 'folder', key: 'folder:rules-creation', comment: 'Rules — character creation', content: 'How the character is rolled and confirmed.' },
+        { mode: 'folder', key: 'folder:rules-fights', comment: 'Rules — fights and injury', content: '' },
+        { mode: 'folder', key: 'folder:people', comment: 'People', content: 'Canon characters of the novel.' },
+        { comment: 'Character generation', content: 'Roll the name. ' + words(300), folder: 'folder:rules-creation' },
+        { comment: 'Starting stage', content: 'Where it starts. ' + words(200), folder: 'folder:rules-creation' },
+        { comment: 'Combat adjudication', content: 'A fight is judged. ' + words(400), folder: 'folder:rules-fights' },
+        { comment: 'Nephis', content: 'Changing Star. ' + words(3000), folder: 'folder:people' },
+        { comment: 'Cassie', content: 'The blind seer. ' + words(3000), folder: 'folder:people' },
+        { comment: 'Ashen Barrow', content: 'A necropolis. ' + words(500) },                           // on no shelf: "Other"
+    ]
+    it('folders are the shelves, in order; a folder is never a book; a book on no shelf goes on "Other"', () => {
+        const index = buildLoreIndex(SHELVED)
+        expect(index.map((it) => it.title)).toEqual(['Character generation', 'Starting stage', 'Combat adjudication', 'Nephis', 'Cassie', 'Ashen Barrow'])
+        const shelves = buildShelves(SHELVED, index)
+        expect(shelves.map((s) => [s.name, s.items])).toEqual([['Rules — character creation', [1, 2]], ['Rules — fights and injury', [3]], ['People', [4, 5]], ['Other', [6]]])
+        expect(shelves[1].hint).toBe('Combat adjudication')                                          // no hint of its own: its first titles
+        expect(buildShelves(LORE)).toEqual([])                                                       // a card with no folder keeps the one-level index
+    })
+    it('a card with shelves is planned as shelves; the helper reads the shelves, not 230 titles', () => {
+        expect(planLore(SHELVED, 3000)).toMatchObject({ mode: 'shelves' })
+        const p = shelfPickPrompt(buildShelves(SHELVED), 'PLAYER: Tôi rút dao.')
+        expect(p).toContain('2. Rules — fights and injury — Combat adjudication (1)')
+        expect(p).toContain('3. People — Canon characters of the novel. (2)')
+        expect(p).not.toContain('Nephis')
+        expect(p).toContain('Tôi rút dao')
+    })
+    it('named shelves that fit come whole; else small shelves whole and the big one\'s titles are asked', () => {
+        const index = buildLoreIndex(SHELVED)
+        const shelves = buildShelves(SHELVED, index)
+        expect(shelfBooks(shelves, [2, 1], index, 5000)).toEqual({ whole: [3, 1, 2], ask: [] })
+        expect(shelves[1].tokens).toBeLessThanOrEqual(WHOLE_SHELF_TOKENS)
+        expect(shelfBooks(shelves, [3, 2], index, 5000)).toEqual({ whole: [3], ask: [4, 5] })
+        expect(shelfBooks(shelves, [9], index, 5000)).toEqual({ whole: [], ask: [] })
+        const q = bookPickPrompt(index, [4, 5], 'STORY: Nephis.')
+        expect(q).toContain('1. Nephis\n2. Cassie')
+        expect(q).not.toContain('Combat')
+        expect(fromSub([4, 5], [2, 7])).toEqual([5])                                                 // the sub-index maps back; out of range is dropped
+    })
+    it('the creation shelf: loaded on a creation turn and kept within the budget like the rules', async () => {
+        const index = buildLoreIndex(SHELVED)
+        expect(creationItems(buildShelves(SHELVED, index))).toEqual([1, 2])
+        setLorePicks('c1', new Set([7]), new Set([4, 5]))
+        expect(loreForced('c1', 4)).toBe(true)
+        expect(lorePicked('c1', 5)).toBe(true)                                                       // forced is loaded too
+        expect(loreForced('c1', 7)).toBe(false)
+        expect(loreForced('c2', 4)).toBe(false)
+        clearLorePicks()
+        expect(loreForced('c1', 4)).toBe(false)
+        const tok = (s: string) => Math.ceil(s.length / 4)
+        const acts = [
+            { source: 'Nephis', tokens: 900, priority: 9000, prompt: 'Nephis is. '.repeat(327), why: 'picked' },
+            { source: 'Character generation', tokens: 600, priority: 50, always: true, prompt: 'c'.repeat(2400), why: 'forced' },
+        ]
+        const kept = await fitBudget(acts, 1000, tok)
+        expect(kept.map((a) => a.source)).toEqual(['Character generation', 'Nephis'])
+        expect(kept[1].tokens).toBeLessThanOrEqual(400)
+        expect(loreStats(acts, kept, 1000)).toMatchObject({ forced: 600, budget: 1000, entries: 2, dropped: 0 })
+    })
+})
+
+describe('the index pass inside the lorebook pass (lorebook.svelte.ts indexActivation)', async () => {
+    const { indexActivation, setLorePicks, clearLorePicks } = await import('./loreIndex')
+    it('the creation shelf is loaded and kept like a rule; a pick loads; a decorator and chat lore are left alone', () => {
+        setLorePicks('c1', new Set([2]), new Set([1]))
+        expect(indexActivation('c1', 1, true, false, 'none', false)).toEqual({ activated: true, always: true, why: 'forced' })
+        expect(indexActivation('c1', 2, true, false, 'none', false)).toEqual({ activated: true, always: false, why: 'picked' })
+        expect(indexActivation('c1', 2, true, true, 'none', false)).toEqual({ activated: true, always: false, why: 'key' })
+        expect(indexActivation('c1', 3, true, false, 'none', false)).toEqual({ activated: false, always: false, why: 'key' })
+        expect(indexActivation('c1', 1, true, false, 'deactivate', false).activated).toBe(false)      // @@dont_activate wins
+        expect(indexActivation('c1', 1, false, false, 'none', false).activated).toBe(false)           // a chat's or module's own lore
+        expect(indexActivation('c1', 0, true, true, 'none', true)).toEqual({ activated: true, always: true, why: 'always' })
+        clearLorePicks()
+        expect(indexActivation('c1', 1, true, false, 'none', false).activated).toBe(false)
+    })
+})

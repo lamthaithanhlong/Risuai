@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { fitBudget, isLearningOnlyLore, lorePicked, onlyNewestPlan } from "./loreIndex"
+import { fitBudget, indexActivation, isLearningOnlyLore, loreStats, onlyNewestPlan, type LoreStats } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -73,6 +73,10 @@ export function addLorebookFolder(type:number) {
         })
     }
 }
+
+let lastLoreStats: LoreStats | null = null
+/** What the last lorebook pass sent, by why (loreIndex.ts loreStats). */
+export const getLastLoreStats = () => lastLoreStats
 
 export async function loadLoreBookV3Prompt(){
     const selectedID = get(selectedCharID)
@@ -248,6 +252,7 @@ export async function loadLoreBookV3Prompt(){
         tokens:number
         priority:number
         always?:boolean
+        why?:string
         source:string
         inject:{
             operation:'append'|'prepend'|'replace',
@@ -571,10 +576,11 @@ export async function loadLoreBookV3Prompt(){
             else if(forceState === 'deactivate'){
                 activated = false
             }
-            // picked from the index this turn (loreIndex.ts): key words alone missed every canon entry of a Vietnamese story
-            else if(!activated && i < characterLore.length && lorePicked(char.chaId, i)){
-                activated = true
-            }
+            // picked from the index this turn, or the creation turn's shelf (loreIndex.ts): key words alone missed every canon entry
+            // of a Vietnamese story
+            const turnPick = indexActivation(char.chaId, i, i < characterLore.length, activated, forceState, !!fullLore[i].alwaysActive)
+            activated = turnPick.activated
+            const why = turnPick.why
             // learning mode's own lore (the foreign speaker) only while learning mode is on
             if(activated && !DBState.db.learningMode && isLearningOnlyLore(fullLore[i])){
                 activated = false
@@ -593,7 +599,9 @@ export async function loadLoreBookV3Prompt(){
                     // evaluation has no side effects like setvar.
                     tokens: await tokenize(risuChatParser(content, {chara: char})),
                     priority: priority,
-                    always: !!fullLore[i].alwaysActive,
+                    // the creation turns' rules are kept within the budget like the always-on ones (loreIndex.ts loreForced)
+                    always: turnPick.always,
+                    why,
                     source: fullLore[i].comment || `lorebook ${i}`,
                     inject: inject ?? null
                 })
@@ -626,6 +634,8 @@ export async function loadLoreBookV3Prompt(){
 
     // within the budget: always-on entries first, then by priority; one that does not fit whole goes in part (loreIndex.ts)
     const activesFiltered = await fitBudget(actives, loreToken, (s) => tokenize(risuChatParser(s, {chara: char})))
+    // the app's own count of what this pass sends (sendChat hands it to the acceptance harness, tests/acceptance/lib/play.mjs)
+    lastLoreStats = loreStats(actives, activesFiltered, loreToken)
 
     let activesResorted = activesFiltered.sort((a,b) => {
         return b.order - a.order

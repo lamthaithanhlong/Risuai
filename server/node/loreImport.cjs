@@ -33,6 +33,8 @@ function toRisuLore(e) {
     return {
         key: e.key ?? '', secondkey: e.secondkey ?? '', insertorder: e.insertorder ?? 100, comment: e.comment ?? '', content,
         mode: e.mode ?? 'normal', alwaysActive: !!e.alwaysActive, selective: !!e.selective, useRegex: !!e.useRegex, bookVersion: 2,
+        // Risu's lore folders are the cards' shelves (loreIndex.ts buildShelves): a book names its folder's key (2026-10-20)
+        ...(e.folder ? { folder: String(e.folder) } : {}),
     }
 }
 
@@ -188,7 +190,7 @@ function newCard(saveDir, card, templatePrefix, chaId = require('crypto').random
     const book = d.character_book ?? {}
     const lore = (book.entries ?? []).map((e) => toRisuLore({
         key: (e.keys ?? []).join(', '), secondkey: (e.secondary_keys ?? []).join(', '), insertorder: e.insertion_order, comment: e.comment,
-        content: e.content, alwaysActive: !!e.constant, selective: !!e.selective, useRegex: !!e.use_regex,
+        content: e.content, alwaysActive: !!e.constant, selective: !!e.selective, useRegex: !!e.use_regex, mode: e.mode, folder: e.folder,
     }))
     return recordedWrite(saveDir, (current) => {
         const blocks = decodeSave(current)

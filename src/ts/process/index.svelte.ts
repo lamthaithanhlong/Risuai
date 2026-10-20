@@ -28,7 +28,7 @@ import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
-import { loadLoreBookV3Prompt } from "./lorebook.svelte";
+import { getLastLoreStats, loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
 import { requestChatData } from "./request/request";
 import { stableDiff } from "./stableDiff";
@@ -531,6 +531,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // the helper model picks lore from the card's index first (loreIndexPage.ts), then the lorebook pass runs as before
     await brTimed('lore index', () => pickLoreForTurn(currentChar, DBState.db.characters[sel.char]?.chats?.[DBState.db.characters[sel.char]?.chatPage]), 0)
     const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt(), 0)
+    // the story request's lore, by why it was sent: read by the acceptance harness (tests/acceptance/lib/play.mjs)
+    ;(globalThis as { __loreStats?: unknown }).__loreStats = getLastLoreStats()
 
     const positionRegex = /{{position::(.+?)}}/g
     const replaceposition = (text:string):{text:string, replaced:boolean} => {
