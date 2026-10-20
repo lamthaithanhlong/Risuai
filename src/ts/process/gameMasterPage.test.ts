@@ -283,4 +283,15 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         noteGameMaster(0, c as never)
         expect(c.scriptstate.$st_frag).toBe('3/1000')
     })
+
+    it('tells the narrator what the last reply already counted, the same on a reroll', () => {
+        const lotm = { ...card, globalLore: [{ content: '[[STATUS\nmoney: 3 bảng\n]]\nCURRENT PANEL\nmoney={{getvar::st_money}}; place={{getvar::st_place}}' }] }
+        db.characters = [lotm]
+        const c = { ...chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa?' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Mưa.' }, { role: 'user', data: 'Tôi chép sổ rồi nhận tiền công.' }], { $st_money: '' }), id: 'chat-2' }
+        expect(storyNotesRequest(req(), lotm as never, c as never)[1].content).not.toContain('already counted')
+        c.message.push({ role: 'char', data: 'Ông đếm sáu xu vào tay Kenji.' }, { role: 'user', data: 'Tôi đi dạo.' })
+        c.scriptstate.$st_money = '6 pence'
+        expect(storyNotesRequest(req(), lotm as never, c as never)[1].content).toContain('the last reply already counted money — → 6 pence')
+        expect(storyNotesRequest(req(), lotm as never, c as never)[1].content).toContain('the last reply already counted money — → 6 pence')
+    })
 })

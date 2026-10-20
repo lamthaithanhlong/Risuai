@@ -88,6 +88,19 @@ export function narratorWrites(spec: StatusSpec, before: Record<string, string>,
     return { written, unpaid }
 }
 
+/**
+ * The note for the next request: the amounts the last reply changed on the panel (narrator and helper), already paid. Measured on
+ * Lord of the Mysteries (acceptance copy, 2026-10-20): six pence of wages became 12, 18, then 24 over two replies, the narrator
+ * paying the coins again on a walk because its own block, cut from the reply, never showed it that they were counted. Only values
+ * with a number (fragments, points, money); '' when none changed.
+ */
+export function paidNote(before: Record<string, string> | undefined, now: Record<string, string>): string {
+    if (!before) return ''
+    const moved = Object.keys(now).filter((k) => (before[k] ?? '') !== now[k] && /\d/.test(now[k] + (before[k] ?? '')))
+    if (!moved.length) return ''
+    return `\n\n[Panel (hidden): the last reply already counted ${moved.map((k) => `${k} ${before[k] || '—'} → ${now[k] || '—'}`).join(', ')}; a gain or payment is counted once, only for what happens in this reply.]`
+}
+
 export type StatusTurn = { previous?: string; written?: Record<string, string> }
 
 /** The helper's part of the request: the card's rules for the block, the panel as it is now, what to write. */

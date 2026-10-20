@@ -3,7 +3,7 @@
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
 import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
-import { applyStatus, narratorWrites, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
+import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 
@@ -47,7 +47,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
  */
 export function storyNotesRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
     if (!card || card.type === 'group' || !chat) return formated
-    notePanelAtRequest(card, chat)
+    const paid = notePanelAtRequest(card, chat)
     const messages = chat.message ?? []
     const state = gmStateOf(chat.scriptstate)
     // never while a character is being made (the creation note's turns); a card with no creation step has none, so from its
@@ -60,15 +60,26 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
     const yes = yesAt(messages)
     const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
     return gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
-        + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : ''))
+        + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : '') + (initializing ? '' : paid))
 }
 
-/** The card's panel as the request leaves (per chat id), so the reply's own writes can be told apart (statusBook.ts). */
+/** The card's panel as the request leaves (per chat id), so the reply's own writes can be told apart (statusBook.ts); and as the
+ *  last request left, so the next one can say what the reply in between already counted. */
 const panelAtRequest = new Map<string, Record<string, string>>()
+const panelLastRequest = new Map<string, { at: number; panel: Record<string, string>; note: string }>()
 
-function notePanelAtRequest(card: character, chat: Chat): void {
+function notePanelAtRequest(card: character, chat: Chat): string {
     const spec = statusSpec(card)
-    if (spec && chat.id) panelAtRequest.set(chat.id, panelOf(spec, chat.scriptstate))
+    if (!spec || !chat.id) return ''
+    const now = panelOf(spec, chat.scriptstate)
+    const at = chat.message?.length ?? 0
+    panelAtRequest.set(chat.id, now)
+    const last = panelLastRequest.get(chat.id)
+    // a reroll or a retry asks again at the same place: the same reply in between, the same note
+    if (last && last.at === at) return last.note
+    const note = paidNote(last?.panel, now)
+    panelLastRequest.set(chat.id, { at, panel: now, note })
+    return note
 }
 
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */

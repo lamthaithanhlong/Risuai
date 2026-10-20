@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyStatus, counterRises, hasSystemLine, narratorWrites, parseStatus, statusPrompt, statusSpec } from './statusBook'
+import { applyStatus, counterRises, hasSystemLine, narratorWrites, paidNote, parseStatus, statusPrompt, statusSpec } from './statusBook'
 
 // condensed from the Lord of the Mysteries card's Module 07 (lorebook)
 const MODULE07 = `MODULE 07: STATUS PANEL AND LEDGER
@@ -102,5 +102,13 @@ describe('a reward is paid once', () => {
         expect(p).toContain('THE REPLY BEFORE IT (everything it showed is already on the panel):\nKenji nhìn xuyên')
         expect(p).toContain('leave them out: frag: 3/1000')
         expect(p).toContain('A gain is paid once')
+    })
+})
+
+describe('the next request is told what the last reply already counted', () => {
+    it('names the amounts that moved (LotM: six pence of wages became 12, 18, 24 when it was not)', () => {
+        expect(paidNote({ money: '', place: 'Tingen' }, { money: '6 pence', place: 'Backlund' })).toBe('\n\n[Panel (hidden): the last reply already counted money — → 6 pence; a gain or payment is counted once, only for what happens in this reply.]')
+        expect(paidNote({ money: '6 pence' }, { money: '6 pence' })).toBe('')
+        expect(paidNote(undefined, { money: '6 pence' })).toBe('')
     })
 })
