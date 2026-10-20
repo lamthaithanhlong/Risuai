@@ -102,8 +102,11 @@ export async function processScriptFull(char:character|groupChat|simpleCharacter
     data = await runLuaEditTrigger(char, mode, data, { index:chatID })
 
     if(mode === 'editdisplay'){
+        // undefined while a page reloads the save after another client's write (selectedCharID points at nothing for a moment):
+        // reading .type threw "undefined is not an object (evaluating 'e.type')" and every message failed to render (phone,
+        // 2026-10-20); the display trigger runs again with the next render, once a character is selected
         const currentChar = getCurrentCharacter()
-        if(currentChar.type !== 'group'){
+        if(currentChar && currentChar.type !== 'group'){
             try{
                 const perf = performance.now()
                 const d = await runTrigger(currentChar, 'display', {
