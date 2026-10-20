@@ -789,12 +789,13 @@ export function getDatabase(options:getDatabaseOptions = {}):Database{
 }
 
 export function getCurrentCharacter(options:getDatabaseOptions = {}):character|groupChat{
-    const db = getDatabase(options)
+    // a snapshot is of the character alone: copying the whole database to return one character took ~100 ms per call
+    const db = getDatabase()
     if(!db.characters){
         db.characters = []
     }
     const char = db.characters?.[get(selectedCharID)]
-    return char
+    return options.snapshot ? $state.snapshot(char) as character|groupChat : char
 }
 
 export function setCurrentCharacter(char:character|groupChat){

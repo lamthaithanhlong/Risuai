@@ -38,7 +38,8 @@ export class AutoStorage{
     }
 
     async checkAccountSync(){
-        let db = getDatabase({ snapshot: true })
+        // read in place: a snapshot here deep-copied the whole database during the load (~60 ms, 240 ms on a 4x slower CPU)
+        const db = getDatabase()
         if(this.isAccount){
             return true
         }

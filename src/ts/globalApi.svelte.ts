@@ -2,7 +2,8 @@ import { pickBackupsToKeep } from "./storage/backupRetention"
 import { getBasename, getUncleanablesSync } from "./storage/uncleanable"
 export { getBasename, getUncleanablesSync }
 import { createJob, readJobEvents } from "./network/proxyJobHttp";
-import { createSaveSignal, createSaveTracker, saveRetryDelayMs, shouldAlertSaveFailure, shouldTrackChatContent, shouldWriteBackup } from "./storage/saveTracker";
+import { createSaveSignal, createSaveTracker, saveRetryDelayMs, shouldAlertSaveFailure, shouldWriteBackup } from "./storage/saveTracker";
+import { watchSaveChanges } from "./storage/saveWatch.svelte";
 import { nextJobKey } from "./process/generationKey";
 import { safeEnqueue } from "./network/safeEnqueue";
 import {
@@ -27,7 +28,7 @@ import { checkRisuUpdate } from "./update";
 import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, selIdState, ReloadGUIPointer, bodyIntercepterStore } from "./stores.svelte";
 import { loadPlugins } from "./plugins/plugins.svelte";
 import { alertConfirm, alertError, alertMd, alertNormal, alertNormalWait, alertSelect, alertTOS, waitAlert } from "./alert";
-import { checkDriverInit, syncDrive } from "./drive/drive";
+import { checkDriverInit } from "./drive/drive";
 import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
@@ -310,7 +311,6 @@ export let requiresFullEncoderReload = $state({
 export async function saveDb() {
     // set by the debounced change effect, taken by the loop below; a failed save puts it back (saveTracker.ts createSaveSignal)
     const changed = createSaveSignal()
-    syncDrive()
     let gotChannel = false
     const sessionID = v4()
     let channel: BroadcastChannel
@@ -367,60 +367,17 @@ export async function saveDb() {
             }, debounceTime);
         }
 
-        $effect(() => {
-            DBState.db.botPresetsId
-            DBState.db.botPresets.length
-            changeTracker.botPreset = true
-            saveTimeoutExecute()
-        })
-        $effect(() => {
-            $state.snapshot(DBState.db.modules)
-            changeTracker.modules = true
-            saveTimeoutExecute()
-        })
-        $effect(() => {
-            $state.snapshot(DBState.db.loadouts)
-            changeTracker.loadouts = true
-            saveTimeoutExecute()
-        })
-        $effect(() => {
-            $state.snapshot(DBState.db.plugins)
-            changeTracker.plugins = true
-            saveTimeoutExecute()
-        })
-        $effect(() => {
-            $state.snapshot(DBState.db.pluginCustomStorage)
-            changeTracker.pluginCustomStorage = true
-            saveTimeoutExecute()
-        })
-        $effect(() => {
-            for (const key in DBState.db) {
-                if (
-                    key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
-                    key !== 'loadouts' && key !== 'plugins' && key !== 'pluginCustomStorage'
-                ) {
-                    $state.snapshot(DBState.db[key])
+        // one effect per part of the database, each walking only its part (saveWatch.svelte.ts)
+        watchSaveChanges(() => DBState.db, () => selIdState, (c) => {
+            if (c.kind === 'character') {
+                if (changeTracker.character[0] !== c.chaId) {
+                    changeTracker.character.unshift(c.chaId)
                 }
-            }
-            if (DBState?.db?.characters?.[selIdState]) {
-                for (const key in DBState.db.characters[selIdState]) {
-                    if (key !== 'chats') {
-                        $state.snapshot(DBState.db.characters[selIdState][key])
-                    }
+                if (changeTracker.chat[0]?.[0] !== c.chaId || changeTracker.chat[0]?.[1] !== c.chatId) {
+                    changeTracker.chat.unshift([c.chaId, c.chatId])
                 }
-                const trackedChats = DBState.db.characters[selIdState].chats
-                if (shouldTrackChatContent(trackedChats[DBState.db.characters[selIdState].chatPage])) {
-                    $state.snapshot(trackedChats)
-                }
-                if (changeTracker.character[0] !== DBState.db.characters[selIdState]?.chaId) {
-                    changeTracker.character.unshift(DBState.db.characters[selIdState]?.chaId)
-                }
-                if (
-                    changeTracker.chat[0]?.[0] !== DBState.db.characters[selIdState]?.chaId ||
-                    changeTracker.chat[0]?.[1] !== DBState.db.characters[selIdState]?.chats[DBState.db.characters[selIdState]?.chatPage].id
-                ) {
-                    changeTracker.chat.unshift([DBState.db.characters[selIdState]?.chaId, DBState.db.characters[selIdState]?.chats[DBState.db.characters[selIdState]?.chatPage].id])
-                }
+            } else if (c.kind !== 'root') {
+                changeTracker[c.kind] = true
             }
             saveTimeoutExecute()
         })
