@@ -47,7 +47,7 @@ export function readMainRequest(bodyText) {
     const ref = /\[Referee: ([^\]]*)\]/.exec(lu)
     if (!ev && gmAt < 0 && all.length < 20000) return { kind: 'other', model: body.model }
     return {
-        kind: 'main', model: body.model, stream: !!body.stream,
+        kind: 'main', model: body.model, stream: !!body.stream, promptChars: all.length,
         event: ev ? ev[1] : null,
         eventNew: ev ? (ev[1] === 'NEW' ? true : ev[1] === 'quiet' ? false : Number(ev[1]) <= 20) : null,
         eventKind: kindDie ? kindDie[1].trim() : null,
@@ -123,6 +123,8 @@ export class Player {
             return {
                 chaId: c.chaId, name: c.name, chatId: chat?.id, chatName: chat?.name, chatCount: c.chats?.length ?? 0,
                 vars, isStreaming: !!chat?.isStreaming,
+                // the lorebook pass's own count of the last request (lorebook.svelte.ts, loreIndex.ts loreStats)
+                lore: globalThis.__loreStats ?? null,
                 messages: (chat?.message ?? []).map((m) => ({ role: m.role, data: String(m.data ?? ''), time: m.time ?? null })),
             }
         })

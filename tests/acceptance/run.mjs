@@ -81,7 +81,7 @@ async function snap(player, label, phase, kind, text, res) {
     return {
         label, phase, kind, text, ok: res.ok && last?.role === 'char', ms: res.ms, timeout: !!res.timeout, errors: res.errors,
         reply: last?.role === 'char' ? last.data : '', shown: last?.role === 'char' ? (d?.prose ?? '') : '',
-        panel: d?.panel ?? null, images: d?.images ?? [], vars: s.vars, raw: main?.response ?? null,
+        panel: d?.panel ?? null, images: d?.images ?? [], vars: s.vars, raw: main?.response ?? null, lore: s.lore ?? null,
         net: (res.net ?? []).map((n) => ({ ...n, response: undefined })),
     }
 }

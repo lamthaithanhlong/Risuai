@@ -313,6 +313,12 @@ export function scoreStory(rec, judge = {}) {
     out.push(check('run.turns', 'Every turn got a reply (retries allowed)', pass(!failed.length && all.length > 0),
         `${all.length - failed.length}/${all.length} turns answered; ${errs.length} request error(s); median reply ${median(all.filter((t) => t.ok).map((t) => t.ms / 1000)).toFixed(0)} s`,
         [...failed.map((t) => `${t.label}: no reply${t.timeout ? ' (timeout)' : ''}`), ...errs.slice(0, 6).map((x) => `${x.t.label}: ${oneLine(x.e.error, 160)}`)]))
+    // what the lorebook pass sent (the app's own o200k count, loreIndex.ts loreStats): the librarian's measure (2026-10-20)
+    const lore = (ph) => all.filter((t) => t.lore && t.phase === ph).map((t) => t.lore)
+    const avg = (xs, k) => Math.round(xs.reduce((a, x) => a + (x[k] ?? 0), 0) / Math.max(1, xs.length))
+    const loreLine = (xs) => `${avg(xs, 'sent')} (rules ${avg(xs, 'always')}, creation ${avg(xs, 'forced')}, picked ${avg(xs, 'picked')}, key words ${avg(xs, 'keyed')}; ${avg(xs, 'entries')} entries, ${avg(xs, 'dropped')} cut)`
+    if (lore('story').length) out.push(check('lore.tokens', 'Lore tokens a request sends (the app\'s count)', 'INFO',
+        `story turns: ${loreLine(lore('story'))}; creation turns: ${lore('creation').length ? loreLine(lore('creation')) : 'n/a'}; budget ${lore('story')[0].budget}`, []))
     const lat = all.filter((t) => t.ok && t.phase === 'story').map((t) => t.ms / 1000)
     if (lat.length) out.push(check('run.latency', 'Seconds from send to a settled reply (story turns)', 'INFO',
         `median ${median(lat).toFixed(0)} s, p90 ${pct(lat, 0.9).toFixed(0)} s, max ${Math.max(...lat).toFixed(0)} s over ${lat.length} turns; mean reply ${Math.round(after.reduce((a, t) => a + (t.shown || '').length, 0) / Math.max(1, after.length))} chars`, []))
