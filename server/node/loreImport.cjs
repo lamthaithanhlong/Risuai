@@ -11,6 +11,7 @@
 //   node server/node/loreImport.cjs <save dir> --script <card.json> <chaId prefix> [...]     (the card's trigger scripts, e.g. a new status.lua)
 //   node server/node/loreImport.cjs <save dir> --clear-assets <chaId prefix> [...]            (drop the card's image library; the files stay on disk)
 //   node server/node/loreImport.cjs <save dir> --text <card.json> <chaId prefix> [...]       (the card's description and first message, e.g. a new opening)
+//   node server/node/loreImport.cjs <save dir> --new <card.json> <template prefix> [chaId]  (a NEW card from a built card, shaped like the template)
 const fs = require('fs')
 const path = require('path')
 const net = require('net')
@@ -175,6 +176,51 @@ function clearCardAssets(saveDir, prefixes, syncFile = saveDir + '.sync.sqlite')
     }, syncFile, 'card-assets')
 }
 
+/**
+ * Creates a NEW character from a built Character Card V3 (its description, first message, lorebook, trigger scripts), shaped like
+ * an existing card of the save (`templatePrefix`) so every field the app keeps is present, with one empty chat. The new block is
+ * listed in the root's __directory and characterOrder, as the app lists a card it imports. Added 2026-10-20 for the Thảm Họa
+ * Zombie card: the import page needs a browser, and the server must be stopped for this write anyway.
+ */
+function newCard(saveDir, card, templatePrefix, chaId = require('crypto').randomUUID(), syncFile = saveDir + '.sync.sqlite') {
+    const d = card.data ?? card
+    if (typeof d.description !== 'string' || !d.description.trim() || typeof d.first_mes !== 'string' || !d.first_mes.trim()) throw new Error('the card has no description or first message')
+    const book = d.character_book ?? {}
+    const lore = (book.entries ?? []).map((e) => toRisuLore({
+        key: (e.keys ?? []).join(', '), secondkey: (e.secondary_keys ?? []).join(', '), insertorder: e.insertion_order, comment: e.comment,
+        content: e.content, alwaysActive: !!e.constant, selective: !!e.selective, useRegex: !!e.use_regex,
+    }))
+    return recordedWrite(saveDir, (current) => {
+        const blocks = decodeSave(current)
+        if (blocks.some((b) => b.name === chaId)) throw new Error(`a card ${chaId} is already in the save`)
+        const t = blocks.findIndex((b) => b.type === 2 && b.name.startsWith(templatePrefix))
+        if (t < 0) throw new Error(`no template card ${templatePrefix} in the save`)
+        const v = structuredClone(parseBlock(blocks[t]))
+        const risu = d.extensions?.risuai ?? {}
+        const now = Date.now()
+        Object.assign(v, {
+            chaId, name: d.name, nickname: d.nickname ?? '', desc: d.description, firstMessage: d.first_mes, creatorNotes: d.creator_notes ?? '',
+            personality: d.personality ?? '', scenario: d.scenario ?? '', exampleMessage: d.mes_example ?? '', systemPrompt: d.system_prompt ?? '',
+            postHistoryInstructions: d.post_history_instructions ?? '', alternateGreetings: d.alternate_greetings ?? [], group_only_greetings: d.group_only_greetings ?? [],
+            tags: d.tags ?? [], creator: d.creator ?? '', characterVersion: d.character_version ?? '', additionalData: { tag: d.tags ?? [], creator: d.creator ?? '', character_version: d.character_version ?? '' },
+            globalLore: lore, loreSettings: { tokenBudget: book.token_budget ?? 4096, scanDepth: book.scan_depth ?? 12, recursiveScanning: !!book.recursive_scanning, fullWordMatching: false },
+            triggerscript: structuredClone(risu.triggerscript ?? []), lowLevelAccess: !!risu.lowLevelAccess,
+            chats: [{ message: [], note: '', name: 'Chat 1', localLore: [], fmIndex: -1, id: require('crypto').randomUUID() }], chatPage: 0, chatFolders: [],
+            image: '', additionalAssets: [], emotionImages: [], ccAssets: [], extentions: {}, bias: [], customscript: [], notes: '',
+            creation_date: d.creation_date ?? Math.floor(now / 1000), modification_date: d.modification_date ?? Math.floor(now / 1000), lastInteraction: now,
+        })
+        blocks.splice(t + 1, 0, serializeBlock(2, blocks[t].comp, chaId, v))
+        const r = blocks.findIndex((b) => b.name === 'root')
+        const root = parseBlock(blocks[r])
+        if (Array.isArray(root.__directory) && !root.__directory.includes(chaId)) root.__directory.push(chaId)
+        root.characterOrder = [...(Array.isArray(root.characterOrder) ? root.characterOrder : []).filter((x) => x !== chaId), chaId]
+        blocks[r] = serializeBlock(blocks[r].type, blocks[r].comp, 'root', root)
+        const out = encodeSave(blocks)
+        validateSave(out)
+        return { out, report: [{ chaId, name: v.name, lore: lore.length, script: JSON.stringify(v.triggerscript).length }] }
+    }, syncFile, 'card-new')
+}
+
 function pendingQueueRows(saveDir) {
     const file = path.resolve(saveDir) + '.queue.sqlite'
     if (!fs.existsSync(file)) return 0
@@ -221,6 +267,12 @@ if (require.main === module) {
             for (const r of setCardText(saveDir, prefixes, d.description, d.first_mes)) console.log(`${r.prefix} ${r.name}: description ${r.before[0]} -> ${r.after[0]}, first message ${r.before[1]} -> ${r.after[1]} chars`)
             return
         }
+        if (pairs[0] === '--new') {
+            // loreImport.cjs <save dir> --new <card.json> <template chaId prefix> [new chaId]
+            const [, cardFile, template, id] = pairs
+            for (const r of newCard(saveDir, JSON.parse(fs.readFileSync(cardFile, 'utf8')), template, id || undefined)) console.log(`${r.chaId} ${r.name}: new card, lore ${r.lore} entries, trigger script ${r.script} chars`)
+            return
+        }
         if (pairs[0] === '--image') {
             // loreImport.cjs <save dir> --image <picture> <chaId prefix> ...
             const [, pic, ...prefixes] = pairs
@@ -232,4 +284,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, recordedWrite, toRisuLore, pendingQueueRows }
+module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, recordedWrite, toRisuLore, pendingQueueRows }

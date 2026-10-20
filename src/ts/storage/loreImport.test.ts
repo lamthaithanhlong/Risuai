@@ -9,7 +9,7 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore, setCardImage, setCardScript, setCardText, clearCardAssets, toRisuLore } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, toRisuLore } = req('../../../server/node/loreImport.cjs')
 // characters.ts updateLorebooks, copied (it needs a browser to import); the test below fails if the original changes
 const updateLorebooks = (book: any[]) => book.map((v) => {
     v.bookVersion ??= 1
@@ -122,6 +122,48 @@ describe.each(['files', 'sqlite'] as const)('lore import while a page is open (%
         const w = sync.onWrite('page', save({ ...old, chats: [{ id: 'k1', message: ['hi', 'more'] }] }), getKey(saveDir, FILE)); sync.close()
         expect(read(w.bytes).additionalAssets).toEqual([])
         expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+    })
+
+    test('a new card is listed, shaped like its template, and survives the next write of a page that loaded the save without it', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'loreimp-n-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const syncFile = saveDir + '.sync.sqlite'
+        const template = { ...card(['ss lore'], ['hi']), loreSettings: { tokenBudget: 16000 }, sdData: [['always', 'solo']], image: 'assets/ss.png', additionalAssets: [['a', 'assets/a.jpg', 'jpg']] }
+        const withRoot = (cards: Record<string, any>) => merge.encodeSave([
+            merge.serializeBlock(1, 0, 'root', { __directory: Object.keys(cards), characterOrder: Object.keys(cards) }),
+            ...Object.entries(cards).map(([n, c]) => merge.serializeBlock(2, 0, n, c)),
+        ])
+        const loaded = withRoot({ ss: template })
+        putKey(saveDir, FILE, loaded)
+        let sync = openDbSync({ dbFile: syncFile, log: () => {} }); sync.onRead('page', loaded); sync.close()
+        const built = { spec: 'chara_card_v3', data: {
+            name: 'Thảm Họa Zombie', description: 'rules', first_mes: 'prologue', tags: ['zombie'],
+            character_book: { token_budget: 17000, scan_depth: 12, entries: [{ keys: ['Module 01'], comment: 'Module 01', content: 'engine <user>', insertion_order: 9100, constant: true }, { keys: ['Sakura Ellis', 'Sakura'], comment: 'Sakura Ellis', content: 'the fighter', insertion_order: 100 }] },
+            extensions: { risuai: { lowLevelAccess: true, triggerscript: [{ comment: 'panel', effect: [{ type: 'triggerlua', code: 'zombie panel' }] }] } },
+        } }
+        const [r] = newCard(saveDir, built, 'ss', 'zz-1')
+        expect(r).toMatchObject({ chaId: 'zz-1', name: 'Thảm Họa Zombie', lore: 2 })
+        const after = merge.decodeSave(getKey(saveDir, FILE))
+        const root = merge.parseBlock(after.find((b: any) => b.name === 'root'))
+        expect(root.__directory).toEqual(['ss', 'zz-1'])
+        expect(root.characterOrder).toEqual(['ss', 'zz-1'])
+        const z = merge.parseBlock(after.find((b: any) => b.name === 'zz-1'))
+        expect(z).toMatchObject({ chaId: 'zz-1', desc: 'rules', firstMessage: 'prologue', lowLevelAccess: true, image: '', additionalAssets: [], sdData: [['always', 'solo']] })
+        expect(z.chats).toHaveLength(1)
+        expect(z.chats[0].message).toEqual([])
+        expect(z.loreSettings.tokenBudget).toBe(17000)
+        expect(z.globalLore.map((l: any) => [l.key, l.alwaysActive, l.bookVersion, l.content])).toEqual([['Module 01', true, 2, 'engine {{user}}'], ['Sakura Ellis, Sakura', false, 2, 'the fighter']])
+        expect(z.triggerscript[0].effect[0].code).toBe('zombie panel')
+        // the template is not touched
+        expect(merge.parseBlock(after.find((b: any) => b.name === 'ss'))).toEqual(template)
+        // a second card with the same id is refused
+        expect(() => newCard(saveDir, built, 'ss', 'zz-1')).toThrow(/already/)
+        // the page that loaded the save before the new card writes a message
+        sync = openDbSync({ dbFile: syncFile, log: () => {} })
+        const w = sync.onWrite('page', withRoot({ ss: { ...template, chats: [{ id: 'k1', message: ['hi', 'more'] }] } }), getKey(saveDir, FILE)); sync.close()
+        const names = merge.decodeSave(w.bytes).map((b: any) => b.name)
+        expect(names).toContain('zz-1')
+        expect(merge.parseBlock(merge.decodeSave(w.bytes).find((b: any) => b.name === 'ss')).chats[0].message).toEqual(['hi', 'more'])
+        expect(merge.parseBlock(merge.decodeSave(w.bytes).find((b: any) => b.name === 'root')).characterOrder).toContain('zz-1')
     })
 
     test('the copy of updateLorebooks above is still what Risu does', () => {
