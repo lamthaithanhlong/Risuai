@@ -55,6 +55,12 @@ const clean = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, MAXLEN)
 const isDash = (s: string) => /^(-|—|none|null)?$/i.test(s.trim())
 const lines = (v: string | undefined) => (v ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
 const nameOf = (l: string) => l.split('|')[0].trim().toLowerCase()
+/** a due reward or consequence whose "when" says it already landed ("Đầu gối đau nhói | Đã xảy ra", measured on the Mailman
+ *  chat 2026-10-20: kept for good and named in every turn's note as still due, so the knee was hurt again and again) */
+const LANDED = /^(done|paid|landed|given|received|happened|resolved|xong|rồi|đã\s+(xảy ra|trả|nhận|đến|tới|xong|thực hiện|hoàn thành|diễn ra|giao|có|được trả))\b/i
+export const isLanded = (l: string) => { const when = l.split('|').slice(1).map((x) => x.trim()).filter(Boolean); return when.length > 0 && LANDED.test(when.at(-1)!) }
+/** the due lines still to come */
+const due = (v: string | undefined) => lines(v).filter((l) => !isLanded(l))
 
 /** The reply without any GM block, and one still being streamed hidden (for the screen). */
 export function stripGm(text: string): string {
@@ -125,11 +131,12 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 threats = threats.filter((t) => nameOf(t) !== name)
                 if (!gone) threats.push(value)
             } else if (key === 'reward' || key === 'rewards') {
-                rewards ??= []
-                if (!isDash(value)) rewards.push(value)
+                // one that landed leaves the list (by its name), the others stay; it is never due again
+                if (isLanded(value)) rewards = (rewards ?? due(state.gm_rewards_due)).filter((r) => nameOf(r) !== nameOf(value))
+                else { rewards ??= []; if (!isDash(value)) rewards.push(value) }
             } else if (key === 'consequence' || key === 'consequences' || key === 'cost') {
-                costs ??= []
-                if (!isDash(value)) costs.push(value)
+                if (isLanded(value)) costs = (costs ?? due(state.gm_consequences_due)).filter((c) => nameOf(c) !== nameOf(value))
+                else { costs ??= []; if (!isDash(value)) costs.push(value) }
             } else if (key === 'canon') {
                 if (value) next.gm_canon = isDash(value) ? '' : value
             } else if (key === 'path' || key === 'allegiance' || key === 'faction') {
@@ -484,7 +491,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         if (state.gm_beat) parts.push(`Beat: ${short(state.gm_beat, 100)}.`)
         const threats = lines(state.gm_threats)
         if (threats.length) parts.push(`Threat: ${threats.map((t) => short(t, 70)).join('; ')}.`)
-        const rewards = lines(state.gm_rewards_due), costs = lines(state.gm_consequences_due)
+        const rewards = due(state.gm_rewards_due), costs = due(state.gm_consequences_due)
         if (rewards.length) parts.push(`Reward: ${rewards.map((r) => short(r, 70)).join('; ')}.`)
         if (costs.length) parts.push(`Consequence: ${costs.map((c) => short(c, 70)).join('; ')}.`)
         // a side not here yet (SS t14-t17, 2026-10-19: "join Nephis's group" from inside the First Nightmare; 0 of 3 replies
@@ -500,7 +507,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
     const block = phase === 'seed'
         ? '[[GM\narc: <hook> | <antagonist> | <goal> | <stakes>\nbeat: 1 | <what is happening> | <what is due next>\nthreat: <name> | <progress> | <when full>\ncanon: <date> | <off-screen>\n]]'
         // "[[GM …]] + changed lines" was read as a second block named CHANGE (Mailman t10, 2026-10-19): the lines go inside it
-        : '[[GM\nbeat: <n> | <now> | <due next>\n<only the changed lines, in this block: arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when>, canon; arc: done | <how> ends it>\n]]'
+        : '[[GM\nbeat: <n> | <now> | <due next>\n<only the changed lines, in this block: arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when|done>, canon; arc: done | <how> ends it>\n]]'
     return '\n\n[GM (hidden, never named): the player\'s own story, not the novel\'s plot. ' + parts.join(' ')
         + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs, within world rules (no free rank, Sequence, stamp, power).'
         + ` Story only, no planning notes; end, after any panel, with ${block}]`
@@ -564,8 +571,8 @@ export function stateLines(state: GmState): string {
     if (state.gm_path) out.push(`path: ${state.gm_path}`)
     for (const e of lines(state.gm_enemies)) out.push(`enemy: ${e}`)
     for (const g of lines(state.gm_gained)) out.push(`gained: ${g}`)
-    for (const r of lines(state.gm_rewards_due)) out.push(`reward: ${r}`)
-    for (const c of lines(state.gm_consequences_due)) out.push(`consequence: ${c}`)
+    for (const r of due(state.gm_rewards_due)) out.push(`reward: ${r}`)
+    for (const c of due(state.gm_consequences_due)) out.push(`consequence: ${c}`)
     if (state.gm_canon) out.push(`canon: ${state.gm_canon}`)
     for (const l of lines(state.gm_left)) out.push(`(left side: ${l.split('|')[0].trim()})`)
     for (const p of lines(state.gm_past)) out.push(`(past arc: ${p})`)
@@ -600,8 +607,8 @@ threat: <name> | <progress, e.g. 2/4> | <what happens when it fills>
 path: <side> | <stage> | <standing>
 enemy: <who> | <why they oppose the player>
 gained: <what a side or deed gave>
-reward: <what> | <when it is paid>
-consequence: <what> | <when it lands>
+reward: <what> | <when it is paid>   (paid in this reply: reward: <what> | done)
+consequence: <what> | <when it lands>   (landed in this reply: consequence: <what> | done)
 canon: <in-world date> | <what canon people are doing off-screen>
 ]]
 Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${status ? `\n\n${status}` : ''}`

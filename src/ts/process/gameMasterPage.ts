@@ -3,7 +3,7 @@
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
 import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
-import { applyStatus, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
+import { applyStatus, narratorWrites, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 
@@ -47,6 +47,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
  */
 export function storyNotesRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
     if (!card || card.type === 'group' || !chat) return formated
+    notePanelAtRequest(card, chat)
     const messages = chat.message ?? []
     const state = gmStateOf(chat.scriptstate)
     // never while a character is being made (the creation note's turns); a card with no creation step has none, so from its
@@ -60,6 +61,14 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
     const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
     return gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
         + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : ''))
+}
+
+/** The card's panel as the request leaves (per chat id), so the reply's own writes can be told apart (statusBook.ts). */
+const panelAtRequest = new Map<string, Record<string, string>>()
+
+function notePanelAtRequest(card: character, chat: Chat): void {
+    const spec = statusSpec(card)
+    if (spec && chat.id) panelAtRequest.set(chat.id, panelOf(spec, chat.scriptstate))
 }
 
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */
@@ -100,17 +109,27 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
             writeState(chat, taken.state)
         }
     }
+    // what the narrator's own block wrote for this reply (the card's script has applied it): a counter it raised with no system
+    // line in the reply goes back (a reward is paid once, statusBook.ts), and the helper leaves the rest of its keys alone
+    const spec = statusSpec(card)
+    const asked = chat.id ? panelAtRequest.get(chat.id) : undefined
+    if (chat.id) panelAtRequest.delete(chat.id)
+    let written: Record<string, string> = {}
+    if (spec && asked) {
+        const w = narratorWrites(spec, asked, chat.scriptstate, reply.data ?? '')
+        written = w.written
+        if (Object.keys(w.unpaid).length) applyStatus(chat.scriptstate ??= {}, w.unpaid)
+    }
     // the bookkeeper, once the character is confirmed (not awaited: the chat goes on); Settings can turn the extra call off.
     // One helper call per turn asks for both the GM's notes and the card's status panel.
     if (getDatabase().gmBookkeeper === false) return
     const gm = gmOn && gmPhase(card, chat.message, chat.scriptstate, gmStateOf(chat.scriptstate), storyLike()) !== 'silent'
-    const spec = statusSpec(card)
     const status = spec && statusConfirmed(card, chat.message, chat.scriptstate) ? spec : null
     if (!gm && !status) return
     // the chat is read again when the answer comes: it may have been replaced meanwhile (as scenePicturesPage does)
     const live = () => getDatabase().characters[charIndex]?.chats?.find((c) => c === chat || (!!chat.id && c.id === chat.id)) ?? chat
     const redraw = () => { const c = getDatabase().characters[charIndex]; if (c) c.reloadKeys = (c.reloadKeys ?? 0) + 1 }
-    void bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw }).catch((e) => console.warn('[game master] bookkeeper failed', e))
+    void bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written }).catch((e) => console.warn('[game master] bookkeeper failed', e))
 }
 
 const BOOKKEEP_TIMEOUT_MS = 60_000
@@ -120,11 +139,15 @@ const BOOKKEEP_TIMEOUT_MS = 60_000
  * while that reply is still the chat's last one. True when anything was written.
  */
 export async function bookkeep(live: () => Chat, reply: { data: string; chatId?: string }, replies: number, flavour: string,
-    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void } = {}): Promise<boolean> {
+    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void; written?: Record<string, string> } = {}): Promise<boolean> {
     const wantGm = opts.gm !== false
     const before = live()
     const player = [...before.message].reverse().find((m) => m.role === 'user')?.data ?? ''
-    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate) : '')
+    // the reply before this one: what it showed is on the panel already (a body seen again is not a second kill)
+    const said = before.message.filter((m) => m.role === 'char')
+    const previous = (said.at(-1)?.data === reply.data || (!!reply.chatId && said.at(-1)?.chatId === reply.chatId) ? said.at(-2) : said.at(-1))?.data ?? ''
+    const written = opts.written ?? {}
+    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '')
     const answer = await (ask ?? askSubmodel)(prompt)
     const chat = live()
     const last = chat.message[chat.message.length - 1]
@@ -136,7 +159,7 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
         wrote = true
     }
     if (opts.status) {
-        const updates = parseStatus(answer, opts.status, chat.scriptstate)
+        const updates = parseStatus(answer, opts.status, chat.scriptstate, { reply: reply.data ?? '', written })
         if (Object.keys(updates).length) {
             chat.scriptstate ??= {}
             applyStatus(chat.scriptstate, updates)

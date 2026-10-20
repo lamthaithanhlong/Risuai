@@ -251,4 +251,36 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         expect(storyNotesRequest(req(), { ...planCard, type: 'group' } as never, story as never)[1].content).toBe('Tui đi xuống hầm.')
         persona.text = ''
     })
+
+    // the Shadow Slave chat of 2026-10-20 (statusBook.test.ts): the Soul Fragments rose on every turn after the first kill
+    it('pays a kill once: the narrator\'s own rise with no event goes back, the helper leaves what the narrator wrote', async () => {
+        const ssCard = { ...card, globalLore: [{ content: '[[STATUS\nfrag: 12/1000\n]]\nCURRENT RUNES\nfrag={{getvar::st_frag}}; place={{getvar::st_place}}' }] }
+        db.characters = [ssCard]
+        const c = { ...chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r1' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Hầm tối.', chatId: 'r2' }, { role: 'user', data: 'Tui bắn 3 viên vào mắt nó' }], { $st_frag: '0/1000' }), id: 'chat-1' }
+        // the kill turn: the request leaves with 0, the card's script applies the narrator's "frag: 3/1000", the helper says 8
+        storyNotesRequest(req(), ssCard as never, c as never)
+        c.message.push({ role: 'char', data: 'Viên cuối xuyên qua hốc mắt.\n\n[Ngươi đã giết một Thú Ngủ Say, Kẻ Rình Khe.]', chatId: 'r3' })
+        c.scriptstate.$st_frag = '3/1000'
+        answer.text = '[[GM\nbeat: 3 | dead | next\n]]\n[[STATUS\nfrag: 8/1000\n]]'
+        noteGameMaster(0, c as never)
+        await vi.waitFor(() => expect(c.scriptstate.$gm_beat).toBe('3 | dead | next'))
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        expect(asks.at(-1)).toContain('leave them out: frag: 3/1000')
+        // a look through the door: the helper sees the body and says 12; no system line, nothing is paid
+        c.message.push({ role: 'user', data: 'Tui dùng thấu thị nhìn ra ngoài' })
+        storyNotesRequest(req(), ssCard as never, c as never)
+        c.message.push({ role: 'char', data: 'Một xác xám nằm co quắp sát chân tường.', chatId: 'r4' })
+        answer.text = '[[GM\nbeat: 4 | look | next\n]]\n[[STATUS\nfrag: 12/1000\nplace: hành lang\n]]'
+        noteGameMaster(0, c as never)
+        await vi.waitFor(() => expect(c.scriptstate.$st_place).toBe('hành lang'))
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        expect(asks.at(-1)).toContain('THE REPLY BEFORE IT (everything it showed is already on the panel):\nViên cuối xuyên qua hốc mắt.')
+        // "Con quái không chết": the narrator's own block says 16 with no kill; it goes back
+        c.message.push({ role: 'user', data: 'Tui bắn đạn đá vào con quái kia' })
+        storyNotesRequest(req(), ssCard as never, c as never)
+        c.message.push({ role: 'char', data: 'Con quái không chết.', chatId: 'r5' })
+        c.scriptstate.$st_frag = '16/1000'
+        noteGameMaster(0, c as never)
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+    })
 })

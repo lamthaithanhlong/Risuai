@@ -344,3 +344,21 @@ describe('going alone is a side (Mailman, 2026-10-19)', () => {
         expect(playerSide('Tôi sẽ gia nhập Kẻ Gác Đêm.')).toBe('Kẻ Gác Đêm')
     })
 })
+
+// the Mailman chat of 2026-10-20 kept "Đầu gối đau nhói | Đã xảy ra" in gm_consequences_due, and every turn's note named it as due
+describe('a due reward or consequence that landed is never due again', () => {
+    const dice = rollGm({ gm_arc: 'a', gm_beat: '1 | x | y' }, 3, seq(0.99))
+    it('is left out of the note and the helper\'s notes, even when an old state still holds it', () => {
+        const s: GmState = { gm_arc: 'bear | hunger | live | knee', gm_beat: '2 | x | y', gm_consequences_due: 'Đầu gối đau nhói | Đã xảy ra', gm_rewards_due: 'năm điểm bưu chính | khi giao xong' }
+        expect(gmNote('run', s, dice, 'x')).not.toContain('Đầu gối')
+        expect(gmNote('run', s, dice, 'x')).toContain('Reward: năm điểm bưu chính')
+        expect(stateLines(s)).not.toContain('Đầu gối')
+    })
+    it('a "| done" line takes that one off the list and keeps the others', () => {
+        const s = applyGm({ gm_rewards_due: 'năm điểm | khi giao xong\na permit | when the ledger is stolen' }, ['reward: Năm điểm | done'], 4)
+        expect(s.gm_rewards_due).toBe('a permit | when the ledger is stolen')
+        expect(applyGm({ gm_consequences_due: 'knee | soon' }, ['consequence: knee | đã xảy ra'], 4).gm_consequences_due).toBe('')
+        expect(bookkeepPrompt({}, 'p', 'r', 'x')).toContain('paid in this reply: reward: <what> | done')
+    })
+})
+
