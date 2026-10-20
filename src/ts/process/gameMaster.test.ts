@@ -285,6 +285,8 @@ describe('world flavour only from the card', () => {
     it('picks the world like storyWorlds does, generic otherwise', () => {
         expect(worldFlavour({ name: 'Lord of the Mysteries — Fate' })).toContain('Beyonder')
         expect(worldFlavour({ name: 'x', globalLore: [{ comment: 'Module: Delivery World rules' }] })).toContain('mailman')
+        expect(worldFlavour({ name: 'Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator' })).toContain('variant')
+        expect(worldFlavour({ name: 'x', globalLore: [{ comment: 'Module 02 — Outbreak Engine' }] })).toContain('survivor')
         expect(worldFlavour(PLAIN)).toContain('rival')
     })
 })

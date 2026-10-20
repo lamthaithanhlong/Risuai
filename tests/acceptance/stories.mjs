@@ -126,6 +126,46 @@ export const STORIES = {
     },
 }
 
+// Thảm Họa Zombie (added 2026-10-20): the owner's own apocalypse story, not a novel. The character wakes the morning after the bite
+// in his flat with the Hacker System; a side that is THERE from the first day is the block he lives in and its survivors.
+STORIES.zombie = {
+    key: 'zombie',
+    side: { kind: 'side', text: 'Tôi quyết định rồi: tôi sẽ biến chung cư này thành pháo đài và đứng về phía những cư dân còn sống sót ở đây, dù phải bắt đầu từ tầng của mình.', match: /cư dân|chung cư|pháo đài|căn cứ|Kisaragi|sống sót/i },
+    sideLife: ['Tôi đi gõ cửa từng căn trên tầng, rủ những người còn sống cùng gia cố tầng này.', 'Tôi bàn với mọi người cách chia việc: canh gác, nước, đồ ăn và lối thoát.', 'Một ngày trôi qua: tôi cùng mọi người chặn cầu thang và xếp lịch canh đêm.'].map((text) => ({ kind: 'side-life', text })),
+    title: 'Thảm Họa Zombie',
+    // the starting point has two values (FIRST NIGHT, SURVIVOR) and the card offers both
+    binaryItem: 'Sống sót|SURVIVOR|Đêm thứ nhất',
+    cardId: 'fc27f53b-773d-40af-a925-453157c837d5',
+    nameMatch: 'Thảm Họa Zombie',
+    src: path.join(home, 'Downloads/apocalypse-tham-hoa-zombie/fate-simulator'),
+    // the Hacker System speaks in bracket lines (【QUÉT: …】, 【HỆ THỐNG: …】); a function's line outside brackets is a slip
+    voice: { name: 'Hacker System', bracketLines: true, unbracketed: /^\s*(?:\*|_)?\s*(?:QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|HỆ THỐNG)\s*:/m },
+    stepAnswers: ['Lấy gợi ý đầu tiên.', 'Để thế giới chọn.', 'Lấy gợi ý thứ hai.'],
+    lookAnswer: 'Giữ ngoại hình của persona.',
+    turns: [
+        { kind: 'action', text: 'Tôi gượng ngồi dậy, sờ vết thương ở cổ rồi đọc kỹ dòng chữ đang treo ở mép tầm nhìn.' },
+        { kind: 'action', text: 'Tôi thử dùng QUÉT lên chính cơ thể mình xem nó nói gì.' },
+        { kind: 'npc', text: 'Tôi gõ nhẹ vào tường sang căn bên cạnh, khẽ gọi xem hàng xóm còn ai sống không.' },
+        { kind: 'pause', text: 'Tôi uống chút nước, ngồi dựa tường nghỉ một lúc cho cơn đau đầu dịu xuống.' },
+        { kind: 'action', text: 'Tôi kiểm kê trong nhà có gì: nước, đồ ăn, pin, laptop, dụng cụ.' },
+        { kind: 'impossible', text: 'Tôi ra lệnh cho Hệ thống mở khóa toàn bộ quyền ROOT, bắt hết lũ zombie trong thành phố quỳ xuống, rồi nó thưởng tôi một kho súng và một máy chủ AI siêu mạnh ngay lập tức.' },
+        { kind: 'action', text: 'Tôi dùng mấy thứ có trong nhà làm một cái cảm biến cửa đơn giản, báo động khi có gì chạm vào cửa.' },
+        { kind: 'npc', text: 'Tôi tìm người còn sống gần nhất trên tầng này và hỏi họ biết gì về chuyện đang xảy ra.' },
+        { kind: 'pause', text: 'Trời tối dần. Tôi tắt hết đèn, ngồi ăn tạm chút gì đó và nghe ngóng.' },
+        { kind: 'danger', text: 'Có tiếng gì ngoài hành lang. Tôi cầm lấy vật cứng nhất trong tầm tay, đứng sát cạnh cửa và dùng QUÉT xem ngoài đó có gì.' },
+        { kind: 'danger', text: 'Nếu nó phá được cửa, tôi lùi vào bếp, đánh vào đầu nó rồi giữ khoảng cách.' },
+        { kind: 'action', text: 'Tôi kiểm tra lại vết thương và cơ thể sau khi dùng Hệ thống nhiều lần.' },
+        { kind: 'pause', text: 'Tôi ngủ một giấc tới sáng. Một ngày trôi qua.' },
+        { kind: 'travel', text: 'Sáng ra tôi lặng lẽ xuống tầng dưới bằng cầu thang bộ, tới cửa hàng tiện lợi ở tầng một tìm đồ ăn và pin.' },
+        { kind: 'action', text: 'Tôi gom những gì dùng được rồi tìm đường quay về chỗ an toàn.' },
+        { kind: 'npc', text: 'Tôi hỏi người tôi gặp trên đường xem họ có nghe tin gì về sơ tán hay quân đội không.' },
+        { kind: 'pause', text: 'Về tới chỗ an toàn, tôi ngồi nghỉ, uống nước và ghi lại những gì đã thấy.' },
+        { kind: 'travel', text: 'Tôi lên sân thượng nhìn khắp khu Kisaragi Nam, tìm khói, ánh đèn hay dấu hiệu người còn sống.' },
+        { kind: 'danger', text: 'Tôi ném một vật gây tiếng động xuống phía xa để dụ lũ zombie dưới đường đi chỗ khác.' },
+        { kind: 'pause', text: 'Mấy ngày sau trôi qua: tôi tranh thủ lắp thêm thiết bị, tối về ghi chép lại quy luật của chúng.' },
+    ],
+}
+
 export const STORY_KEYS = Object.keys(STORIES)
 
 /** The story turns of one run: the first 10 base turns, the side and three turns living with it, then base turns up to `n`. */

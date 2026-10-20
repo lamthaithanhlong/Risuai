@@ -6,7 +6,7 @@
 // danger, travel). Then each reply is scored (lib/score.mjs), sampled replies are judged for canon by the owner's model
 // (lib/judge.mjs), and a scorecard per story plus a summary are written.
 //
-//   node tests/acceptance/run.mjs --story ss|lotm|mailman|all     play and score (default all, the stories in parallel)
+//   node tests/acceptance/run.mjs --story ss|lotm|mailman|zombie|all     play and score (default all, the stories in parallel)
 //     --turns 20         story turns after the yes          --serial       one story at a time
 //     --no-build         serve the repo's dist as it is     --no-judge     skip the model judge
 //     --judge-model M    the judge's model (default: the owner's narrator model; a refused one falls back to the DeepSeek slot)
@@ -194,7 +194,7 @@ async function main() {
     if (flag('--rescore')) return rescore(opt('--rescore', OUT))
     const which = opt('--story', 'all')
     const keys = which === 'all' ? STORY_KEYS : which.split(',')
-    for (const k of keys) if (!STORIES[k]) throw new Error(`unknown story "${k}" (ss, lotm, mailman, all)`)
+    for (const k of keys) if (!STORIES[k]) throw new Error(`unknown story "${k}" (${STORY_KEYS.join(", ")}, all)`)
     fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true })
     pruneRuns()
     const runDir = newRunDir()

@@ -459,6 +459,7 @@ export function worldFlavour(card: Card): string {
     if (/shadow slave|nô lệ bóng tối|nightmare engine|forgotten shore/i.test(text)) return 'a rival Sleeper, a clan\'s agent, a creature that marked them, a debt'
     if (/lord of (the )?myster|quỷ bí|beyonder potion|pathways and sequences/i.test(text)) return 'a hostile Beyonder, a secret order, a church inquiry, a debt'
     if (/infinite mailman|người đưa thư|delivery world|stamp book/i.test(text)) return 'a hostile recipient, a rival mailman, a broken delivery, a penalty'
+    if (/thảm họa zombie|hacker system|hệ thống hacker|outbreak engine/i.test(text)) return 'a variant that broke the pattern, a rival survivor group, a faction that wants the System, a debt'
     return 'a rival, a hunter, a debt, a secret'
 }
 
