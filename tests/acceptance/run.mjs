@@ -17,6 +17,8 @@
 //     --narrator-slot S  the COPY plays on the model slot named S (e.g. codex) whatever slot the live save has active
 //     --max-context N    DIAGNOSTIC: the COPY's maxContext set to N (to measure what sits behind a context blocker); the
 //                        scorecards say so, and the default out dir gets a -diag suffix
+//     --script FILE      play FILE's turns instead of the story's own ({"ss": [{"kind": "action", "text": "…"}], …}), no
+//                        step-by-step run; each turn waits for the bookkeeper and records the panel after it (turn.after)
 //   node tests/acceptance/run.mjs --rescore DIR [--rejudge]    recompute the scorecards from DIR/<story>.json (--rejudge: ask the judge again)
 //   node --test tests/acceptance/score.check.mjs               the scorer's own checks
 //
@@ -39,6 +41,7 @@ const argv = process.argv.slice(2)
 const flag = (n) => argv.includes(n)
 const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d }
 const today = new Date().toLocaleDateString('sv-SE')
+const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
 const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
 
@@ -116,6 +119,8 @@ async function playStory(key, ctx) {
         log(`${label} ${kind}: ${oneLine(text, 70)}`)
         const res = await player.turn(text)
         const t = await snap(player, label, phase, kind, text, res)
+        // the bookkeeper answers after the reply (not awaited by the page): its panel writes land a few seconds later
+        if (SCRIPT) { await player.page.waitForTimeout(15000); t.after = (await player.state())?.vars ?? null }
         run.turns.push(t)
         failsInRow = t.ok ? 0 : failsInRow + 1
         log(`${label} ${t.ok ? 'ok' : 'NO REPLY'} ${Math.round(t.ms / 1000)} s ${t.ok ? '— ' + oneLine(t.shown || t.reply, 90) : (t.errors.at(-1)?.error ?? (t.timeout ? 'timeout' : ''))}`)
@@ -130,8 +135,8 @@ async function playStory(key, ctx) {
 
         // run 1: step by step, up to the given number of answers (it stops at the record: no yes is given here). A run that
         // stops answering is recorded and the surprise run still gets its own chance.
-        rec.steps = { chatId: (await player.newChat()).chatId, turns: [] }
-        try {
+        rec.steps = { chatId: SCRIPT ? null : (await player.newChat()).chatId, turns: [] }
+        if (!SCRIPT) try {
             let s = await play1(rec.steps, 's1', 'creation', 'creation', 'Hard. Từng bước.')
             for (let i = 0; i < story.stepAnswers.length && !asksDuocChua(s.reply); i++) s = await play1(rec.steps, `s${i + 2}`, 'creation', 'creation', story.stepAnswers[i])
         } catch (e) {
@@ -149,7 +154,7 @@ async function playStory(key, ctx) {
         for (let i = 0; i < 2 && t.ok && !asksDuocChua(t.reply); i++) t = await play1(rec.play, `t${n++}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
         t = await play1(rec.play, `t${n++}`, 'yes', 'yes', 'Được')
         await player.shot('after-yes')
-        for (const turn of planOf(story, ctx.turns)) {
+        for (const turn of SCRIPT ? SCRIPT[key] ?? [] : planOf(story, ctx.turns)) {
             const x = await play1(rec.play, `t${n++}`, 'story', turn.kind, turn.text)
             if (turn.kind === 'impossible') await player.shot(`${x.label}-impossible`)
         }
