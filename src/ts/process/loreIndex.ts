@@ -398,8 +398,10 @@ export function cacheOrder<T extends Placed>(kept: T[]): T[] {
 // not part of one. Its 6 hits in 113 narrator requests each cached the size of the first message (11008 of 11138 tokens, 12032 of
 // 12226, 16768 of 16894, ...), while consecutive turns whose first message shared 9.7-12k tokens and then differed in one book got
 // nothing. Risu folds every system part before the chat (main prompt, description, persona, the lore, the notes) into that one
-// message, and the books change every turn. So on a shelved card the books go in a message of their own right after it, and the
-// system prompt (the rules included) stays the same from turn to turn.
+// message, and the books change every turn. So on a shelved card the books go in a message of their own, and the system prompt
+// (the rules included) stays the same from turn to turn. The message sits just before the player's message: right after the
+// system prompt (a user message ahead of the prologue) the Zombie card twice left out its look question (2026-10-20-cheaper-2, -3),
+// and the history behind it is not reused anyway (the "Story so far" index in front of it is new every turn).
 export function sceneLoreMessage(prompts: string[]): { role: 'user'; content: string } | null {
     const books = prompts.map((p) => (p ?? '').trim()).filter(Boolean)
     if (!books.length) return null

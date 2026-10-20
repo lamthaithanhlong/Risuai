@@ -578,8 +578,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         })
     }
-    // a shelved card's books in a message of their own after the system prompt, which then stays the same turn after turn: the
-    // provider's cache reuses whole messages (loreIndex.ts sceneLoreMessage)
+    // a shelved card's books in a message of their own before the player's message, so the system prompt stays the same turn after
+    // turn: the provider's cache reuses whole messages (loreIndex.ts sceneLoreMessage)
     const sceneChat = sceneLoreMessage(normalActives.filter((v) => v.scene).map((v) => risuChatParser(resolvePosition(v.prompt), {chara: currentChar}))) as OpenAIChat | null
 
     const descActives = lorepmt.actives.filter(v => {
@@ -1248,6 +1248,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         return v.content.trim() !== '' || (v.multimodals && v.multimodals.length > 0)
     })
 
+    // the scene's books just before the player's message, the rules that change every reply after them (the depth prompts below)
+    if(sceneChat){
+        unformated.chats.splice(Math.max(0, unformated.chats.length - 1), 0, sceneChat)
+    }
     for(const depthPrompt of depthPrompts){
         const chat:OpenAIChat = {
             role: depthPrompt.role,
@@ -1255,9 +1259,6 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         const depth = depthPrompt.pos === 'depth' ? (depthPrompt.depth) : (unformated.chats.length - depthPrompt.depth)
         unformated.chats.splice(depth,0,chat)
-    }
-    if(sceneChat){
-        unformated.chats.unshift(sceneChat)
     }
 
     if(triggerResult){
