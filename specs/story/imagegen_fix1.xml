@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+<declaration>// imagegen.lua: the cooldown is set before a picture is asked for and lifted only by a picture (FIX=0), or also when the
+// picture was superseded by a newer one for the same message (FIX=1). COOLDOWN = 600 s; a job takes 20..120 s.
+const int FIX = 1;
+const int COOLDOWN = 600;
+int until_ = 0;          // imagegen_off_until, as seconds on the global clock
+bool failed = false;     // a real failure happened (a provider error): then the cooldown is wanted
+bool superseded = false;
+bool autoDone = false;
+clock now;
+chan ask, newer;
+</declaration>
+<template><name>Auto</name><declaration>clock j;</declaration>
+<location id="a0"><name>Idle</name></location>
+<location id="a1"><name>Waiting</name><label kind="invariant">j &lt;= 120</label></location>
+<location id="a2"><name>Done</name></location>
+<init ref="a0"/>
+<transition><source ref="a0"/><target ref="a1"/><label kind="assignment">until_ = COOLDOWN, j = 0</label></transition>
+<transition><source ref="a1"/><target ref="a2"/><label kind="guard">j &gt;= 20 &amp;&amp; !superseded</label><label kind="assignment">until_ = 0, autoDone = true</label><label kind="comments">a picture</label></transition>
+<transition><source ref="a1"/><target ref="a2"/><label kind="guard">j &gt;= 20 &amp;&amp; !superseded</label><label kind="assignment">failed = true, autoDone = true</label><label kind="comments">a real failure: the cooldown stays</label></transition>
+<transition><source ref="a1"/><target ref="a2"/><label kind="guard">superseded</label><label kind="assignment">until_ = (FIX == 1 ? 0 : until_), autoDone = true</label><label kind="comments">a newer picture was asked</label></transition>
+</template>
+<template><name>Button</name>
+<location id="b0"><name>Off</name></location>
+<location id="b1"><name>Pressed</name></location>
+<init ref="b0"/>
+<transition><source ref="b0"/><target ref="b1"/><label kind="assignment">superseded = true</label><label kind="comments">redraw / reroll asks a newer picture for the same message</label></transition>
+</template>
+<template><name>Next</name>
+<location id="n0"><name>Wait</name></location>
+<location id="n1"><name>Blocked</name></location>
+<location id="n2"><name>Drawn</name></location>
+<init ref="n0"/>
+<transition><source ref="n0"/><target ref="n1"/><label kind="guard">autoDone &amp;&amp; until_ &gt; 0</label><label kind="comments">the next reply wants a picture: cooling down</label></transition>
+<transition><source ref="n0"/><target ref="n2"/><label kind="guard">autoDone &amp;&amp; until_ == 0</label></transition>
+</template>
+<system>system Auto, Button, Next;</system>
+</nta>
