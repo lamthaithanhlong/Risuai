@@ -51,7 +51,7 @@ async function rescore(dir) {
         const f = path.join(dir, `${key}.json`)
         if (!fs.existsSync(f)) continue
         const rec = JSON.parse(fs.readFileSync(f, 'utf8'))
-        rec.binaryItem ??= STORIES[key].binaryItem ?? null
+        rec.binaryItem = STORIES[key].binaryItem ?? null       // the story's current definition, not the one the run stored
         if (flag('--rejudge') && rec.play?.turns?.length) {
             const ms = modelSettings(path.join(rec.copyDir ?? path.join(meta.runDir, key), 'save'), rec.store)
             const deepseek = ms.slots.find((x) => /deepseek/i.test(x.name))?.req
