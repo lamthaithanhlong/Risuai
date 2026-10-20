@@ -272,3 +272,12 @@ describe('the budget by value per token, with no book twice (asked 2026-10-20)',
         expect(kept.map((a) => a.source)).toEqual(['Module', 'The Abyss'])
     })
 })
+
+describe('the scene\'s books in a message of their own, so the system prompt stays the same turn after turn (2026-10-20)', async () => {
+    const { sceneLoreMessage } = await import('./loreIndex')
+    it('one user message after the system prompt, marked as the system\'s; none when there is no book', () => {
+        expect(sceneLoreMessage(['[Backlund]\nThe capital.', '[Audrey Hall]\nA noble.'])).toEqual({ role: 'user', content: 'system: [Lore for this scene]\n\n[Backlund]\nThe capital.\n\n[Audrey Hall]\nA noble.' })
+        expect(sceneLoreMessage([])).toBeNull()
+        expect(sceneLoreMessage(['  '])).toBeNull()
+    })
+})

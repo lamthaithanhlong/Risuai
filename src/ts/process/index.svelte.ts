@@ -26,6 +26,7 @@ import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
 import { glossaryOf, termsRequest } from "./storyTermsPage";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
+import { sceneLoreMessage } from "./loreIndex";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
 import { getLastLoreStats, loadLoreBookV3Prompt } from "./lorebook.svelte";
@@ -569,11 +570,17 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     console.log(normalActives)
 
     for(const lorebook of normalActives){
+        if(lorebook.scene){
+            continue
+        }
         unformated.lorebook.push({
             role: lorebook.role,
             content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         })
     }
+    // a shelved card's books in a message of their own after the system prompt, which then stays the same turn after turn: the
+    // provider's cache reuses whole messages (loreIndex.ts sceneLoreMessage)
+    const sceneChat = sceneLoreMessage(normalActives.filter((v) => v.scene).map((v) => risuChatParser(resolvePosition(v.prompt), {chara: currentChar}))) as OpenAIChat | null
 
     const descActives = lorepmt.actives.filter(v => {
         return v.pos === 'after_desc' || v.pos === 'before_desc' || v.pos === 'personality' || v.pos === 'scenario'
@@ -1114,6 +1121,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         currentTokens += await tokenizer.tokenizeChat(chat)
     }
+    if(sceneChat){
+        currentTokens += await tokenizer.tokenizeChat(sceneChat)
+    }
     
     if(nowChatroom.supaMemory && (DBState.db.supaModelType !== 'none' || DBState.db.hanuraiEnable || DBState.db.hypav2 || DBState.db.hypaV3)){
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
@@ -1245,6 +1255,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         const depth = depthPrompt.pos === 'depth' ? (depthPrompt.depth) : (unformated.chats.length - depthPrompt.depth)
         unformated.chats.splice(depth,0,chat)
+    }
+    if(sceneChat){
+        unformated.chats.unshift(sceneChat)
     }
 
     if(triggerResult){

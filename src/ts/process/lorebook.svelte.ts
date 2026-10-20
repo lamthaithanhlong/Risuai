@@ -258,6 +258,7 @@ export async function loadLoreBookV3Prompt(){
         recent?:boolean
         at:number
         turnly?:boolean
+        scene?:boolean
         source:string
         inject:{
             operation:'append'|'prepend'|'replace',
@@ -631,6 +632,8 @@ export async function loadLoreBookV3Prompt(){
                     recent,
                     at: i,
                     turnly,
+                    // a book of a shelved card: sent in a message of its own after the system prompt (loreIndex.ts sceneLoreMessage)
+                    scene: shelved && !fullLore[i].alwaysActive && pos === '' && !inject,
                     source: fullLore[i].comment || `lorebook ${i}`,
                     inject: inject ?? null
                 })

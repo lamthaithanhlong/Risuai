@@ -37,11 +37,14 @@ describe('the lorebook pass, in the order a cache can reuse', () => {
         const slot = actives.filter((a) => a.pos === '').map((a) => a.source)
         expect(slot).toEqual(['Module 01 — Random Fate Engine', 'Lore reconciliation rule', 'Backlund', 'Audrey Hall'])
         const after = actives.filter((a) => a.pos === 'reverse_depth' && a.depth === 1).map((a) => a.source)          // before the player's message
+        // the books go in a message of their own after the system prompt (index.svelte.ts sceneLoreMessage), the rules stay in it
+        expect(actives.filter((a) => a.scene).map((a) => a.source)).toEqual(['Backlund', 'Audrey Hall'])
         expect(after).toEqual(['Module 07 — Status Panel', 'Module 10 — Fate Dice'])
     })
     it('a card with no shelves keeps Risu\'s own order: insert order, the changing rules where they were', async () => {
         db.characters = [card(LORE.filter((l) => l.mode !== 'folder').map((l) => ({ ...l, folder: undefined })))]
         const { actives } = await loadLoreBookV3Prompt()
+        expect(actives.some((a) => a.scene)).toBe(false)
         expect(actives.map((a) => [a.source, a.pos])).toEqual([['Backlund', ''], ['Audrey Hall', ''], ['Module 01 — Random Fate Engine', ''],
             ['Module 07 — Status Panel', ''], ['Module 10 — Fate Dice', ''], ['Lore reconciliation rule', '']])
     })

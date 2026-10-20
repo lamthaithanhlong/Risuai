@@ -392,3 +392,16 @@ export function cacheOrder<T extends Placed>(kept: T[]): T[] {
     const tier = (a: T) => (a.turnly ? 2 : a.why === 'always' ? 0 : 1)
     return [...kept].sort((a, b) => tier(a) - tier(b) || a.order - b.order || a.at - b.at)
 }
+
+// ---- the scene's books in a message of their own (2026-10-20) -----------------------------------------------------------------
+// Measured on the acceptance run 2026-10-20-cheaper (gpt-6-luna through 9router): the provider's cache reuses a whole message,
+// not part of one. Its 6 hits in 113 narrator requests each cached the size of the first message (11008 of 11138 tokens, 12032 of
+// 12226, 16768 of 16894, ...), while consecutive turns whose first message shared 9.7-12k tokens and then differed in one book got
+// nothing. Risu folds every system part before the chat (main prompt, description, persona, the lore, the notes) into that one
+// message, and the books change every turn. So on a shelved card the books go in a message of their own right after it, and the
+// system prompt (the rules included) stays the same from turn to turn.
+export function sceneLoreMessage(prompts: string[]): { role: 'user'; content: string } | null {
+    const books = prompts.map((p) => (p ?? '').trim()).filter(Boolean)
+    if (!books.length) return null
+    return { role: 'user', content: `system: [Lore for this scene]\n\n${books.join('\n\n')}` }
+}
