@@ -1079,10 +1079,11 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
         historyend: '',
         promptend: ''
     }
-    const triggers = char.triggerscript.map((v) => {
-        v.lowLevelAccess = CharacterlowLevelAccess
-        return v
-    }).concat(getModuleTriggers())
+    // copies, not the card's own triggers: writing the flag into them changed the card on every run (scriptings.ts sets it false)
+    const triggers = char.triggerscript.map<triggerscript>((v) => ({
+        ...v,
+        lowLevelAccess: CharacterlowLevelAccess
+    })).concat(getModuleTriggers())
     const db = getDatabase()
     const defaultVariables = parseKeyValue(char.defaultVariables).concat(parseKeyValue(db.templateDefaultVariables))
     let chat = arg.displayMode ? arg.chat : safeStructuredClone(arg.chat ?? char.chats[char.chatPage])

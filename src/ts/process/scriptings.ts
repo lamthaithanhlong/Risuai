@@ -1426,10 +1426,12 @@ export async function runLuaEditTrigger<T extends string|OpenAIChat[]>(char:char
     try {
         let data = content
 
-        const triggers = char.type === 'group' ? (getModuleTriggers()) : (char.triggerscript.map((v) => {
-            v.lowLevelAccess = false
-            return v
-        }).concat(getModuleTriggers()))
+        // copies: setting the flag on the stored triggers rewrote the card on every rendered chunk (triggers.ts sets it back),
+        // and each rewrite re-ran the autosave's walk of the whole card (saveWatch.svelte.ts)
+        const triggers = char.type === 'group' ? (getModuleTriggers()) : (char.triggerscript.map<triggerscript>((v) => ({
+            ...v,
+            lowLevelAccess: false
+        })).concat(getModuleTriggers()))
     
         for(let trigger of triggers){
             if(trigger?.effect?.[0]?.type === 'triggerlua'){

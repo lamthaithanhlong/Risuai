@@ -79,3 +79,19 @@ rules:
     paths:
       include: ["server/node/saveQueue.cjs", "server/node/atomicWrite.cjs"]
 
+
+  - id: mutate-stored-card-in-map
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      This writes into the character's own stored list while mapping it. The card in the database changes on every call, and each
+      change re-runs the autosave's walk of the whole card (saveWatch.svelte.ts); runLuaEditTrigger and runTrigger did this per rendered
+      chunk (258 card walks in one turn, specs/core/SaveWatch.dfy C). Map to a copy: `.map((v) => ({ ...v, flag }))`.
+    patterns:
+      - pattern: $V.$F = $X
+      - pattern-inside: $C.$LIST.map(($V) => {...})
+      - metavariable-regex:
+          metavariable: $LIST
+          regex: ^(triggerscript|customscripts|globalLore)$
+    paths:
+      include: ["**/src/ts/**"]
