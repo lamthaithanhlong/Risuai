@@ -39,6 +39,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)))
 }
 
+
 /**
  * The persona and Future Plan notes, whether the GM is on or off: they belong to the card and the player, not to the GM
  * (Z3 on the note conditions, 2026-10-19: inside gameMasterRequest they were gone with the GM switched off, and on a card with
@@ -64,8 +65,9 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
 }
 
 /** The card's panel as the request leaves (per chat id), so the reply's own writes can be told apart (statusBook.ts); and as the
- *  last request left, so the next one can say what the reply in between already counted. */
-const panelAtRequest = new Map<string, Record<string, string>>()
+ *  last request left, so the next one can say what the reply in between already counted. `vars`: the panel and the ledger as
+ *  chat variables, kept for a rollback of the reply (settlePanel). */
+const panelAtRequest = new Map<string, { panel: Record<string, string>; vars: Record<string, string> }>()
 const panelLastRequest = new Map<string, { at: number; panel: Record<string, string>; note: string }>()
 
 function notePanelAtRequest(card: character, chat: Chat): string {
@@ -73,7 +75,10 @@ function notePanelAtRequest(card: character, chat: Chat): string {
     if (!spec || !chat.id) return ''
     const now = panelOf(spec, chat.scriptstate)
     const at = chat.message?.length ?? 0
-    panelAtRequest.set(chat.id, now)
+    const vars: Record<string, string> = {}
+    for (const [k, v] of Object.entries(now)) vars['$st_' + k] = v
+    for (const k of LEDGER_VARS) vars[k] = chat.scriptstate?.[k] === undefined ? '' : String(chat.scriptstate[k])
+    panelAtRequest.set(chat.id, { panel: now, vars })
     const last = panelLastRequest.get(chat.id)
     // a reroll or a retry asks again at the same place: the same reply in between, the same note
     if (last && last.at === at) return last.note
@@ -82,21 +87,45 @@ function notePanelAtRequest(card: character, chat: Chat): string {
     return note
 }
 
+/** The card's ledger (status.lua's [[LEDGER]]: memories, relations, timeline), written by the reply as the panel is. */
+const LEDGER_VARS = ['$led_mem', '$led_rel', '$led_ev']
+/** Replies whose rollback is kept: a rollback over more replies at once goes back to before the oldest of these. */
+const PANEL_LOG_MAX = 20
+type PanelLog = [string, Record<string, string>][]
+
+function panelLog(vars: Chat['scriptstate']): PanelLog {
+    let log: PanelLog = []
+    try { log = JSON.parse(String(vars.$panel_log || '[]')) } catch { log = [] }
+    if (!Array.isArray(log)) log = []
+    // 21380949 kept the latest reply only ($panel_at, its panel by key)
+    if (vars.$panel_at) {
+        let prev: Record<string, string> = {}
+        try { prev = JSON.parse(String(vars.$panel_prev || '{}')) ?? {} } catch { prev = {} }
+        log.push([String(vars.$panel_at), Object.fromEntries(Object.entries(prev).map(([k, v]) => ['$st_' + k, v]))])
+        vars.$panel_at = ''
+        vars.$panel_prev = ''
+    }
+    return log
+}
+
 /**
- * A reply's panel writes (the card's script from its [[STATUS]] block, the helper's) go with it on a reroll or a delete, as the
- * GM's do (settleGm): the panel before it is kept with its chat id ($panel_prev, $panel_at; not st_*, which is the panel), and put
- * back once that reply is gone. Called as sendChat starts, before the lorebook's {{getvar::st_*}} shows the narrator the panel:
- * a rerolled kill in Shadow Slave read 3/1000 there and paid it again (0 -> 3 -> 6), a rerolled wage in Lord of the Mysteries too.
+ * A reply's panel and ledger writes (the card's script from its [[STATUS]] and [[LEDGER]] blocks, the helper's) go with it on a
+ * reroll or a delete, as the GM's do (settleGm): the variables before each reply are kept with its chat id ($panel_log; not st_*,
+ * which is the panel), and once the chat's last kept replies are gone the variables go back to before the oldest of them. Called
+ * as sendChat starts, before the lorebook's {{getvar::st_*}} shows the narrator the panel: a rerolled kill in Shadow Slave read
+ * 3/1000 there and paid it again (0 -> 3 -> 6), a rerolled wage in Lord of the Mysteries too, and a rerolled "event:" stayed in
+ * the timeline twice. TLA+ (specs/story/reroll/PanelReroll.tla): the latest reply alone fails a rollback over two replies.
+ * A reply deleted from the middle, with later ones kept, leaves the variables as they are.
  */
 export function settlePanel(chat: Chat | undefined): void {
     const vars = chat?.scriptstate
-    const at = String(vars?.$panel_at ?? '')
-    if (!vars || !at || chat.message?.some((m) => m.chatId === at)) return
-    let prev: Record<string, string> = {}
-    try { prev = JSON.parse(String(vars.$panel_prev || '{}')) ?? {} } catch { prev = {} }
-    applyStatus(vars, prev)
-    vars.$panel_prev = ''
-    vars.$panel_at = ''
+    if (!vars || (!vars.$panel_log && !vars.$panel_at)) return
+    const log = panelLog(vars)
+    const present = new Set((chat.message ?? []).map((m) => m.chatId).filter(Boolean))
+    let k = log.length
+    while (k > 0 && !present.has(log[k - 1][0])) k--
+    if (k < log.length) Object.assign(vars, log[k][1])
+    vars.$panel_log = JSON.stringify(log.slice(0, k))
 }
 
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */
@@ -140,7 +169,8 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     // what the narrator's own block wrote for this reply (the card's script has applied it): a counter it raised with no system
     // line in the reply goes back (a reward is paid once, statusBook.ts), and the helper leaves the rest of its keys alone
     const spec = statusSpec(card)
-    const asked = chat.id ? panelAtRequest.get(chat.id) : undefined
+    const atRequest = chat.id ? panelAtRequest.get(chat.id) : undefined
+    const asked = atRequest?.panel
     if (chat.id) panelAtRequest.delete(chat.id)
     let written: Record<string, string> = {}
     if (spec && asked) {
@@ -148,11 +178,11 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
         written = w.written
         if (Object.keys(w.unpaid).length) applyStatus(chat.scriptstate ??= {}, w.unpaid)
     }
-    // the panel before this reply, for a reroll or a delete of it (settlePanel); the helper's writes go with it too
-    if (spec && chat.scriptstate) {
-        const keep = !!asked && !!reply.chatId
-        chat.scriptstate.$panel_prev = keep ? JSON.stringify(asked) : ''
-        chat.scriptstate.$panel_at = keep ? reply.chatId! : ''
+    // the panel and ledger before this reply, for a reroll or a delete of it (settlePanel); the helper's writes go with it too
+    if (spec && atRequest && reply.chatId && chat.scriptstate) {
+        const log = panelLog(chat.scriptstate).filter(([id]) => id !== reply.chatId)
+        log.push([reply.chatId, atRequest.vars])
+        chat.scriptstate.$panel_log = JSON.stringify(log.slice(-PANEL_LOG_MAX))
     }
     // the bookkeeper, once the character is confirmed (not awaited: the chat goes on); Settings can turn the extra call off.
     // One helper call per turn asks for both the GM's notes and the card's status panel.

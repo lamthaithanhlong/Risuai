@@ -298,6 +298,8 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
             c.message.push({ role: 'char', data: 'Viên cuối xuyên qua hốc mắt.\n\n[Ngươi đã giết một Thú Ngủ Say.]', chatId })
             c.scriptstate.$st_frag = `${Number(c.scriptstate.$st_frag.split('/')[0]) + 3}/1000`
             c.scriptstate.$st_place = 'khe đá'
+            // its [[LEDGER]] "event:" line, appended by status.lua
+            c.scriptstate.$led_ev = [c.scriptstate.$led_ev, 'Ngày 1 | giết Kẻ Rình Khe'].filter(Boolean).join('\n')
             noteGameMaster(0, c as never)
         }
         ask()
@@ -308,8 +310,10 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         ask()
         expect(c.scriptstate.$st_frag).toBe('0/1000')
         expect(c.scriptstate.$st_place).toBe('')
+        expect(c.scriptstate.$led_ev).toBe('')
         kill('r3b')
         expect(c.scriptstate.$st_frag).toBe('3/1000')
+        expect(c.scriptstate.$led_ev).toBe('Ngày 1 | giết Kẻ Rình Khe')
         // a reply that stays keeps what it paid
         c.message.push({ role: 'user', data: 'Tui nhìn quanh' })
         ask()
@@ -322,6 +326,15 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         ask()
         expect(c.scriptstate.$st_frag).toBe('3/1000')
         expect(c.scriptstate.$st_place).toBe('khe đá')
+        // a rollback over two replies at once (the kill and the one after it): back to before the kill (TLA+ PanelReroll)
+        c.message.push({ role: 'char', data: 'Không còn gì.', chatId: 'r5' })
+        c.scriptstate.$st_place = 'cầu thang'
+        noteGameMaster(0, c as never)
+        c.message.splice(4)
+        ask()
+        expect(c.scriptstate.$st_frag).toBe('0/1000')
+        expect(c.scriptstate.$st_place).toBe('')
+        expect(c.scriptstate.$led_ev).toBe('')
     })
 
     it('tells the narrator what the last reply already counted, the same on a reroll', () => {
