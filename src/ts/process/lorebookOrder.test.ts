@@ -31,12 +31,12 @@ const card = (lore: unknown[]) => ({ chaId: 'c1', name: 'LotM', globalLore: lore
     chats: [{ message: [{ role: 'char', data: 'Fog.' }, { role: 'user', data: 'Tôi đến Backlund gặp Audrey.' }], localLore: [], fmIndex: -1 }] })
 
 describe('the lorebook pass, in the order a cache can reuse', () => {
-    it('a shelved card: the fixed rules, the books by insert order, and the rules that change every reply after the chat', async () => {
+    it('a shelved card: the fixed rules, the books by insert order, and the rules that change every reply after the chat, before the player\'s message', async () => {
         db.characters = [card(LORE)]
         const { actives } = await loadLoreBookV3Prompt()
         const slot = actives.filter((a) => a.pos === '').map((a) => a.source)
         expect(slot).toEqual(['Module 01 — Random Fate Engine', 'Lore reconciliation rule', 'Backlund', 'Audrey Hall'])
-        const after = actives.filter((a) => a.pos === 'depth' && a.depth === 0).map((a) => a.source)
+        const after = actives.filter((a) => a.pos === 'reverse_depth' && a.depth === 1).map((a) => a.source)          // before the player's message
         expect(after).toEqual(['Module 07 — Status Panel', 'Module 10 — Fate Dice'])
     })
     it('a card with no shelves keeps Risu\'s own order: insert order, the changing rules where they were', async () => {

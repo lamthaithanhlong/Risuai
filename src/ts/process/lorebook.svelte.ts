@@ -606,11 +606,12 @@ export async function loadLoreBookV3Prompt(){
             }
 
             if(activated){
-                // an always-on rule that changes every reply (the status panel, the fate dice) goes after the chat on a shelved card
+                // an always-on rule that changes every reply (the status panel, the fate dice) goes after the chat on a shelved card,
+                // just before the player's message: the player's words and the notes on them (GM, referee) stay the last thing read
                 const turnly = shelved && !!fullLore[i].alwaysActive && pos === '' && !inject && changesEachTurn(content)
                 if(turnly){
-                    pos = 'depth'
-                    depth = 0
+                    pos = 'reverse_depth'
+                    depth = 1
                 }
                 actives.push({
                     depth: depth,
