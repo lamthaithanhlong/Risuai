@@ -17,7 +17,7 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { creationRequest, gameMasterRequest, noteGameMaster, storyNotesRequest } from "./gameMasterPage";
+import { creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
@@ -373,6 +373,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     const tokenizer = new ChatTokenizer(chatAdditonalTokens, DBState.db.aiModel.startsWith('gpt') ? 'noName' : 'name')
     let currentChat = runCurrentChatFunction(nowChatroom.chats[sel.chat])
     nowChatroom.chats[sel.chat] = currentChat
+    // a rerolled or deleted reply's panel writes go back before the prompt shows the panel (gameMasterPage.ts)
+    settlePanel(currentChat)
     let maxContextTokens = DBState.db.maxContext
 
     chatProcessStage.set(1); brPhase('sendChat stage 1')

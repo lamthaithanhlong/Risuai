@@ -82,6 +82,23 @@ function notePanelAtRequest(card: character, chat: Chat): string {
     return note
 }
 
+/**
+ * A reply's panel writes (the card's script from its [[STATUS]] block, the helper's) go with it on a reroll or a delete, as the
+ * GM's do (settleGm): the panel before it is kept with its chat id ($panel_prev, $panel_at; not st_*, which is the panel), and put
+ * back once that reply is gone. Called as sendChat starts, before the lorebook's {{getvar::st_*}} shows the narrator the panel:
+ * a rerolled kill in Shadow Slave read 3/1000 there and paid it again (0 -> 3 -> 6), a rerolled wage in Lord of the Mysteries too.
+ */
+export function settlePanel(chat: Chat | undefined): void {
+    const vars = chat?.scriptstate
+    const at = String(vars?.$panel_at ?? '')
+    if (!vars || !at || chat.message?.some((m) => m.chatId === at)) return
+    let prev: Record<string, string> = {}
+    try { prev = JSON.parse(String(vars.$panel_prev || '{}')) ?? {} } catch { prev = {} }
+    applyStatus(vars, prev)
+    vars.$panel_prev = ''
+    vars.$panel_at = ''
+}
+
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */
 function hasPersona(): boolean {
     return !!String(getPersonaPrompt() ?? '').trim()
@@ -130,6 +147,12 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
         const w = narratorWrites(spec, asked, chat.scriptstate, reply.data ?? '')
         written = w.written
         if (Object.keys(w.unpaid).length) applyStatus(chat.scriptstate ??= {}, w.unpaid)
+    }
+    // the panel before this reply, for a reroll or a delete of it (settlePanel); the helper's writes go with it too
+    if (spec && chat.scriptstate) {
+        const keep = !!asked && !!reply.chatId
+        chat.scriptstate.$panel_prev = keep ? JSON.stringify(asked) : ''
+        chat.scriptstate.$panel_at = keep ? reply.chatId! : ''
     }
     // the bookkeeper, once the character is confirmed (not awaited: the chat goes on); Settings can turn the extra call off.
     // One helper call per turn asks for both the GM's notes and the card's status panel.

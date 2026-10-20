@@ -8,7 +8,7 @@ const asks: string[] = []
 const answer = { text: '[[GM\nbeat: 1 | x | y\n]]' }
 vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: answer.text } } }))
 
-const { bookkeep, creationRequest, gameMasterRequest, noteGameMaster, storyNotesRequest } = await import('./gameMasterPage')
+const { bookkeep, creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } = await import('./gameMasterPage')
 const { statusSpec } = await import('./statusBook')
 
 const card = { type: 'character', name: 'Shadow Slave', desc: 'Character Creation … Được chưa?', firstMessage: '', globalLore: [] }
@@ -282,6 +282,46 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         c.scriptstate.$st_frag = '16/1000'
         noteGameMaster(0, c as never)
         expect(c.scriptstate.$st_frag).toBe('3/1000')
+    })
+
+    // a reroll pops the reply and asks again, but the card's script had already written its block: Shadow Slave paid the kill
+    // 0 -> 3, and the reroll, reading 3 on the panel, paid it again to 6 (Lord of the Mysteries: wages twice)
+    it('a rerolled or deleted reply takes its panel writes with it, as the GM does', () => {
+        const ssCard = { ...card, globalLore: [{ content: '[[STATUS\nfrag: 12/1000\n]]\nCURRENT RUNES\nfrag={{getvar::st_frag}}; place={{getvar::st_place}}' }] }
+        db.characters = [ssCard]
+        db.gmBookkeeper = false
+        const c = { ...chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r1' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Hầm tối.', chatId: 'r2' }, { role: 'user', data: 'Tui bắn 3 viên vào mắt nó' }], { $st_frag: '0/1000' }), id: 'chat-3' }
+        // as sendChat asks: the panel settled before the prompt is built, then the notes
+        const ask = () => { settlePanel(c as never); storyNotesRequest(req(), ssCard as never, c as never) }
+        // the narrator's block pays three on what the panel shows (status.lua writes it), the helper notes the place
+        const kill = (chatId: string) => {
+            c.message.push({ role: 'char', data: 'Viên cuối xuyên qua hốc mắt.\n\n[Ngươi đã giết một Thú Ngủ Say.]', chatId })
+            c.scriptstate.$st_frag = `${Number(c.scriptstate.$st_frag.split('/')[0]) + 3}/1000`
+            c.scriptstate.$st_place = 'khe đá'
+            noteGameMaster(0, c as never)
+        }
+        ask()
+        kill('r3')
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        // reroll: the reply is gone before the new request, which finds the panel as it was before it
+        c.message.pop()
+        ask()
+        expect(c.scriptstate.$st_frag).toBe('0/1000')
+        expect(c.scriptstate.$st_place).toBe('')
+        kill('r3b')
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        // a reply that stays keeps what it paid
+        c.message.push({ role: 'user', data: 'Tui nhìn quanh' })
+        ask()
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        c.message.push({ role: 'char', data: 'Không còn gì.', chatId: 'r4' })
+        noteGameMaster(0, c as never)
+        // deleted, then the player writes again: the deleted reply's writes go too, the earlier payment stays
+        c.scriptstate.$st_place = 'hành lang'
+        c.message.splice(-1, 1, { role: 'user', data: 'Tui quay lại' })
+        ask()
+        expect(c.scriptstate.$st_frag).toBe('3/1000')
+        expect(c.scriptstate.$st_place).toBe('khe đá')
     })
 
     it('tells the narrator what the last reply already counted, the same on a reroll', () => {
