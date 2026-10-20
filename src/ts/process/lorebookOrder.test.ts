@@ -74,4 +74,12 @@ describe('the lorebook pass, in the order a cache can reuse', () => {
         const { actives: plain } = await loadLoreBookV3Prompt()                                             // no librarian: as before
         expect(plain.map((a) => a.source)).toContain('Audrey Hall')
     })
+    it('the creation shelf on a creation turn stays in the system prompt with the rules, not with the scene\'s books', async () => {
+        db.characters = [card(LORE)]
+        setLorePicks('c1', new Set(), new Set([5]))                                                        // Audrey Hall forced, as the creation shelf is
+        const { actives } = await loadLoreBookV3Prompt()
+        clearLorePicks()
+        expect(actives.filter((a) => a.scene).map((a) => a.source)).toEqual(['Backlund'])
+        expect(actives.find((a) => a.source === 'Audrey Hall')?.scene).toBe(false)
+    })
 })
