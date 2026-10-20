@@ -66,10 +66,14 @@ export async function pickLoreForTurn(char: character | undefined, chat: Chat | 
         const recent = recentText(chat.message ?? [])
         if (!recent.trim()) return
         const room = Math.max(0, plan.room - forcedItems.reduce((n, k) => n + (index[k - 1]?.tokens ?? 0), 0))
-        const picks = plan.mode === 'shelves' ? await librarian(char, index, recent, room) : await cachedAsk(`${char.chaId}|${index.length}|titles|${recent}`, lorePickPrompt(index, recent), index.length, 12)
-        if (!picks) return
+        const got = plan.mode === 'shelves' ? await librarian(char, index, recent, room) : await cachedAsk(`${char.chaId}|${index.length}|titles|${recent}`, lorePickPrompt(index, recent), index.length, 12)
+        if (!got) return
+        const picks = Array.isArray(got) ? got : got.picks
         const chatKey = `${char.chaId}|${chat.id ?? ''}`
-        const fitted = fitPicks(index, picks.filter((k) => !forcedItems.includes(k)), (lastPicks.get(chatKey) ?? []).filter((k) => !forcedItems.includes(k)), room)
+        // last turn's picks stay for continuity; with shelves only those on a shelf named this turn (the scene still reads it),
+        // so the room is not filled with what the scene has left behind
+        const previous = (lastPicks.get(chatKey) ?? []).filter((k) => !forcedItems.includes(k) && (Array.isArray(got) || got.open.has(k)))
+        const fitted = fitPicks(index, picks.filter((k) => !forcedItems.includes(k)), previous, room)
         lastPicks.set(chatKey, fitted)
         setLorePicks(char.chaId, pickedIds(index, fitted), forced)
     } catch (e) {
@@ -77,15 +81,19 @@ export async function pickLoreForTurn(char: character | undefined, chat: Chat | 
     }
 }
 
-/** Shelves first, then the titles on the named shelves that do not come whole (loreIndex.ts shelfBooks). Null when the helper failed. */
-async function librarian(char: character, index: IndexItem[], recent: string, room: number): Promise<number[] | null> {
+/**
+ * Shelves first, then the titles on the named shelves that do not come whole (loreIndex.ts shelfBooks). `open`: every title on
+ * the named shelves. Null when the helper failed.
+ */
+async function librarian(char: character, index: IndexItem[], recent: string, room: number): Promise<{ picks: number[]; open: Set<number> } | null> {
     const shelves = buildShelves(char.globalLore ?? [], index)
     const named = await cachedAsk(`${char.chaId}|${index.length}|shelves|${recent}`, shelfPickPrompt(shelves, recent), shelves.length, MAX_SHELVES)
     if (!named) return null
-    const { whole, ask: open } = shelfBooks(shelves, named, index, room)
-    if (!open.length) return whole
+    const open = new Set(named.flatMap((k) => shelves[k - 1]?.items ?? []))
+    const { whole, ask } = shelfBooks(shelves, named, index, room)
+    if (!ask.length) return { picks: whole, open }
     const left = Math.max(0, room - whole.reduce((n, k) => n + (index[k - 1]?.tokens ?? 0), 0))
-    if (left < MIN_PART_TOKENS) return whole
-    const books = await cachedAsk(`${char.chaId}|${index.length}|books|${open.join(',')}|${recent}`, bookPickPrompt(index, open, recent), open.length, 12)
-    return books ? [...whole, ...fromSub(open, books)] : whole
+    if (left < MIN_PART_TOKENS) return { picks: whole, open }
+    const books = await cachedAsk(`${char.chaId}|${index.length}|books|${ask.join(',')}|${recent}`, bookPickPrompt(index, ask, recent), ask.length, 12)
+    return { picks: books ? [...whole, ...fromSub(ask, books)] : whole, open }
 }

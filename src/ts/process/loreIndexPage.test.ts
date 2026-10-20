@@ -80,6 +80,22 @@ describe('the librarian on the page', () => {
         expect(ids(4, 5).some((i) => lorePicked('c1', i) || loreForced('c1', i))).toBe(false)              // not a creation turn
     })
 
+    it('last turn\'s picks stay only while their shelf is still named; the room is not padded with what the scene left', async () => {
+        const c = chat([...STORY.slice(0, 3), { role: 'user', data: 'Tôi hỏi Person 0.' }])
+        answers.push('3'); answers.push('1, 2')                                                         // People: Person 0, Person 1
+        await pickLoreForTurn(card() as never, c as never)
+        expect([7, 8].map((i) => lorePicked('c1', i))).toEqual([true, true])
+        c.message.push({ role: 'char', data: 'Họ im lặng.' }, { role: 'user', data: 'Tôi rút dao đâm con quái.' })
+        answers.push('2')                                                                               // fights only
+        await pickLoreForTurn(card() as never, c as never)
+        expect(lorePicked('c1', 6)).toBe(true)
+        expect([7, 8].some((i) => lorePicked('c1', i))).toBe(false)                                     // People was not named
+        c.message.push({ role: 'char', data: 'Lưỡi dao trượt.' }, { role: 'user', data: 'Tôi gọi Person 5.' })
+        answers.push('3, 2'); answers.push('6')                                                         // People again: Person 5
+        await pickLoreForTurn(card() as never, c as never)
+        expect(lorePicked('c1', 12)).toBe(true)
+    })
+
     it('both questions read only the newest reply\'s Future Plan line (onlyNewestPlan)', async () => {
         answers.push('3')
         answers.push('1')
