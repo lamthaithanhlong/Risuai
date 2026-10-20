@@ -924,6 +924,11 @@ export interface Database{
     gameMaster?: boolean
     /** After each reply the submodel writes the GM notes that changed (gameMasterPage.ts bookkeep); on unless false. */
     gmBookkeeper?: boolean
+    /** The bookkeeper names the shelves the next reply needs and the books are asked then, so the librarian waits in the chat instead of
+     *  asking before the narrator (loreIndex.ts "the GM asks the librarian"); on unless false. */
+    loreForward?: boolean
+    /** Measuring only: the live librarian decides, what the GM's answer would have loaded is logged on the chat ($lore_shadow). */
+    loreForwardShadow?: boolean
     storyVoice?: boolean
     storyTerms?: boolean
     /** The language being learned: 'ja' | 'zh' | 'ko' | 'es' | 'fr' | 'en' | 'th'. */

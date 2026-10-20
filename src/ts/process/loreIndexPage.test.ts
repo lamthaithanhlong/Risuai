@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // asked 2026-10-20: the lore works like a librarian (index → shelf → book), the creation turns' rules are never dropped
-const db = { loreBookToken: 4000, characters: [] as unknown[] }
+const db: { loreBookToken: number; characters: unknown[]; loreForward?: boolean; loreForwardShadow?: boolean } = { loreBookToken: 4000, characters: [] }
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 const asks: string[] = []
 const answers: string[] = []
@@ -9,8 +9,8 @@ vi.mock('./request/request', () => ({
     requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: answers.shift() ?? 'none' } },
 }))
 
-const { pickLoreForTurn, creationTurn } = await import('./loreIndexPage')
-const { lorePicked, loreForced, loreLeftBehind } = await import('./loreIndex')
+const { pickLoreForTurn, creationTurn, forwardAsk, prefetchBooks, trackForward, forwardStats } = await import('./loreIndexPage')
+const { lorePicked, loreForced, loreLeftBehind, FORWARD_VAR } = await import('./loreIndex')
 
 const words = (n: number) => 'Word. '.repeat(Math.round(n * 3.9 / 6))
 const folder = (id: string, name: string, hint = '') => ({ mode: 'folder', key: `folder:${id}`, comment: name, content: hint })
@@ -130,5 +130,118 @@ describe('the librarian on the page', () => {
         expect(loreLeftBehind('c1', 6)).toBe(true)
         await pickLoreForTurn(card({ loreIndexPick: false }) as never, chat(scene) as never)
         expect(loreLeftBehind('c1', 9)).toBe(false)                                                         // no librarian this turn
+    })
+})
+
+// ---- the GM asks the librarian (2026-10-20): the shelves and the books wait in the chat, no helper call before the narrator ----------
+describe('the librarian asked by the GM', () => {
+    let seq = 0
+    const player = () => ({ role: 'user', data: `Tôi đi tiếp ${++seq}.` })                                  // each turn its own text: the answers are cached by it
+    const msgs = (): (M & { chatId?: string })[] => [...MSGS.slice(0, 3), player()]
+    const MSGS: (M & { chatId?: string })[] = [{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r0' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Mưa rơi.\n\n[💡Kế hoạch| Person 1 ]', chatId: 'r1' }, { role: 'user', data: 'Tôi đi tiếp.' }]
+    const fwVar = (over = {}) => JSON.stringify([{ at: 'r1', n: 25, shelves: ['People'], books: ['Person 1', 'Person 3'], ...over }])
+    beforeEach(() => { asks.length = 0; answers.length = 0; db.loreForward = undefined; db.loreForwardShadow = undefined; forwardStats.hit = forwardStats.books = forwardStats.miss = 0 })
+
+    it('a waiting answer for the last reply: the shelves and the books are loaded with no helper call at all', async () => {
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar() }) as never)
+        expect(asks).toHaveLength(0)
+        expect([8, 10].map((i) => lorePicked('c1', i))).toEqual([true, true])                                // Person 1, Person 3
+        expect(lorePicked('c1', 7)).toBe(false)                                                             // Person 0: not named
+        expect(loreLeftBehind('c1', 6)).toBe(true)                                                          // Combat adjudication: its shelf was not named
+        expect(forwardStats.hit).toBe(1)
+    })
+
+    it('the shelves came but the books did not: only the book question is asked, and only over the named shelf', async () => {
+        answers.push('2')
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar({ books: undefined }) }) as never)
+        expect(asks).toHaveLength(1)
+        expect(asks[0]).toContain('1. Person 0\n2. Person 1')
+        expect(asks[0]).not.toContain('SHELVES')
+        expect(lorePicked('c1', 8)).toBe(true)
+    })
+
+    it('an answer for another reply (a reroll, a newer reply) or another lorebook is not used: the live librarian asks', async () => {
+        answers.push('3'); answers.push('1')
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar({ at: 'r0' }) }) as never)
+        expect(asks).toHaveLength(2)
+        expect(asks[0]).toContain('SHELVES')
+        expect(forwardStats.miss).toBe(1)
+        asks.length = 0; answers.push('3'); answers.push('2')
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar({ n: 99 }) }) as never)
+        expect(asks).toHaveLength(2)
+    })
+
+    it('a title the player said outright is picked even though the GM did not name it', async () => {
+        await pickLoreForTurn(card() as never, chat([...MSGS.slice(0, 3), { role: 'user', data: `Tôi gọi Person 12 lại gần ${++seq}.` }], { [FORWARD_VAR]: fwVar() }) as never)
+        expect(asks).toHaveLength(0)
+        expect(lorePicked('c1', 19)).toBe(true)                                                             // Person 12
+    })
+
+    it('a rerolled reply: the answer kept for the reply before it is still there, so the reroll asks nothing', async () => {
+        const kept = JSON.stringify([{ at: 'r1', n: 25, shelves: ['People'], books: ['Person 1'] }, { at: 'r2', n: 25, shelves: ['Rules — fights and injury'], books: [] }])
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: kept }) as never)               // the chat ends at r1 again: r2 was rerolled away
+        expect(asks).toHaveLength(0)
+        expect(lorePicked('c1', 8)).toBe(true)                                                              // Person 1, from r1's answer
+        expect(lorePicked('c1', 6)).toBe(false)                                                             // not r2's shelf
+    })
+
+    it('turned off, a waiting answer is left alone', async () => {
+        db.loreForward = false
+        answers.push('3'); answers.push('1')
+        await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar() }) as never)
+        expect(asks).toHaveLength(2)
+    })
+
+    it('the bookkeeper chain still running is waited for, not asked twice', async () => {
+        const c = chat(msgs(), {})
+        let done!: () => void
+        trackForward(c as never, new Promise<void>((r) => { done = () => { c.scriptstate[FORWARD_VAR] = fwVar(); r() } }))
+        const picking = pickLoreForTurn(card() as never, c as never)
+        await Promise.resolve()
+        expect(asks).toHaveLength(0)
+        done()
+        await picking
+        expect(asks).toHaveLength(0)
+        expect(lorePicked('c1', 8)).toBe(true)
+    })
+
+    it('shadow: the live librarian decides the turn, the waiting answer is only compared with it', async () => {
+        db.loreForwardShadow = true
+        answers.push('3'); answers.push('1')                                                                // live: People, Person 0
+        const c = chat(msgs(), { [FORWARD_VAR]: fwVar() })
+        await pickLoreForTurn(card() as never, c as never)
+        expect(asks).toHaveLength(2)
+        expect(lorePicked('c1', 7)).toBe(true)                                                              // Person 0, the live pick
+        const log = JSON.parse(c.scriptstate.$lore_shadow)
+        expect(log).toHaveLength(1)
+        expect(log[0]).toMatchObject({ fwShelves: ['People'], liveShelves: ['People'], fwBooks: ['Person 1', 'Person 3'], liveBooks: ['Person 0'] })
+    })
+
+    it('the GM is asked for shelves only on a shelved card the index pass runs for, and only while the setting is on', () => {
+        expect(forwardAsk(card() as never)?.shelves.map((s) => s.name)).toEqual(['Rules — character creation', 'Rules — fights and injury', 'People'])
+        expect(forwardAsk(card({ loreIndexPick: false }) as never)).toBeNull()
+        expect(forwardAsk(card({ globalLore: LORE.slice(0, 7).filter((l) => l.mode !== 'folder') }) as never)).toBeNull()      // no shelves
+        db.loreForward = false
+        expect(forwardAsk(card() as never)).toBeNull()
+    })
+
+    it('prefetch: asks the books of the named shelves once, from the story after the reply, and keeps the titles with the answer', async () => {
+        const c = chat(MSGS.slice(0, 3), { [FORWARD_VAR]: JSON.stringify([{ at: 'r1', n: 25, shelves: ['People'] }]) })
+        answers.push('2, 4')                                                                               // Person 1, Person 3
+        await prefetchBooks(card() as never, c as never)
+        expect(asks).toHaveLength(1)
+        expect(asks[0]).toContain('Kế hoạch| Person 1')
+        expect(JSON.parse(c.scriptstate[FORWARD_VAR])[0].books).toEqual(['Person 1', 'Person 3'])
+        // a small shelf comes whole: nothing to ask
+        asks.length = 0
+        c.scriptstate[FORWARD_VAR] = JSON.stringify([{ at: 'r1', n: 25, shelves: ['Rules — fights and injury'] }])
+        await prefetchBooks(card() as never, c as never)
+        expect(asks).toHaveLength(0)
+        // the chat moved on while it asked: the answer is dropped
+        c.scriptstate[FORWARD_VAR] = JSON.stringify([{ at: 'r1', n: 25, shelves: ['People'] }])
+        c.message.push({ role: 'user', data: 'đi', }, { role: 'char', data: 'Gió.', chatId: 'r2' } as never)
+        answers.push('1')
+        await prefetchBooks(card() as never, c as never)
+        expect(JSON.parse(c.scriptstate[FORWARD_VAR])[0].books).toBeUndefined()
     })
 })

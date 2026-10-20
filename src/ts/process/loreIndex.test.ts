@@ -281,3 +281,67 @@ describe('the scene\'s books in a message of their own, so the system prompt sta
         expect(sceneLoreMessage(['  '])).toBeNull()
     })
 })
+
+// ---- the GM asks the librarian (2026-10-20) ----------------------------------------------------------------------------------
+import { bookNumbers, forwardFor, withForward, forwardUsable, mentionedBooks, parseShelvesLine, shelfNumbers, shelvesAsk, buildShelves, FORWARD_VAR, type ForwardLore } from './loreIndex'
+
+const SHELVED = [
+    { comment: 'Rules', content: 'How things work.', mode: 'folder', key: 'f:rules' },
+    { comment: 'People', content: 'Canon characters.', mode: 'folder', key: 'f:people' },
+    { comment: 'Fights', content: 'Combat.', folder: 'f:rules' },
+    { comment: 'Haruto Quinn', content: 'The neighbour in 703.', folder: 'f:people' },
+    { comment: 'Evelyn', content: 'The ghost.', folder: 'f:people' },
+]
+
+describe('the GM names the shelves the next reply needs', () => {
+    const shelves = buildShelves(SHELVED)
+    it('the bookkeeper is asked for one shelves line, from the shelf list, outside its notes block', () => {
+        const a = shelvesAsk(shelves)
+        expect(a).toContain('1. Rules — How things work. (1)\n2. People — Canon characters. (2)')
+        expect(a).toMatch(/shelves: /)
+        expect(a).toMatch(/Future Plan/)
+    })
+    it('reads the shelves line: in range, once, at most max; "none" is an answer; no line is no answer', () => {
+        expect(parseShelvesLine('[[GM\nbeat: 1 | a | b\n]]\nshelves: 2, 1, 2, 9', 2)).toEqual([2, 1])
+        expect(parseShelvesLine('shelves: none', 2)).toEqual([])
+        expect(parseShelvesLine('Shelves: 1 2 3 4 5 6', 9, 4)).toHaveLength(4)
+        expect(parseShelvesLine('[[GM\nbeat: 1 | a | b\n]]', 2)).toBeNull()
+        expect(parseShelvesLine('shelves:', 2)).toBeNull()
+    })
+    it('a forward answer is kept by names, so it survives a lorebook that was reordered', () => {
+        const fw: ForwardLore = { at: 'r2', n: 3, shelves: ['People', 'Gone'], books: ['Evelyn', 'Nobody'] }
+        expect(shelfNumbers(fw, shelves)).toEqual([2])
+        expect(bookNumbers(fw, buildLoreIndex(SHELVED))).toEqual([3])
+    })
+    it('usable only for the reply it answers, and the lorebook it was asked on', () => {
+        const fw: ForwardLore = { at: 'r2', n: 3, shelves: ['People'] }
+        expect(forwardUsable(fw, 'r2', 3)).toBe(true)
+        expect(forwardUsable(fw, 'r3', 3)).toBe(false)                           // a reroll or a newer reply
+        expect(forwardUsable(fw, 'r2', 4)).toBe(false)                           // the lorebook changed
+        expect(forwardUsable(null, 'r2', 3)).toBe(false)
+        expect(forwardUsable(fw, undefined, 3)).toBe(false)
+    })
+    it('keeps the newest few answers on the chat, one a reply, and a broken value is nothing', () => {
+        const fw = (at: string, extra = {}): ForwardLore => ({ at, n: 3, shelves: ['People'], ...extra })
+        let v = withForward({}, fw('r1'))
+        v = withForward({ [FORWARD_VAR]: v }, fw('r2', { books: ['Evelyn'] }))
+        expect(forwardFor({ [FORWARD_VAR]: v }, 'r1')).toEqual(fw('r1'))                      // a reroll of r2 finds r1's answer still there
+        expect(forwardFor({ [FORWARD_VAR]: v }, 'r2')?.books).toEqual(['Evelyn'])
+        v = withForward({ [FORWARD_VAR]: v }, fw('r2', { books: ['Haruto Quinn'] }))          // the same reply again: replaced, not added
+        expect(JSON.parse(v)).toHaveLength(2)
+        for (const at of ['r3', 'r4', 'r5']) v = withForward({ [FORWARD_VAR]: v }, fw(at))
+        expect(JSON.parse(v).map((f: ForwardLore) => f.at)).toEqual(['r2', 'r3', 'r4', 'r5'])   // the oldest left
+        expect(forwardFor({ [FORWARD_VAR]: '{nope' }, 'r1')).toBeNull()
+        expect(forwardFor({}, 'r1')).toBeNull()
+        expect(forwardFor(undefined, 'r1')).toBeNull()
+        expect(forwardFor({ [FORWARD_VAR]: v }, undefined)).toBeNull()
+    })
+    it('a title the player just said is a pick the GM could not have known', () => {
+        const index = buildLoreIndex(SHELVED)
+        expect(mentionedBooks(index, 'Tôi gọi Haruto Quinn qua tường.')).toEqual([2])
+        expect(mentionedBooks(index, 'tôi hỏi evelyn')).toEqual([3])             // any case
+        expect(mentionedBooks(buildLoreIndex([{ comment: 'Person 1', content: 'x' }, { comment: 'Person 12', content: 'y' }]), 'Tôi gọi Person 12.')).toEqual([2])   // a whole run, not a prefix
+        expect(mentionedBooks(index, 'Tôi đi tiếp.')).toEqual([])
+        expect(mentionedBooks(buildLoreIndex([{ comment: 'Mai', content: 'x' }, { comment: 'Evelyn', content: 'y' }]), 'Mai đi chợ')).toEqual([])   // under 4 letters: too common a word
+    })
+})

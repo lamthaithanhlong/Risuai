@@ -17,6 +17,8 @@
 //     --narrator-slot S  the COPY plays on the model slot named S (e.g. codex) whatever slot the live save has active
 //     --max-context N    DIAGNOSTIC: the COPY's maxContext set to N (to measure what sits behind a context blocker); the
 //                        scorecards say so, and the default out dir gets a -diag suffix
+//     --lore-forward M   on | off | shadow: the COPY's loreForward (the GM names the shelves, loreIndex.ts); shadow keeps the live librarian
+//                        and logs what the GM's answer would have loaded ($lore_shadow). Not diagnostic: the scorecards are comparable.
 //     --dump-requests    write each narrator and lore-helper request body to OUT/requests/<story>/ (the prompt cache's shared prefix)
 //     --script FILE      play FILE's turns instead of the story's own ({"ss": [{"kind": "action", "text": "…"}], …}), no
 //                        step-by-step run; each turn waits for the bookkeeper and records the panel after it (turn.after)
@@ -43,6 +45,7 @@ const flag = (n) => argv.includes(n)
 const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d }
 const today = new Date().toLocaleDateString('sv-SE')
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
+const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
 const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
 
@@ -107,6 +110,11 @@ async function playStory(key, ctx) {
         const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, { forceReplaceUrl: ctx.web.url })
         rec.narrator = `ChatGPT web (${ctx.web.model}, effort ${ctx.web.effort}) through ${ctx.web.url} for requests to "${ctx.web.narrator}"; the copy's URL was ${was.forceReplaceUrl || 'the default'}`
         log(rec.narrator)
+    }
+    if (LORE_FORWARD) {
+        patchCopyRoot(path.join(dir, 'save'), ctx.backend, LORE_FORWARD)
+        rec.loreForward = opt('--lore-forward')
+        log(`lore forward: ${rec.loreForward}`)
     }
     if (DIAG) {
         const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, DIAG)

@@ -407,3 +407,73 @@ export function sceneLoreMessage(prompts: string[]): { role: 'user'; content: st
     if (!books.length) return null
     return { role: 'user', content: `system: [Lore for this scene]\n\n${books.join('\n\n')}` }
 }
+
+// ---- the GM asks the librarian (2026-10-20) ----------------------------------------------------------------------------------
+// Measured on the four story cards (acceptance run 2026-10-20-cheaper-4; 9router's own log for the runs after it): a story turn
+// made ~2.7 helper calls, the shelf call and the book call one after the other BEFORE the narrator (median 3.4 s + 2.8 s of a
+// ~13 s turn), the GM's bookkeeper after it (4.5 s, off the way). Each call carries a fixed ~2.4k tokens besides its text.
+// The bookkeeper already reads the reply and the Future Plan line, which is exactly what the shelf call reads. So it names the
+// shelves the NEXT reply needs in the same answer, the app asks the books of those shelves right then (nobody is waiting), and
+// the next turn finds both waiting in the chat's variables; the live librarian stays for the first turn, a reroll, a bookkeeper
+// that was slow or off, and a lorebook that changed. What the player's next message says is not known then: the key words
+// still wake what it names, and a title it says outright is added (mentionedBooks).
+
+/** What the GM's answer after reply `at` says the next reply needs: shelf names, then the books picked from them (titles). */
+export type ForwardLore = { at: string; n: number; shelves: string[]; books?: string[] }
+export const FORWARD_VAR = '$lore_next'
+
+/** The part of the bookkeeper's request that asks for the shelves. */
+export function shelvesAsk(shelves: Shelf[], max = MAX_SHELVES): string {
+    return `THE LORE SHELVES (the library the next reply draws on):\n${shelfLines(shelves)}\n\n`
+        + `After the block, on its own line, write which shelves the NEXT reply needs to stay true to the canon and the rules: the places, creatures, people, powers and rules the scene is about or is about to meet, going by where the story is heading (the Future Plan line, the place, who is there, what is about to happen).`
+        + ` Format: "shelves: 2, 5" (numbers only, at most ${max}, the most needed first), or "shelves: none".`
+}
+
+/** The shelf numbers on the answer's "shelves:" line: in range, once each, at most max; null when the answer has no such line. */
+export function parseShelvesLine(answer: string, n: number, max = MAX_SHELVES): number[] | null {
+    const m = /^[ \t>*-]*shelves[ \t]*:[ \t]*(.*)$/im.exec(answer ?? '')
+    if (!m || !m[1].trim()) return null
+    return parseLorePick(m[1], n, max)
+}
+
+/** The answers kept on a chat: the newest few, so a rerolled or deleted reply finds the answer of the reply before it still there. */
+export const FORWARD_KEEP = 4
+function forwardsIn(vars: Record<string, unknown> | undefined): ForwardLore[] {
+    const raw = vars?.[FORWARD_VAR]
+    if (!raw || typeof raw !== 'string') return []
+    try {
+        const v = JSON.parse(raw)
+        return Array.isArray(v) ? v.filter((x) => x && typeof x.at === 'string' && Array.isArray(x.shelves) && typeof x.n === 'number') : []
+    } catch { return [] }
+}
+/** The answer kept for the reply `at` (a broken value is nothing). */
+export function forwardFor(vars: Record<string, unknown> | undefined, at: string | undefined): ForwardLore | null {
+    return at ? forwardsIn(vars).find((f) => f.at === at) ?? null : null
+}
+/** The chat variable's new value with `fw` in it (replacing the answer for the same reply), the newest FORWARD_KEEP kept. */
+export function withForward(vars: Record<string, unknown> | undefined, fw: ForwardLore): string {
+    return JSON.stringify([...forwardsIn(vars).filter((f) => f.at !== fw.at), fw].slice(-FORWARD_KEEP))
+}
+/** Usable for this turn: it answers the reply the chat ends with (not a rerolled one, not an older one), on the same lorebook. */
+export function forwardUsable(fw: ForwardLore | null, lastReplyId: string | undefined, indexLength: number): fw is ForwardLore {
+    return !!fw && !!lastReplyId && fw.at === lastReplyId && fw.n === indexLength
+}
+/** The shelf numbers (1-based) of the names it carries, as the lorebook is now. */
+export function shelfNumbers(fw: ForwardLore, shelves: Shelf[]): number[] {
+    return fw.shelves.map((name) => shelves.findIndex((s) => s.name === name) + 1).filter((k) => k > 0)
+}
+/** The index numbers of the titles it carries. */
+export function bookNumbers(fw: ForwardLore, index: IndexItem[]): number[] {
+    return (fw.books ?? []).map((t) => index.findIndex((it) => it.title === t) + 1).filter((k) => k > 0)
+}
+/** The titles the player said outright (a name, a place): a pick no forward guess could have, found without a helper call. A
+ *  title counts as a whole word run ("Person 1" is not in "Person 12"). */
+export function mentionedBooks(index: IndexItem[], text: string, min = 4): number[] {
+    const t = (text ?? '').toLowerCase()
+    if (!t) return []
+    return index.flatMap((it, i) => {
+        const title = it.title.trim().toLowerCase()
+        if (title.length < min) return []
+        return new RegExp(`(?<![\\p{L}\\p{N}])${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(t) ? [i + 1] : []
+    })
+}

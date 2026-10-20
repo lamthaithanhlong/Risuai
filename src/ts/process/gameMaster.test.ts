@@ -375,3 +375,18 @@ describe('a due reward or consequence that landed is never due again', () => {
     })
 })
 
+
+describe('the bookkeeper also names the shelves (the GM asks the librarian)', () => {
+    it('the shelves request is part of the prompt only when the card has shelves, with and without the GM notes', () => {
+        expect(bookkeepPrompt({}, 'p', 'r', 'x')).not.toContain('LORE SHELVES')
+        const lore = 'THE LORE SHELVES (x):\n1. People (3)\n\nAfter the block write "shelves: 2".'
+        const withGm = bookkeepPrompt({}, 'p', 'r', 'x', '', lore)
+        expect(withGm).toContain('1. People (3)')
+        expect(withGm.indexOf('Write the notes this reply changed')).toBeLessThan(withGm.indexOf('LORE SHELVES'))     // after the block's format
+        expect(bookkeepPrompt(null, 'p', 'r', 'x', 'STATUS PART', lore)).toMatch(/STATUS PART[\s\S]*LORE SHELVES/)
+    })
+    it('the shelves line is not mistaken for a note', () => {
+        expect(parseBookkeep('[[GM\nbeat: 2 | a | b\n]]\nshelves: 1, 3')).toEqual(['\nbeat: 2 | a | b\n'])
+        expect(parseBookkeep('shelves: 1, 3')).toBeNull()
+    })
+})

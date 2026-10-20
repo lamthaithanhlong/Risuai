@@ -3,7 +3,7 @@
 // whose lore is on shelves (Risu lore folders) is asked like a librarian: the shelves first, then the titles on those shelves.
 import { getDatabase, type character, type Chat } from '../storage/database.svelte'
 import { hasCreationStep, hasPanel, gmStateOf, yesAt } from './gameMaster'
-import { bookPickPrompt, buildLoreIndex, buildShelves, clearLorePicks, creationItems, fitPicks, fromSub, lorePickPrompt, MAX_SHELVES, MIN_ENTRIES, MIN_PART_TOKENS, parseLorePick, pickedIds, planLore, recentText, setLorePicks, shelfBooks, shelfPickPrompt, type IndexItem } from './loreIndex'
+import { bookNumbers, bookPickPrompt, buildLoreIndex, buildShelves, clearLorePicks, creationItems, fitPicks, forwardFor, forwardUsable, FORWARD_VAR, fromSub, lorePickPrompt, MAX_SHELVES, mentionedBooks, MIN_ENTRIES, MIN_PART_TOKENS, parseLorePick, pickedIds, planLore, recentText, setLorePicks, shelfBooks, shelfNumbers, shelfPickPrompt, withForward, type ForwardLore, type IndexItem, type Shelf } from './loreIndex'
 
 const TIMEOUT_MS = 20_000
 const cache = new Map<string, number[]>()
@@ -66,7 +66,7 @@ export async function pickLoreForTurn(char: character | undefined, chat: Chat | 
         const recent = recentText(chat.message ?? [])
         if (!recent.trim()) return
         const room = Math.max(0, plan.room - forcedItems.reduce((n, k) => n + (index[k - 1]?.tokens ?? 0), 0))
-        const got = plan.mode === 'shelves' ? await librarian(char, index, recent, room) : await cachedAsk(`${char.chaId}|${index.length}|titles|${recent}`, lorePickPrompt(index, recent), index.length, 12)
+        const got = plan.mode === 'shelves' ? await shelvedPicks(char, chat, index, recent, room) : await cachedAsk(`${char.chaId}|${index.length}|titles|${recent}`, lorePickPrompt(index, recent), index.length, 12)
         if (!got) return
         const picks = Array.isArray(got) ? got : got.picks
         const chatKey = `${char.chaId}|${chat.id ?? ''}`
@@ -84,17 +84,122 @@ export async function pickLoreForTurn(char: character | undefined, chat: Chat | 
 
 /**
  * Shelves first, then the titles on the named shelves that do not come whole (loreIndex.ts shelfBooks). `open`: every title on
- * the named shelves. Null when the helper failed.
+ * the named shelves. Null when the helper failed. `fw`: the GM already named the shelves (and maybe the books) for this reply:
+ * those questions are not asked again, and a title the player said outright is added (it could not be known before).
  */
-async function librarian(char: character, index: IndexItem[], recent: string, room: number): Promise<{ picks: number[]; open: Set<number> } | null> {
+async function librarian(char: character, index: IndexItem[], recent: string, room: number, fw?: ForwardLore | null, player = ''): Promise<{ picks: number[]; open: Set<number> } | null> {
     const shelves = buildShelves(char.globalLore ?? [], index)
-    const named = await cachedAsk(`${char.chaId}|${index.length}|shelves|${recent}`, shelfPickPrompt(shelves, recent), shelves.length, MAX_SHELVES)
-    if (!named) return null
-    const open = new Set(named.flatMap((k) => shelves[k - 1]?.items ?? []))
+    let named: number[]
+    if (fw) named = shelfNumbers(fw, shelves)
+    else {
+        const got = await cachedAsk(`${char.chaId}|${index.length}|shelves|${recent}`, shelfPickPrompt(shelves, recent), shelves.length, MAX_SHELVES)
+        if (!got) return null
+        named = got
+    }
+    const said = fw ? mentionedBooks(index, player) : []
+    const open = new Set([...named.flatMap((k) => shelves[k - 1]?.items ?? []), ...said])
     const { whole, ask } = shelfBooks(shelves, named, index, room)
-    if (!ask.length) return { picks: whole, open }
+    if (!ask.length) return { picks: [...said, ...whole], open }
     const left = Math.max(0, room - whole.reduce((n, k) => n + (index[k - 1]?.tokens ?? 0), 0))
-    if (left < MIN_PART_TOKENS) return { picks: whole, open }
+    if (left < MIN_PART_TOKENS) return { picks: [...said, ...whole], open }
+    if (fw?.books) return { picks: [...said, ...whole, ...bookNumbers(fw, index).filter((k) => ask.includes(k))], open }
     const books = await cachedAsk(`${char.chaId}|${index.length}|books|${ask.join(',')}|${recent}`, bookPickPrompt(index, ask, recent), ask.length, 12)
-    return { picks: books ? [...whole, ...fromSub(ask, books)] : whole, open }
+    return { picks: books ? [...said, ...whole, ...fromSub(ask, books)] : [...said, ...whole], open }
+}
+
+// ---- the GM asks the librarian (loreIndex.ts, 2026-10-20) ---------------------------------------------------------------------
+// The bookkeeper that runs after a reply names the shelves the next reply needs (gameMasterPage.ts bookkeep), the books of those
+// shelves are asked right then (prefetchBooks), and both wait in the chat's variables; this turn finds them and asks nothing
+// before the narrator. Anything missing, stale or off: the live librarian above, as before.
+
+/** What the GM's answers saved the helper this session (for the acceptance scorecard and the console). */
+export const forwardStats = { hit: 0, books: 0, miss: 0 }
+
+/** On unless the setting is off. */
+const forwardOn = () => getDatabase().loreForward !== false
+
+/** What the bookkeeper needs to ask for the shelves: the card's shelves, when this card runs the librarian; else null. */
+export function forwardAsk(char: character | undefined): { shelves: Shelf[]; indexLength: number } | null {
+    if (!char || char.type !== 'character' || !forwardOn() || !loreIndexOn(char)) return null
+    const lore = char.globalLore ?? []
+    const index = buildLoreIndex(lore)
+    const plan = planLore(lore, char.loreSettings?.tokenBudget ?? getDatabase().loreBookToken)
+    return plan.mode === 'shelves' ? { shelves: buildShelves(lore, index), indexLength: index.length } : null
+}
+
+/** The bookkeeper chains of this session, by chat: the next turn waits for the one still running instead of asking itself. */
+const pending = new Map<string, Promise<unknown>>()
+const FORWARD_WAIT_MS = 8_000
+export function trackForward(chat: Chat, p: Promise<unknown>): void {
+    const key = chat.id ?? ''
+    const q = p.catch(() => undefined).finally(() => { if (pending.get(key) === q) pending.delete(key) })
+    pending.set(key, q)
+}
+
+const lastReplyId = (chat: Chat) => [...(chat.message ?? [])].reverse().find((m) => m.role === 'char')?.chatId
+const lastPlayer = (chat: Chat) => [...(chat.message ?? [])].reverse().find((m) => m.role === 'user')?.data ?? ''
+
+/**
+ * The books of the shelves the GM named, asked now (nobody is waiting on it) from the story as it stands after the reply, and
+ * kept with the shelves in the chat's variable. Dropped when the chat has moved on meanwhile (a reroll, a newer reply).
+ */
+export async function prefetchBooks(char: character, chat: Chat): Promise<void> {
+    try {
+        const fw = forwardFor(chat.scriptstate, lastReplyId(chat))
+        const lore = char.globalLore ?? []
+        const index = buildLoreIndex(lore)
+        if (!forwardUsable(fw, lastReplyId(chat), index.length)) return
+        const plan = planLore(lore, char.loreSettings?.tokenBudget ?? getDatabase().loreBookToken)
+        const shelves = buildShelves(lore, index)
+        const { whole, ask } = shelfBooks(shelves, shelfNumbers(fw, shelves), index, plan.room)
+        const left = Math.max(0, plan.room - whole.reduce((n, k) => n + (index[k - 1]?.tokens ?? 0), 0))
+        if (!ask.length || left < MIN_PART_TOKENS) return
+        const recent = recentText(chat.message ?? [])
+        const books = await cachedAsk(`${char.chaId}|${index.length}|books|${ask.join(',')}|${recent}`, bookPickPrompt(index, ask, recent), ask.length, 12)
+        const now = forwardFor(chat.scriptstate, lastReplyId(chat))
+        if (!books || !forwardUsable(now, lastReplyId(chat), index.length) || now.at !== fw.at) return
+        chat.scriptstate ??= {}
+        chat.scriptstate[FORWARD_VAR] = withForward(chat.scriptstate, { ...now, books: fromSub(ask, books).map((k) => index[k - 1].title) })
+    } catch (e) {
+        console.warn('[lore index] prefetch skipped', e)
+    }
+}
+
+/** The picks of a shelved card: from the GM's waiting answer when there is one for this reply, else the live librarian. */
+async function shelvedPicks(char: character, chat: Chat, index: IndexItem[], recent: string, room: number): Promise<{ picks: number[]; open: Set<number> } | null> {
+    const shadow = getDatabase().loreForwardShadow === true
+    let fw: ForwardLore | null = null
+    if (forwardOn() || shadow) {
+        const run = pending.get(chat.id ?? '')
+        if (run) await Promise.race([run, new Promise((r) => setTimeout(r, FORWARD_WAIT_MS))])
+        const v = forwardFor(chat.scriptstate, lastReplyId(chat))
+        fw = forwardUsable(v, lastReplyId(chat), index.length) ? v : null
+    }
+    if (shadow) return shadowPicks(char, chat, index, recent, room, fw)
+    if (!fw) { if (forwardOn()) forwardStats.miss++; return librarian(char, index, recent, room) }
+    forwardStats.hit++
+    if (fw.books) forwardStats.books++
+    return librarian(char, index, recent, room, fw, lastPlayer(chat))
+}
+
+/**
+ * Measuring: the live librarian decides the turn; what the GM's waiting answer would have loaded is kept on the chat
+ * ("$lore_shadow") beside it, as titles, to read back after a run.
+ */
+async function shadowPicks(char: character, chat: Chat, index: IndexItem[], recent: string, room: number, fw: ForwardLore | null) {
+    const live = await librarian(char, index, recent, room)
+    const shelves = buildShelves(char.globalLore ?? [], index)
+    const title = (ks: number[]) => ks.map((k) => index[k - 1]?.title).filter(Boolean)
+    const sh = (ids: Set<number>) => shelves.filter((s) => s.items.some((k) => ids.has(k))).map((s) => s.name)
+    const fwd = fw ? await librarianNoAsk(char, index, recent, room, fw, lastPlayer(chat)) : null
+    const entry = { at: lastReplyId(chat) ?? '', hit: !!fw, books: !!fw?.books, fwShelves: fw?.shelves ?? [], liveShelves: live ? sh(live.open) : [], fwBooks: fwd ? title(fwd.picks) : [], liveBooks: live ? title(live.picks) : [] }
+    let log: unknown[] = []
+    try { log = JSON.parse(String(chat.scriptstate?.$lore_shadow || '[]')) } catch { log = [] }
+    chat.scriptstate ??= {}
+    chat.scriptstate.$lore_shadow = JSON.stringify([...log, entry].slice(-60))
+    return live
+}
+/** What the waiting answer alone would load: its books, none asked for. */
+async function librarianNoAsk(char: character, index: IndexItem[], recent: string, room: number, fw: ForwardLore, player: string) {
+    return librarian(char, index, recent, room, { ...fw, books: fw.books ?? [] }, player)
 }

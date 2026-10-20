@@ -6,6 +6,8 @@ import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasF
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
+import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
+import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
 
 type Room = character | groupChat
 
@@ -217,7 +219,13 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     // the chat is read again when the answer comes: it may have been replaced meanwhile (as scenePicturesPage does)
     const live = () => getDatabase().characters[charIndex]?.chats?.find((c) => c === chat || (!!chat.id && c.id === chat.id)) ?? chat
     const redraw = () => { const c = getDatabase().characters[charIndex]; if (c) c.reloadKeys = (c.reloadKeys ?? 0) + 1 }
-    void bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written }).catch((e) => console.warn('[game master] bookkeeper failed', e))
+    // the same call also names the shelves the next reply needs (loreIndex.ts "the GM asks the librarian"); the chain, books included,
+    // is tracked so the next turn waits for it rather than asking the shelf question itself
+    const ask = forwardAsk(card)
+    const lore = ask ? { ...ask, prefetch: () => prefetchBooks(card, live()) } : undefined
+    const run = bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written, lore })
+    trackForward(chat, run)
+    void run.catch((e) => console.warn('[game master] bookkeeper failed', e))
 }
 
 const BOOKKEEP_TIMEOUT_MS = 60_000
@@ -227,7 +235,8 @@ const BOOKKEEP_TIMEOUT_MS = 60_000
  * while that reply is still the chat's last one. True when anything was written.
  */
 export async function bookkeep(live: () => Chat, reply: { data: string; chatId?: string }, replies: number, flavour: string,
-    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void; written?: Record<string, string> } = {}): Promise<boolean> {
+    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void; written?: Record<string, string>
+        lore?: { shelves: Shelf[]; indexLength: number; prefetch?: () => Promise<void> } } = {}): Promise<boolean> {
     const wantGm = opts.gm !== false
     const before = live()
     const player = [...before.message].reverse().find((m) => m.role === 'user')?.data ?? ''
@@ -235,7 +244,7 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     const said = before.message.filter((m) => m.role === 'char')
     const previous = (said.at(-1)?.data === reply.data || (!!reply.chatId && said.at(-1)?.chatId === reply.chatId) ? said.at(-2) : said.at(-1))?.data ?? ''
     const written = opts.written ?? {}
-    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '')
+    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '')
     const answer = await (ask ?? askSubmodel)(prompt)
     const chat = live()
     const last = chat.message[chat.message.length - 1]
@@ -254,6 +263,14 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
             opts.redraw?.()
             wrote = true
         }
+    }
+    // the shelves the next reply needs, kept with the reply they answer; then the books of those shelves (nobody waits on it)
+    const named = opts.lore && reply.chatId ? parseShelvesLine(answer, opts.lore.shelves.length) : null
+    if (opts.lore && named) {
+        chat.scriptstate ??= {}
+        chat.scriptstate[FORWARD_VAR] = withForward(chat.scriptstate, { at: reply.chatId!, n: opts.lore.indexLength, shelves: named.map((k) => opts.lore!.shelves[k - 1].name) })
+        wrote = true
+        await opts.lore.prefetch?.()
     }
     return wrote
 }

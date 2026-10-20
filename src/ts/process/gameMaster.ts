@@ -589,15 +589,17 @@ export function stateLines(state: GmState): string {
 /**
  * The helper's request: the notes, the player's turn and the reply; it answers with one [[GM]] block. `status` is the card's
  * own panel part (statusBook.ts), asked in the same call so a turn costs one helper call; `state` null leaves the GM part out.
+ * `lore`: the librarian's shelf question (loreIndex.ts shelvesAsk), asked in the same call too.
  */
-export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = ''): string {
+export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = '', lore = ''): string {
     const cut = (s: string, n: number) => { const t = (s ?? '').trim(); return t.length > n ? '…' + t.slice(-n) : t }
     const turn = `THE PLAYER'S LAST ACTION:
 ${cut(player, 800)}
 
 THE STORY'S REPLY:
 ${cut(reply, 3500)}`
-    if (!state) return `You keep the status panel of an interactive story.\n\n${turn}\n\n${status}`
+    const shelves = lore ? `\n\n${lore}` : ''
+    if (!state) return `You keep the status panel of an interactive story.\n\n${turn}\n\n${status}${shelves}`
     const side = playerSide(player)
     return `You keep the Game Master's notes for an interactive story: the player's own story inside a novel's world, not the novel's plot.
 
@@ -618,7 +620,7 @@ reward: <what> | <when it is paid>   (paid in this reply: reward: <what> | done)
 consequence: <what> | <when it lands>   (landed in this reply: consequence: <what> | done)
 canon: <in-world date> | <what canon people are doing off-screen>
 ]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${status ? `\n\n${status}` : ''}`
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${status ? `\n\n${status}` : ''}${shelves}`
 }
 
 /** The block in the helper's answer (a bare list of lines counts too), or null. Its [[STATUS]] block is not part of it. */

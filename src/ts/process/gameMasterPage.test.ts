@@ -369,3 +369,61 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         expect(storyNotesRequest(req(), lotm as never, c as never)[1].content).toContain('the last reply already counted money — → 6 pence')
     })
 })
+
+// ---- the GM asks the librarian (2026-10-20) ----------------------------------------------------------------------------------
+describe('the bookkeeper names the shelves for the next reply', () => {
+    const shelves = [{ name: 'Rules', hint: '', items: [1], tokens: 100 }, { name: 'People', hint: '', items: [2, 3], tokens: 2000 }]
+    const lore = (prefetch?: () => Promise<void>) => ({ shelves, indexLength: 3, prefetch })
+    const story = () => chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'Tôi gọi Haruto.' }, { role: 'char', data: 'Haruto đáp.\n[💡Kế hoạch| Evelyn ]', chatId: 'r2' }], { $st_name: 'Mai' })
+
+    it('asks for the shelves in the same call and keeps the named ones, by name, for the reply it answered', async () => {
+        const c = story()
+        let asked = ''
+        let fetched = 0
+        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 1 | a | b\n]]\nshelves: 2, 1' }, { lore: lore(async () => { fetched++ }) })
+        expect(ok).toBe(true)
+        expect(asked).toContain('THE LORE SHELVES')
+        expect(asked).toContain('2. People')
+        expect(JSON.parse(c.scriptstate.$lore_next)).toEqual([{ at: 'r2', n: 3, shelves: ['People', 'Rules'] }])
+        expect(c.scriptstate.$gm_beat).toBe('1 | a | b')                                                    // the notes still land
+        expect(fetched).toBe(1)                                                                              // and the books of those shelves are asked
+    })
+
+    it('no shelves line, or the reply replaced meanwhile: nothing is kept and nothing is fetched', async () => {
+        let fetched = 0
+        const c = story()
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async () => '[[GM\nbeat: 1 | a | b\n]]', { lore: lore(async () => { fetched++ }) })
+        expect(c.scriptstate.$lore_next).toBeUndefined()
+        const d = story()
+        await bookkeep(() => d as never, d.message[2], 2, 'x', async () => { d.message.push({ role: 'user', data: 'đi' }, { role: 'char', data: 'reroll', chatId: 'r3' }); return 'shelves: 1' }, { lore: lore(async () => { fetched++ }) })
+        expect(d.scriptstate.$lore_next).toBeUndefined()
+        expect(fetched).toBe(0)
+    })
+
+    it('"shelves: none" is an answer: the next reply needs no shelf', async () => {
+        const c = story()
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async () => '[[GM\nbeat: 1 | a | b\n]]\nshelves: none', { lore: lore() })
+        expect(JSON.parse(c.scriptstate.$lore_next)[0].shelves).toEqual([])
+    })
+
+    it('without a lore request the prompt is the old one', async () => {
+        const c = story()
+        let asked = ''
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 1 | a | b\n]]' })
+        expect(asked).not.toContain('SHELVES')
+    })
+
+    it('after a reply the chain is tracked, so the next turn waits for it (card with shelves)', async () => {
+        const shelved = { ...card, chaId: 'c9', globalLore: [{ mode: 'folder', key: 'f:a', comment: 'Rules', content: '' }, { mode: 'folder', key: 'f:b', comment: 'People', content: '' },
+            ...Array.from({ length: 30 }, (_, i) => ({ comment: `Book ${i}`, content: 'Word. '.repeat(500), folder: i % 2 ? 'f:a' : 'f:b' }))] }
+        db.characters = [shelved]
+        answer.text = '[[GM\nbeat: 1 | a | b\n]]\nshelves: 2'
+        asks.length = 0
+        const c = story()
+        c.scriptstate.$gm_arc = 'a | b | c | d'
+        noteGameMaster(0, c as never)
+        await new Promise((r) => setTimeout(r, 20))
+        expect(asks[0]).toContain('THE LORE SHELVES')
+        expect(JSON.parse(c.scriptstate.$lore_next)[0].shelves).toEqual(['People'])
+    })
+})
