@@ -4,6 +4,7 @@
 //   node tests/acceptance/jank.mjs --dist <built client dir> [--label before] [--base <snapshot dir>] [--port 6111] [--idle 30]
 //        [--cpu 4] (CPU throttling, a phone-class CPU) [--card <name part>] (the character to play; default the biggest)
 //        [--turns 3] (played turns without a model: a streamed reply plus the story layer's edits) [--dump-global <name>]
+//        [--other-page] (another page writes once before this page's first save, so that save is merged: the live state with two pages)
 //
 // Note: Playwright keeps the DevTools Network domain on, which copies every request body in the page; a 7 MB /api/write then costs
 // the page ~11 ms (x4 throttled) that a plain browser does not pay (0 ms measured). `fetch` in the profile is mostly that.
@@ -56,6 +57,33 @@ function analyseProfile(prof, mapPos) {
     }
 }
 
+const stats = (xs) => {
+    if (!xs.length) return null
+    const v = [...xs].sort((a, b) => a - b)
+    const q = (p) => Math.round(v[Math.min(v.length - 1, Math.floor(p * v.length))] * 10) / 10
+    return { n: v.length, mean: Math.round(v.reduce((a, x) => a + x, 0) / v.length * 10) / 10, p50: q(0.5), p90: q(0.9), max: q(1) }
+}
+
+/** The server's `[Sync] trace` / `[Story] trace` lines (RISU_SYNC_TRACE=1): how each write was stored and its event-loop ms. */
+function serverTrace(logFile) {
+    const lines = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').split('\n') : []
+    const writes = []
+    const story = []
+    for (const l of lines) {
+        const m = /\[Sync\] trace how=(\S+) bytes=(\d+) onWrite=([\d.]+) merge=([\d.]+) queue=([\d.]+) handler=([\d.]+)/.exec(l)
+        const d = /changed=(\d+) changedBytes=(\d+) names=(\S*)/.exec(l)
+        if (m) writes.push({ how: m[1], bytes: +m[2], onWrite: +m[3], merge: +m[4], queue: +m[5], handler: +m[6], changed: d ? +d[1] : null, changedBytes: d ? +d[2] : null, names: d ? d[3] : null })
+        const s = /\[Story\] trace sync=([\d.]+)/.exec(l)
+        if (s) story.push(+s[1])
+    }
+    const how = {}
+    for (const w of writes) how[w.how] = (how[w.how] ?? 0) + 1
+    return { how, onWrite: stats(writes.map((w) => w.onWrite)), merge: stats(writes.map((w) => w.merge)), queue: stats(writes.map((w) => w.queue)),
+        handler: stats(writes.map((w) => w.handler)), story: stats(story),
+        bytes: stats(writes.map((w) => w.bytes)), changedBytes: stats(writes.filter((w) => w.changedBytes != null).map((w) => w.changedBytes)),
+        changedBlocks: stats(writes.filter((w) => w.changed != null).map((w) => w.changed)), changedNames: [...new Set(writes.map((w) => w.names).filter(Boolean))], sync: lines.filter((l) => l.startsWith('[Sync]') && !l.includes(' trace ')).slice(-5) }
+}
+
 async function sourceMapper(distDir) {
     const { SourceMapConsumer } = require(path.join(path.dirname(new URL(import.meta.url).pathname), '../../node_modules/source-map'))
     const cache = new Map()
@@ -90,6 +118,7 @@ async function main() {
     fs.symlinkSync(dist, path.join(runDir, 'dist'))
     const { dir, password } = copySave(runDir, base, 'copy')
     const port = await freePort(Number(opt('--port', 6111)))
+    process.env.RISU_SYNC_TRACE = '1'          // the server logs where each write's event-loop time went (server.cjs /api/write)
     const server = await startServer(dir, port, { backend })
     const browser = await chromium.launch({ headless: true })
     const out = { label, dist, port, phases: {} }
@@ -168,6 +197,22 @@ async function main() {
         if (big && !await page.evaluate((id) => globalThis.__pluginApis__.getChar()?.chaId === id, big.chaId)) throw new Error(`could not open ${big.name}`)
         const tPlay = await mark()
         const turns = Number(opt('--turns', 3))
+        if (argv.includes('--other-page')) {
+            // another page (a second tab, the phone) writes once: the first save of this page then goes through the merge, as on the
+            // live server where the owner plays with more than one page open. The other page's write is this page's own file sent
+            // under another tab id, just before it, so the merge takes nothing from the server.
+            await page.evaluate(() => {
+                const orig = window.fetch
+                let done = false
+                window.fetch = async (url, init) => {
+                    if (!done && String(url).endsWith('/api/write') && init?.headers?.['file-path'] === '6461746162617365' + '2f6461746162617365' + '2e62696e') {
+                        done = true
+                        await orig(url, { ...init, headers: { ...init.headers, 'x-risu-tab': 'jank-other-page-0001' } })
+                    }
+                    return orig(url, init)
+                }
+            })
+        }
         const tNet = Date.now()
         // a played turn, without a model: the player's line, a reply streamed in 50 ms chunks for 6 s, then the after-reply edits
         // the story layer makes (a script variable, the reply rewritten twice: translation, Future Plan cleanup)
@@ -219,6 +264,8 @@ async function main() {
             out.phases.play.writes = writes.length
             out.phases.play.writeKB = Math.round(writes.reduce((a, x) => a + x.bytes, 0) / 1024)
             out.phases.play.writePaths = [...new Set(writes.map((x) => x.path))]
+            out.phases.play.writeLatency = stats(writes.map((x) => x.ms))
+            out.phases.play.server = serverTrace(path.join(dir, 'server.log'))
         }
         out.net = net
         out.loaf = J.loaf.filter((x) => x.ms > 100).map((x) => ({ ...x, at: Math.round(x.at), ms: Math.round(x.ms), block: Math.round(x.block) }))

@@ -120,11 +120,21 @@ if (process.env.RISU_STORY !== '0') {
         console.error('[Story] disabled:', error.message);
     }
 }
+const SYNC_TRACE = process.env.RISU_SYNC_TRACE === '1';
+// RISU_SYNC_TRACE: how much of a write differs from what the server had, block by block (what a delta upload would carry)
+const blockDelta = (prev, next) => {
+    const { decodeSave } = require('./dbMerge.cjs');
+    const old = new Map(decodeSave(prev).map((b) => [b.name, b]));
+    const changed = decodeSave(next).filter((b) => { const o = old.get(b.name); return !o || o.type !== b.type || !o.data.equals(b.data); });
+    return { blocks: old.size, changed: changed.length, changedBytes: changed.reduce((a, b) => a + b.data.length + b.name.length + 7, 0), names: changed.map((b) => b.name.length > 12 ? b.name.slice(0, 8) + '..' : b.name) };
+};
 const syncStory = (bytes, rev) => {
     if (!storyStore || !bytes) return;
     setImmediate(() => {
         try {
+            const t0 = performance.now();
             const r = storyStore.sync(bytes, rev);
+            if (SYNC_TRACE) console.log(`[Story] trace sync=${(performance.now() - t0).toFixed(1)}`);
             if (r.error) console.error('[Story] sync:', r.error);
         } catch (error) {
             console.error('[Story] sync:', error.message);
@@ -1828,11 +1838,16 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
     try {
         let toStore = fileContent;
         let merged = false;
+        let syncTrace = null;
+        const tWrite = performance.now();
         if(dbSync && filePath === DB_KEY_HEX && Buffer.isBuffer(fileContent)){
             try {
-                const r = dbSync.onWrite(clientIdOf(req), fileContent, currentSaveBytes(filePath));
+                const before = currentSaveBytes(filePath);
+                const r = dbSync.onWrite(clientIdOf(req), fileContent, before);
+                if(SYNC_TRACE && before) r.before = before;
                 toStore = r.bytes;
                 merged = r.merged;
+                syncTrace = r;
                 res.setHeader('x-risu-rev', String(r.rev));
                 if(r.merged && Date.now() - lastPremergeAt > 10 * 60 * 1000){
                     // a safety copy of what the server had and what the page wrote, at most one pair per ten minutes
@@ -1856,7 +1871,15 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
             }
         }
         // committed to SQLite before we answer; the worker moves it to the directory (atomically) in order
+        const tQueue = performance.now();
         saveQueue.enqueueWrite(filePath, toStore);
+        if(SYNC_TRACE && syncTrace){
+            // RISU_SYNC_TRACE=1: one line per write of database.bin with where its event-loop time went (tests/acceptance/jank.mjs)
+            const f = (x) => x.toFixed(1);
+            const queueMs = performance.now() - tQueue, handlerMs = performance.now() - tWrite;
+            const d = syncTrace.before ? blockDelta(syncTrace.before, fileContent) : null;   // after the clock: not part of the handler's time
+            console.log(`[Sync] trace how=${syncTrace.how.split(':')[0].replace(/ /g, '_')} bytes=${fileContent.length} onWrite=${f(syncTrace.ms.total)} merge=${f(syncTrace.ms.merge)} queue=${f(queueMs)} handler=${f(handlerMs)}` + (d ? ` blocks=${d.blocks} changed=${d.changed} changedBytes=${d.changedBytes} names=${d.names.join(',')}` : ''));
+        }
         if(filePath === DB_KEY_HEX && Buffer.isBuffer(toStore)){
             syncStory(toStore, dbSync ? dbSync.currentRev() : null);
         }

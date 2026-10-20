@@ -279,7 +279,8 @@ describe('per page bookkeeping', () => {
         // X is known now: its later write is compared with what it wrote, so another page's change in between is kept
         const aFile = edit(w1.bytes, (g, set) => { const r = g('root'); r.language = 'en'; set('root', r) })
         const wa = s.onWrite('A', aFile, w1.bytes)
-        expect(['merged', 'fast']).toContain(wa.how)
+        // A's file already has X's change, so the merge takes nothing from the server and is stored as a plain write
+        expect(['merged', 'fast', 'merged, nothing from the server']).toContain(wa.how)
         const xFile = edit(w1.bytes, (g, set) => { const c = g('c1'); c.name = 'y'; set('c1', c) })
         const w2 = s.onWrite('X', xFile, wa.bytes)
         expect(w2.how).toBe('merged')

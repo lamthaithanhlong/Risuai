@@ -19,9 +19,16 @@
 \* _SINCESYNC (the code: base stays the loaded rev) is red; _ADVANCE (the base becomes what the page wrote; a merged write forces the
 \* next write of that page to merge, since the server then holds more than the page) is green. OwnEditKept (against what the tab
 \* LOADED) is exactly the rule AdvanceBase drops, so _ADVANCE checks OwnEditKeptSinceSync instead.
+\* AfterMerge (2026-10-20, only with AdvanceBase): what a merged write leaves as the page's base. "loaded" (the code until then): always
+\* the page's own file under a negative id, so every later write of that page merges again, forever -- the live log showed "0 parts
+\* from the server, 0 both-changed" on every save, ~120-150 ms of the server's event loop each. "ifempty": a merge that took nothing
+\* from the server (no key the page left alone and the server changed, no key both changed: the code's report.fromServer,
+\* blocksFromServer and conflicts all 0) stores the page's own file and makes that revision its base, so the fast path comes back
+\* (_EMPTYPLAIN, green). "always": the same after ANY merge -- the server then holds more than the page and its next fast write
+\* would drop that (_ALWAYSPLAIN, red: it shows the "took nothing" guard is what keeps NoLostUpdateSinceSync).
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS Tabs, Keys, MaxRev, MaxEdits, KEEP, SameBrowser, PerTab, PinBases, Backups, LoadedBase, AdvanceBase
+CONSTANTS Tabs, Keys, MaxRev, MaxEdits, KEEP, SameBrowser, PerTab, PinBases, Backups, LoadedBase, AdvanceBase, AfterMerge
 
 Id(t) == IF PerTab THEN t ELSE IF SameBrowser THEN "browser" ELSE t
 Ids == {Id(t) : t \in Tabs}
@@ -57,13 +64,19 @@ Edit(t, k) == /\ loaded[t] /\ edits < MaxEdits /\ edits' = edits + 1 /\ local' =
 \* the three-way merge by key against the base (what Merge3.dfy proves); without AdvanceBase bst[i] is always hist[base[i]]
 Merged(t, s) == [k \in Keys |-> IF local[t][k] = s[k] THEN server[k] ELSE local[t][k]]
 Foreign(i, b) == \E r \in (b + 1)..rev : r >= floor /\ writer[r] # i
+\* the merge of t's write against s takes nothing from the server: every key the page left alone is as the server has it, and no key was
+\* changed by both to different values (dbMerge.cjs report.fromServer / blocksFromServer / conflicts all 0)
+TookNothing(t, s) == \A k \in Keys : (local[t][k] = s[k] => server[k] = s[k]) /\ (local[t][k] # s[k] /\ server[k] # s[k] => server[k] = local[t][k])
 Write(t) == /\ loaded[t] /\ rev < MaxRev
             /\ LET i == Id(t)
                    b == base[i]
-                   how == IF b = NoBase THEN "unknown" ELSE IF forced[i] THEN "merged" ELSE IF ~Foreign(i, b) THEN "fast" ELSE IF b < floor THEN "pruned" ELSE "merged"
-                   new == IF how = "merged" THEN Merged(t, bst[i]) ELSE local[t]
+                   how0 == IF b = NoBase THEN "unknown" ELSE IF forced[i] THEN "merged" ELSE IF ~Foreign(i, b) THEN "fast" ELSE IF b < floor THEN "pruned" ELSE "merged"
+                   \* "plain": a merged write the server then holds exactly as the page does (AfterMerge), stored and based like a fast one
+                   how == IF how0 = "merged" /\ AdvanceBase /\ (AfterMerge = "always" \/ (AfterMerge = "ifempty" /\ TookNothing(t, bst[i]))) THEN "plain" ELSE how0
+                   \* "ifempty" stores the page's own bytes (dbSync.cjs); "always" keeps the merged result but drops the forced merge
+                   new == IF how = "merged" \/ (how = "plain" /\ AfterMerge = "always") THEN Merged(t, bst[i]) ELSE local[t]
                IN /\ server' = new /\ rev' = rev + 1 /\ hist' = [hist EXCEPT ![rev + 1] = new] /\ writer' = [writer EXCEPT ![rev + 1] = i]
-                  /\ base' = IF how \in {"unknown", "pruned"} \/ (AdvanceBase /\ how = "fast") THEN [base EXCEPT ![i] = rev + 1] ELSE base
+                  /\ base' = IF how \in {"unknown", "pruned"} \/ (AdvanceBase /\ how \in {"fast", "plain"}) THEN [base EXCEPT ![i] = rev + 1] ELSE base
                   \* the stored file is the page's own: that is its base. AdvanceBase: after ANY write the page holds what it wrote; when
                   \* that was merged the server holds more than the page, so its next write must merge (dbSync.cjs: a negative manifest id)
                   /\ bst' = IF how \in {"unknown", "pruned"} \/ AdvanceBase THEN [bst EXCEPT ![i] = local[t]] ELSE bst

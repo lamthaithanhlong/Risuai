@@ -9,7 +9,8 @@
 // A page is a browser tab (the hash of its public key and the tab id, else the header x-risu-client, else address + user agent). Its
 // base is what it last loaded or wrote: after a write its memory is the file it wrote, so what differs from that is exactly what it
 // changed since. A write stored as it is makes that revision the base; a merged write keeps the page's own file as a manifest under a
-// negative id, and the page's next write is merged against it (the server holds more than the page then). When the base is not
+// negative id, and the page's next write is merged against it (the server holds more than the page then) -- unless the merge took
+// nothing from the server: then the page's own file is stored and becomes the base, as a plain write would. When the base is not
 // known (a page that loaded before this started, a pruned manifest) the page's file is stored as it is, as before.
 const { manifestOf, mergeSaves, validateSave } = require('./dbMerge.cjs')
 
@@ -94,6 +95,8 @@ function openDbSync(opts) {
 
     /** a page writes `bytes`; `current` is what the server has (Buffer or null) */
     function onWrite(client, bytes, current) {
+        const t0 = performance.now()
+        let tMerge = 0
         const cur = currentRev()
         const rev = cur + 1
         let out = bytes
@@ -111,18 +114,26 @@ function openDbSync(opts) {
             if (!mrow) {
                 how = 'base pruned'
             } else {
+                const tm = performance.now()
                 try {
                     const r = mergeSaves(JSON.parse(mrow.data), bytes, current)
                     report = r.report
-                    if (r.merged) {
-                        validateSave(r.buf)            // never store a result that does not read back
-                    }
                     out = r.buf
                     how = r.merged ? 'merged' : 'unmerged: ' + r.report.reason
+                    if (r.merged && r.report.fromServer === 0 && r.report.blocksFromServer === 0 && r.report.conflicts === 0) {
+                        // the merge took nothing from the server: its result is the page's own file, so store that and make it the
+                        // base, as a fast write would. Kept as 'merged', the page's base stayed a negative manifest and every later
+                        // save of it was merged again, forever (onWrite 62-70 ms instead of 35, measured with tests/acceptance/jank.mjs
+                        // --other-page on 2026-10-20; specs/chat/DbSync.tla AfterMerge)
+                        out = bytes
+                        how = 'merged, nothing from the server'
+                    }
+                    if (how === 'merged') validateSave(out)   // never store a result that does not read back
                 } catch (error) {
                     out = bytes
                     how = 'merge failed: ' + error.message
                 }
+                tMerge = performance.now() - tm
             }
         }
         setRev.run(rev)
@@ -152,7 +163,9 @@ function openDbSync(opts) {
         } else if (how !== 'fast') {
             log(`sync: write of ${client.slice(0, 8)} stored as ${how}`)
         }
-        return { bytes: out, rev, merged: how === 'merged', how, report }
+        // ms: event-loop time of this write (merge: reading the base, mergeSaves and validateSave; the rest is manifestOf and SQLite)
+        const ms = { total: performance.now() - t0, merge: tMerge }
+        return { bytes: out, rev, merged: how === 'merged', how, report, ms }
     }
 
     function close() {
