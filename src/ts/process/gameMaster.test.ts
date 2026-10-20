@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
     applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    WORLD_LAW,
 } from './gameMaster'
+
+const LAW = WORLD_LAW.length + 1
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
 const PLAIN = { name: 'Aiko', desc: 'A cheerful barista who chats with you.', firstMessage: 'Hi!' }
@@ -169,15 +172,23 @@ describe('the note', () => {
         expect(n).toContain('rival Sleeper')
         expect(n).not.toContain('ESCALATE')
     })
+    it('names the GM all-knowing and all-powerful and the world\'s laws binding on it, whenever it speaks', () => {
+        // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý"
+        expect(gmNote('run', FULL, dice, 'x')).toContain(WORLD_LAW)
+        expect(gmNote('seed', {}, dice, 'x')).toContain(WORLD_LAW)
+        expect(WORLD_LAW).toMatch(/all-knowing, all-powerful/)
+        expect(WORLD_LAW).toMatch(/laws are truth and bind you too/)
+        expect(WORLD_LAW).toMatch(/path or Sequence/)
+    })
     it('stays compact with a full state (rides every turn)', () => {
         const n = gmNote('run', FULL, dice, 'x')
         // ~4 characters a token for English: ~400 tokens (cl100k) with every slot full (no side chosen yet)
-        expect(n.length).toBeLessThan(1550)
+        expect(n.length).toBeLessThan(1550 + LAW)
     })
     it('stays near 290 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
         const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
-        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300)
-        expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150)
+        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300 + LAW)
+        expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150 + LAW)
     })
 })
 
@@ -200,7 +211,7 @@ describe('the card\'s own fate die reaches the note', () => {
         expect(n).toContain('overrides a QUIET or BUILD pace')
         expect(n.indexOf('Card fate die')).toBeGreaterThan(n.indexOf('Dice: QUIET'))
         expect(gmNote('run', FULL, quiet, 'x')).not.toContain('Card fate die')
-        expect(gmNote('run', FULL, { ...quiet, cardNew: true }, 'x').length).toBeLessThan(1550 + 360)
+        expect(gmNote('run', FULL, { ...quiet, cardNew: true }, 'x').length).toBeLessThan(1550 + 360 + LAW)
     })
 })
 

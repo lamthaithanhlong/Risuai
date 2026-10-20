@@ -450,6 +450,9 @@ const PACE: Record<GmDice['pace'], string> = {
     escalate: 'ESCALATE: the next beat hits and the stakes rise',
 }
 
+/** The GM's standing: it knows the whole world and runs its events and fate, and the world's laws bind it as they bind the player. */
+export const WORLD_LAW = 'You are this world\'s all-knowing, all-powerful GM (all lore, hidden truths, off-screen lives; you run events and fate), yet its laws are truth and bind you too: events, dice, rewards and the chosen path or Sequence obey the lore\'s rules, costs and order; a choice that breaks a law meets the law.'
+
 /** The card's fate die said NEW: it outranks a QUIET or BUILD pace, and it is the one new trouble of the reply. */
 const CARD_NEW = 'Card fate die: NEW EVENT. If this reply reaches a natural pause (rest, waiting, a walk or journey, time passing), something new surfaces now, a person, creature, clue, message or threat not yet in the story, shown as a hook in the prose (the card\'s dice say what and how); it overrides a QUIET or BUILD pace and is this reply\'s one new trouble.'
 
@@ -510,7 +513,10 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         // "[[GM …]] + changed lines" was read as a second block named CHANGE (Mailman t10, 2026-10-19): the lines go inside it
         : '[[GM\nbeat: <n> | <now> | <due next>\n<only the changed lines, in this block: arc, threat, path: <side> | <stage> | <standing>, enemy: <who> | <why>, gained, reward/consequence: <what> | <when|done>, canon; arc: done | <how> ends it>\n]]'
     return '\n\n[GM (hidden, never named): the player\'s own story, not the novel\'s plot. ' + parts.join(' ')
-        + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs, within world rules (no free rank, Sequence, stamp, power).'
+        // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý": the GM knows and runs
+        // everything, and the world's laws bind it too
+        + ' ' + WORLD_LAW
+        + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs (no free rank, Sequence, stamp, power).'
         + ` Story only, no planning notes; end, after any panel, with ${block}]`
 }
 
