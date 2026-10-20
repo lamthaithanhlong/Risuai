@@ -26,3 +26,9 @@ check OnePlanAfterMerge for 5 but 1 World     // expect a counterexample: two re
 pred nextReply[w: World] { all p: Pos | p != newest[w, Merged] => no at[w, Merged, p].plan or p = newest[w, Merged] }
 assert HealsOnNextReply { all w: World | merged[w] and nextReply[w] => lone lines[w, Merged] }
 check HealsOnNextReply for 5 but 1 World      // expect none
+
+// the fix in the app (loreIndex.ts onlyNewestPlan): the key pass and the picker read only the newest reply's line, whatever
+// the stored chat holds; the merged chat may keep two lines, the lore passes see at most one
+fun seen[w: World]: set Pos { lines[w, Merged] & newest[w, Merged] }
+assert LorePassSeesOne { all w: World | clean[w, Base] and clean[w, Ours] and clean[w, Theirs] and merged[w] => lone seen[w] }
+check LorePassSeesOne for 5 but 1 World       // expect none

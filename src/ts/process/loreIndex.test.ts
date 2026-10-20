@@ -104,3 +104,29 @@ describe('the budget, for every card', async () => {
         expect(fitPicks(idx, [1, 2], [], 1200)).toEqual([1])
     })
 })
+
+describe('the Future Plan line as the lore passes read it (Alloy PlanMerge.als: two lines after a merge from two devices)', async () => {
+    const { onlyNewestPlan, recentText } = await import('./loreIndex')
+    const merged = [
+        { role: 'char', data: 'Xa lắm rồi.\n\n[💡Kế hoạch| Old ]' },
+        { role: 'user', data: 'đi tiếp' },
+        { role: 'char', data: 'Desktop.\n\n[💡Kế hoạch| Nephis ]' },          // the desktop's reply
+        { role: 'user', data: 'tôi chờ' },
+        { role: 'char', data: 'Phone.\n\n[💡Kế hoạch| Cassie ]' },           // the phone's reply, merged after it
+        { role: 'user', data: 'tôi nhìn quanh' },
+    ]
+    it('only the newest reply keeps its line; the rest of every message is untouched', () => {
+        const out = onlyNewestPlan(merged)
+        expect(out.map((m) => m.data).join('\n')).not.toMatch(/Old|Nephis/)
+        expect(out[4].data).toContain('[💡Kế hoạch| Cassie ]')
+        expect(out[0].data).toBe('Xa lắm rồi.')
+        expect(out[1]).toBe(merged[1])
+        expect(merged[2].data).toContain('Nephis')                              // the stored chat is not changed
+    })
+    it('the same array when there is nothing to leave out; the picker reads the same', () => {
+        const clean = [{ role: 'char', data: 'Mưa.\n\n[💡Kế hoạch| Không ]' }, { role: 'user', data: 'x' }]
+        expect(onlyNewestPlan(clean)).toBe(clean)
+        expect(recentText(merged)).not.toMatch(/Nephis|Old/)
+        expect(recentText(merged)).toContain('Cassie')
+    })
+})

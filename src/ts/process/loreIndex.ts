@@ -101,9 +101,22 @@ export function pickedIds(index: IndexItem[], picks: number[]): Set<number> {
     return new Set(picks.flatMap((k) => index[k - 1]?.ids ?? []))
 }
 
+// ---- the Future Plan line, as the lore passes read it --------------------------------------------------------------------------
+// The story cards end each reply with "[💡Kế hoạch| names ]" and their status.lua drops it from older replies, so the key pass
+// wakes only the names planned last. A chat merged from two devices that both replied from one base keeps two lines until the
+// next reply (Alloy, specs/story/PlanMerge.als: OnePlanAfterMerge has a counterexample); an edit or a restored backup can bring
+// one back too. So the passes themselves read only the newest reply's line, whatever the stored chat holds.
+const PLAN_LINE = /[ \t]*\[💡[^\]\n]*\][ \t]*/g
+/** The messages with every Future Plan line but the newest reply's left out (the same array when there is nothing to leave out). */
+export function onlyNewestPlan<T extends { role: string; data: string }>(messages: T[]): T[] {
+    const last = messages.map((m) => m.role).lastIndexOf('char')
+    if (!messages.some((m, i) => i !== last && m.role === 'char' && (m.data ?? '').includes('[💡'))) return messages
+    return messages.map((m, i) => (i !== last && m.role === 'char' && (m.data ?? '').includes('[💡') ? { ...m, data: m.data.replace(PLAN_LINE, '').trimEnd() } : m))
+}
+
 /** The last messages as the picker reads them: the bar's and portraits' blocks left out, the newest kept whole. */
 export function recentText(messages: { role: string; data: string }[], count = 6, chars = 4000): string {
-    const text = messages.slice(-count).map((m) => `${m.role === 'user' ? 'PLAYER' : 'STORY'}: ${(m.data ?? '')
+    const text = onlyNewestPlan(messages.slice(-count)).map((m) => `${m.role === 'user' ? 'PLAYER' : 'STORY'}: ${(m.data ?? '')
         .replace(/\[\[(?:REPLIES|CHECK|LOOK)\b[\s\S]*?\]\]/g, '').replace(/\{\{inlay::[^}]*\}\}/g, '').trim()}`).join('\n\n')
     return text.length > chars ? text.slice(text.length - chars) : text
 }

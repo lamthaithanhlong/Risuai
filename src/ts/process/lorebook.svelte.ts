@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { fitBudget, isLearningOnlyLore, lorePicked } from "./loreIndex"
+import { fitBudget, isLearningOnlyLore, lorePicked, onlyNewestPlan } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -83,6 +83,8 @@ export async function loadLoreBookV3Prompt(){
     const moduleLorebook = getModuleLorebooks()
     const fullLore = safeStructuredClone(characterLore.concat(chatLore).concat(moduleLorebook))
     const currentChat = char.chats[page].message
+    // the key pass reads only the newest reply's Future Plan line (loreIndex.ts onlyNewestPlan)
+    const scanChat = onlyNewestPlan(currentChat)
     const loreDepth = char.loreSettings?.scanDepth ?? DBState.db.loreBookDepth
     const loreToken = char.loreSettings?.tokenBudget ?? DBState.db.loreBookToken
     const fullWordMatchingSetting = char.loreSettings?.fullWordMatching ?? false
@@ -540,7 +542,7 @@ export async function loadLoreBookV3Prompt(){
                 }
     
                 for(const query of searchQueries){
-                    const result = searchMatch(currentChat, {
+                    const result = searchMatch(scanChat, {
                         keys: query.keys,
                         searchDepth: scanDepth,
                         regex: fullLore[i].useRegex,
