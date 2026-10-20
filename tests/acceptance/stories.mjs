@@ -55,7 +55,8 @@ export const STORIES = {
         cardId: '22a987d8-4a13-4185-b24a-0308be8502fd',
         nameMatch: 'Lord of the Mysteries',
         // creation item with two values by the card's rules (main_description.md: Way in: BORN HERE or TRANSMIGRATOR)
-        binaryItem: 'xuyên không|transmigr',
+        // the way in has two values; the model words the second one "xuyên không" or "tỉnh dậy trong thân thể của một người…"
+        binaryItem: 'xuyên không|transmigr|tỉnh dậy trong (thân thể|thân xác|cơ thể)',
         src: path.join(home, 'Downloads/lord-of-the-mystery/fate-simulator'),
         // no status window and no system: the supernatural is costly, not a game (main_description.md)
         voice: { name: null, bracketLines: false, unbracketed: null },
