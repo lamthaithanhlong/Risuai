@@ -10,6 +10,7 @@ const { chromium } = require('playwright')
 const HELPER = [
     [/^You are a literary translator/, 'translate'],
     [/^Below is the index of a story's lore/, 'lore-pick'],
+    [/^Below are the shelves of a story's lore/, 'shelf-pick'],
     [/^Below are the rules of an interactive story/, 'rules-helper'],
 ]
 
@@ -35,7 +36,8 @@ export function readMainRequest(bodyText) {
     try { body = JSON.parse(bodyText) } catch { return null }
     const msgs = Array.isArray(body.messages) ? body.messages : []
     const first = typeof msgs[0]?.content === 'string' ? msgs[0].content : ''
-    for (const [re, kind] of HELPER) if (re.test(first)) return { kind }
+    // a lore helper's prompt size and (in #capture) its answer: what the librarian costs a turn and what it named
+    for (const [re, kind] of HELPER) if (re.test(first)) return /pick$/.test(kind) ? { kind, promptChars: first.length } : { kind }
     const all = msgs.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n')
     const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
     const lu = typeof lastUser?.content === 'string' ? lastUser.content : ''
@@ -61,8 +63,10 @@ export function readMainRequest(bodyText) {
 }
 
 export class Player {
-    constructor({ port, password, outDir, label, log = console.log }) {
-        Object.assign(this, { port, password, outDir, label, log })
+    /** dumpDir: each narrator and lore-helper request body is written there (--dump-requests: the prompt cache's shared prefix) */
+    constructor({ port, password, outDir, label, log = console.log, dumpDir = null }) {
+        Object.assign(this, { port, password, outDir, label, log, dumpDir })
+        this.dumped = 0
         this.base = `http://localhost:${port}`
         this.net = []
         this.auth = ''
@@ -97,8 +101,14 @@ export class Player {
             const info = readMainRequest(req.postData() || '')
             if (!info) return
             let text = null
-            if (info.kind === 'main') { try { text = completionText(await (await req.response())?.text()) } catch { text = null } }
-            this.net.push({ at, type: 'completion', ...info, response: text })
+            if (info.kind === 'main' || /pick$/.test(info.kind)) { try { text = completionText(await (await req.response())?.text()) } catch { text = null } }
+            if (this.dumpDir && (info.kind === 'main' || /pick$/.test(info.kind))) {
+                const fs = await import('fs')
+                fs.mkdirSync(this.dumpDir, { recursive: true })
+                const n = String(++this.dumped).padStart(3, '0')
+                fs.writeFileSync(path.join(this.dumpDir, `${n}-${info.kind}.json`), JSON.stringify({ at, kind: info.kind, body: JSON.parse(req.postData() || '{}'), response: text }))
+            }
+            this.net.push({ at, type: 'completion', ...info, response: /pick$/.test(info.kind) ? undefined : text, answer: /pick$/.test(info.kind) ? text : undefined })
         } else if (/\/api\/story\/referee/.test(url)) {
             let r = null
             try { r = await (await req.response())?.json() } catch { /* none */ }

@@ -17,6 +17,7 @@
 //     --narrator-slot S  the COPY plays on the model slot named S (e.g. codex) whatever slot the live save has active
 //     --max-context N    DIAGNOSTIC: the COPY's maxContext set to N (to measure what sits behind a context blocker); the
 //                        scorecards say so, and the default out dir gets a -diag suffix
+//     --dump-requests    write each narrator and lore-helper request body to OUT/requests/<story>/ (the prompt cache's shared prefix)
 //     --script FILE      play FILE's turns instead of the story's own ({"ss": [{"kind": "action", "text": "…"}], …}), no
 //                        step-by-step run; each turn waits for the bookkeeper and records the panel after it (turn.after)
 //   node tests/acceptance/run.mjs --rescore DIR [--rejudge]    recompute the scorecards from DIR/<story>.json (--rejudge: ask the judge again)
@@ -113,7 +114,7 @@ async function playStory(key, ctx) {
         log(rec.diagnostic)
     }
     const server = await startServer(dir, ctx.port, { backend: ctx.backend, log })
-    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log })
+    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null })
     let failsInRow = 0
     const play1 = async (run, label, phase, kind, text) => {
         log(`${label} ${kind}: ${oneLine(text, 70)}`)
