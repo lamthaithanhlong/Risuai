@@ -41,5 +41,14 @@ ok &= check('plan: the story runs on a card with the rule, the note is there', A
 making = And(creationStep, Not(confirmed))
 ok &= check('no story note while the character is being made', And(making, Or(personaNote, planNote)))
 # on a card with no creation step, from its first reply (the GM's storyLike needs panels, which such a card may never write)
+if fixed:
+    # the "already counted" note (statusBook.ts paidNote): the card has a panel, the chat an id, the last reply moved an amount;
+    # it rides with the story notes, never on the yes turn (the panel is first filled there, nothing was paid)
+    spec, chatId, moved = Bools('spec chatId moved')
+    paid = And(Not(group), notesOn, Not(initializing), spec, chatId, moved)
+    ok &= check('paid: never with the creation note', And(creation, paid))
+    ok &= check('paid: never while the character is being made', And(making, paid))
+    ok &= check('paid: never on the yes turn', And(initializing, paid))
+    ok &= check('paid: the story runs and an amount moved, the note is there', And(Not(group), notesOn, Not(initializing), spec, chatId, moved, Not(paid)))
 ok &= check('no creation step: the notes come with the first reply', And(Not(group), Not(creationStep), charReply, rule, Not(planNote)))
 sys.exit(0 if ok else 1)
