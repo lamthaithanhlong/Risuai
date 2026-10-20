@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { cacheOrder, changesEachTurn, fitBudget, indexActivation, isFolder, isLearningOnlyLore, loreStats, onlyNewestPlan, type LoreStats } from "./loreIndex"
+import { cacheOrder, changesEachTurn, fitBudget, indexActivation, isFolder, isLearningOnlyLore, loreLeftBehind, loreStats, onlyNewestPlan, type LoreStats } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -255,6 +255,7 @@ export async function loadLoreBookV3Prompt(){
         priority:number
         always?:boolean
         why?:string
+        recent?:boolean
         at:number
         turnly?:boolean
         source:string
@@ -268,6 +269,7 @@ export async function loadLoreBookV3Prompt(){
     let activatedIndexes:number[] = []
     let disabledUIPrompts:string[] = []
     let matchTimes = 0
+    let leftBehind = 0
     let keepActivateAfterMatch = false
     let dontActivateAfterMatch = false
     while(matching){
@@ -585,6 +587,19 @@ export async function loadLoreBookV3Prompt(){
             const turnPick = indexActivation(char.chaId, i, i < characterLore.length, activated, forceState, !!fullLore[i].alwaysActive)
             activated = turnPick.activated
             const why = turnPick.why
+            // a key word in the last two messages is worth more than one twelve messages back (loreIndex.ts valueOf)
+            let recent = false
+            if(shelved && activated && why === 'key' && forceState === 'none' && !fullLore[i].alwaysActive){
+                const logged = matchLog.length
+                recent = searchMatch(scanChat, { keys: fullLore[i].key.split(','), searchDepth: Math.min(2, scanDepth), regex: fullLore[i].useRegex,
+                    fullWordMatching, dontSearchWhenRecursive: true })
+                matchLog.length = logged
+                // said only in the older messages, on a shelf the librarian did not name this turn: left behind
+                if(!recent && i < characterLore.length && loreLeftBehind(char.chaId, i)){
+                    activated = false
+                    leftBehind++
+                }
+            }
             // learning mode's own lore (the foreign speaker) only while learning mode is on
             if(activated && !DBState.db.learningMode && isLearningOnlyLore(fullLore[i])){
                 activated = false
@@ -612,6 +627,7 @@ export async function loadLoreBookV3Prompt(){
                     // the creation turns' rules are kept within the budget like the always-on ones (loreIndex.ts loreForced)
                     always: turnPick.always,
                     why,
+                    recent,
                     at: i,
                     turnly,
                     source: fullLore[i].comment || `lorebook ${i}`,
@@ -645,9 +661,10 @@ export async function loadLoreBookV3Prompt(){
     }
 
     // within the budget: always-on entries first, then by priority; one that does not fit whole goes in part (loreIndex.ts)
-    const activesFiltered = await fitBudget(actives, loreToken, (s) => tokenize(risuChatParser(s, {chara: char})))
+    // a shelved card: the books by value per token, none twice (loreIndex.ts fitBudget byValue)
+    const activesFiltered = await fitBudget(actives, loreToken, (s) => tokenize(risuChatParser(s, {chara: char})), { byValue: shelved })
     // the app's own count of what this pass sends (sendChat hands it to the acceptance harness, tests/acceptance/lib/play.mjs)
-    lastLoreStats = loreStats(actives, activesFiltered, loreToken)
+    lastLoreStats = loreStats(actives, activesFiltered, loreToken, leftBehind)
 
     // reversed here and back on return: a shelved card's lore stable → volatile, any other in Risu's insert order
     let activesResorted = shelved ? cacheOrder(activesFiltered).reverse() : activesFiltered.sort((a,b) => {

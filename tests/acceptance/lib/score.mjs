@@ -316,7 +316,7 @@ export function scoreStory(rec, judge = {}) {
     // what the lorebook pass sent (the app's own o200k count, loreIndex.ts loreStats): the librarian's measure (2026-10-20)
     const lore = (ph) => all.filter((t) => t.lore && t.phase === ph).map((t) => t.lore)
     const avg = (xs, k) => Math.round(xs.reduce((a, x) => a + (x[k] ?? 0), 0) / Math.max(1, xs.length))
-    const loreLine = (xs) => `${avg(xs, 'sent')} (rules ${avg(xs, 'always')}, creation ${avg(xs, 'forced')}, picked ${avg(xs, 'picked')}, key words ${avg(xs, 'keyed')}; ${avg(xs, 'entries')} entries, ${avg(xs, 'dropped')} cut)`
+    const loreLine = (xs) => `${avg(xs, 'sent')} (rules ${avg(xs, 'always')}, creation ${avg(xs, 'forced')}, picked ${avg(xs, 'picked')}, key words ${avg(xs, 'keyed')}; ${avg(xs, 'entries')} entries, ${avg(xs, 'dropped')} cut, ${avg(xs, 'behind')} left behind)`
     if (lore('story').length) out.push(check('lore.tokens', 'Lore tokens a request sends (the app\'s count)', 'INFO',
         `story turns: ${loreLine(lore('story'))}; creation turns: ${lore('creation').length ? loreLine(lore('creation')) : 'n/a'}; budget ${lore('story')[0].budget}`, []))
     const lat = all.filter((t) => t.ok && t.phase === 'story').map((t) => t.ms / 1000)

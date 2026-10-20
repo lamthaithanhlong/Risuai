@@ -75,7 +75,8 @@ export async function pickLoreForTurn(char: character | undefined, chat: Chat | 
         const previous = (lastPicks.get(chatKey) ?? []).filter((k) => !forcedItems.includes(k) && (Array.isArray(got) || got.open.has(k)))
         const fitted = fitPicks(index, picks.filter((k) => !forcedItems.includes(k)), previous, room)
         lastPicks.set(chatKey, fitted)
-        setLorePicks(char.chaId, pickedIds(index, fitted), forced)
+        // with shelves, the books on shelves the librarian did not name are left behind (loreIndex.ts loreLeftBehind)
+        setLorePicks(char.chaId, pickedIds(index, fitted), forced, Array.isArray(got) ? undefined : pickedIds(index, [...got.open]))
     } catch (e) {
         console.warn('[lore index] skipped', e)
     }

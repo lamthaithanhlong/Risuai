@@ -14,6 +14,7 @@ vi.mock('../globalApi.svelte', () => ({ downloadFile: vi.fn(), saveAsset: vi.fn(
 vi.mock('../storage/database.svelte', () => ({}))
 
 const { loadLoreBookV3Prompt } = await import('./lorebook.svelte')
+const { setLorePicks, clearLorePicks } = await import('./loreIndex')
 
 const rule = (comment: string, order: number, content = `${comment} rules.`) => ({ comment, content, alwaysActive: true, insertorder: order, key: '', mode: 'normal' })
 const book = (comment: string, order: number, key: string) => ({ comment, content: `${comment} canon.`, key, insertorder: order, mode: 'normal', folder: 'folder:people' })
@@ -43,5 +44,31 @@ describe('the lorebook pass, in the order a cache can reuse', () => {
         const { actives } = await loadLoreBookV3Prompt()
         expect(actives.map((a) => [a.source, a.pos])).toEqual([['Backlund', ''], ['Audrey Hall', ''], ['Module 01 — Random Fate Engine', ''],
             ['Module 07 — Status Panel', ''], ['Module 10 — Fate Dice', ''], ['Lore reconciliation rule', '']])
+    })
+    it('a tight budget: the helper\'s pick, then the key word just said, before one said long ago, whatever the insert order', async () => {
+        const big = (comment: string, order: number, key: string) => ({ ...book(comment, order, key), content: `${comment} canon. `.repeat(100) })
+        const lore = [LORE[0], rule('Module 01 — Random Fate Engine', 9100), big('Old Tower', 9000, 'tower'), big('Backlund', 120, 'backlund'),
+            big('Audrey Hall', 110, 'nobody-says-this'), big('Spare', 101, 'spare')]
+        const c = card(lore)
+        c.loreSettings.tokenBudget = 1000
+        c.chats[0].message = [{ role: 'user', data: 'Tôi trèo lên tower.' }, { role: 'char', data: 'Gió.' }, { role: 'user', data: 'spare' }, { role: 'char', data: 'Mưa.' },
+            { role: 'user', data: 'Tôi đến Backlund.' }]
+        db.characters = [c]
+        setLorePicks('c1', new Set([4]))
+        const { actives } = await loadLoreBookV3Prompt()
+        clearLorePicks()
+        expect(actives.map((a) => a.source)).toEqual(['Module 01 — Random Fate Engine', 'Audrey Hall', 'Backlund'])                // was: Old Tower, Backlund
+    })
+    it('a key word said long ago no longer loads a book the librarian left behind; one said just now still does', async () => {
+        const c = card(LORE)
+        c.chats[0].message = [{ role: 'user', data: 'Tôi gặp Audrey.' }, { role: 'char', data: 'Gió.' }, { role: 'user', data: 'Tôi đi.' }, { role: 'char', data: 'Mưa.' },
+            { role: 'user', data: 'Tôi đến Backlund.' }]
+        db.characters = [c]
+        setLorePicks('c1', new Set(), new Set(), new Set())                                                // the librarian named no shelf
+        const { actives } = await loadLoreBookV3Prompt()
+        clearLorePicks()
+        expect(actives.filter((a) => a.pos === '').map((a) => a.source)).toEqual(['Module 01 — Random Fate Engine', 'Lore reconciliation rule', 'Backlund'])
+        const { actives: plain } = await loadLoreBookV3Prompt()                                             // no librarian: as before
+        expect(plain.map((a) => a.source)).toContain('Audrey Hall')
     })
 })

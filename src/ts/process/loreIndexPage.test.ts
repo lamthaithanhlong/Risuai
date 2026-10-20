@@ -10,7 +10,7 @@ vi.mock('./request/request', () => ({
 }))
 
 const { pickLoreForTurn, creationTurn } = await import('./loreIndexPage')
-const { lorePicked, loreForced } = await import('./loreIndex')
+const { lorePicked, loreForced, loreLeftBehind } = await import('./loreIndex')
 
 const words = (n: number) => 'Word. '.repeat(Math.round(n * 3.9 / 6))
 const folder = (id: string, name: string, hint = '') => ({ mode: 'folder', key: `folder:${id}`, comment: name, content: hint })
@@ -117,5 +117,18 @@ describe('the librarian on the page', () => {
         const n = asks.length
         await pickLoreForTurn(card() as never, c as never)
         expect(asks.length).toBe(n)
+    })
+
+    it('the librarian answered: a book on a shelf it did not name is left behind (its key word said long ago loads it no more)', async () => {
+        const scene = [...STORY.slice(0, 3), { role: 'user', data: 'Tôi chém nó lần nữa.' }]                // not asked before (cache)
+        answers.push('2')                                                                                  // fights only
+        await pickLoreForTurn(card() as never, chat(scene) as never)
+        expect(loreLeftBehind('c1', 6)).toBe(false)                                                         // on Rules — fights
+        expect(loreLeftBehind('c1', 9)).toBe(true)                                                          // a person: People not named
+        answers.push('nothing here')                                                                       // no number: "none", an answer
+        await pickLoreForTurn(card() as never, chat([...scene, { role: 'char', data: 'Gió.' }, { role: 'user', data: 'Tôi chạy.' }]) as never)
+        expect(loreLeftBehind('c1', 6)).toBe(true)
+        await pickLoreForTurn(card({ loreIndexPick: false }) as never, chat(scene) as never)
+        expect(loreLeftBehind('c1', 9)).toBe(false)                                                         // no librarian this turn
     })
 })

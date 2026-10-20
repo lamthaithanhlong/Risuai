@@ -224,15 +224,28 @@ export function recentText(messages: { role: string; data: string }[], count = 6
 
 // ---- the picks of the current turn, read by the lorebook pass -----------------------------------------------------------------
 
-let current: { chaId: string; ids: Set<number>; forced: Set<number> } | null = null
-/** `forced`: positions loaded this turn whatever the picks, and kept within the budget like the always-on rules (creation). */
-export function setLorePicks(chaId: string, ids: Set<number>, forced: Set<number> = new Set()) {
-    current = { chaId, ids: new Set([...ids, ...forced]), forced }
+let current: { chaId: string; ids: Set<number>; forced: Set<number>; open?: Set<number> } | null = null
+/**
+ * `forced`: positions loaded this turn whatever the picks, and kept within the budget like the always-on rules (creation).
+ * `open`: the librarian answered, and these are the positions on the shelves it named; a book elsewhere is left behind.
+ */
+export function setLorePicks(chaId: string, ids: Set<number>, forced: Set<number> = new Set(), open?: Set<number>) {
+    current = { chaId, ids: new Set([...ids, ...forced]), forced, open }
 }
 export function clearLorePicks() { current = null }
 /** True when the index pass picked this lorebook position for this character this turn. */
 export function lorePicked(chaId: string, i: number): boolean {
     return !!current && current.chaId === chaId && current.ids.has(i)
+}
+/**
+ * True when the librarian answered this turn and this position is on none of the shelves it named and was not picked: a key word
+ * said only in the older messages no longer loads it (lorebook.svelte.ts); one in the last two messages still does. Measured on
+ * the librarian run (2026-10-20): of the key-word lore a story turn sent (SS 2.6k, LotM 7.1k, Zombie 9.0k tokens) most was woken
+ * by a word said 3 to 12 messages back (key-only replay: SS 3.1k of 4.1k, Zombie 4.6k of 6.8k), while the helper, reading the
+ * last six messages, had named the shelves the scene is on.
+ */
+export function loreLeftBehind(chaId: string, i: number): boolean {
+    return !!current && current.chaId === chaId && !!current.open && !current.open.has(i) && !current.ids.has(i)
 }
 /** True when this position must be loaded and never dropped for the budget this turn (the creation shelf on a creation turn). */
 export function loreForced(chaId: string, i: number): boolean {
@@ -253,11 +266,12 @@ export function indexActivation(chaId: string, i: number, cardLore: boolean, act
 }
 
 /** What the lorebook pass sent last turn, by why each entry was sent (o200k tokens, the app's own count). */
-export type LoreStats = { at: number; budget: number; sent: number; always: number; forced: number; picked: number; keyed: number; entries: number; dropped: number }
-export function loreStats<T extends { tokens: number; why?: string }>(actives: T[], kept: T[], budget: number): LoreStats {
+/** `behind`: books a key word would have loaded that the librarian left behind (loreLeftBehind). */
+export type LoreStats = { at: number; budget: number; sent: number; always: number; forced: number; picked: number; keyed: number; entries: number; dropped: number; behind: number }
+export function loreStats<T extends { tokens: number; why?: string }>(actives: T[], kept: T[], budget: number, behind = 0): LoreStats {
     const sum = (w: string) => kept.filter((a) => a.why === w).reduce((n, a) => n + a.tokens, 0)
     return { at: Date.now(), budget, sent: kept.reduce((n, a) => n + a.tokens, 0), always: sum('always'), forced: sum('forced'), picked: sum('picked'),
-        keyed: sum('key'), entries: kept.length, dropped: actives.length - kept.length }
+        keyed: sum('key'), entries: kept.length, dropped: actives.length - kept.length, behind }
 }
 
 /**
@@ -300,17 +314,51 @@ export function headOf(content: string, maxTokens: number, tokensOf: (s: string)
     return out
 }
 
-export type Active = { tokens: number; priority: number; always?: boolean; prompt: string }
+/** `why` and `recent` (a key word in the last two messages) give a book its value (valueOf) when the budget goes by value. */
+export type Active = { tokens: number; priority: number; always?: boolean; prompt: string; why?: string; recent?: boolean }
+
+// ---- by value per token, with no book twice (asked 2026-10-20) ------------------------------------------------------------------
+// Replayed on 309 recorded LotM turns the key words woke ~73k tokens for a 14000 budget (24k after the card's keys were narrowed),
+// and the budget kept them by insert order: the helper's picks, what the scene was judged to need, went out first (the librarian
+// run: LotM sent 7.1k of key-word lore and 0.5k of picks a story turn). And 86 pairs of Shadow Slave books share most of their
+// text ("The Abyss" and "The Abyss — Deep Layers"), so a turn could pay for one subject twice.
+
+/** A book's value: the helper's pick (what the scene was judged to need), a key word of the last two messages, an older one. */
+export const valueOf = (a: { why?: string; recent?: boolean }) => (a.why === 'picked' ? 3 : a.recent ? 2 : 1)
+
+const shingles = (s: string) => {
+    const w = (s ?? '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+    const out = new Set<string>()
+    for (let i = 0; i + 2 < w.length; i++) out.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`)
+    return out
+}
+/** How much of `a`'s text (its three-word runs) is in `b`: 1 when all of it, 0 when none. */
+export function overlapShare(a: string | Set<string>, b: string | Set<string>): number {
+    const x = typeof a === 'string' ? shingles(a) : a, y = typeof b === 'string' ? shingles(b) : b
+    if (!x.size || !y.size) return 0
+    let n = 0
+    for (const t of x) if (y.has(t)) n++
+    return n / x.size
+}
+/** A book this much inside one already kept is left out (Shadow Slave: 86 pairs above it, ~9.6k tokens in the smaller ones). */
+export const REDUNDANT_SHARE = 0.5
+
 /**
  * The entries kept within the budget: the always-on ones first (the rules a card is built on: with a tight budget Risu used
  * to keep whichever had the higher insert order and could drop a rule for a lore entry), then by priority; an entry that
- * does not fit whole is sent in part when at least MIN_PART_TOKENS are left.
+ * does not fit whole is sent in part when at least MIN_PART_TOKENS are left. `byValue` (a shelved card): after the rules the
+ * books go by value (valueOf), the smaller first within a value, and a book mostly inside one already kept is left out.
  */
-export async function fitBudget<T extends Active>(actives: T[], budget: number, tokensOf: (s: string) => Promise<number> | number): Promise<T[]> {
-    const sorted = [...actives].sort((a, b) => (Number(!!b.always) - Number(!!a.always)) || (b.priority - a.priority))
+export async function fitBudget<T extends Active>(actives: T[], budget: number, tokensOf: (s: string) => Promise<number> | number, opts: { byValue?: boolean } = {}): Promise<T[]> {
+    const byValue = !!opts.byValue
+    const sorted = [...actives].sort((a, b) => (Number(!!b.always) - Number(!!a.always))
+        || (byValue && !a.always ? (valueOf(b) - valueOf(a)) || (a.tokens - b.tokens) : 0) || (b.priority - a.priority))
     const kept: T[] = []
+    const runs = new Map<T, Set<string>>()
+    const runsOf = (a: T) => { let r = runs.get(a); if (!r) { r = shingles(a.prompt); runs.set(a, r) } return r }
     let used = 0
     for (const act of sorted) {
+        if (byValue && !act.always && kept.some((k) => !k.always && overlapShare(runsOf(act), runsOf(k)) > REDUNDANT_SHARE)) continue
         if (used + act.tokens <= budget) { kept.push(act); used += act.tokens; continue }
         const left = budget - used
         if (left < MIN_PART_TOKENS) continue

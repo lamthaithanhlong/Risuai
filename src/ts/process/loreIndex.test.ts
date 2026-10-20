@@ -237,3 +237,38 @@ describe('the order a request carries its lore in, for the prompt cache (asked 2
         expect(cacheOrder([...kept].reverse()).map((a) => a.name)).toEqual(cacheOrder(kept).map((a) => a.name))
     })
 })
+
+describe('the budget by value per token, with no book twice (asked 2026-10-20)', async () => {
+    const { fitBudget, overlapShare, valueOf } = await import('./loreIndex')
+    const tok = (s: string) => Math.ceil(s.length / 4)
+    const text = (seed: string, n: number) => Array.from({ length: n }, (_, i) => `${seed}${i} walks the ${seed} road`).join('. ')
+    const act = (source: string, tokens: number, extra: Record<string, unknown> = {}) => ({ source, tokens, priority: 100, prompt: text(source, Math.ceil(tokens / 3)), ...extra })
+    it('the value of a book: the helper\'s pick, then a key word of the last two messages, then an older one', () => {
+        expect(valueOf({ why: 'picked' })).toBeGreaterThan(valueOf({ why: 'key', recent: true }))
+        expect(valueOf({ why: 'key', recent: true })).toBeGreaterThan(valueOf({ why: 'key' }))
+    })
+    it('picks before key words whatever the insert order, recent key words before old, the smaller first; the rules never dropped', async () => {
+        const acts = [
+            act('old-key', 300, { why: 'key', priority: 9000 }),
+            act('atlas', 900, { why: 'key', recent: true, priority: 500 }),
+            act('pick', 600, { why: 'picked', priority: 1 }),
+            act('rules', 800, { why: 'always', always: true, priority: 1 }),
+            act('inn', 200, { why: 'key', recent: true, priority: 2 }),
+        ]
+        const kept = await fitBudget(acts, 1700, tok, { byValue: true })
+        expect(kept.map((a) => a.source)).toEqual(['rules', 'pick', 'inn'])                                   // old: rules, old-key, atlas (in part)
+        expect((await fitBudget(acts, 1700, tok)).map((a) => a.source)).toEqual(['rules', 'old-key', 'atlas'])  // without byValue: Risu's priority
+    })
+    it('a book whose text is mostly in one already kept is left out; a rule never', async () => {
+        const abyss = text('abyss', 300)
+        const acts = [
+            { source: 'The Abyss', tokens: tok(abyss), priority: 1, why: 'picked', prompt: abyss },
+            { source: 'The Abyss — Deep Layers', tokens: 200, priority: 1, why: 'key', recent: true, prompt: abyss.slice(0, 800) },
+            { source: 'Module', tokens: 200, priority: 1, why: 'always', always: true, prompt: abyss.slice(0, 800) },
+        ]
+        expect(overlapShare(abyss.slice(0, 800), abyss)).toBeGreaterThan(0.9)
+        expect(overlapShare(text('fog', 50), abyss)).toBe(0)
+        const kept = await fitBudget(acts, 100000, tok, { byValue: true })
+        expect(kept.map((a) => a.source)).toEqual(['Module', 'The Abyss'])
+    })
+})
