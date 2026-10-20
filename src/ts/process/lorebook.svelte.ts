@@ -1,5 +1,5 @@
 import { lastItems } from "./scanWindow"
-import { fitBudget, indexActivation, isLearningOnlyLore, loreStats, onlyNewestPlan, type LoreStats } from "./loreIndex"
+import { cacheOrder, changesEachTurn, fitBudget, indexActivation, isFolder, isLearningOnlyLore, loreStats, onlyNewestPlan, type LoreStats } from "./loreIndex"
 import { get } from "svelte/store";
 import { getChatVar, setChatVar } from '../parser/chatVar.svelte';
 import {selectedCharID} from '../stores.svelte'
@@ -94,6 +94,8 @@ export async function loadLoreBookV3Prompt(){
     const fullWordMatchingSetting = char.loreSettings?.fullWordMatching ?? false
     const chatLength = currentChat.length + 1 //includes first message
     const recursiveScanning = char.loreSettings?.recursiveScanning ?? true
+    // a card whose lore is on shelves (the story cards) sends it in the order a prompt cache can reuse (loreIndex.ts cacheOrder)
+    const shelved = characterLore.some(isFolder)
     let recursivePrompt:{
         prompt: string,
         source: string,
@@ -253,6 +255,8 @@ export async function loadLoreBookV3Prompt(){
         priority:number
         always?:boolean
         why?:string
+        at:number
+        turnly?:boolean
         source:string
         inject:{
             operation:'append'|'prepend'|'replace',
@@ -587,6 +591,12 @@ export async function loadLoreBookV3Prompt(){
             }
 
             if(activated){
+                // an always-on rule that changes every reply (the status panel, the fate dice) goes after the chat on a shelved card
+                const turnly = shelved && !!fullLore[i].alwaysActive && pos === '' && !inject && changesEachTurn(content)
+                if(turnly){
+                    pos = 'depth'
+                    depth = 0
+                }
                 actives.push({
                     depth: depth,
                     pos: pos,
@@ -602,6 +612,8 @@ export async function loadLoreBookV3Prompt(){
                     // the creation turns' rules are kept within the budget like the always-on ones (loreIndex.ts loreForced)
                     always: turnPick.always,
                     why,
+                    at: i,
+                    turnly,
                     source: fullLore[i].comment || `lorebook ${i}`,
                     inject: inject ?? null
                 })
@@ -637,7 +649,8 @@ export async function loadLoreBookV3Prompt(){
     // the app's own count of what this pass sends (sendChat hands it to the acceptance harness, tests/acceptance/lib/play.mjs)
     lastLoreStats = loreStats(actives, activesFiltered, loreToken)
 
-    let activesResorted = activesFiltered.sort((a,b) => {
+    // reversed here and back on return: a shelved card's lore stable → volatile, any other in Risu's insert order
+    let activesResorted = shelved ? cacheOrder(activesFiltered).reverse() : activesFiltered.sort((a,b) => {
         return b.order - a.order
     })
 

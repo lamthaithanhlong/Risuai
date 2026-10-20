@@ -323,3 +323,24 @@ export async function fitBudget<T extends Active>(actives: T[], budget: number, 
     }
     return kept
 }
+
+// ---- the order a request carries its lore in, for the prompt cache (asked 2026-10-20) ----------------------------------------
+// A provider reuses the longest prefix two requests share. The lore came in insert order, every book (each turn its own set) before
+// the always-on modules, and two of those modules are new every reply: Module 07 reads the chat's variables (the status panel),
+// Module 10 rolls the fate dice ({{random::…}}). So the prefix two turns shared ended at the first book, and everything after it
+// (the rules, the response instruction, the whole chat history) was sent again uncached. The order is now stable → volatile.
+
+/** Text that is new every reply: it reads the chat's variables or the clock, or rolls dice. */
+const CHANGES_EACH_TURN = /\{\{\s*(?:getvar|getglobalvar|gettempvar|tempvar|random|randint|roll|rollp|pick|dice|time|date|isotime|isodate|unixtime|chat_index|message_index|lastmessage|lastmessageid|previous_char_chat|previous_user_chat|history|idle_duration)\b/i
+export const changesEachTurn = (content: string) => CHANGES_EACH_TURN.test(content ?? '')
+
+/** `at`: the lorebook position; `turnly`: an always-on rule whose text changes every reply (the pass sends it after the chat). */
+export type Placed = { why?: string; order: number; at: number; turnly?: boolean }
+/**
+ * Stable → volatile: the always-on rules that never change (insert order), then the books (insert order, then lorebook position:
+ * the same set gives the same text whatever order the pass activated it in), then the rules that change every reply.
+ */
+export function cacheOrder<T extends Placed>(kept: T[]): T[] {
+    const tier = (a: T) => (a.turnly ? 2 : a.why === 'always' ? 0 : 1)
+    return [...kept].sort((a, b) => tier(a) - tier(b) || a.order - b.order || a.at - b.at)
+}

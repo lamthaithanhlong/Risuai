@@ -212,3 +212,28 @@ describe('the index pass inside the lorebook pass (lorebook.svelte.ts indexActiv
         expect(indexActivation('c1', 1, true, false, 'none', false).activated).toBe(false)
     })
 })
+
+describe('the order a request carries its lore in, for the prompt cache (asked 2026-10-20)', async () => {
+    const { cacheOrder, changesEachTurn } = await import('./loreIndex')
+    it('a rule reading the chat\'s variables or rolling dice changes every reply; {{user}} and plain text do not', () => {
+        expect(changesEachTurn('Name: {{getvar::st_name}}')).toBe(true)                               // Module 07 — Status Panel
+        expect(changesEachTurn('* Event: {{random::NEW,quiet}}.')).toBe(true)                         // Module 10 — Fate Dice
+        expect(changesEachTurn('{{randint::1::100}}')).toBe(true)
+        expect(changesEachTurn('{{user}} is one person; write {{image::fog.jpg}} for a picture')).toBe(false)
+    })
+    it('stable to volatile: the fixed rules, then the books by insert order and position, the rules that change last', () => {
+        const kept = [
+            { name: 'dice', why: 'always', always: true, order: 9800, at: 23, turnly: true },
+            { name: 'person', why: 'picked', order: 140, at: 70 },
+            { name: 'engine', why: 'always', always: true, order: 9100, at: 16 },
+            { name: 'panel', why: 'always', always: true, order: 9700, at: 22, turnly: true },
+            { name: 'creation', why: 'forced', always: true, order: 101, at: 31 },
+            { name: 'place', why: 'key', order: 120, at: 50 },
+            { name: 'reconcile', why: 'always', always: true, order: 9900, at: 30 },
+            { name: 'twin', why: 'key', order: 120, at: 49 },
+        ]
+        expect(cacheOrder(kept).map((a) => a.name)).toEqual(['engine', 'reconcile', 'creation', 'twin', 'place', 'person', 'panel', 'dice'])
+        // the same set in any order of activation gives the same prompt
+        expect(cacheOrder([...kept].reverse()).map((a) => a.name)).toEqual(cacheOrder(kept).map((a) => a.name))
+    })
+})

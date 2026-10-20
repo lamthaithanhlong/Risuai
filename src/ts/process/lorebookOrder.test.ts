@@ -1,0 +1,47 @@
+import { describe, expect, it, vi } from 'vitest'
+
+// The lorebook pass's order, for the prompt cache (loreIndex.ts cacheOrder): asked 2026-10-20, "token tiết kiệm hơn mà vẫn tốt".
+const db = { characters: [] as unknown[], loreBookDepth: 5, loreBookToken: 8000, username: 'Kenji', learningMode: false }
+vi.mock('../stores.svelte', () => ({ DBState: { db }, selectedCharID: { subscribe: (run: (v: number) => void) => (run(0), () => undefined) } }))
+vi.mock('../tokenizer', () => ({ tokenize: async (s: string) => Math.ceil(s.length / 4) }))
+vi.mock('../parser/parser.svelte', () => ({ risuChatParser: (s: string) => s }))
+vi.mock('../parser/chatVar.svelte', () => ({ getChatVar: () => '', setChatVar: () => undefined }))
+vi.mock('./modules', () => ({ getModuleLorebooks: () => [] }))
+vi.mock('../util', () => ({ findCharacterbyId: () => null, pickHashRand: () => 1, selectSingleFile: vi.fn() }))
+vi.mock('../alert', () => ({ alertError: vi.fn(), alertNormal: vi.fn() }))
+vi.mock('../../lang', () => ({ language: {} }))
+vi.mock('../globalApi.svelte', () => ({ downloadFile: vi.fn(), saveAsset: vi.fn() }))
+vi.mock('../storage/database.svelte', () => ({}))
+
+const { loadLoreBookV3Prompt } = await import('./lorebook.svelte')
+
+const rule = (comment: string, order: number, content = `${comment} rules.`) => ({ comment, content, alwaysActive: true, insertorder: order, key: '', mode: 'normal' })
+const book = (comment: string, order: number, key: string) => ({ comment, content: `${comment} canon.`, key, insertorder: order, mode: 'normal', folder: 'folder:people' })
+const LORE = [
+    { comment: 'People', content: '', key: 'folder:people', mode: 'folder', insertorder: 100 },
+    rule('Module 01 — Random Fate Engine', 9100),
+    rule('Module 07 — Status Panel', 9700, 'Name: {{getvar::st_name}}'),
+    rule('Module 10 — Fate Dice', 9800, '* Event: {{random::NEW,quiet}}.'),
+    rule('Lore reconciliation rule', 9900),
+    book('Audrey Hall', 140, 'audrey'),
+    book('Backlund', 120, 'backlund'),
+]
+const card = (lore: unknown[]) => ({ chaId: 'c1', name: 'LotM', globalLore: lore, chatPage: 0, loreSettings: { tokenBudget: 8000, scanDepth: 12 },
+    chats: [{ message: [{ role: 'char', data: 'Fog.' }, { role: 'user', data: 'Tôi đến Backlund gặp Audrey.' }], localLore: [], fmIndex: -1 }] })
+
+describe('the lorebook pass, in the order a cache can reuse', () => {
+    it('a shelved card: the fixed rules, the books by insert order, and the rules that change every reply after the chat', async () => {
+        db.characters = [card(LORE)]
+        const { actives } = await loadLoreBookV3Prompt()
+        const slot = actives.filter((a) => a.pos === '').map((a) => a.source)
+        expect(slot).toEqual(['Module 01 — Random Fate Engine', 'Lore reconciliation rule', 'Backlund', 'Audrey Hall'])
+        const after = actives.filter((a) => a.pos === 'depth' && a.depth === 0).map((a) => a.source)
+        expect(after).toEqual(['Module 07 — Status Panel', 'Module 10 — Fate Dice'])
+    })
+    it('a card with no shelves keeps Risu\'s own order: insert order, the changing rules where they were', async () => {
+        db.characters = [card(LORE.filter((l) => l.mode !== 'folder').map((l) => ({ ...l, folder: undefined })))]
+        const { actives } = await loadLoreBookV3Prompt()
+        expect(actives.map((a) => [a.source, a.pos])).toEqual([['Backlund', ''], ['Audrey Hall', ''], ['Module 01 — Random Fate Engine', ''],
+            ['Module 07 — Status Panel', ''], ['Module 10 — Fate Dice', ''], ['Lore reconciliation rule', '']])
+    })
+})
