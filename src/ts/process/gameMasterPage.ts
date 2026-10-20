@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, PERSONA_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
@@ -54,8 +54,12 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
     const running = yesAt(messages) >= 0 || hasPanel(chat.scriptstate) || !!state.gm_arc || !!state.gm_past
         || (!hasCreationStep(card) && messages.some((m) => m.role === 'char'))
     if (!running) return formated
-    // only a card that says the persona is the character sheet gets the persona note (another card keeps its own rules)
-    return gmRequest(formated, (hasPersona() && hasPersonaRule(card) ? PERSONA_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : ''))
+    // only a card that says the persona is the character sheet gets the persona and voice notes (another card keeps its own rules)
+    const ours = hasPersonaRule(card)
+    const yes = yesAt(messages)
+    const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
+    return gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
+        + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : ''))
 }
 
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */

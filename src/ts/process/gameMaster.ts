@@ -219,6 +219,12 @@ const CREATION_ASK = /[?？]|\bbước\s*\d|\bstep\s*\d/i
 // Measured on the same evening's run: with the persona the step-by-step interview asked the name, the sex and the look again
 // (Mailman asked the look twice) and offered the persona's look as one choice of three; the items it fixes are named once.
 const PERSONA_CREATION = ' The player has a persona (their own profile in the prompt): it is the character sheet. Take every item it states from it word for word, abilities and companions included, and list its abilities and companions in the record (Năng lực, Đồng hành). Step by step: the first reply opens with one line "Từ persona: …" naming what it fixes; then ask only the items it leaves open, in the card\'s order. Never ask the name, sex, age or look it gives, and never offer another name or look ("lấy như profile" = the persona\'s line).'
+/** The yes turn (the card's Initialization), measured 2026-10-19 (SS, persona-plan): the player said "Được" to "Được chưa?" and
+ *  the reply recapped the record and asked "Được chưa?" again, the only note on that turn being the persona's. */
+export const INIT_STORY = '\n\n[Start (hidden, never named): the player said yes and the character is locked. This reply opens the story now (the card\'s Initialization): no record, no recap, no question, no "Được chưa?".]'
+/** Every story turn of a card with the persona rule (canon judge, same run: "Kenji nói rõ cách anh sẽ đối phó…" for a player's
+ *  conditional plan). The cards say it; the note at the end of the message is what a fast model follows. */
+export const VOICE_STORY = '\n\n[Voice (hidden, never named): the player\'s character says, thinks and decides only what the player wrote; write no speech, plan or choice for them.]'
 /** A card with a Future Plan rule (the Kairos Academy card's "Request Profile", asked 2026-10-19: "thiếu future plan"): the reply
  *  ends with "[💡Kế hoạch| names ]", whose names wake their lore next turn; the card's status.lua folds it and keeps only the newest. */
 /** A card whose rules say the player's persona is the character sheet (the three story cards' "The Player's Persona"). */

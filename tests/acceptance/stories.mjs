@@ -14,8 +14,10 @@ const home = os.homedir()
 export const STORIES = {
     ss: {
         key: 'ss',
-        side: { kind: 'side', text: 'Tôi quyết định rồi: tôi sẽ tìm mọi cách gia nhập nhóm của Nephis (Ngôi Sao Đổi Thay) và đi theo cô ấy, dù phải bắt đầu từ việc nhỏ nhất.', match: /Nephis|Ngôi Sao Đổi Thay|Changing Star|nhóm|đội/i },
-        sideLife: ['Tôi làm việc được giao trong nhóm, cố cho mọi người thấy mình có ích.', 'Tôi hỏi một người trong nhóm về luật lệ và việc sắp tới của cả nhóm.', 'Một ngày trôi qua trong nhóm; tôi đi cùng mọi người và làm theo quy củ của họ.'].map((text) => ({ kind: 'side-life', text })),
+        // a side that is THERE: the run is in the First Nightmare, where Nephis is not (2026-10-19: "join Nephis's group" from inside
+        // it was followed by 0-1 of 3 side-life turns, since nothing of her group exists there)
+        side: { kind: 'side', text: 'Tôi quyết định rồi: tôi sẽ xin theo phe đang nắm quyền ở nơi này và làm việc cho họ, dù phải bắt đầu từ việc nhỏ nhất.', match: /phe|nắm quyền|đoàn|quân|lính|gác|chủ|gia tộc|hội|giáo|đội|nhóm/i },
+        sideLife: ['Tôi làm việc được giao cho phe mình theo, cố cho họ thấy mình có ích.', 'Tôi hỏi một người trong phe về luật lệ và việc sắp tới của họ.', 'Một ngày trôi qua; tôi đi cùng họ và làm theo quy củ của họ.'].map((text) => ({ kind: 'side-life', text })),
         title: 'Shadow Slave',
         cardId: '04103f68-46fc-4384-8d2f-04781a0a4d27',
         nameMatch: 'Shadow Slave',

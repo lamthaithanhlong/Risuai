@@ -3,8 +3,8 @@
 from z3 import Bools, And, Or, Not, Solver, sat, Implies
 import sys
 fixed = '--fixed' in sys.argv
-creationStep, panel, arc, past, yes, lastUser, asked, gmOn, persona, rule, storyLike, group, charReply, personaRule = Bools(
-    'creationStep panel arc past yes lastUser asked gmOn persona rule storyLike group charReply personaRule')
+creationStep, panel, arc, past, yes, lastUser, asked, gmOn, persona, rule, storyLike, group, charReply, personaRule, replyAfterYes = Bools(
+    'creationStep panel arc past yes lastUser asked gmOn persona rule storyLike group charReply personaRule replyAfterYes')
 confirmed = Or(yes, panel, arc, past)
 # gameMaster.ts creationNote: hasCreationStep && !hasPanel && !gm_arc && !gm_past && last user && no yes && asked
 creation = And(Not(group), creationStep, Not(panel), Not(arc), Not(past), lastUser, Not(yes), asked)
@@ -26,6 +26,13 @@ def check(name, f):
     print(f'{name}: {"COUNTEREXAMPLE " + str(s.model()) if r == sat else "holds (unsat)"}')
     return r != sat
 ok = True
+initializing = And(yes, Not(replyAfterYes))
+if fixed:
+    initNote = And(Not(group), notesOn, personaRule, initializing)
+    voiceNote = And(Not(group), notesOn, personaRule, Not(initializing))
+    ok &= check('the Start note never with the creation note', And(creation, initNote))
+    ok &= check('Start and Voice never together', And(initNote, voiceNote))
+    ok &= check('the yes turn of a persona-rule card always gets Start', And(Not(group), personaRule, initializing, Not(initNote)))
 ok &= check('creation note and a story note never together', And(creation, Or(personaNote, planNote)))
 ok &= check('persona: the story runs on a persona-rule card with a persona, the note is there', And(Not(group), running, persona, personaRule, Not(personaNote)))
 ok &= check('persona note only on a card whose rules ask for it', And(personaNote, Not(personaRule)))

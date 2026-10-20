@@ -225,6 +225,19 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         expect(storyNotesRequest(req(), card as never, story as never)[1].content).not.toContain('Future Plan')
     })
 
+    it('the yes turn opens the story; later turns carry the voice note; another card gets neither', () => {
+        const rule = { ...card, desc: card.desc + " The Player's Persona …" }
+        const init = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }])
+        const first = storyNotesRequest(req(), rule as never, init as never)[1].content
+        expect(first).toContain('[Start (hidden')
+        expect(first).not.toContain('[Voice (hidden')
+        const later = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'Được' }, { role: 'char', data: 'Mưa rơi.' }, { role: 'user', data: 'Nếu nó lao tới thì tôi né.' }])
+        const next = storyNotesRequest(req(), rule as never, later as never)[1].content
+        expect(next).toContain('[Voice (hidden')
+        expect(next).not.toContain('[Start (hidden')
+        expect(storyNotesRequest(req(), card as never, later as never)[1].content).toBe('Tui đi xuống hầm.')
+    })
+
     it('the persona and Future Plan notes stay with the GM switched off, and come on a card with no creation step (Z3 counterexamples)', () => {
         persona.text = '[{{user}} = Kenji Park ... 1. **Thôi miên:** ...]'
         const planCard = { ...card, desc: "The Player's Persona … Future Plan … [💡Kế hoạch| a ] …" }      // no "Được chưa?": no creation step
