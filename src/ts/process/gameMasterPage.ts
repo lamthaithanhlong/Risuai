@@ -31,14 +31,38 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     const shape = storyShape(replies.map((m) => m.data ?? ''))
     const phase = gmPhase(card, messages, chat.scriptstate, state, shape.head.length + shape.tail.length > 0)
     const dice = rollGm(state, replies.length, rng)
-    // the card's own fate die, as this request rolled it, is named in the note, which the model follows over the system prompt
-    if (cardEvent(formated)) dice.cardNew = true
+    // the card's own fate die, as this request rolled it, is named in the note, which the model follows over the system prompt;
+    // never two in a row (the cards' Module 10), so a NEW right after a reply told NEW is held back
+    const die = phase === 'run' ? cardEvent(formated) : null
+    let held = false
+    if (die !== null) {
+        if (cardNewMark(chat.scriptstate ??= {}, replies.length, die)) dice.cardNew = true
+        else held = die
+    }
     // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
-    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)))
+    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)) + (held ? CARD_HELD : ''))
 }
 
+const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'
+
+/**
+ * Whether this request tells the card's NEW event (cardEvent), kept on the chat: the cards' Module 10 says "never two new
+ * events in a row", but the note followed the die alone, and its "overrides a QUIET or BUILD pace" asked for a second one (Z3,
+ * specs/story/dice/card_new_z3.py: sat before, unsat after). $gm_new_at is the reply count the last NEW was told for;
+ * a reroll asks again at that count, so it looks at the mark before ($gm_new_prev), and a quiet reroll takes the mark back.
+ */
+export function cardNewMark(vars: Chat['scriptstate'], n: number, dieNew: boolean): boolean {
+    const num = (v: unknown) => (v === undefined || v === null || v === '' ? -1 : Number(v))
+    const at = num(vars.$gm_new_at), prev = num(vars.$gm_new_prev)
+    const last = at === n ? prev : at
+    const told = dieNew && last !== n - 1
+    const str = (x: number) => (x < 0 ? '' : String(x))
+    vars.$gm_new_at = str(told ? n : last)
+    vars.$gm_new_prev = str(told ? last : at === n ? -1 : prev)
+    return told
+}
 
 /**
  * The persona and Future Plan notes, whether the GM is on or off: they belong to the card and the player, not to the GM

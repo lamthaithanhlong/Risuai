@@ -8,7 +8,7 @@ const asks: string[] = []
 const answer = { text: '[[GM\nbeat: 1 | x | y\n]]' }
 vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: { content: string }[] }) => { asks.push(arg.formated[0].content); return { type: 'success', result: answer.text } } }))
 
-const { bookkeep, creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } = await import('./gameMasterPage')
+const { bookkeep, cardNewMark, creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } = await import('./gameMasterPage')
 const { statusSpec } = await import('./statusBook')
 
 const card = { type: 'character', name: 'Shadow Slave', desc: 'Character Creation … Được chưa?', firstMessage: '', globalLore: [] }
@@ -65,6 +65,27 @@ describe('the Game Master on the page', () => {
         const out = gameMasterRequest(req(), card as never, c as never)[1].content
         expect(out).toContain('No arc yet')
         expect(c.scriptstate.$gm_arc).toBe('')
+    })
+
+    // Module 10: "Never two new events in a row"; the note followed the die alone (Z3 specs/story/dice/card_new_z3.py)
+    it('the card\'s NEW event is never told two replies in a row; a reroll looks at the reply before it', () => {
+        const ok = chatOf([{ role: 'char', data: 'story', chatId: 'r1' }, { role: 'user', data: 'đi' }, { role: 'char', data: 'story 2', chatId: 'r2' }],
+            { $st_name: 'Mai', $gm_arc: 'debt | Varn | pay | brother', $gm_beat: '1 | x | y' })
+        const withDie = (n: number) => [{ role: 'system', content: `THIS REPLY'S DICE\n* Event: ${n}. At a natural pause (arriving, resting, travelling, a day passing), 1–20 means something new surfaces; otherwise the scene goes on.` }, { role: 'user', content: 'Tôi ngồi nghỉ.' }]
+        expect(gameMasterRequest(withDie(7), card as never, ok as never)[1].content).toContain('Card fate die: NEW EVENT')
+        // a reroll of that reply: asked again at the same place, still the first NEW
+        expect(gameMasterRequest(withDie(3), card as never, ok as never)[1].content).toContain('Card fate die: NEW EVENT')
+        ok.message.push({ role: 'user', data: 'nghỉ tiếp' }, { role: 'char', data: 'story 3', chatId: 'r3' })
+        const next = gameMasterRequest(withDie(12), card as never, ok as never)[1].content
+        expect(next).not.toContain('Card fate die: NEW EVENT')
+        expect(next).toContain('the last reply already brought something new')
+        // the pure mark: a quiet reroll of the NEW reply takes the mark back, so the reply after it may surface one
+        const v: Record<string, string> = {}
+        expect(cardNewMark(v, 4, true)).toBe(true)
+        expect(cardNewMark(v, 4, false)).toBe(false)
+        expect(cardNewMark(v, 5, true)).toBe(true)
+        expect(cardNewMark(v, 6, true)).toBe(false)
+        expect(cardNewMark(v, 7, true)).toBe(true)
     })
 
     it('fresh dice each request (the same state gives different turns)', () => {
