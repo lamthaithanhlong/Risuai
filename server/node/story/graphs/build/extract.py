@@ -2,11 +2,12 @@
 """Drafts a card's knowledge graph from its lore books (owner, 2026-10-21: "librarian nên có … Knowledge Graph … phân biệt sự thật,
 tin đồn, điều chưa biết và thông tin đã lỗi thời").
 
-A model only DRAFTS: each batch of books goes to DeepSeek through 9Router (ask(); never Codex) with the brief below, and the answer is one JSON object. merge.cjs then checks every entity and fact against
+A model only DRAFTS: each batch of books goes to haiku through a lean `claude -p` (default), or to main-deepseek through 9Router
+(ask(); never Codex, never the 43.2x DeepSeek tier) with the brief below, and the answer is one JSON object. merge.cjs then checks every entity and fact against
 story/schema/lore-graph.schema.json, drops what fails (dangling ids, a status the text does not support), and writes
 story/graphs/<world>.json. Nothing here touches the save or the live server.
 
-  extract.py <world> <card repo>/fate-simulator/risu_lorebook.json [--out DIR] [--jobs 6] [--model main-deepseek] [--only N,M]
+  extract.py <world> <card repo>/fate-simulator/risu_lorebook.json [--out DIR] [--jobs 4] [--model claude:haiku] [--only N,M]
 """
 from __future__ import annotations
 import argparse
@@ -101,13 +102,44 @@ def batches(books):
 
 ROUTER = 'http://127.0.0.1:20128/v1/chat/completions'
 NO_CODEX = re.compile(r'^(cx/|gpt-|web-codex|cgw/)', re.I)
+# CFO, 2026-10-21 (modelapi.vn's own bill): mvn/deepseek-v4-flash, mvn/deepseek-flash and deepseek-v4-pro are billed at 43.2x
+# ($12.96 / M in, $51.84 / M out). The first full build ran on v4-flash: 613 calls, most of the day's $64.56, while 9Router's
+# own log said $0.58. Those models are refused here; DeepSeek only as main-deepseek (deepseek-v4.1-flash, $2.1 / M).
+EXPENSIVE = re.compile(r'^(mvn/)?(deepseek-flash|deepseek-v4-flash|deepseek-v4-pro)$', re.I)
+CLAUDE = re.compile(r'^claude:(haiku|sonnet)$', re.I)
+CLAUDE_FLAGS = ['--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
+                '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json',
+                '--system-prompt', 'You turn lore books into a knowledge graph. Answer only with the JSON object asked for.']
+
+
+def ask_claude(model: str, prompt: str, tries: int = 2) -> tuple[str, dict, float]:
+    """The default: a lean `claude -p` on the Claude plan (no tools, MCP, settings, hooks or kept session), $0 on top of it.
+    Pulling entities and facts out of a book into a fixed JSON shape is extraction, haiku's work (CFO 2026-10-21)."""
+    t, last = time.time(), ''
+    for k in range(tries):
+        try:
+            r = subprocess.run(['claude', '-p', '--model', CLAUDE.match(model).group(1).lower(), *CLAUDE_FLAGS], input=prompt,
+                               capture_output=True, text=True, timeout=600)
+            j = json.loads(r.stdout)
+            if j.get('is_error'):
+                raise RuntimeError(str(j.get('result'))[:200])
+            u = j.get('usage') or {}
+            return str(j.get('result') or ''), {'prompt_tokens': u.get('input_tokens'), 'completion_tokens': u.get('output_tokens')}, time.time() - t
+        except Exception as e:  # noqa: BLE001 - a limit, a timeout or a non-JSON answer: once more
+            last = f'{type(e).__name__}: {e}'
+            time.sleep(5 * (k + 1))
+    raise RuntimeError(last[:300])
 
 
 def ask(model: str, prompt: str, max_tokens: int = 9000, tries: int = 4) -> tuple[str, dict, float]:
     """One chat completion through 9Router, reasoning OFF: DeepSeek v4 spent the whole 9000-token answer thinking out loud on a
     3.6k-token batch (measured 2026-10-21: content empty, or 32 KB of notes and no JSON); reasoning_effort "none" answers directly."""
+    if CLAUDE.match(model):
+        return ask_claude(model, prompt)
     if NO_CODEX.match(model):
         raise SystemExit(f'refused: {model} (worker calls never go to Codex)')
+    if EXPENSIVE.match(model):
+        raise SystemExit(f'refused: {model} is billed at 43.2x by modelapi.vn; use claude:haiku (default) or main-deepseek')
     body = json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': max_tokens, 'stream': False,
                        'reasoning_effort': 'none', 'response_format': {'type': 'json_object'}}).encode()
     t, last = time.time(), ''
@@ -155,11 +187,11 @@ def main():
     ap.add_argument('world')
     ap.add_argument('lorebook')
     ap.add_argument('--out', default=str(Path.home() / '.backend-review/work/risu-librarian-kg/extract'))
-    ap.add_argument('--jobs', type=int, default=6)
-    ap.add_argument('--model', default='mvn/deepseek-v4-flash')
+    ap.add_argument('--jobs', type=int, default=4)
+    ap.add_argument('--model', default='claude:haiku', help='claude:haiku (default, on the plan) | claude:sonnet | main-deepseek')
     ap.add_argument('--only', default='')
     a = ap.parse_args()
-    if 'BR_9ROUTER' not in os.environ:      # the key comes from the Keychain, never through this process's argv or output
+    if not CLAUDE.match(a.model) and 'BR_9ROUTER' not in os.environ:      # the key comes from the Keychain, never through this process's argv or output
         sec = Path.home() / '.claude/skills/backend-review/scripts/secret_run.py'
         raise SystemExit(subprocess.call([sys.executable, str(sec), 'br-9router', '--', sys.executable, *sys.argv]))
     out = Path(a.out) / a.world
