@@ -133,7 +133,8 @@ const syncStory = (bytes, rev) => {
     setImmediate(() => {
         try {
             const t0 = performance.now();
-            const r = storyStore.sync(bytes, rev);
+            // a REMOTE character (enableRemoteSaving) is read from remotes/<chaId>.local.bin, as a reader of the save gets it
+            const r = storyStore.sync(bytes, rev, (name) => currentSaveBytes(Buffer.from(`remotes/${name}.local.bin`, 'utf-8').toString('hex')));
             if (SYNC_TRACE) console.log(`[Story] trace sync=${(performance.now() - t0).toFixed(1)}`);
             if (r.error) console.error('[Story] sync:', r.error);
         } catch (error) {
@@ -2178,6 +2179,9 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
         }
         if(filePath === DB_KEY_HEX && Buffer.isBuffer(toStore)){
             syncStory(toStore, dbSync ? dbSync.currentRev() : null);
+        } else if(remoteNameOf(filePath) && Buffer.isBuffer(toStore)){
+            // the chats of a REMOTE character changed in its own file: the story index follows that write too
+            syncStory(currentSaveBytes(DB_KEY_HEX), dbSync ? dbSync.currentRev() : null);
         }
         res.send({
             success: true,
