@@ -22,6 +22,8 @@
 //     --lore-forward M   on | off | shadow: the COPY's loreForward (the GM names the shelves, loreIndex.ts); shadow keeps the live librarian
 //                        and logs what the GM's answer would have loaded ($lore_shadow). Not diagnostic: the scorecards are comparable.
 //     --lore-budget P    the COPY's card gets loreSettings.tokenBudget scaled to P percent (70 = cut 30%); the live card keeps its budget
+//     --req-log          count each request's tokens at a loopback proxy in front of the router (the whole request, the lore message, its tagged
+//                        facts): the turns run in the server's page, so lore.tokens has no other source; not with --narrator web
 //     --gm-solver off    the COPY's gmSolver=false: the GM's note keeps its open rules (the symbolic solver is skipped); "on" leaves it as it is
 //     --base-from RUN    take the snapshot from RUN/_base of an earlier run (an APFS clone: no new disk, and two runs start from the same save)
 //     --keep-runs        do not remove the earlier runs under ~/.risu-story-work/acceptance (another session may still need a copy)
@@ -41,6 +43,7 @@ import path from 'path'
 import { STORIES, STORY_KEYS, planOf } from './stories.mjs'
 import { buildClient, copySave, freePort, liveServer, newRunDir, pruneRuns, snapshotLive, startServer, storeBackend } from './lib/env.mjs'
 import { Player } from './lib/play.mjs'
+import { startReqLog, summarise } from './lib/reqLog.mjs'
 import { modelSettings, patchCopyCardBudget, patchCopyRoot, redact } from './lib/save.mjs'
 import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
@@ -154,6 +157,15 @@ async function playStory(key, ctx) {
         rec.diagnostic = `copy settings changed for this run: ${Object.entries(DIAG).map(([k, v]) => `${k} ${was[k]} -> ${v}`).join(', ')} (the owner's real save keeps ${JSON.stringify(was)})`
         log(rec.diagnostic)
     }
+    let reqLog = null
+    if (flag('--req-log')) {
+        if (ctx.web) throw new Error('--req-log and --narrator web both sit at forceReplaceUrl')
+        const f = path.join(dir, 'requests.jsonl')
+        reqLog = await startReqLog({ upstream: new URL(ctx.model.url).origin, file: f })
+        patchCopyRoot(path.join(dir, 'save'), ctx.backend, { forceReplaceUrl: reqLog.url })
+        rec.reqLogFile = f
+        log(`request log: ${reqLog.url} -> ${ctx.model.url}`)
+    }
     const server = await startServer(dir, ctx.port, { backend: ctx.backend, log })
     const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null, factsLog: path.join(dir, 'facts.jsonl') })
     let failsInRow = 0
@@ -219,6 +231,7 @@ async function playStory(key, ctx) {
     } catch (e) { rec.blocked.push(`final read: ${e.message || e}`) }
     await player.close()
     await server.stop()
+    if (reqLog) { await reqLog.close(); rec.reqLog = summarise(rec.reqLogFile) }
     rec.ms = Date.now() - t0
     if (!flag('--no-judge') && rec.play?.turns?.length) {
         log('judging ...')
