@@ -5,7 +5,7 @@
     import { untrack } from "svelte";
     import { beginGeneration, endGeneration, isGenerationActive } from "src/ts/process/generationKey";
     import { clearPending, markPending, resumeGeneration } from "src/ts/process/pendingGeneration";
-    import { planResumeWithRestore } from "src/ts/process/pendingGenerationCore";
+    import { planResumeWithRestore, resumePage } from "src/ts/process/pendingGenerationCore";
     import { asyncTurnsOn, cancelTurn, chatBusy, resumeTurns, submitTurn, turnViews } from "src/ts/process/turnClient";
     import { registerTurnRunner } from "src/ts/process/turnWorkerPage";
     import { isTurnWorker, takeTurnKey, turnInputMessageId } from "src/ts/process/turnWorkerState";
@@ -366,7 +366,7 @@
             // A refresh mid-reply loses it; this note lets the next load generate it again.
             const sent = pendingChar.chats[pendingChar.chatPage].message[previousLength - 1]
             markPending({
-                chaId: pendingChar.chaId, chatPage: pendingChar.chatPage, previousLength, jobKey: generationKey,
+                chaId: pendingChar.chaId, chatPage: pendingChar.chatPage, chatId: pendingChar.chats[pendingChar.chatPage]?.id, previousLength, jobKey: generationKey,
                 userMessage: sent?.role === 'user' && (sent.data?.length ?? 0) < 20000 ? safeStructuredClone(sent) as any : undefined,
             })
         }
@@ -459,8 +459,13 @@
         }
         resumeGeneration.set(null)
         untrack(() => {
-            const chat = char.chats[pending.chatPage]
-            const plan = chat && char.chatPage === pending.chatPage
+            // the note's chat by id (New Chat shifts the indices), shown on screen: the reply goes where the player wrote
+            const page = resumePage(pending, char.chats)
+            if(page !== null && char.chatPage !== page){
+                char.chatPage = page
+            }
+            const chat = page === null ? undefined : char.chats[page]
+            const plan = chat
                 ? planResumeWithRestore(pending, chat.message.map((m) => m.role))
                 : null
             if(plan === null){

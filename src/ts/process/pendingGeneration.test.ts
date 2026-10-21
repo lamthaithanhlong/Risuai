@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createRequire } from 'node:module'
-import { PENDING_MAX_AGE_MS, isFresh, planResume, planResumeWithRestore, type PendingGeneration } from './pendingGenerationCore'
+import { PENDING_MAX_AGE_MS, isFresh, planResume, planResumeWithRestore, resumePage, type PendingGeneration } from './pendingGenerationCore'
 const base: PendingGeneration = { chaId: 'c1', chatPage: 0, previousLength: 3, at: 1_000 }
 
 describe('planResume', () => {
@@ -71,5 +71,19 @@ describe('windows agree with the server', () => {
         const { JOB_REUSE_MAX_AGE_MS, JOB_KEEP_MS } = require('../../../server/node/jobStore.cjs')
         expect(PENDING_MAX_AGE_MS).toBeGreaterThanOrEqual(JOB_REUSE_MAX_AGE_MS)
         expect(JOB_KEEP_MS).toBeGreaterThanOrEqual(JOB_REUSE_MAX_AGE_MS)
+    })
+})
+
+describe('resumePage: the note finds its chat by id', () => {
+    test('New Chat put a chat first: the note still names the chat the player wrote in (repro kill: the resume answered another chat)', () => {
+        const note: PendingGeneration = { ...base, chatPage: 0, chatId: 'mine' }
+        expect(resumePage(note, [{ id: 'new' }, { id: 'mine' }, { id: 'old' }])).toBe(1)
+    })
+    test('the chat was deleted: nothing to resume', () => {
+        expect(resumePage({ ...base, chatId: 'gone' }, [{ id: 'a' }, { id: 'b' }])).toBeNull()
+    })
+    test('a note from before ids: its index, when it is in range', () => {
+        expect(resumePage({ ...base, chatPage: 1 }, [{ id: 'a' }, { id: 'b' }])).toBe(1)
+        expect(resumePage({ ...base, chatPage: 5 }, [{ id: 'a' }])).toBeNull()
     })
 })

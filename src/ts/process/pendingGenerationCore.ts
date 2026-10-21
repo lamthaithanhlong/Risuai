@@ -5,6 +5,12 @@
 export interface PendingGeneration {
     chaId: string
     chatPage: number
+    /**
+     * The chat's id. chatPage is an index, and New Chat puts the new chat first: after a reload the index named another chat, the
+     * resume answered that one and the turn's own chat kept its message unanswered while the page spun (tests/turns/repro.mjs kill;
+     * owner on the phone 2026-10-20: "đóng trang 60 giây nó loading mãi"). Notes written before this have no id: the index is used.
+     */
+    chatId?: string
     /** Number of messages in the chat when generation started; the last one is the user's message. */
     previousLength: number
     /** The generation's key: after a refresh it re-attaches to the server job that has the reply. */
@@ -57,4 +63,13 @@ export function planResumeWithRestore(p: PendingGeneration, roles: string[]): Re
         return { keep: p.previousLength, restore: p.userMessage }
     }
     return null
+}
+
+/** The index of the chat the note is about, found by its id when the note has one; null when that chat is gone. */
+export function resumePage(p: PendingGeneration, chats: { id?: string }[]): number | null {
+    if (typeof p.chatId === 'string') {
+        const i = chats.findIndex((c) => c?.id === p.chatId)
+        return i >= 0 ? i : null
+    }
+    return p.chatPage >= 0 && p.chatPage < chats.length ? p.chatPage : null
 }

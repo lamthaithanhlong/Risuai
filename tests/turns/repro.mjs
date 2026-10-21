@@ -61,20 +61,28 @@ function patchRoot(dir, patch) {
     } finally { store.close(); queue.close() }
 }
 
-/** The chat as the SERVER has it (the store of the copy), not as the page holds it. */
-function serverChat(dir, chatId) {
+/** A file as the SERVER has it (the copy's queue first: a write still in it is what a reader gets, saveQueue.cjs), or null. */
+function serverFile(dir, name) {
     const Database = require(path.join(REPO, 'node_modules/better-sqlite3'))
-    const key = Buffer.from('database/database.bin', 'utf-8').toString('hex').toLowerCase()
+    const key = Buffer.from(name, 'utf-8').toString('hex').toLowerCase()
     let bytes
     const q = path.join(dir, 'save.queue.sqlite')
-    // a write still in the queue is what a reader gets (saveQueue.cjs): look there first
     if (fs.existsSync(q)) {
         const d = new Database(q, { readonly: true })
         try { bytes = d.prepare("SELECT data FROM pending WHERE key = ? AND op = 'write'").get(key)?.data } catch { /* other schema */ } finally { d.close() }
     }
     if (!bytes) { const d = new Database(path.join(dir, 'save.store.sqlite'), { readonly: true }); try { bytes = d.prepare('SELECT data FROM files WHERE key = ?').get(key)?.data } finally { d.close() } }
-    const block = decodeSave(bytes).find((b) => b.name === CARD.id)
-    const card = parseBlock(block)
+    return bytes ?? null
+}
+
+/**
+ * The chat as the SERVER has it (the store of the copy), not as the page holds it. With enableRemoteSaving (the live save) the card is
+ * a REMOTE block in database.bin and its chats are in remotes/<chaId>.local.bin.
+ */
+function serverChat(dir, chatId) {
+    const block = decodeSave(serverFile(dir, 'database/database.bin')).find((b) => b.name === CARD.id)
+    const remote = block.type === 6 ? serverFile(dir, `remotes/${CARD.id}.local.bin`) : null
+    const card = remote ? JSON.parse(Buffer.from(remote).toString('utf8')) : parseBlock(block)
     const chat = card.chats.find((c) => c.id === chatId)
     return chat ? chat.message.map((m) => ({ role: m.role, data: String(m.data).slice(0, 60), id: m.chatId })) : null
 }
