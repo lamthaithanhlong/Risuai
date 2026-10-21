@@ -16,6 +16,11 @@ const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((p) 
 export const tok = (s) => enc.encode(String(s ?? '')).length
 const LORE_HEAD = /^system: \[Lore for this scene\]/
 const FACTS_AT = /\n\n\[Facts the librarian checked for this scene\./
+// the bookkeeper's call (gameMaster.ts bookkeepPrompt with social on) and its answer's social lines: measured 2026-10-21, acceptance ss
+// ran 31 bookkeeper calls and $led_soc stayed empty, and nothing showed whether the helper wrote no line or the page lost it
+const BK_MARK = 'social: <who> | <tag> | <whom>'
+const SOCIAL_LINE = /^\s*[-*•]?\s*social\s*:/i
+const countSocial = (s) => String(s ?? '').split('\n').filter((l) => SOCIAL_LINE.test(l)).length
 
 /** the token split of one chat-completions body */
 export function splitRequest(body) {
@@ -43,17 +48,26 @@ export function startReqLog({ port = 0, upstream = 'http://localhost:20128', fil
         for await (const c of req) chunks.push(c)
         const raw = Buffer.concat(chunks)
         const t0 = Date.now()
-        let rec = null
-        if (req.method === 'POST' && /\/chat\/completions$/.test(req.url ?? '')) { try { rec = splitRequest(JSON.parse(raw.toString('utf8'))) } catch { rec = null } }
+        let rec = null, bk = false
+        if (req.method === 'POST' && /\/chat\/completions$/.test(req.url ?? '')) {
+            try {
+                const body = JSON.parse(raw.toString('utf8'))
+                rec = splitRequest(body)
+                bk = (Array.isArray(body?.messages) ? body.messages : []).some((m) => textOf(m.content).includes(BK_MARK))
+            } catch { rec = null }
+        }
         try {
             const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !['host', 'content-length', 'connection'].includes(k)))
             const r = await fetch(upstream + req.url, { method: req.method, headers, body: req.method === 'GET' || req.method === 'HEAD' ? undefined : raw })
             const h = {}
             r.headers.forEach((v, k) => { if (!['content-length', 'content-encoding', 'transfer-encoding', 'connection'].includes(k)) h[k] = v })
             res.writeHead(r.status, h)
-            if (r.body) for await (const c of r.body) res.write(c)
+            const got = []
+            if (r.body) for await (const c of r.body) { res.write(c); if (bk) got.push(Buffer.from(c)) }
             res.end()
-            if (rec) fs.appendFileSync(file, JSON.stringify({ at: t0, ms: Date.now() - t0, status: r.status, ...rec }) + '\n')
+            let social = null
+            if (bk) { try { social = countSocial(JSON.parse(Buffer.concat(got).toString('utf8'))?.choices?.[0]?.message?.content) } catch { social = null } }
+            if (rec) fs.appendFileSync(file, JSON.stringify({ at: t0, ms: Date.now() - t0, status: r.status, ...rec, ...(bk ? { bk: true, social } : {}) }) + '\n')
         } catch (e) {
             res.writeHead(502, { 'content-type': 'application/json' })
             res.end(JSON.stringify({ error: { message: `reqLog upstream: ${e.message}` } }))
@@ -81,5 +95,8 @@ export function summarise(file) {
         meanLore: mean(col('lore')), meanBooks: mean(col('books')), meanFacts: mean(col('facts')), meanSystem: mean(col('system')), meanChat: mean(col('chat')),
         factsInLore: lore.filter((r) => r.facts > 0).length,
         helperRequests: all.length - lore.length,
+        bkCalls: all.filter((r) => r.bk).length,
+        bkSocialLines: all.reduce((n, r) => n + (r.bk ? r.social ?? 0 : 0), 0),
+        bkWithSocial: all.filter((r) => r.bk && r.social > 0).length,
     }
 }

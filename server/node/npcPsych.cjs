@@ -322,7 +322,7 @@ function openNpcPsych(opts = {}) {
         let set = null
         try {
             const f = JSON.parse(fs.readFileSync(path.join(npcDir, `${world}.json`), 'utf8'))
-            set = new Set(f.npcs.flatMap((n) => [n.name, ...(n.aliases ?? [])]).filter((a) => /(^|\s)\p{Lu}/u.test(String(a ?? '').normalize('NFC'))).map(lower))
+            set = new Map(f.npcs.flatMap((n) => [n.name, ...(n.aliases ?? [])]).map((a) => String(a ?? '').normalize('NFC').trim()).filter((a) => /(^|\s)\p{Lu}/u.test(a)).map((a) => [lower(a), a]))
         } catch { set = null }
         propers.set(world, set)
         return set
@@ -331,9 +331,13 @@ function openNpcPsych(opts = {}) {
         const c = cacheOf(world)
         const proper = properOf(world)
         const best = new Map()
-        const ts = (texts ?? []).map((t) => String(t ?? '').normalize('NFC').toLowerCase())
+        const ts = (texts ?? []).map((t) => String(t ?? '').normalize('NFC'))
         for (const [alias, set] of c.alias) {
-            if ([...alias].length < 3 || (proper && !proper.has(alias)) || !ts.some((t) => wordAt(t, alias).length)) continue
+            // case-sensitive on the seed's own spelling: "hy vọng" in prose is a word ("hope"), "Hy Vọng" is the person (measured
+            // 2026-10-21, acceptance ss: Hope stood in a scene nobody named her in); an unreadable seed falls back to lower case
+            const spelling = proper ? proper.get(alias) : null
+            if ([...alias].length < 3 || (proper && !spelling)) continue
+            if (!ts.some((t) => (spelling ? wordAt(t, spelling) : wordAt(t.toLowerCase(), alias)).length)) continue
             const id = pick(world, [...set])
             if (id && (!best.has(id) || [...alias].length > [...best.get(id)].length)) best.set(id, alias)
         }

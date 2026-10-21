@@ -423,7 +423,8 @@ function canonNamed(npc, inp) {
         const v = inp.vars ?? {}
         const memo = new Map()
         const sameAs = (x) => { if (!memo.has(x)) { let id = null; try { id = npc.resolveId(inp.world, inp.chatId, x, v) } catch {} memo.set(x, id) } return memo.get(x) }
-        const texts = (inp.messages ?? []).slice(-2).map((m) => plain(m.text))
+        // the texts as written (case kept): a profiled alias counts only when the prose capitalises it as the seed does
+        const texts = (inp.messages ?? []).slice(-2).map((m) => String(m.text ?? '').replace(/\[\[[A-Z_]+[\s\S]*?(\]\]|$)/g, ' ').replace(/<[^>]+>/g, ' ').normalize('NFC'))
         const people = typeof npc.namedIn === 'function' ? npc.namedIn(inp.world, texts).map((h) => ({ alias: h.alias, name: npc.profileOf(inp.world, h.id)?.name ?? h.alias })) : []
         return { people, sameAs }
     } catch {

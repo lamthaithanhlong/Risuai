@@ -42,3 +42,18 @@ test('proxy forwards the body and the answer unchanged and logs the narrator req
     assert.equal(sum.meanFacts, tok(facts))
     await px.close(); up.close(); up.closeAllConnections()
 })
+
+test('a bookkeeper call is marked and its answer\'s social lines counted (the in-app helper wrote none in 31 calls, measured 2026-10-21)', async () => {
+    const answer = { choices: [{ message: { content: '[[GM\nbeat: 1 | a | b\nsocial: Harlan | help | player\n- social: player | insult | Harlan\n]]' } }] }
+    const up = http.createServer(async (req, res) => { for await (const x of req) void x; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(answer)) })
+    await new Promise((r) => up.listen(0, '127.0.0.1', r))
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'reqlog-')), 'r.jsonl')
+    const px = await startReqLog({ upstream: `http://127.0.0.1:${up.address().port}`, file })
+    const post = (content) => fetch(px.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'story', messages: [{ role: 'user', content }] }) }).then((r) => r.text())
+    assert.equal(await post('Write the notes:\n[[GM\nsocial: <who> | <tag> | <whom>   (one line per social act)\n]]'), JSON.stringify(answer))   // forwarded unchanged
+    await post('Describe the picture.')
+    const rows = fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+    assert.deepEqual(rows.map((r) => [r.bk ?? false, r.social ?? null]), [[true, 2], [false, null]])
+    assert.deepEqual((({ bkCalls, bkSocialLines, bkWithSocial }) => ({ bkCalls, bkSocialLines, bkWithSocial }))(summarise(file)), { bkCalls: 1, bkSocialLines: 2, bkWithSocial: 1 })
+    await px.close(); up.close()
+})

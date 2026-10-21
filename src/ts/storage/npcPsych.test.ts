@@ -228,18 +228,25 @@ describe('who the layer can read: canon names in the prose (namedIn), and strang
     test('namedIn: each profiled person a text names, by the longest alias it holds as a whole word; short aliases and parts of words are no hit', () => {
         const s = setup()
         s.p.loadWorld('mailman')
-        const texts = ['cúc rót trà, rồi red granny bước vào', 'không ai thấy kai']
+        const texts = ['Cúc rót trà, rồi Red Granny bước vào', 'không ai thấy Kai']
         expect(s.p.namedIn('mailman', texts)).toEqual([{ id: 'hồng bà bà', alias: 'red granny' }, { id: 'kai', alias: 'kai' }, { id: 'mặc cúc', alias: 'cúc' }])
-        expect(s.p.namedIn('mailman', ['mặc cúc gật đầu với cúc'])).toEqual([{ id: 'mặc cúc', alias: 'mặc cúc' }])   // longest wins
-        expect(s.p.namedIn('mailman', ['kaiser và cúcu'])).toEqual([])                                              // inside a word
+        expect(s.p.namedIn('mailman', ['Mặc Cúc gật đầu với Cúc'])).toEqual([{ id: 'mặc cúc', alias: 'mặc cúc' }])   // longest wins
+        expect(s.p.namedIn('mailman', ['Kaiser và Cúcu'])).toEqual([])                                              // inside a word
         const short = setup({ seed: { ...SEED, npcs: [{ ...SEED.npcs[2], aliases: ['Ka'] }], relations: [] } })
         short.p.loadWorld('mailman')
-        expect(short.p.namedIn('mailman', ['ka nói'])).toEqual([])                                                 // 2 letters: not looked for
+        expect(short.p.namedIn('mailman', ['Ka nói'])).toEqual([])                                                 // 2 letters: not looked for
         // an alias the seed writes in lower case is a description, an ordinary word in prose ("không gian" is "space")
         const desc = setup({ seed: { ...SEED, npcs: [{ ...SEED.npcs[2], aliases: ['không gian', 'Lừa Già'] }], relations: [] } })
         desc.p.loadWorld('mailman')
         expect(desc.p.namedIn('mailman', ['không gian lạnh đi'])).toEqual([])
-        expect(desc.p.namedIn('mailman', ['lừa già bước tới'])).toEqual([{ id: 'kai', alias: 'lừa già' }])
+        expect(desc.p.namedIn('mailman', ['Lừa Già bước tới'])).toEqual([{ id: 'kai', alias: 'lừa già' }])
+        // and case-sensitive: an alias that is also an ordinary word ("hy vọng" = hope) is the person only as the seed writes it
+        const hope = setup({ seed: { ...SEED, npcs: [{ ...SEED.npcs[2], aliases: ['Hy Vọng'] }], relations: [] } })
+        hope.p.loadWorld('mailman')
+        expect(hope.p.namedIn('mailman', ['Cô ấy còn chút hy vọng.'])).toEqual([])
+        expect(hope.p.namedIn('mailman', ['Hy vọng cuối cùng đã tắt.'])).toEqual([])
+        expect(hope.p.namedIn('mailman', ['Hy Vọng bước vào.'])).toEqual([{ id: 'kai', alias: 'hy vọng' }])
+        expect(desc.p.namedIn('mailman', ['lừa già bước tới'])).toEqual([])
     })
     test('a stranger: neutral traits, the default seed toward everyone, no secret, no agenda; a profile with the same id wins', async () => {
         const s = setup()
@@ -852,10 +859,10 @@ describe('the acceptance script tests/acceptance/scripts/npc-psych.json', () => 
         for (const [key, world] of Object.entries(WORLD)) {
             const turns = SCRIPT[key] as { kind: string; text: string }[]
             expect(p.loadWorld(world)).toBe(true)
-            const ids = new Set(turns.flatMap((t) => p.namedIn(world, [t.text.toLowerCase()]).map((h: any) => h.id)))
+            const ids = new Set(turns.flatMap((t) => p.namedIn(world, [t.text]).map((h: any) => h.id)))
             expect(ids.size, key).toBe(1)
             // the same person in every turn but the pause
-            for (const t of turns.filter((x) => x.kind !== 'pause' && x.kind !== 'npc')) expect(p.namedIn(world, [t.text.toLowerCase()]).map((h: any) => h.id), `${key}: ${t.text}`).toEqual([...ids])
+            for (const t of turns.filter((x) => x.kind !== 'pause' && x.kind !== 'npc')) expect(p.namedIn(world, [t.text]).map((h: any) => h.id), `${key}: ${t.text}`).toEqual([...ids])
             expect(turns.map((t) => t.kind)).toEqual(expect.arrayContaining(['help', 'insult', 'apologise', 'confide']))
             expect(turns.some((t) => /giấu/.test(t.text))).toBe(true)
         }
