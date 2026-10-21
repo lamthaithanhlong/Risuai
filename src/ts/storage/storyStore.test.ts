@@ -169,3 +169,33 @@ describe.skipIf(!existsSync(LIVE))('a copy of the real save', () => {
         s.close()
     })
 })
+
+describe('a REMOTE character (enableRemoteSaving: the live save since 2026-10-20)', () => {
+    // database.bin holds only a pointer {v, type, name}; the character and its chats are remotes/<chaId>.local.bin. The index read only
+    // database.bin, so every chat of such a save was "not_found" (acceptance prolog.check, all 4 stories).
+    const remoteSave = (chars: any[]) => merge.encodeSave([
+        merge.serializeBlock(1, 0, 'root', { __directory: chars.map((c) => c.chaId) }),
+        ...chars.map((c) => ({ type: 6, comp: 0, name: c.chaId, data: Buffer.from(JSON.stringify({ v: 1, type: 2, name: c.chaId })) })),
+        { type: 0, comp: 0, name: 'config', data: Buffer.from('{}') },
+    ])
+    test('its chats are read from the remote file', () => {
+        const s = fresh()
+        const c = card([chat1()], LORE)
+        const files: Record<string, Buffer> = { ss: Buffer.from(JSON.stringify(c)) }
+        const r = s.sync(remoteSave([c]), 5, (name: string) => files[name] ?? null)
+        expect(r.chats).toBe(1)
+        expect(s.story('k1')?.state.st_name).toBe('Kenji Park')
+    })
+    test('a remote file that changed is synced again; one that is missing archives nothing', () => {
+        const s = fresh()
+        const c = card([chat1()], LORE)
+        const files: Record<string, Buffer | null> = { ss: Buffer.from(JSON.stringify(c)) }
+        s.sync(remoteSave([c]), 5, (n: string) => files[n] ?? null)
+        files.ss = Buffer.from(JSON.stringify(card([chat1({ st_place: 'Bright Castle' })], LORE)))
+        s.sync(remoteSave([c]), 6, (n: string) => files[n] ?? null)
+        expect(s.story('k1')?.state.st_place).toBe('Bright Castle')
+        files.ss = null
+        expect(s.sync(remoteSave([c]), 7, (n: string) => files[n] ?? null).archived).toBe(0)
+        expect(s.story('k1')).not.toBeNull()
+    })
+})

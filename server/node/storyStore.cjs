@@ -290,12 +290,30 @@ function openStoryStore(opts) {
         return report
     })
 
-    function sync(bytes, rev) {
+    /**
+     * readRemote(name): the bytes of remotes/<name>.local.bin, or null. With enableRemoteSaving (the live save since 2026-10-20) a
+     * character block in database.bin is only a pointer {v, type, name}; its chats are in that file. Read only database.bin, every chat
+     * of such a save was "not_found" (acceptance prolog.check in all 4 stories). A pointer whose file cannot be read stays a pointer:
+     * unreadable, so its character is not archived.
+     */
+    function sync(bytes, rev, readRemote = null) {
         let blocks
         try {
             blocks = decodeSave(bytes)
         } catch (error) {
             return { error: error.message }
+        }
+        if (readRemote) {
+            blocks = blocks.map((b) => {
+                if (b.type !== 6) return b
+                try {
+                    const ptr = JSON.parse(b.data.toString('utf8'))
+                    const data = readRemote(typeof ptr?.name === 'string' ? ptr.name : b.name)
+                    return data ? { type: ptr?.type ?? 2, comp: 0, name: b.name, data: Buffer.from(data) } : b
+                } catch {
+                    return b
+                }
+            })
         }
         return syncTx(blocks, rev ?? null, now())
     }
