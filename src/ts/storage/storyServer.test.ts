@@ -194,6 +194,15 @@ describe.skipIf(!CLINGO)('NPC psychology over HTTP', () => {
         expect(s.json.state.led_soc).toBe(talk.led_soc)               // storyStore keeps led_soc in the synced state
     }, 60000)
 
+    test('the page\'s named people reach the solver: a portrait name the ledger never wrote is a stranger in the scene (measured: "Harlan" was dropped by this route)', async () => {
+        const b = body({ chatId: 'n2', vars: { st_name: 'Kenji', st_place: 'Làng' }, messages: [{ role: 'char', text: 'Harlan hé cửa.' }, { role: 'user', text: 'Tôi đi theo Harlan.' }], people: ['Harlan', 42, 'x'.repeat(90)] })
+        const r = await eventually(() => decide(b), (v) => v.status === 'ok')
+        expect(r.present).toEqual(['harlan'])
+        expect(r.npc.actions[0]).toMatchObject({ who: 'Harlan' })
+        const none = await decide({ ...b, people: undefined })
+        expect(none.present).toEqual([])
+    }, 60000)
+
     test('the page may turn it off (npc:false), and RISU_NPC_PSYCH=0 turns the module off: today\'s note, no npc field', async () => {
         const off = await decide(body({ npc: false }))
         expect(off.status).toBe('ok')

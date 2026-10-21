@@ -509,6 +509,18 @@ describe('NPC psychology: $led_soc and the solver flag', () => {
         expect(c.scriptstate.$led_soc).toBe('2 | player | help | Marek\n2 | Marek | save | player')
     })
 
+    it('social lines are kept when the same call also answers the STATUS panel (the call the page makes once the character is confirmed)', async () => {
+        const spec = statusSpec(ssCard as never)!
+        expect(spec).toBeTruthy()
+        const c = chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r1' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Harlan hé cửa.', chatId: 'r2' }], { $st_name: 'Mai', $st_frag: '0/1000' })
+        let asked = ''
+        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 8 | a | b\nsocial: Harlan | help | player\n]]\n[[STATUS\nfrag: 12/1000\n]]' }, { status: spec, social: true })
+        expect(ok).toBe(true)
+        expect(asked).toContain('social: <who> | <tag> | <whom>')
+        expect(asked).toContain('THE STATUS PANEL')
+        expect(c.scriptstate.$led_soc).toBe('2 | Harlan | help | player')
+    })
+
     it('a reply the helper answers with only a social line still counts as written', async () => {
         const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'x' }, { role: 'char', data: 'b', chatId: 'r2' }], { $st_name: 'Mai' })
         expect(await bookkeep(() => c as never, c.message[2], 2, 'x', async () => 'Nothing else.')).toBe(false)

@@ -2173,6 +2173,9 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
             prevNew: !!b.prevNew, kinds: (Array.isArray(b.kinds) ? b.kinds : []).slice(0, 3).map((k) => str(k, 200)), stance: str(b.stance, 60),
             // the reply count (the $led_soc lines' turn numbers): the NPC appraisal ages emotions by it
             ...(Number.isInteger(b.turn) && b.turn >= 0 ? { turn: Math.min(b.turn, 1e6) } : {}),
+            // the chat's named people the ledger may lack (gmSolver.ts decidePeople: LOOK names, the card's portraits). Measured 2026-10-21,
+            // acceptance ss: without this line "Harlan" (a portrait, named in 4 replies) was never in the scene
+            people: (Array.isArray(b.people) ? b.people : []).filter((x) => typeof x === 'string').slice(0, 40).map((x) => str(x, 40)),
         };
         // npc: false (the page's db.npcPsych off) or no module (RISU_NPC_PSYCH=0): today's note, no Subtext line
         const r = await gmSolver.decide({ ...input, npc: b.npc !== false }, { store: storyStore, graph: storyGraph, npc: b.npc === false ? null : npcPsych });
