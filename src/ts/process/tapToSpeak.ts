@@ -5,6 +5,7 @@
 // Việt-ji line under each word and furigana in <rt>.
 
 import { speakForeign, warmVoice, type StreamDeps } from './ttsStream'
+import { unlockAudio } from './audioUnlock'
 import { isLatinLang } from './vietji'
 
 const FOREIGN = /[぀-ヿ㐀-鿿豈-﫿가-힣ᄀ-ᇿ㄰-㆏々〆ー\u0E01-\u0E4E]/
@@ -117,6 +118,7 @@ export function installTapToSpeak(deps: StreamDeps, getLang: () => string) {
             for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!skipped(n, block)) text += n.textContent ?? ''
             const say = foreignOfLine(text, getLang())
             if (say && allowTap()) {
+                try { unlockAudio() } catch { /* no Web Audio */ }        // inside the tap: iOS allows sound only here
                 const lang = /[\uac00-\ud7a3]/.test(say) ? 'ko' : /[\u0e01-\u0e4e]/.test(say) ? 'th' : /[\u3040-\u30ff]/.test(say) ? 'ja' : getLang()
                 speakForeign(deps, say, lang).catch((err) => console.warn('[tts] speaker button failed', err))
             }
@@ -127,6 +129,7 @@ export function installTapToSpeak(deps: StreamDeps, getLang: () => string) {
         const at = textAtPoint(root, e.clientX, e.clientY)
         const hit = at && foreignAt(at.text, at.pos, getLang())
         if (!hit || !allowTap()) return
+        try { unlockAudio() } catch { /* no Web Audio */ }            // inside the tap: iOS allows sound only here
         speakForeign(deps, hit.text, hit.lang).catch((err) => console.warn('[tts] tap to speak failed', err))
     }
     document.addEventListener('click', installed, true)

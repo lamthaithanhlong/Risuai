@@ -54,3 +54,22 @@ describe('audio player (iOS unlock)', () => {
         expect(ctx.log.filter((l) => l === 'stop').length).toBe(1)
     })
 })
+
+describe('audio player after the app was switched (iOS "interrupted")', () => {
+    test('a context iOS interrupted is resumed at the next tap, not only a suspended one', () => {
+        const ctx = fakeContext('running')
+        ;(ctx as { state: string }).state = 'interrupted'
+        const p = createAudioPlayer(() => ctx)
+        p.unlock()
+        expect(ctx.log).toContain('resume')
+    })
+    test('playing on an interrupted context resumes it first', async () => {
+        const ctx = fakeContext('running')
+        const p = createAudioPlayer(() => ctx)
+        p.unlock()
+        ;(ctx as { state: string }).state = 'interrupted'
+        ctx.log.length = 0
+        await p.play(new ArrayBuffer(8))
+        expect(ctx.log[0]).toBe('resume')
+    })
+})

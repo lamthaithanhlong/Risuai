@@ -22,7 +22,8 @@ export function createAudioPlayer(make: () => AudioContextLike) {
         /** Call synchronously from the tap, before any await. */
         unlock(): AudioContextLike {
             const c = get()
-            if (c.state === 'suspended') {
+            // 'suspended' (never unlocked) or iOS's 'interrupted' (the app was switched, the screen locked): resume inside the tap
+            if (c.state !== 'running') {
                 void c.resume().catch(() => {})
             }
             const silent = c.createBufferSource()
@@ -41,7 +42,7 @@ export function createAudioPlayer(make: () => AudioContextLike) {
 
         async play(bytes: ArrayBuffer): Promise<{ state: string }> {
             const c = get()
-            if (c.state === 'suspended') {
+            if (c.state !== 'running') {
                 await c.resume()
             }
             const buffer = await c.decodeAudioData(bytes)

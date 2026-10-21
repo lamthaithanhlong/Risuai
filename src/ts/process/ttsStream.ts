@@ -8,6 +8,8 @@
 //
 // Frames: 1 byte kind ('A' = an MP3 file, 'E' = an error, UTF-8) · 4 bytes length, big endian · the data.
 
+import { sharedAudioContext, unlockAudio } from './audioUnlock'
+
 export type Frame = { kind: 'audio' | 'error'; data: Uint8Array }
 
 /** Splits a byte stream into frames; the stream may cut a frame anywhere. */
@@ -51,7 +53,6 @@ export interface StreamDeps {
 }
 
 let current: { stop(): void } | null = null
-let audioCtx: AudioContext | null = null
 
 /** Stops whatever is being read. */
 export function stopSpeaking() {
@@ -60,10 +61,15 @@ export function stopSpeaking() {
     try { globalThis.speechSynthesis?.cancel() } catch { /* no device voice */ }
 }
 
+/**
+ * The context the tap unlocked (audioUnlock.ts), never one of its own. This used to make its own at the first reading, after the awaits
+ * that load the TTS code, so outside the tap: iOS started it suspended and would not resume it, and the voice was silent or came only
+ * at a later tap (owner, 2026-10-20). After an app switch iOS leaves it 'interrupted': resumed here too.
+ */
 function context(): AudioContext {
-    audioCtx ??= new (globalThis.AudioContext ?? (globalThis as any).webkitAudioContext)()
-    if (audioCtx.state === 'suspended') void audioCtx.resume()
-    return audioCtx
+    const ctx = (sharedAudioContext() ?? unlockAudio()) as unknown as AudioContext
+    if (ctx.state !== 'running') void ctx.resume().catch(() => {})
+    return ctx
 }
 
 /**
