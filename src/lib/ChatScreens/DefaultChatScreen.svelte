@@ -14,6 +14,8 @@
     import { onMount } from "svelte";
 
     import Suggestion from './Suggestion.svelte';
+    import MicButton from './MicButton.svelte';
+    import { appendText } from 'src/ts/process/dictation';
     import { CameraIcon, DatabaseIcon, DicesIcon, GlobeIcon, ImagePlusIcon, LanguagesIcon, Laugh, MenuIcon, MicOffIcon, PackageIcon, Plus, RefreshCcwIcon, ReplyIcon, Send, StepForwardIcon, XIcon, BrainIcon, ArrowDown, SparkleIcon } from "@lucide/svelte";
     import { selectedCharID, PlaygroundStore, createSimpleCharacter, hypaV3ModalOpen, ScrollToMessageStore, additionalChatMenu, additionalFloatingActionButtons, easyPanelStore, chatPanelStore } from "../../ts/stores.svelte";
     import { tick } from 'svelte';
@@ -895,6 +897,10 @@
                 ></textarea>
 
 
+                <MicButton
+                        height={inputHeight}
+                        onText={(text) => { messageInput = appendText(messageInput, text); tick().then(() => updateInputSizeAll()) }}
+                />
                 {#if $doingChat || doingChatInputTranslate}
                     <button
                             aria-labelledby="cancel"

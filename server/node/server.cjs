@@ -168,6 +168,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
         try { await Promise.race([turnWorker?.stop(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* the browser goes with the process */ }
         try { await Promise.race([saveQueue.flush(), new Promise((r) => setTimeout(r, 8000))]); await saveQueue.close(); } catch (e) { console.error('[SaveQueue] shutdown:', e); }
         try { saveStore.close(); } catch (e) { console.error('[Store] shutdown:', e); }
+        try { stt.close(); } catch { /* the worker goes with the process */ }
         process.exit(0);
     });
 }
@@ -1405,6 +1406,11 @@ app.post('/api/tts/warm', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
     await pipeLocalTTS(req, res, '/audio/warm', { model: req.body?.model, voice: req.body?.voice });
 });
+
+// Speech to text on this Mac (stt.cjs): the page records with the mic button, POSTs the bytes here, gets the text back.
+const { createStt, mountStt } = require('./stt.cjs');
+const stt = createStt({ args: [process.env.RISU_STT_MODEL || 'turbo', process.env.RISU_STT_FAST_MODEL || 'small', process.env.RISU_STT_LONG_AFTER || '60'] });
+mountStt(app, { express, stt, auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter });
 
 app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
