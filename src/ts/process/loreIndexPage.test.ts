@@ -140,7 +140,7 @@ describe('the librarian asked by the GM', () => {
     const msgs = (): (M & { chatId?: string })[] => [...MSGS.slice(0, 3), player()]
     const MSGS: (M & { chatId?: string })[] = [{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r0' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Mưa rơi.\n\n[💡Kế hoạch| Person 1 ]', chatId: 'r1' }, { role: 'user', data: 'Tôi đi tiếp.' }]
     const fwVar = (over = {}) => JSON.stringify([{ at: 'r1', n: 25, shelves: ['People'], books: ['Person 1', 'Person 3'], ...over }])
-    beforeEach(() => { asks.length = 0; answers.length = 0; db.loreForward = undefined; db.loreForwardShadow = undefined; forwardStats.hit = forwardStats.books = forwardStats.miss = 0 })
+    beforeEach(() => { asks.length = 0; answers.length = 0; db.loreForward = undefined; db.loreForwardShadow = false; forwardStats.hit = forwardStats.books = forwardStats.miss = 0 })
 
     it('a waiting answer for the last reply: the shelves and the books are loaded with no helper call at all', async () => {
         await pickLoreForTurn(card() as never, chat(msgs(), { [FORWARD_VAR]: fwVar() }) as never)
@@ -215,6 +215,16 @@ describe('the librarian asked by the GM', () => {
         const log = JSON.parse(c.scriptstate.$lore_shadow)
         expect(log).toHaveLength(1)
         expect(log[0]).toMatchObject({ fwShelves: ['People'], liveShelves: ['People'], fwBooks: ['Person 1', 'Person 3'], liveBooks: ['Person 0'] })
+    })
+
+    it('shadow is the default while the setting was never touched (owner 10-20: live in shadow until the canon judge scores it)', async () => {
+        db.loreForwardShadow = undefined
+        answers.push('3'); answers.push('1')
+        const c = chat(msgs(), { [FORWARD_VAR]: fwVar() })
+        await pickLoreForTurn(card() as never, c as never)
+        expect(asks).toHaveLength(2)                                                                        // the live librarian still asked
+        expect(lorePicked('c1', 7)).toBe(true)
+        expect(JSON.parse(c.scriptstate.$lore_shadow)).toHaveLength(1)
     })
 
     it('the GM is asked for shelves only on a shelved card the index pass runs for, and only while the setting is on', () => {

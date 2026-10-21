@@ -167,7 +167,9 @@ export async function prefetchBooks(char: character, chat: Chat): Promise<void> 
 
 /** The picks of a shelved card: from the GM's waiting answer when there is one for this reply, else the live librarian. */
 async function shelvedPicks(char: character, chat: Chat, index: IndexItem[], recent: string, room: number): Promise<{ picks: number[]; open: Set<number> } | null> {
-    const shadow = getDatabase().loreForwardShadow === true
+    // owner 10-20: live in shadow first (the live librarian picks; the GM's picks are logged to $lore_shadow) until the canon judge
+    // has scored it; Settings turns shadow off to use the GM's picks
+    const shadow = getDatabase().loreForwardShadow !== false
     let fw: ForwardLore | null = null
     if (forwardOn() || shadow) {
         const run = pending.get(chat.id ?? '')
