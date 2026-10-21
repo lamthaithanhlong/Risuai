@@ -341,7 +341,7 @@ export function scoreStory(rec, judge = {}) {
     if (lore('story').length) out.push(check('lore.tokens', 'Lore tokens a request sends (the app\'s count)', 'INFO',
         `story turns: ${loreLine(lore('story'))}; creation turns: ${lore('creation').length ? loreLine(lore('creation')) : 'n/a'}; budget ${lore('story')[0].budget}`, []))
     if (rec.reqLog?.narrator) out.push(check('lore.requests', 'Tokens a narrator request sends, counted at the proxy (o200k)', 'INFO',
-        `${rec.reqLog.narrator} requests with the scene's lore: mean ${rec.reqLog.meanTotal} tokens (median ${rec.reqLog.medianTotal}, max ${rec.reqLog.maxTotal}); of it books ${rec.reqLog.meanBooks}, tagged facts ${rec.reqLog.meanFacts} (${rec.reqLog.factsInLore} requests carried facts); ${rec.reqLog.helperRequests} helper requests`, []))
+        `${rec.reqLog.narrator} requests with the scene's lore: mean ${rec.reqLog.meanTotal} tokens (median ${rec.reqLog.medianTotal}, max ${rec.reqLog.maxTotal}); of it system messages ${rec.reqLog.meanSystem ?? '?'}, chat ${rec.reqLog.meanChat ?? '?'}, the scene's books ${rec.reqLog.meanBooks}, tagged facts ${rec.reqLog.meanFacts} (${rec.reqLog.factsInLore} requests carried facts); ${rec.reqLog.helperRequests} helper requests`, []))
     const lat = all.filter((t) => t.ok && t.phase === 'story').map((t) => t.ms / 1000)
     if (lat.length) out.push(check('run.latency', 'Seconds from send to a settled reply (story turns)', 'INFO',
         `median ${median(lat).toFixed(0)} s, p90 ${pct(lat, 0.9).toFixed(0)} s, max ${Math.max(...lat).toFixed(0)} s over ${lat.length} turns; mean reply ${Math.round(after.reduce((a, t) => a + (t.shown || '').length, 0) / Math.max(1, after.length))} chars`, []))

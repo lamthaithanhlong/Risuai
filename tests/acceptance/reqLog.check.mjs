@@ -18,6 +18,8 @@ test('splitRequest: books and facts are counted apart, the rest is not lore', ()
     assert.equal(s.facts, tok(facts))
     assert.equal(s.books, tok(['system: [Lore for this scene]', books.trim()].join('\n\n')))
     assert.ok(s.total > s.lore && s.lore === s.books + s.facts)
+    assert.equal(s.system, tok('You are the narrator.'))
+    assert.equal(s.total, s.system + s.lore + s.chat)
 })
 
 test('splitRequest: a request without the lore message has none', () => {

@@ -20,11 +20,13 @@ const FACTS_AT = /\n\n\[Facts the librarian checked for this scene\./
 /** the token split of one chat-completions body */
 export function splitRequest(body) {
     const msgs = Array.isArray(body?.messages) ? body.messages : []
-    const out = { model: body?.model ?? null, messages: msgs.length, total: 0, lore: 0, books: 0, facts: 0, hasLore: false }
+    const out = { model: body?.model ?? null, messages: msgs.length, total: 0, lore: 0, books: 0, facts: 0, system: 0, chat: 0, hasLore: false }
     for (const m of msgs) {
         const t = textOf(m.content)
         const n = tok(t)
         out.total += n
+        if (m.role === 'system') out.system += n
+        else if (!(m.role === 'user' && LORE_HEAD.test(t))) out.chat += n
         if (m.role === 'user' && LORE_HEAD.test(t)) {
             out.hasLore = true
             out.lore += n
@@ -76,7 +78,7 @@ export function summarise(file) {
     return {
         requests: all.length, narrator: lore.length,
         meanTotal: mean(col('total')), medianTotal: sorted[Math.floor(sorted.length / 2)] ?? 0, maxTotal: sorted.at(-1) ?? 0,
-        meanLore: mean(col('lore')), meanBooks: mean(col('books')), meanFacts: mean(col('facts')),
+        meanLore: mean(col('lore')), meanBooks: mean(col('books')), meanFacts: mean(col('facts')), meanSystem: mean(col('system')), meanChat: mean(col('chat')),
         factsInLore: lore.filter((r) => r.facts > 0).length,
         helperRequests: all.length - lore.length,
     }
