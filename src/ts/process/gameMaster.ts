@@ -502,6 +502,10 @@ export function pathLine(state: GmState): string {
 // hidden block; the scene gets a sign of it at most.
 const SEED_PROSE = 'In the prose the hook is at most a quiet sign (something seen or overheard) that follows from what the player just did: no new character speaks to or makes an offer to the player character, the antagonist does not act yet.'
 
+// measured 2026-10-21 (Shadow Slave chat ee04f566): after the player only walked on, a stranger offered "I'll show you where the water is"
+// for help with a knot, though nobody had shown the character thirsty. The offer must hook a need that is already established.
+export const NEED_RULE = 'An NPC\'s offer, bait or bargain may only target a need the player character already has (shown in the scene, said by the player or written in the status panel\'s condition): never invent a need (thirst, hunger, a wound, being lost) to hook a scene; with none, the NPC wants something for themselves or just acts.'
+
 /** The note for this turn, or '' when the GM is silent. */
 export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string): string {
     if (phase === 'silent') return ''
@@ -538,6 +542,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý": the GM knows and runs
         // everything, and the world's laws bind it too
         + ' ' + WORLD_LAW
+        + ' ' + NEED_RULE
         + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs (no free rank, Sequence, stamp, power).'
         + ` Story only, no planning notes; end, after any panel, with ${block}]`
 }

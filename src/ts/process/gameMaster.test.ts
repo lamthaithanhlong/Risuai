@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
     applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isForeignText, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
-    WORLD_LAW,
+    WORLD_LAW, NEED_RULE,
 } from './gameMaster'
 
-const LAW = WORLD_LAW.length + 1
+const LAW = WORLD_LAW.length + 1 + NEED_RULE.length + 1   // the standing rules every note carries (2026-10-21: + the need rule)
 
 const SS = { name: 'Shadow Slave — Independent Fate', desc: 'Character Creation (before the story starts)\n… "Được chưa? Sửa dòng nào cứ nói"', firstMessage: '' }
 const PLAIN = { name: 'Aiko', desc: 'A cheerful barista who chats with you.', firstMessage: 'Hi!' }
@@ -198,6 +198,17 @@ describe('the note', () => {
             expect(n).toContain('arc: <hook> | <antagonist> | <goal> | <stakes>')   // the arc itself still goes in the block
         }
         expect(gmNote('run', FULL, dice, 'x')).not.toContain('quiet sign')
+    })
+    it('an NPC may only offer, bait or bargain on a need the player character already has: shown in the prose, said by the player or in the panel', () => {
+        // measured 2026-10-21 (Shadow Slave chat ee04f566): "Cậu trông khỏe hơn tôi. Giúp tôi nới nút này đi, rồi tôi sẽ chỉ cậu chỗ có nước."
+        // after the player only walked on: nobody had shown the character thirsty, the narrator invented the thirst to hook the scene
+        const thirsty = { ...FULL, st_condition: 'khát khô cổ' }
+        for (const n of [gmNote('run', FULL, dice, 'x'), gmNote('run', thirsty, dice, 'x'), gmNote('seed', {}, dice, 'x'), gmNote('seed', { gm_path: 'the garrison | recruit | low' }, dice, 'x')]) {
+            expect(n).toContain('An NPC\'s offer, bait or bargain may only target a need the player character already has')
+            expect(n).toContain('status panel')   // a condition written there counts as established
+            expect(n).toContain('never invent a need (thirst, hunger, a wound, being lost) to hook a scene')
+            expect(n).toContain('the NPC wants something for themselves or just acts')
+        }
     })
     it('names the GM all-knowing and all-powerful and the world\'s laws binding on it, whenever it speaks', () => {
         // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý"
