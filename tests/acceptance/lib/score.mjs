@@ -296,11 +296,11 @@ export function scoreStory(rec, judge = {}) {
     }
 
     // ---- the librarian's tagged facts (loreFacts.ts, storyGraph.cjs) ----------------------------------------------------------------
-    const mains = story.map((t) => ({ t, facts: (t.net ?? []).filter((n) => n.kind === 'main').flatMap((n) => n.facts ?? []) }))
+    const mains = story.map((t) => ({ t, facts: (t.net ?? []).filter((n) => n.kind === 'main' || n.type === 'facts').flatMap((n) => n.facts ?? []) }))
     const withFacts = mains.filter((x) => x.facts.length)
     const count = (st) => withFacts.reduce((n, x) => n + x.facts.filter((f) => f.status === st).length, 0)
     if (mains.length) out.push(check('lore.facts', 'Tagged facts the librarian sent (FACT / RUMOR / UNKNOWN / OUTDATED)', 'INFO',
-        `${withFacts.length}/${mains.length} story requests carried facts; lines per request median ${median(withFacts.map((x) => x.facts.length))}; fact ${count('fact')}, rumor ${count('rumor')}, unknown ${count('unknown')}, outdated ${count('outdated')}`,
+        `${withFacts.length}/${mains.length} story turns got facts; lines per request median ${median(withFacts.map((x) => x.facts.length))}; fact ${count('fact')}, rumor ${count('rumor')}, unknown ${count('unknown')}, outdated ${count('outdated')}`,
         withFacts.slice(0, 3).flatMap((x) => x.facts.filter((f) => f.status !== 'fact').slice(0, 2).map((f) => `${x.t.label}: ${f.status.toUpperCase()} · ${oneLine(f.text, 140)}`))))
     const fj = judge.facts ?? {}
     const factJudged = Object.entries(fj)

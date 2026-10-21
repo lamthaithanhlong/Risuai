@@ -25,7 +25,7 @@ import { isNodeServer } from "../platform";
 import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
 import { glossaryOf, termsRequest } from "./storyTermsPage";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
-import { pickLoreForTurn } from "./loreIndexPage";
+import { creationTurn, pickLoreForTurn } from "./loreIndexPage";
 import { recentText, sceneLoreMessage } from "./loreIndex";
 import { fetchSceneFacts } from "./loreFacts";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
@@ -532,7 +532,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
     // the helper model picks lore from the card's index first (loreIndexPage.ts), then the lorebook pass runs as before
     // the librarian's facts about who and what the scene names (loreFacts.ts), asked while the lore is picked; they join the scene's books
-    const sceneFacts: Promise<string> = (DBState.db.loreFacts !== false && isNodeServer && currentChat?.id)
+    // not while the character is being made: the story has not started, so there is nothing to state as fact, and the creation
+    // record's shape is what that turn must keep (acceptance 2026-10-21: the two creation checks that slipped had a facts block)
+    const sceneFacts: Promise<string> = (DBState.db.loreFacts !== false && isNodeServer && currentChat?.id && !(currentChar?.type === 'character' && creationTurn(currentChar, currentChat.message ?? [], currentChat.scriptstate)))
         ? import('../storage/nodeStorage').then(({ getNodeServerProxyAuth }) => fetchSceneFacts(currentChat.id, recentText(currentChat.message ?? []), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth })).catch(() => '')
         : Promise.resolve('')
     await brTimed('lore index', () => pickLoreForTurn(currentChar, DBState.db.characters[sel.char]?.chats?.[DBState.db.characters[sel.char]?.chatPage]), 0)

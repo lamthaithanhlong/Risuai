@@ -118,6 +118,12 @@ export class Player {
                 fs.writeFileSync(path.join(this.dumpDir, `${n}-${info.kind}.json`), JSON.stringify({ at, kind: info.kind, body: JSON.parse(req.postData() || '{}'), response: text }))
             }
             this.net.push({ at, type: 'completion', ...info, response: /pick$/.test(info.kind) ? undefined : text, answer: /pick$/.test(info.kind) ? text : undefined })
+        } else if (/\/api\/story\/facts/.test(url)) {
+            // the librarian's tagged facts for this turn (loreFacts.ts asks from the page, so they are seen even when the server
+            // sends the narrator's request itself)
+            let r = null
+            try { r = await (await req.response())?.json() } catch { /* none */ }
+            this.net.push({ at, type: 'facts', status: r?.status ?? null, tokens: r?.tokens ?? 0, facts: factsIn(r?.lines ?? '') })
         } else if (/\/api\/story\/referee/.test(url)) {
             let r = null
             try { r = await (await req.response())?.json() } catch { /* none */ }

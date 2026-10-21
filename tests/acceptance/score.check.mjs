@@ -120,7 +120,7 @@ test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, a
     assert.deepEqual(factsIn('no block here'), [])
     const rec = goodRecord()
     const t5 = rec.play.turns.find((t) => t.label === 't5')
-    t5.net = [{ type: 'completion', kind: 'main', event: '50', eventNew: false, gmNote: true, facts: factsIn(block) }]
+    t5.net = [{ type: 'completion', kind: 'main', event: '50', eventNew: false, gmNote: true }, { type: 'facts', status: 'ok', facts: factsIn(block) }]   // asked by the page
     const J = { impossible: { granted: false, why: 'failed' }, sideLife: { t10: { follows: true }, t11: { follows: true }, t12: { follows: true } } }
     const ok = { rumorAsFact: false, unknownRevealed: false, outdatedAsCurrent: false, touched: true, quote: 'người ta đồn Kai đã giết người' }
     assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: ok } }), 'facts.rumor').status, 'PASS')
@@ -128,5 +128,5 @@ test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, a
     assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: { ...ok, rumorAsFact: true } } }), 'facts.rumor').status, 'FAIL')
     assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: { ...ok, outdatedAsCurrent: true } } }), 'facts.outdated').status, 'FAIL')
     assert.equal(byId(scoreStory(rec, J), 'facts.rumor').status, 'N/A')                    // not judged (--no-judge)
-    assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story requests carried facts; .*rumor 1, unknown 0, outdated 1/)
+    assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story turns got facts; .*rumor 1, unknown 0, outdated 1/)
 })

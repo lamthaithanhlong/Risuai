@@ -145,7 +145,7 @@ Answer only JSON: {"follows": true|false, "how": "<one sentence, quoting the rep
     // the librarian's tagged facts (loreFacts.ts): a turn whose request carried a RUMOR, an UNKNOWN or an OUTDATED line is asked
     // whether the reply told it as true, revealed it, or as still so (at most 8 turns)
     out.facts = {}
-    const tagged = storyTurns.map((t) => ({ t, lines: (t.net ?? []).filter((n) => n.kind === 'main').flatMap((n) => n.facts ?? []).filter((f) => f.status !== 'fact') })).filter((x) => x.lines.length).slice(0, 8)
+    const tagged = storyTurns.map((t) => ({ t, lines: (t.net ?? []).filter((n) => n.kind === 'main' || n.type === 'facts').flatMap((n) => n.facts ?? []).filter((f) => f.status !== 'fact') })).filter((x) => x.lines.length).slice(0, 8)
     for (const { t, lines } of tagged) {
         try {
             out.facts[t.label] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese). Before this reply the narrator was given lore lines, each tagged: RUMOR = only said or believed, never to be narrated as true; UNKNOWN = nobody in the story knows it, not to be revealed; OUTDATED = was true and is no longer.
