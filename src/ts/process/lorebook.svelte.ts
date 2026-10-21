@@ -78,10 +78,19 @@ let lastLoreStats: LoreStats | null = null
 /** What the last lorebook pass sent, by why (loreIndex.ts loreStats). */
 export const getLastLoreStats = () => lastLoreStats
 
-export async function loadLoreBookV3Prompt(){
-    const selectedID = get(selectedCharID)
+/**
+ * target: the character and chat (indices) of the reply being written. sendChat passes its ChatSlot's: the player may leave the chat,
+ * switch apps or reload while the turn runs, and the selected character is then another one or none (-1). Reading the selection here
+ * crashed the turn on the iPhone ("undefined is not an object (evaluating 't.chatPage')", owner 2026-10-20). Without target, the
+ * selected chat, as before.
+ */
+export async function loadLoreBookV3Prompt(target?: { char: number, page: number }){
+    const selectedID = target ? target.char : get(selectedCharID)
     const char = DBState.db.characters[selectedID]
-    const page = char.chatPage
+    if(!char){
+        throw new Error('The character of this reply is no longer loaded')
+    }
+    const page = target ? target.page : char.chatPage
     const characterLore = char.globalLore ?? []
     const chatLore = char.chats[page].localLore ?? []
     const moduleLorebook = getModuleLorebooks()

@@ -531,7 +531,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
     // the helper model picks lore from the card's index first (loreIndexPage.ts), then the lorebook pass runs as before
     await brTimed('lore index', () => pickLoreForTurn(currentChar, DBState.db.characters[sel.char]?.chats?.[DBState.db.characters[sel.char]?.chatPage]), 0)
-    const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt(), 0)
+    const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt({ char: sel.char, page: sel.chat }), 0)
     // the story request's lore, by why it was sent: read by the acceptance harness (tests/acceptance/lib/play.mjs)
     ;(globalThis as { __loreStats?: unknown }).__loreStats = getLastLoreStats()
 
