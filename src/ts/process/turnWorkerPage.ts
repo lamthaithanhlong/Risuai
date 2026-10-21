@@ -7,6 +7,9 @@ import { selectedCharID } from '../stores.svelte'
 import { getDatabase } from '../storage/database.svelte'
 import { planReroll, planSend, turnAnswered, turnInputId, type TurnKind } from './turnCore'
 import { visibleReply } from './emptyReply'
+
+/** how long a turn waits for the reply's bookkeeper before it saves (the helper answers in ~3-7 s, measured 2026-10-21) */
+const BOOKKEEP_WAIT_MS = 20_000
 import { beginTurnRun, endTurnRun, isTurnWorker, turnRunErrors } from './turnWorkerState'
 
 export { isTurnWorker }
@@ -114,6 +117,10 @@ async function run(spec: TurnSpec): Promise<{ ok: boolean, error?: string, retry
             return { ok: false, error: errors[0] ?? 'no reply came back', retryable: true }
         }
         phase(spec.key, 'tidying')
+        // the bookkeeper's notes for this reply (social acts, the panel, the next shelves) are part of the turn: wait for them before the
+        // save the client takes (bookkeepPending.ts), at most BOOKKEEP_WAIT_MS; one that is slower writes after, as before
+        const { bookkeepSettled } = await import('./bookkeepPending')
+        await bookkeepSettled(spec.chatId, BOOKKEEP_WAIT_MS)
         // saved means in the server's save: flush until the server sees the turn's messages there (flushSave alone gives up after its
         // timeout, and the next turn reloads the page: what was not written yet is lost)
         const ids = c.message.slice(Math.max(0, from - 1)).map((m) => m.chatId).filter((x): x is string => typeof x === 'string')

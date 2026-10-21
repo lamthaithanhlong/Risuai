@@ -1,6 +1,7 @@
 // The page's side of the index pass (loreIndex.ts): before the lorebook pass of a turn, one rule for any card (planLore):
 // all the lore when it fits the budget, else the helper model picks from the titles and the picks fill the room left. A card
 // whose lore is on shelves (Risu lore folders) is asked like a librarian: the shelves first, then the titles on those shelves.
+import { pendingFor, trackForward } from './bookkeepPending'
 import { getDatabase, type character, type Chat } from '../storage/database.svelte'
 import { hasCreationStep, hasPanel, gmStateOf, yesAt } from './gameMaster'
 import { bookNumbers, bookPickPrompt, buildLoreIndex, buildShelves, clearLorePicks, creationItems, fitPicks, forwardFor, forwardUsable, FORWARD_VAR, fromSub, lorePickPrompt, MAX_SHELVES, mentionedBooks, MIN_ENTRIES, MIN_PART_TOKENS, parseLorePick, pickedIds, planLore, recentText, setLorePicks, shelfBooks, shelfNumbers, shelfPickPrompt, withForward, type ForwardLore, type IndexItem, type Shelf } from './loreIndex'
@@ -127,14 +128,9 @@ export function forwardAsk(char: character | undefined): { shelves: Shelf[]; ind
     return plan.mode === 'shelves' ? { shelves: buildShelves(lore, index), indexLength: index.length } : null
 }
 
-/** The bookkeeper chains of this session, by chat: the next turn waits for the one still running instead of asking itself. */
-const pending = new Map<string, Promise<unknown>>()
+/** The bookkeeper chains of this session, by chat (bookkeepPending.ts): the next turn waits for the one still running instead of asking itself. */
 const FORWARD_WAIT_MS = 8_000
-export function trackForward(chat: Chat, p: Promise<unknown>): void {
-    const key = chat.id ?? ''
-    const q = p.catch(() => undefined).finally(() => { if (pending.get(key) === q) pending.delete(key) })
-    pending.set(key, q)
-}
+export { trackForward }
 
 const lastReplyId = (chat: Chat) => [...(chat.message ?? [])].reverse().find((m) => m.role === 'char')?.chatId
 const lastPlayer = (chat: Chat) => [...(chat.message ?? [])].reverse().find((m) => m.role === 'user')?.data ?? ''
@@ -172,7 +168,7 @@ async function shelvedPicks(char: character, chat: Chat, index: IndexItem[], rec
     const shadow = getDatabase().loreForwardShadow !== false
     let fw: ForwardLore | null = null
     if (forwardOn() || shadow) {
-        const run = pending.get(chat.id ?? '')
+        const run = pendingFor(chat.id)
         if (run) await Promise.race([run, new Promise((r) => setTimeout(r, FORWARD_WAIT_MS))])
         const v = forwardFor(chat.scriptstate, lastReplyId(chat))
         fw = forwardUsable(v, lastReplyId(chat), index.length) ? v : null

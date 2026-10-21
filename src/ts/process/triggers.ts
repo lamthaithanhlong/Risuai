@@ -15,6 +15,7 @@ import { generateAIImage } from "./stableDiff";
 import { writeInlayImage } from "./files/inlays";
 import { GENERATED_INLAY_MAX_SIDE } from "./files/inlaySize";
 import { runScripted } from "./scriptings";
+import { writeTriggerVars } from "./triggerVars";
 import { calcString } from "./infunctions";
 
 
@@ -1087,6 +1088,8 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
     const db = getDatabase()
     const defaultVariables = parseKeyValue(char.defaultVariables).concat(parseKeyValue(db.templateDefaultVariables))
     let chat = arg.displayMode ? arg.chat : safeStructuredClone(arg.chat ?? char.chats[char.chatPage])
+    /** the scriptstate keys this run set: only these go back to the live chat (triggerVars.ts) */
+    const setKeys = new Set<string>()
     
     const previousTriggerId = get(CurrentTriggerIdStore)
     const shouldSetTriggerId = !arg.displayMode && mode !== 'display'
@@ -1227,9 +1230,8 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
 
         varChanged = true
         chat.scriptstate[stateKey] = value
-        currentChat.scriptstate = chat.scriptstate
-        currentCharacter.chats[currentCharacter.chatPage].scriptstate = chat.scriptstate
-        db.characters[selectedCharId].chats[currentCharacter.chatPage].scriptstate = chat.scriptstate
+        setKeys.add(stateKey)
+        writeTriggerVars([currentChat, currentCharacter.chats[currentCharacter.chatPage], db.characters[selectedCharId]?.chats?.[currentCharacter.chatPage]], chat.scriptstate, [stateKey])
         return true
     }
     
@@ -2823,7 +2825,7 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
     }
     if(varChanged){
         const currentChat = getCurrentChat()
-        currentChat.scriptstate = chat.scriptstate
+        writeTriggerVars([currentChat], chat.scriptstate, setKeys)
         ReloadGUIPointer.set(get(ReloadGUIPointer) + 1)
     }
 
