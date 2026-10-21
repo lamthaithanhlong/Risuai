@@ -54,6 +54,14 @@ export const accessibilitySettingsItems: SettingItem[] = [
         keywords: ['async', 'server', 'queue', 'background', 'turn', 'chatgpt web']
     },
     {
+        // where the server's push goes when an Async turn ends (ntfy server, topic, the link it opens)
+        id: 'acc.turnNotify',
+        type: 'custom',
+        componentId: 'TurnNotifySettings',
+        condition: (ctx) => ctx.db.asyncTurns === true,
+        keywords: ['notification', 'thông báo', 'ntfy', 'push', 'topic', 'async']
+    },
+    {
         id: 'acc.fixedChatTextarea',
         type: 'check',
         labelKey: 'fixedChatTextarea',

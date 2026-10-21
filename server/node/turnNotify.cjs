@@ -10,10 +10,33 @@ function notifyConfig(file = require('path').join(require('os').homedir(), '.ris
     return { url: process.env.RISU_NOTIFY_URL || saved.url || '', click: process.env.RISU_NOTIFY_CLICK || saved.click || '' };
 }
 
+/** Saves the settings page's choice: {server, topic, click} -> notify.json {url, click}. Throws a TypeError for a bad value. */
+function saveNotifyConfig({ server, topic, click }, file = require('path').join(require('os').homedir(), '.risu-lan', 'notify.json')) {
+    const s = String(server ?? '').trim().replace(/\/+$/, '')
+    const t = String(topic ?? '').trim()
+    const c = String(click ?? '').trim()
+    if (t === '' && s === '') {
+        require('fs').writeFileSync(file, JSON.stringify({ url: '', click: c }) + '\n', { mode: 0o600 })
+        return { url: '', click: c }
+    }
+    if (!/^https?:\/\/[^\s/]+$/.test(s)) throw new TypeError('server must be like https://ntfy.sh')
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(t)) throw new TypeError('topic: 6-64 letters, digits, - or _')
+    if (c && !/^https?:\/\/\S+$/.test(c)) throw new TypeError('the link must start with http(s)://')
+    const conf = { url: `${s}/${t}`, click: c }
+    require('fs').writeFileSync(file, JSON.stringify(conf) + '\n', { mode: 0o600 })
+    return conf
+}
+
+/** {server, topic, click} for the settings page */
+function splitNotifyConfig(conf) {
+    if (!conf.url) return { server: 'https://ntfy.sh', topic: '', click: conf.click || '', enabled: false }
+    const u = new URL(conf.url)
+    return { server: u.origin, topic: u.pathname.replace(/^\/+|\/+$/g, ''), click: conf.click || '', enabled: true }
+}
+
 function createTurnNotifier(opts = {}) {
-    const conf = opts.url !== undefined ? { url: opts.url, click: opts.click ?? '' } : notifyConfig(opts.file);
-    const url = conf.url;
-    const click = conf.click;
+    // read on every push: the settings page changes it without a restart
+    const conf = () => (opts.url !== undefined ? { url: opts.url, click: opts.click ?? '' } : notifyConfig(opts.file));
     const fetchFn = opts.fetch ?? globalThis.fetch;
     const log = opts.log ?? ((...a) => console.log('[Notify]', ...a));
     const nameOf = opts.nameOf ?? (() => '');
@@ -26,9 +49,10 @@ function createTurnNotifier(opts = {}) {
     }
 
     return {
-        enabled: !!url,
+        get enabled() { return !!conf().url; },
         /** state event of a turn: notify once for saved / failed (a retry is not an end) */
         async onState(turn, state) {
+            const { url, click } = conf();
             if (!url || !turn || !['saved', 'failed'].includes(state)) return false;
             const id = `${turn.key}:${state}`;
             if (sent.has(id)) return false;
@@ -51,4 +75,4 @@ function createTurnNotifier(opts = {}) {
     };
 }
 
-module.exports = { createTurnNotifier, notifyConfig };
+module.exports = { createTurnNotifier, notifyConfig, saveNotifyConfig, splitNotifyConfig };

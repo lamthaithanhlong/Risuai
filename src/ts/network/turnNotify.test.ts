@@ -37,3 +37,31 @@ describe('turnNotify', () => {
         expect(f.calls).toHaveLength(0)
     })
 })
+
+describe('turnNotify settings (notify.json)', () => {
+    const { saveNotifyConfig, splitNotifyConfig, notifyConfig } = createRequire(import.meta.url)('../../../server/node/turnNotify.cjs')
+    const os = createRequire(import.meta.url)('node:os')
+    const path = createRequire(import.meta.url)('node:path')
+    const fs = createRequire(import.meta.url)('node:fs')
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tn-')), 'notify.json')
+    it('saves what the settings page sends and reads it back split', () => {
+        saveNotifyConfig({ server: 'https://ntfy.sh/', topic: 'risu-abcdef12', click: 'https://10.0.0.164:6443/' }, file)
+        expect(notifyConfig(file)).toEqual({ url: 'https://ntfy.sh/risu-abcdef12', click: 'https://10.0.0.164:6443/' })
+        expect(splitNotifyConfig(notifyConfig(file))).toEqual({ server: 'https://ntfy.sh', topic: 'risu-abcdef12', click: 'https://10.0.0.164:6443/', enabled: true })
+    })
+    it('refuses a bad topic or server, and an empty one turns it off', () => {
+        expect(() => saveNotifyConfig({ server: 'https://ntfy.sh', topic: 'a b' }, file)).toThrow(TypeError)
+        expect(() => saveNotifyConfig({ server: 'ntfy.sh', topic: 'risu-abcdef12' }, file)).toThrow(TypeError)
+        saveNotifyConfig({ server: '', topic: '' }, file)
+        expect(splitNotifyConfig(notifyConfig(file)).enabled).toBe(false)
+    })
+    it('the notifier reads the file at each push: a change in Settings needs no restart', async () => {
+        const calls: string[] = []
+        const n = createTurnNotifier({ file, fetch: async (u: string) => { calls.push(u); return { ok: true, status: 200 } }, log: () => {} })
+        expect(await n.onState(turn, 'saved')).toBe(false)               // off
+        saveNotifyConfig({ server: 'https://ntfy.sh', topic: 'risu-abcdef12' }, file)
+        expect(n.enabled).toBe(true)
+        expect(await n.onState({ ...turn, key: 'chat-1:abcdefgh-9' }, 'saved')).toBe(true)
+        expect(calls).toEqual(['https://ntfy.sh/'])
+    })
+})

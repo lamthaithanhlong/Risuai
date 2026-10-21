@@ -1474,6 +1474,7 @@ app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
 // ---- Turns: once the player presses send, the turn is the server's (turnQueue.cjs, turnWorker.cjs, specs/turns) -----------------
 // RISU_TURNS=0 turns it off (the page runs its turns as before); without Playwright there is no worker and the pages are told so.
 let turnQueue = null;
+let turnNotifier = null;
 let turnWorker = null;
 const turnWaiters = new Set();
 if (process.env.RISU_TURNS !== '0') {
@@ -1483,14 +1484,12 @@ if (process.env.RISU_TURNS !== '0') {
         mkdirSync(path.dirname(turnsDbPath), { recursive: true });
         turnQueue = require('./turnQueue.cjs').openTurnQueue(turnsDbPath);
         turnQueue.onEvent(() => { for (const w of [...turnWaiters]) w(); });
-        // a push to the owner's phone when a turn ends (turnNotify.cjs; off unless ~/.risu-lan/notify.json or RISU_NOTIFY_URL)
-        const notifier = require('./turnNotify.cjs').createTurnNotifier({ nameOf: (chaId) => turnCharName(chaId) });
-        if (notifier.enabled) {
-            turnQueue.onEvent((key, _seq, event) => {
-                if (event?.type === 'state' && (event.state === 'saved' || event.state === 'failed')) void notifier.onState(turnQueue.get(key), event.state);
-            });
-            console.log('[Turns] a push goes to the phone when a turn ends');
-        }
+        // a push to the owner's phone when a turn ends (turnNotify.cjs; set in Settings, kept in ~/.risu-lan/notify.json)
+        turnNotifier = require('./turnNotify.cjs').createTurnNotifier({ nameOf: (chaId) => turnCharName(chaId) });
+        turnQueue.onEvent((key, _seq, event) => {
+            if (event?.type === 'state' && (event.state === 'saved' || event.state === 'failed')) void turnNotifier.onState(turnQueue.get(key), event.state);
+        });
+        if (turnNotifier.enabled) console.log('[Turns] a push goes to the phone when a turn ends');
         console.log(`[Turns] queue ready (${turnsDbPath}); pruned ${turnQueue.prune()}; open ${turnQueue.open().length}`);
         setInterval(() => { try { turnQueue.prune(); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
     } catch (error) {
@@ -1595,6 +1594,29 @@ app.post('/api/turns', authenticatedRouteLimiter, async (req, res) => {
         console.error('[Turns] create:', error?.message || error);
         res.status(500).send({ error: 'Could not queue the turn' });
     }
+});
+
+// Settings > Accessibility: where the push goes when a turn ends (server, topic, the link it opens), and a test push
+app.get('/api/turns/notify', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const n = require('./turnNotify.cjs');
+    res.send({ ...n.splitNotifyConfig(n.notifyConfig()), serverRunsTurns: turnsOn() });
+});
+app.put('/api/turns/notify', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    try {
+        const n = require('./turnNotify.cjs');
+        res.send(n.splitNotifyConfig(n.saveNotifyConfig(req.body || {})));
+    } catch (error) {
+        res.status(error instanceof TypeError ? 400 : 500).send({ error: error.message });
+    }
+});
+app.post('/api/turns/notify/test', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    if (!turnNotifier?.enabled) { res.status(400).send({ error: 'No topic set' }); return; }
+    const ok = await turnNotifier.onState({ key: `test:${Date.now()}`, cha: '', kind: 'send' }, 'saved');
+    res.send({ ok });
 });
 
 app.get('/api/turns', authenticatedRouteLimiter, async (req, res) => {
