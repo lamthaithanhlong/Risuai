@@ -58,23 +58,35 @@ function worldOf(name, titles = []) {
 }
 
 // ---- reading the ledger's words ------------------------------------------------------------------------------------------------------
+// Vietnamese words are matched as WHOLE words (storyStore wordAt): measured on an acceptance copy 2026-10-21, "yêu cầu" (to demand)
+// read as "yêu" (love) and made "loves"; "có tin" would match "có tin tưởng", "con" every "con đường". English keeps stems.
+// and a syllable is not a word: the compounds that would read as another relation are taken out first ("yêu cầu" demand,
+// "yêu quái" demon, "bị thương" wounded, "thầy bói" fortune-teller, "cha xứ" priest, "thương nhân" merchant)
+const NOT_THESE = ['yêu cầu', 'yêu quái', 'yêu tinh', 'yêu thú', 'bị thương', 'thương nhân', 'thương hội', 'thương lượng', 'thầy bói', 'thầy thuốc', 'thầy pháp', 'cha xứ', 'con đường', 'dạy dỗ']
+const has = (text, phrases) => {
+    let t = lower(text)
+    for (const c of NOT_THESE) t = t.split(c).join(' · ')
+    return phrases.some((p) => wordAt(t, p).length > 0)
+}
 /** a line that says it was only heard, said or guessed: a rumor, not a fact */
-const RUMOR = /\b(rumou?rs?|rumou?red|heard that|they say|it is said|allegedly|supposedly|unconfirmed|whisper(s|ed)?)\b|tin đồn|nghe nói|nghe đồn|đồn rằng|người ta (nói|đồn|bảo)|chưa (được )?xác (nhận|minh)|nghe kể|có tin|lời đồn/i
+const RUMOR_EN = /\b(rumou?rs?|rumou?red|heard that|they say|it is said|allegedly|supposedly|unconfirmed|whisper(s|ed)?)\b/i
+const RUMOR_VI = ['tin đồn', 'lời đồn', 'nghe nói', 'nghe đồn', 'đồn rằng', 'người ta nói', 'người ta đồn', 'người ta bảo', 'chưa xác nhận', 'chưa được xác nhận', 'chưa xác minh', 'nghe kể', 'có tin đồn', 'nghe phong thanh']
 /** a line that says nobody knows (yet) */
-const UNKNOWN = /\b(unknown|nobody knows|no one knows|a mystery|unclear)\b|chưa (ai )?biết|không (ai )?(rõ|biết)|chưa rõ|bí ẩn|là ai\s*\?|\?\s*$/i
-const statusOfText = (t) => (RUMOR.test(t) ? 'rumor' : UNKNOWN.test(t) ? 'unknown' : 'fact')
-/** a ledger relation's words -> a graph relation */
+const UNKNOWN_EN = /\b(unknown|nobody knows|no one knows|a mystery|unclear)\b/i
+const UNKNOWN_VI = ['chưa biết', 'chưa ai biết', 'không ai biết', 'không rõ', 'chưa rõ', 'bí ẩn', 'là ai']
+const statusOfText = (t) => (RUMOR_EN.test(t) || has(t, RUMOR_VI) ? 'rumor' : UNKNOWN_EN.test(t) || has(t, UNKNOWN_VI) || /\?\s*$/.test(String(t).trim()) ? 'unknown' : 'fact')
+/** a ledger relation's words -> a graph relation (first match wins; "thuộc hạ" is a servant before "thuộc" is a member) */
 const REL_WORDS = [
-    ['enemy_of', /enem|rival|hate|hostile|hunt|kẻ thù|thù|đối thủ|địch|ghét|săn/i],
-    ['ally_of', /ally|allied|friend|partner|trust|đồng minh|bạn|tin tưởng|cộng sự|đồng đội/i],
-    ['member_of', /member|joined|belongs|thành viên|gia nhập|thuộc|người của/i],
-    ['serves', /serv|follow|subordinate|phục vụ|thuộc hạ|cấp dưới|theo hầu/i],
-    ['mentor_of', /mentor|teach|master of|thầy|sư phụ|dạy/i],
-    ['loves', /love|lover|yêu|người yêu|thích/i],
-    ['kin_of', /brother|sister|father|mother|son|daughter|family|kin|anh trai|em gái|chị|cha|mẹ|con|gia đình|họ hàng/i],
-    ['owns', /owes|debt|nợ/i],
+    ['enemy_of', /\b(enem|rival|hate|hostile|hunt)/i, ['kẻ thù', 'thù', 'thù địch', 'đối thủ', 'kẻ địch', 'căm ghét', 'ghét', 'truy sát', 'săn lùng']],
+    ['serves', /\b(serv|follower|subordinate|underling)/i, ['phục vụ', 'thuộc hạ', 'cấp dưới', 'theo hầu', 'tay sai', 'đàn em']],
+    ['ally_of', /\b(all(y|ied|ies)|friend|partner|trust)/i, ['đồng minh', 'bạn bè', 'bạn thân', 'bạn đồng hành', 'tin tưởng', 'cộng sự', 'đồng đội', 'liên minh']],
+    ['member_of', /\b(member|joined|belongs)/i, ['thành viên', 'gia nhập', 'thuộc về', 'người của']],
+    ['mentor_of', /\b(mentor|teach|master of)/i, ['thầy', 'sư phụ', 'dạy', 'người dạy']],
+    ['loves', /\b(love|lover)/i, ['yêu', 'người yêu', 'yêu thương', 'say mê']],
+    ['kin_of', /\b(brother|sister|father|mother|son|daughter|family|kin)\b/i, ['anh trai', 'em trai', 'em gái', 'chị gái', 'cha', 'mẹ', 'bố', 'con trai', 'con gái', 'gia đình', 'họ hàng', 'anh em ruột']],
+    ['owns', /\b(owes|debt)\b/i, ['nợ', 'mắc nợ']],
 ]
-const relOf = (how) => REL_WORDS.find(([, re]) => re.test(how))?.[0] ?? 'knows'
+const relOf = (how) => REL_WORDS.find(([, en, vi]) => en.test(how) || has(how, vi))?.[0] ?? 'knows'
 /** a timeline line that moves someone somewhere: "X went to P", "X đến P" (the place is matched against known places) */
 const MOVE = /\b(went|goes|left for|moved|arrived|reached|fled|returned)\b|đi (đến|tới|về)|đến|tới|rời|chạy (đến|tới|về)|trở về|về (lại )?/i
 
