@@ -402,10 +402,13 @@ export function cacheOrder<T extends Placed>(kept: T[]): T[] {
 // (the rules included) stays the same from turn to turn. The message sits just before the player's message: right after the
 // system prompt (a user message ahead of the prologue) the Zombie card twice left out its look question (2026-10-20-cheaper-2, -3),
 // and the history behind it is not reused anyway (the "Story so far" index in front of it is new every turn).
-export function sceneLoreMessage(prompts: string[]): { role: 'user'; content: string } | null {
+// The librarian's facts (loreFacts.ts, 2026-10-21) ride in the same message, after the books: they change with the scene as the books
+// do, so the system prompt stays the same turn after turn.
+export function sceneLoreMessage(prompts: string[], facts = ''): { role: 'user'; content: string } | null {
     const books = prompts.map((p) => (p ?? '').trim()).filter(Boolean)
-    if (!books.length) return null
-    return { role: 'user', content: `system: [Lore for this scene]\n\n${books.join('\n\n')}` }
+    const f = (facts ?? '').trim()
+    if (!books.length && !f) return null
+    return { role: 'user', content: ['system: [Lore for this scene]', ...books, ...(f ? [f] : [])].join('\n\n') }
 }
 
 // ---- the GM asks the librarian (2026-10-20) ----------------------------------------------------------------------------------

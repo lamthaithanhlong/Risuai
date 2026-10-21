@@ -916,6 +916,8 @@ export interface Database{
     oneSystemMessage?: boolean
     historyIndex?: boolean
     playerAgency?: boolean
+    /** The librarian's tagged facts (fact / rumor / unknown / outdated, server/node/storyGraph.cjs) go with the scene's books; on unless false. */
+    loreFacts?: boolean
     /** Put the canon violations of the chat (story.sqlite + canon.pl, /api/story/:id/check) in the request as one line; off unless true. */
     storyCheckInPrompt?: boolean
     /** Jev judges the player's turn (server/node/jevReferee.cjs) and a flagged turn gets a note after it; on unless false. */

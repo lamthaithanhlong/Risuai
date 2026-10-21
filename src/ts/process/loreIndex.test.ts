@@ -279,6 +279,10 @@ describe('the scene\'s books in a message of their own, so the system prompt sta
         expect(sceneLoreMessage(['[Backlund]\nThe capital.', '[Audrey Hall]\nA noble.'])).toEqual({ role: 'user', content: 'system: [Lore for this scene]\n\n[Backlund]\nThe capital.\n\n[Audrey Hall]\nA noble.' })
         expect(sceneLoreMessage([])).toBeNull()
         expect(sceneLoreMessage(['  '])).toBeNull()
+        // the librarian's facts go after the books, in the same message; facts alone still make the message
+        expect(sceneLoreMessage(['[Backlund]\nThe capital.'], '[Facts …]\n- RUMOR · x')!.content).toBe('system: [Lore for this scene]\n\n[Backlund]\nThe capital.\n\n[Facts …]\n- RUMOR · x')
+        expect(sceneLoreMessage([], '[Facts …]\n- FACT · y')!.content).toBe('system: [Lore for this scene]\n\n[Facts …]\n- FACT · y')
+        expect(sceneLoreMessage([], '  ')).toBeNull()
     })
 })
 

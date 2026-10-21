@@ -26,7 +26,8 @@ import { voiceProfileOf, voiceRequest } from "./storyVoicePage";
 import { glossaryOf, termsRequest } from "./storyTermsPage";
 import { historyForTurn, INDEX_MEMO } from "./historyIndexPage";
 import { pickLoreForTurn } from "./loreIndexPage";
-import { sceneLoreMessage } from "./loreIndex";
+import { recentText, sceneLoreMessage } from "./loreIndex";
+import { fetchSceneFacts } from "./loreFacts";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
 import { getLastLoreStats, loadLoreBookV3Prompt } from "./lorebook.svelte";
@@ -530,6 +531,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     // the helper model picks lore from the card's index first (loreIndexPage.ts), then the lorebook pass runs as before
+    // the librarian's facts about who and what the scene names (loreFacts.ts), asked while the lore is picked; they join the scene's books
+    const sceneFacts: Promise<string> = (DBState.db.loreFacts !== false && isNodeServer && currentChat?.id)
+        ? import('../storage/nodeStorage').then(({ getNodeServerProxyAuth }) => fetchSceneFacts(currentChat.id, recentText(currentChat.message ?? []), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth })).catch(() => '')
+        : Promise.resolve('')
     await brTimed('lore index', () => pickLoreForTurn(currentChar, DBState.db.characters[sel.char]?.chats?.[DBState.db.characters[sel.char]?.chatPage]), 0)
     const lorepmt = await brTimed('lorebook', () => loadLoreBookV3Prompt({ char: sel.char, page: sel.chat }), 0)
     // the story request's lore, by why it was sent: read by the acceptance harness (tests/acceptance/lib/play.mjs)
@@ -580,7 +585,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
     // a shelved card's books in a message of their own before the player's message, so the system prompt stays the same turn after
     // turn: the provider's cache reuses whole messages (loreIndex.ts sceneLoreMessage)
-    const sceneChat = sceneLoreMessage(normalActives.filter((v) => v.scene).map((v) => risuChatParser(resolvePosition(v.prompt), {chara: currentChar}))) as OpenAIChat | null
+    const sceneChat = sceneLoreMessage(normalActives.filter((v) => v.scene).map((v) => risuChatParser(resolvePosition(v.prompt), {chara: currentChar})), await brTimed('lore facts', () => sceneFacts, 0)) as OpenAIChat | null
 
     const descActives = lorepmt.actives.filter(v => {
         return v.pos === 'after_desc' || v.pos === 'before_desc' || v.pos === 'personality' || v.pos === 'scenario'
