@@ -125,15 +125,38 @@ const metIn = (t, need) => (MET[need] ?? []).some((w) => wordAt(t, w).length > 0
  * The facts of a turn for story/gm/derive.lp (the words read here: needs, names, deaths), and what they were built from.
  * The deaths are the story index's own (storyStore.cjs deathsIn over the timeline, the canon rules' death words).
  */
-function featureFacts(input, places = []) {
+function featureFacts(input, places = [], extra = {}) {
     const v = input.vars ?? {}
     const out = []
     const led = ledger(v)
     const threads = threadsOf(v)
     const persons = new Map()
-    for (const n of deriveNpcs(v, led, [...places, v.st_place].filter(Boolean))) persons.set(lower(n.name), n)
-    for (const t of threads) if (['antagonist', 'threat', 'enemy'].includes(t.kind) && lower(t.name).length >= 2 && !persons.has(lower(t.name))) persons.set(lower(t.name), { name: t.name })
-    for (const m of [v.st_name, v.st_truename].filter((x) => !isDash(x)).map(lower)) persons.delete(m)
+    for (const n of deriveNpcs(v, led, [...places, v.st_place].filter(Boolean))) persons.set(lower(n.name), { ...n, origin: 'ledger' })
+    for (const t of threads) if (['antagonist', 'threat', 'enemy'].includes(t.kind) && lower(t.name).length >= 2 && !persons.has(lower(t.name))) persons.set(lower(t.name), { name: t.name, origin: 'thread' })
+    // the people the ledger has no line for (measured 2026-10-21, acceptance ss: "Martin Vale" walked beside the character for twelve
+    // replies and was nobody, so the NPC layer never fired): the bookkeeper's social acts ($led_soc), the names the narrator gave a
+    // look ([[LOOK name | ...]], input.people from the page) and the card's profiled people the last messages name (extra.people)
+    const player = new Set([v.st_name, v.st_truename].filter((x) => !isDash(x)).map(lower))
+    const sameAs = extra.sameAs ?? (() => null)
+    const ids = new Set()
+    const aliases = {}             // a second name of a person -> their key
+    for (const k of persons.keys()) { const id = sameAs(k); if (id) ids.add(id) }
+    const addPerson = (name, origin, display) => {
+        const shown = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
+        const k = lower(shown)
+        if ([...k].length < 2 || persons.has(k) || player.has(k) || k === 'player' || /[|\[\]<>{}]/.test(k)) return
+        // "Martin" after "Martin Vale" (or before it) is the same man: one person, the other name an alias of him
+        const same = [...persons.keys()].find((x) => shortName(x) === k || shortName(k) === x)
+        if (same) { aliases[k] = same; return }
+        const id = sameAs(k)
+        if (id === 'player' || (id && ids.has(id))) return
+        if (id) ids.add(id)
+        persons.set(k, { name: display ?? shown, origin })
+    }
+    for (const l of lines(v.led_soc)) { const p = l.split('|').map((x) => x.trim()); if (p.length >= 4) { addPerson(p[1], 'chat'); addPerson(p[3], 'chat') } }
+    for (const n of (Array.isArray(input.people) ? input.people : []).slice(0, 40)) if (typeof n === 'string') addPerson(n, 'chat')
+    for (const n of extra.people ?? []) addPerson(n?.alias ?? n, 'canon', n?.name)
+    for (const m of player) persons.delete(m)
     const keys = [...persons.keys()]
     const dead = new Set()
     for (const e of led.timeline) for (const d of deathsIn(e.event, keys)) dead.add(d)
@@ -147,7 +170,8 @@ function featureFacts(input, places = []) {
         const seen = !!(here && n.last_seen_place && lower(n.last_seen_place) === here)
         if (seen) out.push(`seen_here(${str(k)}).`)
         let first = null
-        msgs.forEach((t, i) => { if (wordAt(t, k).length) { out.push(`named(${str(k)}, ${i}).`); if (first === null) first = i } })
+        const short = shortName(k)
+        msgs.forEach((t, i) => { if (wordAt(t, k).length || (short && wordAt(t, short).length)) { out.push(`named(${str(k)}, ${i}).`); if (first === null) first = i } })
         if (!gone && first !== null && (first <= 1 || (seen && first <= 3))) present.push(k)
     }
     for (const [k, x] of Object.entries(v)) if (PANEL_NEED_KEY.test(k) && !isDash(x)) for (const n of needsIn(plain(x, 400))) out.push(`panel_need(${n}).`)
@@ -156,7 +180,14 @@ function featureFacts(input, places = []) {
         for (const n of Object.keys(MET)) if (metIn(t, n)) out.push(`resolved(${n}, ${i}).`)
     })
     for (const t of threads) for (const k of keys) if (wordAt(lower(t.text), k).length) out.push(`actor(${t.id}, ${str(k)}).`)
-    return { text: [...new Set(out)].join('\n') + '\n', threads, present, relations: led.relations, names: Object.fromEntries([...persons].map(([k, n]) => [k, n.name])), timeline: led.timeline.length }
+    return { text: [...new Set(out)].join('\n') + '\n', threads, present, relations: led.relations, names: Object.fromEntries([...persons].map(([k, n]) => [k, n.name])), origins: Object.fromEntries([...persons].map(([k, n]) => [k, n.origin])), aliases, timeline: led.timeline.length }
+}
+/** a Western full name ("martin vale") is also named by its first word ("martin"), as the prose says it after the first meeting; a
+ *  Vietnamese one ("tôn mai") is not: its first word is the family name, shared by strangers */
+const SHORT_STOP = new Set(['the', 'old', 'young', 'mister', 'miss', 'lady', 'lord', 'sir', 'captain', 'doctor'])
+function shortName(k) {
+    const w = k.split(' ')
+    return w.length >= 2 && w.every((x) => /^[a-z][a-z'-]*$/.test(x)) && w[0].length >= 3 && !SHORT_STOP.has(w[0]) ? w[0] : null
 }
 
 /** The ASP facts of a turn: the dice, the GM's machine (scene, combat) and the threads. */
@@ -385,6 +416,20 @@ function graphFacts(graph, chatId, story, ids) {
 }
 
 // ---- the people as people (npcPsych.cjs) -------------------------------------------------------------------------------------------
+/** {people: the profiled names (an alias as written) in the last two messages, sameAs: name -> profile id | 'player' | null}, or null */
+function canonNamed(npc, inp) {
+    try {
+        if (!npc.loadWorld?.(inp.world)) return null
+        const v = inp.vars ?? {}
+        const memo = new Map()
+        const sameAs = (x) => { if (!memo.has(x)) { let id = null; try { id = npc.resolveId(inp.world, inp.chatId, x, v) } catch {} memo.set(x, id) } return memo.get(x) }
+        const texts = (inp.messages ?? []).slice(-2).map((m) => plain(m.text))
+        const people = typeof npc.namedIn === 'function' ? npc.namedIn(inp.world, texts).map((h) => ({ alias: h.alias, name: npc.profileOf(inp.world, h.id)?.name ?? h.alias })) : []
+        return { people, sameAs }
+    } catch {
+        return null
+    }
+}
 /**
  * The NPC side of a turn, started before clingo: who of the scene has a profile, what the social ledger ($led_soc) did to how they see
  * the player and each other, what they feel (the sidecar or the local fold, whichever answers in `ms`), and the atoms of npc.lp in
@@ -397,14 +442,21 @@ async function npcStep(npc, inp, ff, ms) {
     const memo = new Map()
     const idOf = (x) => { if (!memo.has(x)) memo.set(x, npc.resolveId(world, chatId, x, v)); return memo.get(x) }
     const ids = new Map(), keys = new Map()        // ledger name -> profile id, and back
-    for (const k of ff.present) { const id = idOf(k); if (id && id !== 'player' && !keys.has(id)) { ids.set(k, id); keys.set(id, k) } }
+    const asKey = (x) => ff.aliases?.[lower(x)] ?? x  // "martin" -> "martin vale" (featureFacts' second names)
+    const strangers = []                            // a named person of this chat the card has no profile for: a stranger's (npcPsych.strangerOf)
+    for (const k of ff.present) {
+        let id = idOf(k)
+        if (!id && ff.origins?.[k] !== 'thread') { id = k; strangers.push({ id, name: ff.names?.[k] ?? k }) }
+        if (id && id !== 'player' && !keys.has(id)) { ids.set(k, id); keys.set(id, k) }
+    }
     if (!ids.size) return null
-    const events = npc.socialEvents(v).map((e) => ({ turn: e.turn, tag: e.tag, who: idOf(e.who) ?? e.who, target: idOf(e.target) ?? e.target })).filter((e) => e.who !== e.target)
+    const who = (x) => { const k = asKey(x); return idOf(k) ?? (ids.has(k) ? ids.get(k) : k) }
+    const events = npc.socialEvents(v).map((e) => ({ turn: e.turn, tag: e.tag, who: who(e.who), target: who(e.target) })).filter((e) => e.who !== e.target)
     const relations = (ff.relations ?? []).map((r) => ({ a: idOf(r.a), b: idOf(r.b), how: r.how })).filter((r) => r.a && r.b)
     const turn = Number.isFinite(inp.turn) ? inp.turn : events.reduce((m, e) => Math.max(m, e.turn), 0)
     let timer
     const result = await Promise.race([
-        npc.appraise({ chatId, world, turn, present: [...ids.values()], events, relations }, { budgetMs: ms }),
+        npc.appraise({ chatId, world, turn, present: [...ids.values()], events, relations, strangers }, { budgetMs: ms }),
         new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms + 20) }),
     ]).finally(() => clearTimeout(timer))
     if (!result?.npcs?.length) return null
@@ -448,9 +500,11 @@ async function decide(input, opts = {}) {
         s = store && /^[A-Za-z0-9-]{1,80}$/.test(String(input?.chatId ?? '')) ? store.story(input.chatId) : null
         if (s?.chat?.char_id) places = store.lore(s.chat.char_id).filter((l) => l.canon && /^\s*region/i.test(l.title)).flatMap((l) => String(l.keys).split(',').map((k) => k.trim()).filter((k) => k.length >= 4))
     } catch { places = [] }
-    const ff = featureFacts(inp, places)
     // the people as people: appraised while the facts below are built (the sidecar is a network call), with a deadline of its own
     const npc = input?.npc === false || inp.phase === 'seed' ? null : opts.npc ?? null
+    // the card's profiled people the player's message or the last reply names count as people of the story, ledger or not
+    const canon = npc ? canonNamed(npc, inp) : null
+    const ff = featureFacts(inp, places, canon ?? {})
     const npcMs = Math.min(opts.npcBudgetMs ?? NPC_BUDGET_MS, left() - NPC_KEEP_MS)
     const npcP = npc && npcMs >= 15 ? Promise.resolve().then(() => npcStep(npc, inp, ff, npcMs)).catch(() => null) : null
     // the librarian's knowledge graph (storyGraph.cjs): the facts touching the people of this chat, and who knows them

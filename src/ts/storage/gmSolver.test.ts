@@ -332,11 +332,15 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         expect(b.npc).toBeUndefined()
         expect(b.decision).toEqual(a.decision)
         expect(b.status).toBe('ok')
-        // a profile for someone who is not in the scene is no atom either
-        const far = open(seedOf([45, 70, 0, 25]).npcs.length ? { ...seedOf([45, 70, 0, 25]), npcs: [{ id: 'aldric', name: 'Aldric', importance: 10, traits: tr(50, 50, 50, 50, 50), speech: 'blunt' }], relations: [] } : null)
-        const c = await G.decide(quiet, { budgetMs: 3000, npc: far.npc })
-        expect(c.line).toBe(a.line)
-        expect(c.npc).toBeUndefined()
+        // a profile for someone who is not in the scene is no atom either; the people who are (Marek, Ba kẻ lạ mặt: the ledger's,
+        // no profile in this card) are strangers: the default seed, neutral traits, and never a secret or an agenda
+        const far = open({ ...seedOf([45, 70, 0, 25]), npcs: [{ id: 'aldric', name: 'Aldric', importance: 10, traits: tr(50, 50, 50, 50, 50), speech: 'blunt' }], relations: [] })
+        const c = await G.decide({ ...quiet, withFacts: true }, { budgetMs: 3000, npc: far.npc, withFacts: true })
+        expect(c.npc.actions.map((x: any) => x.who).sort()).toEqual(['Ba kẻ lạ mặt', 'Marek'])
+        expect(c.facts).not.toContain('npc("aldric")')
+        expect(c.facts).not.toMatch(/has_secret|has_agenda/)
+        expect(c.npc.subtext).not.toMatch(/keeps something back|has something unsaid/)
+        expect(c.line.split('\n').slice(0, -1).join('\n')).toBe(a.line)     // the solver's own lines are today's; only the Subtext is added
     })
     test('the off switch: input.npc === false is today\'s answer exactly', async () => {
         const { npc } = open(seedOf([45, 70, 0, 25]))
@@ -353,6 +357,44 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         const r = await G.decide({ ...quiet, phase: 'seed' }, { budgetMs: 3000, npc })
         expect(r.line).not.toContain('Subtext')
         expect(r.npc).toBeUndefined()
+    })
+    // measured 2026-10-21, acceptance ss ON: 0/20 turns with a Subtext; the ledger never named the people the replies did
+    const bare = { st_name: 'Kenji Park', st_place: 'Hành lang', gm_arc: 'phe đang nắm quyền | người cầm gậy | gia nhập | chỗ đứng', gm_beat: '3 | đi tiếp | tìm cầu thang' }
+    const scene = (messages: any[], extra: any = {}) => ({ world: 'shadow_slave', phase: 'run', chatId: 'c2', dice: { pace: 'quiet' }, kinds: [], stance: '', turn: 9, vars: { ...bare, ...(extra.vars ?? {}) }, messages, ...extra, ...(extra.vars ? { vars: { ...bare, ...extra.vars } } : {}) })
+    test('a profiled person the player\'s message or the last reply names is in the scene, ledger or not (by an alias too)', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25], [{ id: 'nephis', name: 'Nephis', aliases: ['Changing Star'], importance: 95, traits: tr(40, 80, 20, 40, 30), speech: 'cold' }]))
+        const r = await G.decide(scene([{ role: 'char', text: 'Hành lang trống.' }, { role: 'user', text: 'Tôi hỏi Changing Star cô ấy định đi đâu.' }]), { budgetMs: 3000, npc })
+        expect(r.present).toEqual(['changing star'])                       // derive.lp's present/1: the person atom is the alias the text holds
+        expect(r.npc.actions.map((a: any) => a.who)).toEqual(['Nephis'])     // shown by the profile's name
+        expect(lastLine(r)).toMatch(/^Subtext .*“Nephis”/)
+        // named three messages back only: not in the scene (the same rule as the ledger's people)
+        const old = await G.decide(scene([{ role: 'char', text: 'Nephis đi khỏi.' }, { role: 'user', text: 'a' }, { role: 'char', text: 'b' }, { role: 'user', text: 'Tôi nhìn quanh.' }]), { budgetMs: 3000, npc })
+        expect(old.present).toEqual([])
+        expect(old.npc).toBeUndefined()
+        // and the off switch still means today's answer
+        const off = await G.decide({ ...scene([{ role: 'user', text: 'Tôi hỏi Nephis.' }]), npc: false }, { budgetMs: 3000, npc })
+        expect(off.present).toEqual([])
+    })
+    test('a named person the chat invented (a LOOK name from the page, or the bookkeeper\'s social line) is a stranger: a Subtext, never a secret', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const reply = { role: 'char', text: 'Martin bước lệch khỏi vệt xước, chờ xem Kenji đi tiếp hay dừng.' }
+        const byLook = await G.decide(scene([reply, { role: 'user', text: 'Tôi đi tiếp.' }], { people: ['Martin Vale'] }), { budgetMs: 3000, npc, withFacts: true })
+        expect(byLook.present).toEqual(['martin vale'])                    // "Martin" in the prose is Martin Vale
+        expect(byLook.npc.actions[0]).toMatchObject({ who: 'Martin Vale', demeanor: 'neutral' })
+        expect(lastLine(byLook)).toMatch(/^Subtext .*“Martin Vale”/)
+        expect(lastLine(byLook)).not.toMatch(/keeps something back|has something unsaid/)
+        expect(byLook.facts).not.toMatch(/has_secret|has_agenda/)
+        // the bookkeeper's social line names him, no page list: the same; "Martin" in a later line is still him, and what the player
+        // did to him moves how he sees the player (insults: a grudge, so he is cold and keeps away)
+        const bySoc = await G.decide(scene([reply, { role: 'user', text: 'Tôi đi tiếp.' }], { vars: { led_soc: '7 | Martin Vale | help | player\n8 | player | insult | Martin\n9 | player | insult | Martin' } }), { budgetMs: 3000, npc })
+        expect(bySoc.present).toEqual(['martin vale'])
+        expect(bySoc.npc.actions[0]).toMatchObject({ who: 'Martin Vale', demeanor: 'cold' })
+        const rel = npc.stateOf('c2').find((x: any) => x.npc === 'martin vale').rel.player
+        expect(rel.grudge).toBeGreaterThanOrEqual(30)
+        // a role is no name, and a name nobody says in the last two messages is not in the scene
+        const none = await G.decide(scene([{ role: 'user', text: 'Tôi đi tiếp.' }], { people: ['Martin Vale'] }), { budgetMs: 3000, npc })
+        expect(none.present).toEqual([])
+        expect(none.npc).toBeUndefined()
     })
     test('the ledger moves the numbers the solver reads: a betrayal the turn before is never answered by making peace', async () => {
         const base = seedOf([60, 55, 0, 30])

@@ -26,6 +26,7 @@ const path = require('path')
 const crypto = require('crypto')
 const { validate } = require('./jsonSchemaLite.cjs')
 const { worldOf, relOf } = require('./storyGraph.cjs')
+const { wordAt } = require('./storyStore.cjs')
 
 const NPC_DIR = path.join(__dirname, 'story', 'npcs')
 const SCHEMA = JSON.parse(fs.readFileSync(path.join(__dirname, 'story', 'schema', 'npc-profile.schema.json'), 'utf8'))
@@ -169,6 +170,18 @@ function socialEvents(vars) {
     return out.slice(-WINDOW).map((e, pos) => ({ ...e, pos }))
 }
 
+// ---- strangers -------------------------------------------------------------------------------------------------------------------------
+/** how important a stranger is next to the card's people (the Subtext names the most important first) */
+const STRANGER_IMPORTANCE = 20
+/**
+ * The profile of a named person of the chat the card has no profile for ("Martin Vale", invented by the narrator): neutral traits
+ * (50 each), plain speech, the table's default_seed toward everyone (seedPairs), and never a secret or an agenda, because nobody
+ * wrote one: has_secret/has_agenda stay false, so the narrator is never told a stranger "keeps something back".
+ */
+function strangerOf(id, name) {
+    return { id, name: String(name ?? id), importance: STRANGER_IMPORTANCE, traits: Object.fromEntries(TRAIT_KEYS.map((k) => [k, 50])), speech: 'plain', wantsSay: null, wantsHide: null, hideFid: null, tags: ['stranger'], source: 'stranger', hasSecret: false, hasAgenda: false }
+}
+
 // ---- names -----------------------------------------------------------------------------------------------------------------------------
 const HONORIFIC = /^(ông|bà|anh|chị|cô|chú|lão|mr|mrs|ms)\.?\s+(?=\S)/u
 const trimName = (s) => lower(s).replace(/^["'“”‘’«»(\[]+|["'“”‘’«».,;:!?)\]]+$/gu, '').trim()
@@ -232,7 +245,7 @@ function openNpcPsych(opts = {}) {
             db.prepare('INSERT OR REPLACE INTO npc_meta (world, hash, built, npcs, pairs, loaded_at) VALUES (?, ?, ?, ?, ?, ?)').run(world, hash, f.built ?? null, f.npcs.length, f.relations.length, Date.now())
         })()
         loaded.set(world, hash)
-        caches.delete(world)
+        caches.delete(world); propers.delete(world)
         log(`npc ${world}: ${f.npcs.length} profiles, ${f.relations.length} pairs`)
         return true
     }
@@ -297,6 +310,35 @@ function openNpcPsych(opts = {}) {
         if (first?.size === 1) return [...first][0]
         return null
     }
+    /**
+     * The card's profiled people the texts name (lower-cased text, as gmSolver's plain() gives): [{id, alias}], one per id, the longest
+     * alias of an id that a text holds as a whole word. Aliases under 3 letters are not looked for (too many false hits in prose).
+     */
+    const propers = new Map()     // world -> the aliases the seed writes as a proper name
+    /** the seed's names and aliases that are written capitalised ("Old Neil", "Changing Star"): a lower-case alias in the seed is a
+     *  description ("không gian", "lão bà", "old woman in the kitchen") and in prose it is an ordinary word, never a sign the person is there */
+    function properOf(world) {
+        if (propers.has(world)) return propers.get(world)
+        let set = null
+        try {
+            const f = JSON.parse(fs.readFileSync(path.join(npcDir, `${world}.json`), 'utf8'))
+            set = new Set(f.npcs.flatMap((n) => [n.name, ...(n.aliases ?? [])]).filter((a) => /(^|\s)\p{Lu}/u.test(String(a ?? '').normalize('NFC'))).map(lower))
+        } catch { set = null }
+        propers.set(world, set)
+        return set
+    }
+    function namedIn(world, texts) {
+        const c = cacheOf(world)
+        const proper = properOf(world)
+        const best = new Map()
+        const ts = (texts ?? []).map((t) => String(t ?? '').normalize('NFC').toLowerCase())
+        for (const [alias, set] of c.alias) {
+            if ([...alias].length < 3 || (proper && !proper.has(alias)) || !ts.some((t) => wordAt(t, alias).length)) continue
+            const id = pick(world, [...set])
+            if (id && (!best.has(id) || [...alias].length > [...best.get(id)].length)) best.set(id, alias)
+        }
+        return [...best].map(([id, alias]) => ({ id, alias })).sort((a, b) => a.id.localeCompare(b.id))
+    }
     /** ledger acts with their names resolved; a name that is nobody known stays as written (lower case): counted, but it has no profile */
     function resolveEvents(world, chatId, events, st) {
         const memo = new Map()
@@ -312,10 +354,11 @@ function openNpcPsych(opts = {}) {
      * affection 50, both ways); else the table's default. Rows: [{p, q, trust, affection, debt, grudge, from}]. A person with no profile
      * gets no row (never a default for someone nobody described).
      */
-    function seedPairs(world, ids, relations = [], { max = MAX_PRESENT } = {}) {
+    function seedPairs(world, ids, relations = [], { max = MAX_PRESENT, strangers = new Map() } = {}) {
         const c = cacheOf(world)
         const all = [...new Set((ids ?? []).filter(Boolean))]
-        const ps = all.filter((id) => c.profiles.has(id)).sort((a, b) => c.profiles.get(b).importance - c.profiles.get(a).importance || a.localeCompare(b)).slice(0, max)
+        const prof = (id) => c.profiles.get(id) ?? strangers.get(id)
+        const ps = all.filter((id) => prof(id)).sort((a, b) => prof(b).importance - prof(a).importance || a.localeCompare(b)).slice(0, max)
         const led = new Map()
         for (const r of relations ?? []) {
             if (!r?.a || !r?.b || r.a === r.b) continue
@@ -342,10 +385,12 @@ function openNpcPsych(opts = {}) {
     function buildPayload(input) {
         const world = input.world
         const present = [...new Set((input.present ?? []).map(lower).filter((x) => x && x !== PLAYER))]
-        const rows = seedPairs(world, present, input.relations ?? [])
+        // a stranger only where the card has nobody by that id (a profile always wins)
+        const strangers = new Map((input.strangers ?? []).filter((x) => x?.id && present.includes(lower(x.id)) && !profileOf(world, lower(x.id))).map((x) => [lower(x.id), strangerOf(lower(x.id), x.name)]))
+        const rows = seedPairs(world, present, input.relations ?? [], { strangers })
         const ps = [...new Set(rows.map((r) => r.p))]
         const npcs = ps.map((id) => {
-            const pr = profileOf(world, id)
+            const pr = profileOf(world, id) ?? strangers.get(id)
             const seed = {}
             for (const r of rows) if (r.p === id) seed[r.q] = { trust: r.trust, affection: r.affection, debt: r.debt, grudge: r.grudge }
             return { id, name: pr.name, traits: pr.traits, importance: pr.importance, speech: pr.speech, tags: pr.tags, hasSecret: pr.hasSecret, hasAgenda: pr.hasAgenda, seed }
@@ -643,7 +688,7 @@ function openNpcPsych(opts = {}) {
         }
     }
     function close() {}
-    return { loadWorld, profileOf, resolveId, socialEvents, seedPairs, foldRelations, emotionsLocal, appraiseLocal, appraise, aspFacts, subtextOf, persist, relationsOf, stateOf, syncChat, syncAll, stats, close, engine }
+    return { loadWorld, profileOf, resolveId, namedIn, socialEvents, seedPairs, foldRelations, emotionsLocal, appraiseLocal, appraise, aspFacts, subtextOf, persist, relationsOf, stateOf, syncChat, syncAll, stats, close, engine }
 }
 
 /**
@@ -670,4 +715,4 @@ function seedErrors(f) {
     return out
 }
 
-module.exports = { openNpcPsych, seedErrors, APPRAISAL, SCHEMA, TAGS, DIMS, EMOTION_OF_TAG, EMOTIONS, TRAIT_KEYS, ENGINES, SUBTEXT_MAX, PLAYER, clamp, modOf, foldRelations, emotionsLocal, appraiseLocal, socialEvents }
+module.exports = { openNpcPsych, strangerOf, seedErrors, APPRAISAL, SCHEMA, TAGS, DIMS, EMOTION_OF_TAG, EMOTIONS, TRAIT_KEYS, ENGINES, SUBTEXT_MAX, PLAYER, clamp, modOf, foldRelations, emotionsLocal, appraiseLocal, socialEvents }

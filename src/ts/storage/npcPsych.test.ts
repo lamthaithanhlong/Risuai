@@ -223,6 +223,45 @@ describe('names to ids (resolveId)', () => {
     })
 })
 
+// ---- 2026-10-21, acceptance ss ON: 0/20 turns with a Subtext; the scene's people were never anyone the layer knew -------------------
+describe('who the layer can read: canon names in the prose (namedIn), and strangers the card has no profile for', () => {
+    test('namedIn: each profiled person a text names, by the longest alias it holds as a whole word; short aliases and parts of words are no hit', () => {
+        const s = setup()
+        s.p.loadWorld('mailman')
+        const texts = ['cúc rót trà, rồi red granny bước vào', 'không ai thấy kai']
+        expect(s.p.namedIn('mailman', texts)).toEqual([{ id: 'hồng bà bà', alias: 'red granny' }, { id: 'kai', alias: 'kai' }, { id: 'mặc cúc', alias: 'cúc' }])
+        expect(s.p.namedIn('mailman', ['mặc cúc gật đầu với cúc'])).toEqual([{ id: 'mặc cúc', alias: 'mặc cúc' }])   // longest wins
+        expect(s.p.namedIn('mailman', ['kaiser và cúcu'])).toEqual([])                                              // inside a word
+        const short = setup({ seed: { ...SEED, npcs: [{ ...SEED.npcs[2], aliases: ['Ka'] }], relations: [] } })
+        short.p.loadWorld('mailman')
+        expect(short.p.namedIn('mailman', ['ka nói'])).toEqual([])                                                 // 2 letters: not looked for
+        // an alias the seed writes in lower case is a description, an ordinary word in prose ("không gian" is "space")
+        const desc = setup({ seed: { ...SEED, npcs: [{ ...SEED.npcs[2], aliases: ['không gian', 'Lừa Già'] }], relations: [] } })
+        desc.p.loadWorld('mailman')
+        expect(desc.p.namedIn('mailman', ['không gian lạnh đi'])).toEqual([])
+        expect(desc.p.namedIn('mailman', ['lừa già bước tới'])).toEqual([{ id: 'kai', alias: 'lừa già' }])
+    })
+    test('a stranger: neutral traits, the default seed toward everyone, no secret, no agenda; a profile with the same id wins', async () => {
+        const s = setup()
+        const r = await s.p.appraise({ chatId: 'c1', world: 'mailman', turn: 5, present: ['martin vale', 'kai'], events: [ev(4, 'player', 'insult', 'martin vale')], strangers: [{ id: 'martin vale', name: 'Martin Vale' }, { id: 'kai', name: 'Not Kai' }] })
+        const m = r.npcs.find((n: any) => n.id === 'martin vale')
+        expect(m).toMatchObject({ name: 'Martin Vale', hasSecret: false, hasAgenda: false, traits: { open: 50, consc: 50, extra: 50, agree: 50, neuro: 50 } })
+        expect(m.rel.player.grudge).toBeGreaterThan(APPRAISAL.default_seed.grudge)          // the insult moved how he sees the player
+        expect(m.rel.player.trust).toBeLessThan(APPRAISAL.default_seed.trust)
+        expect(m.emotions.some((e: any) => e.type === 'anger' && e.target === 'player')).toBe(true)
+        expect(r.npcs.find((n: any) => n.id === 'kai').name).toBe('Kai')                     // the card's profile, not the stranger's
+        const atoms = s.p.aspFacts(r, ['martin vale', 'kai'], { world: 'mailman', turn: 5 })
+        expect(atoms).toContain('npc("martin vale").')
+        expect(atoms).not.toContain('has_secret("martin vale")')
+        expect(atoms).not.toContain('has_agenda("martin vale")')
+        expect(atoms).toContain('has_secret("kai")')
+        // a stranger who is not present, or none asked for, is nobody
+        expect((await s.p.appraise({ chatId: 'c1', world: 'mailman', turn: 5, present: ['kai'], events: [], strangers: [{ id: 'martin vale', name: 'Martin Vale' }] })).npcs.map((n: any) => n.id)).toEqual(['kai'])
+        expect((await s.p.appraise({ chatId: 'c1', world: 'mailman', turn: 5, present: ['martin vale'], events: [] })).npcs).toEqual([])
+        expect(np.strangerOf('x', 'X')).toMatchObject({ hasSecret: false, hasAgenda: false, wantsHide: null, wantsSay: null, source: 'stranger' })
+    })
+})
+
 describe('the social ledger ($led_soc)', () => {
     test('lines are parsed; unknown tags, bad turns, empty names and who == whom are dropped; the Vietnamese gloss counts; a repeat is one act', () => {
         const led = ['3 | player | help | Mặc Cúc', '3 | Player | HELP | mặc cúc', '4 | Mặc Cúc | giúp | Kai', '4 | kai | dance | player', 'x | kai | help | player', '5 | kai | harm | kai',
@@ -802,4 +841,23 @@ describe('seed files (server/node/story/npcs/<world>.json, when they exist)', ()
             expect(db.prepare('SELECT COUNT(*) AS n FROM npc_profile WHERE world = ?').get(world).n).toBe(seed.npcs.length)
         })
     }
+})
+
+describe('the acceptance script tests/acceptance/scripts/npc-psych.json', () => {
+    const SCRIPT = JSON.parse(readFileSync(join(__dirname, '../../../tests/acceptance/scripts/npc-psych.json'), 'utf8'))
+    const WORLD = { ss: 'shadow_slave', lotm: 'lotm', mailman: 'mailman', zombie: 'zombie' } as const
+    test('every story meets one profiled person by name and does the four acts the layer folds, then asks what they hide', () => {
+        const store = openStoryStore({ dbFile: ':memory:' })
+        const p = np.openNpcPsych({ db: store.db, npcDir: NPC_DIR, engine: 'asp' })
+        for (const [key, world] of Object.entries(WORLD)) {
+            const turns = SCRIPT[key] as { kind: string; text: string }[]
+            expect(p.loadWorld(world)).toBe(true)
+            const ids = new Set(turns.flatMap((t) => p.namedIn(world, [t.text.toLowerCase()]).map((h: any) => h.id)))
+            expect(ids.size, key).toBe(1)
+            // the same person in every turn but the pause
+            for (const t of turns.filter((x) => x.kind !== 'pause' && x.kind !== 'npc')) expect(p.namedIn(world, [t.text.toLowerCase()]).map((h: any) => h.id), `${key}: ${t.text}`).toEqual([...ids])
+            expect(turns.map((t) => t.kind)).toEqual(expect.arrayContaining(['help', 'insult', 'apologise', 'confide']))
+            expect(turns.some((t) => /giấu/.test(t.text))).toBe(true)
+        }
+    })
 })

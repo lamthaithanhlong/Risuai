@@ -1,0 +1,43 @@
+{
+  "about": "NPC psychology acceptance (2026-10-21): each story meets one profiled canon person (server/node/story/npcs/<world>.json), named in the player's own words so the scene has them whatever the narrator rolled, then does the four acts the layer folds (help, insult, apologise, confide) and asks what they hide (the secret rule: never volunteered at low trust). Played with run.mjs --script after the yes; each turn waits for the bookkeeper (its social: lines).",
+  "ss": [
+    { "kind": "npc", "text": "Tôi hỏi quanh xem có ai biết Nephis, người được gọi là Ngôi Sao Đổi Thay, rồi đi tìm cô ấy." },
+    { "kind": "npc", "text": "Gặp được Nephis, tôi chào cô ấy và nói thẳng mình là ai, mình đang cần gì." },
+    { "kind": "help", "text": "Tôi giúp Nephis một tay: đỡ phần việc nặng nhất của cô ấy và canh chừng phía sau lưng cô." },
+    { "kind": "insult", "text": "Mệt và bực, tôi buông một câu chế giễu Nephis rằng danh tiếng của cô chỉ là lời đồn thổi." },
+    { "kind": "apologise", "text": "Tôi hối hận ngay, cúi đầu xin lỗi Nephis vì câu nói vừa rồi." },
+    { "kind": "confide", "text": "Tôi tâm sự với Nephis về nỗi sợ thật sự của mình trong Ác Mộng này." },
+    { "kind": "npc", "text": "Tôi hỏi Nephis có điều gì cô đang giấu không, điều gì khiến cô đi một mình." },
+    { "kind": "pause", "text": "Tôi ngồi nghỉ cạnh Nephis một lúc, không nói gì thêm." }
+  ],
+  "lotm": [
+    { "kind": "npc", "text": "Tôi tìm đến chỗ lão Neil, người giữ kho lưu trữ mà người ta hay nhắc, để hỏi về những chuyện kỳ lạ gần đây." },
+    { "kind": "npc", "text": "Gặp được Old Neil, tôi chào lão, tự giới thiệu và nói mình đang tìm hiểu điều gì." },
+    { "kind": "help", "text": "Tôi giúp Old Neil sắp lại chồng hồ sơ nặng và mang đèn tới cho lão." },
+    { "kind": "insult", "text": "Lão chậm chạp quá, tôi buông lời chế giễu Old Neil là một ông già lẩm cẩm." },
+    { "kind": "apologise", "text": "Tôi thấy mình quá lời, xin lỗi Old Neil một cách thành thật." },
+    { "kind": "confide", "text": "Tôi tâm sự với Old Neil về những giấc mơ lạ và nỗi lo của mình." },
+    { "kind": "npc", "text": "Tôi hỏi Old Neil có điều gì lão đang giấu, điều gì lão không dám nói ra." },
+    { "kind": "pause", "text": "Tôi ngồi lại uống trà với Old Neil, lặng lẽ nghe lão kể chuyện cũ." }
+  ],
+  "mailman": [
+    { "kind": "npc", "text": "Tôi hỏi thăm về Vương Đông Lượng, người đưa thư mà người ta nhắc tới, rồi đi tìm anh ta." },
+    { "kind": "npc", "text": "Gặp được Vương Đông Lượng, tôi chào và nói mình là người đưa thư thực tập, đang cần chỉ dẫn." },
+    { "kind": "help", "text": "Tôi giúp Vương Đông Lượng mang hộ túi thư nặng và canh chừng đường đi cho anh ta." },
+    { "kind": "insult", "text": "Thấy anh ta cẩn thận quá mức, tôi chế giễu Vương Đông Lượng là kẻ nhát gan." },
+    { "kind": "apologise", "text": "Tôi biết mình sai, xin lỗi Vương Đông Lượng vì lời vừa rồi." },
+    { "kind": "confide", "text": "Tôi tâm sự với Vương Đông Lượng về khoản nợ và nỗi sợ của mình khi đi đưa thư." },
+    { "kind": "npc", "text": "Tôi hỏi Vương Đông Lượng có chuyện gì anh đang giấu về những lá thư này không." },
+    { "kind": "pause", "text": "Tôi ngồi nghỉ cùng Vương Đông Lượng một lúc trước chuyến thư kế tiếp." }
+  ],
+  "zombie": [
+    { "kind": "npc", "text": "Tôi hỏi những người sống sót quanh đây về thiếu tá Trần Khải, rồi đi tìm ông ấy." },
+    { "kind": "npc", "text": "Gặp được Trần Khải, tôi chào, nói tên mình và hỏi ông cần người làm việc gì." },
+    { "kind": "help", "text": "Tôi giúp Trần Khải khuân thùng tiếp tế và gác cửa cho người của ông." },
+    { "kind": "insult", "text": "Bực vì bị sai vặt, tôi chế giễu Trần Khải là kẻ chỉ biết ra lệnh." },
+    { "kind": "apologise", "text": "Tôi nguôi giận, xin lỗi Trần Khải vì câu nói đó." },
+    { "kind": "confide", "text": "Tôi tâm sự với Trần Khải về người thân mình đã mất trong mấy ngày đầu." },
+    { "kind": "npc", "text": "Tôi hỏi Trần Khải có điều gì ông đang giấu về chỗ này không." },
+    { "kind": "pause", "text": "Tôi ngồi nghỉ gần Trần Khải, nghe ngóng tin tức từ bộ đàm." }
+  ]
+}
