@@ -1375,6 +1375,32 @@ app.post('/api/tts/speech', authenticatedRouteLimiter, async (req, res) => {
     if (typeof input !== 'string' || !input.trim()) { res.status(400).send({ error: { message: 'input is empty' } }); return; }
     await pipeLocalTTS(req, res, '/audio/speech', { model, voice, input, stream: true });
 });
+// The same synthesis as one plain audio/mpeg stream an <audio> element can play (ttsStreams.cjs): it goes on when the phone locks.
+// POST registers (risu-auth), GET plays (no header possible: the unguessable uuid is the capability), DELETE stops.
+const { createTtsStreams } = require('./ttsStreams.cjs');
+const ttsStreams = createTtsStreams({
+    async *open(body, signal) {
+        const upstream = await fetch(LOCAL_TTS_URL + '/audio/speech', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, signal,
+            body: JSON.stringify({ model: body.model, voice: body.voice, input: body.input, stream: true }),
+        });
+        if (!upstream.ok || !upstream.body) throw new Error(`local TTS answered ${upstream.status}`);
+        for await (const piece of upstream.body) yield Buffer.from(piece);
+    },
+});
+app.post('/api/tts/stream/:id', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    if (!ttsAllowed()) { res.status(429).setHeader('retry-after', '20'); res.send({ error: { message: 'too many readings, wait a little' } }); return; }
+    const { model, voice, input } = req.body ?? {};
+    if (typeof input !== 'string' || !input.trim()) { res.status(400).send({ error: { message: 'input is empty' } }); return; }
+    const r = ttsStreams.register(req.params.id, { model, voice, input });
+    res.status(r.status).send(r.ok ? { ok: true } : { error: { message: r.error } });
+});
+app.get('/api/tts/stream/:id', authenticatedRouteLimiter, (req, res) => { void ttsStreams.serve(req.params.id, req, res); });
+app.delete('/api/tts/stream/:id', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.send({ stopped: ttsStreams.stop(req.params.id) });
+});
 app.post('/api/tts/warm', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
     await pipeLocalTTS(req, res, '/audio/warm', { model: req.body?.model, voice: req.body?.voice });

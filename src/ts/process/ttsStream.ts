@@ -54,6 +54,10 @@ export interface StreamDeps {
 
 let current: { stop(): void } | null = null
 
+/** What is being read now (ttsElement.ts registers its own here, so Stop and a new reading end it too). */
+export function setCurrentReading(c: { stop(): void } | null) { current = c }
+export function currentReading() { return current }
+
 /** Stops whatever is being read. */
 export function stopSpeaking() {
     current?.stop()

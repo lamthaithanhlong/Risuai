@@ -10,6 +10,8 @@ import { isLocalTTS, resolveTTS } from "./ttsLocal";
 import { speakableText } from "./ttsText";
 import { playUnlocked, sharedAudioContext, stopUnlocked, unlockAudio } from "./audioUnlock";
 import { brLog } from "../brLog";
+import { beginElementReading, elementReadingSupported, ReadingStopped, type ElementReading } from "./ttsElement";
+import { stopSpeaking } from "./ttsStream";
 import {
     getTTSPreprocessors,
     getTTSPostprocessors,
@@ -85,6 +87,21 @@ export async function sayTTS(character:character,text:string) {
         unlockAudio()
     } catch (error) {
         brLog(`tts unlock failed: ${error}`)
+    }
+    // Still inside the tap: a message read by the local TTS plays through an <audio> element (so it goes on when the screen locks or the
+    // app is switched, with lock-screen controls: ttsElement.ts). The element starts here, the text is sent once it is known.
+    let reading: ElementReading | null = null
+    let readingSent = false
+    const streamDeps = { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init), auth: async () => (await import('../storage/nodeStorage')).getNodeServerProxyAuth() }
+    try {
+        const c = character ?? getCurrentCharacter()
+        if (c && c.type !== 'group' && text && (globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__ && elementReadingSupported()) {
+            const local = getDatabase()
+            const t = resolveTTS(c, local.ttsLocal, local.openAIKey)
+            if (t.mode === 'openai' && t.openai && isLocalTTS(t.openai.baseURL)) reading = beginElementReading(c.name ?? '', streamDeps)
+        }
+    } catch (error) {
+        brLog(`tts element start failed: ${error}`)
     }
     try {
         if(!character){
@@ -203,10 +220,21 @@ export async function sayTTS(character:character,text:string) {
                 // the local TTS server, from Risu on its server: streamed chunk by chunk (first sound 0.31 s instead of 12.8 s
                 // for 220 words, measured 2026-10-15); anything else, or a failure, takes the whole-file path below
                 if (isLocalTTS(baseURL) && (globalThis as typeof globalThis & { __NODE__?: boolean }).__NODE__) {
+                    if (reading) {
+                        readingSent = true
+                        try {
+                            const r = await reading.send(streamDeps, { model, voice, input: text })
+                            brLog(`tts element: first sound in ${r.first} ms`)
+                            break
+                        } catch (error) {
+                            if (error instanceof ReadingStopped) break      // Stop, or a newer reading: do not play it another way
+                            brLog(`tts element failed, Web Audio instead: ${error}`)
+                            reading.stop()
+                        }
+                    }
                     try {
                         const { speakStream } = await import('./ttsStream')
-                        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
-                        const r = await speakStream({ fetch: (input, init) => fetch(input, init), auth: getNodeServerProxyAuth }, { model, voice, input: text })
+                        const r = await speakStream(streamDeps, { model, voice, input: text })
                         brLog(`tts stream: first sound in ${r.first} ms`)
                         break
                     } catch (error) {
@@ -445,6 +473,8 @@ export async function sayTTS(character:character,text:string) {
         }
     } catch (error) {
         alertError(`TTS Error: ${error}`)
+    } finally {
+        if (reading && !readingSent) reading.stop()         // nothing to say after all (empty text, a hook skipped it, another voice)
     }
 }
 
@@ -455,6 +485,7 @@ export const oaiVoices = [
 ]
 
 export function stopTTS(){
+    stopSpeaking()
     stopUnlocked()
     if(sourceNode){
         sourceNode.stop()
