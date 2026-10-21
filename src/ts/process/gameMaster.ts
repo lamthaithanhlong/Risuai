@@ -51,6 +51,21 @@ const NO_SIDE = /^(none|no side|chưa( chọn| có)?( bên| phe)?|không|<side>)
 const ARC_LABEL = /^<?(hook|antagonist|rival|goal|stakes?)>?$/i
 const OPEN_TAIL = /\[\[GM\b[\s\S]*$/
 
+// A note is Vietnamese (the cards' language) or English (the model's default). Anything else is a slip: measured 2026-10-21, a
+// canon line came back in Indonesian ("…menjalani kehidupan mereka sendiri") and the next turns' notes quoted it back.
+const FOREIGN_SCRIPT = /[Ѐ-ӿ֐-ۿऀ-෿฀-໿ᄀ-ᇿ぀-ヿ㐀-鿿가-힯]/g
+const MALAY_STRONG = /\b(mereka|sendiri|menjalani|kehidupan|tidak|dengan|adalah|untuk|sedang|karena|tetapi|sudah|belum|seorang|bahwa|pada|dalam)\b/gi
+// lowercase only: Dan, Kita and Pada are names too
+const MALAY_WEAK = /\b(yang|dan|dari|akan|juga|bisa|ini|itu|saya|kami|kita)\b/g
+/** True when a value is neither Vietnamese nor English: Indonesian or Malay function words, or another script. */
+export function isForeignText(v: string): boolean {
+    const t = v ?? ''
+    if ((t.match(FOREIGN_SCRIPT) ?? []).length >= 3) return true
+    const strong = new Set((t.match(MALAY_STRONG) ?? []).map((w) => w.toLowerCase()))
+    const weak = new Set((t.match(MALAY_WEAK) ?? []).map((w) => w.toLowerCase()))
+    return strong.size >= 1 || weak.size >= 2
+}
+
 const clean = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, MAXLEN)
 const isDash = (s: string) => /^(-|—|none|null)?$/i.test(s.trim())
 const lines = (v: string | undefined) => (v ?? '').split('\n').map((l) => l.trim()).filter(Boolean)
@@ -99,6 +114,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
             const value = clean(m[2].replace(new RegExp(`^.*\\b${key}\\s*:\\s*`, 'i'), ''))
             // measured on the bookkeeper: "arc: unchanged (still …)", "enemy: no change.", "path: player avoided … — did they com…"
             if (NOTE_TALK.test(value) || ((key === 'path' || key === 'enemy') && /\?\s*$/.test(value))) continue
+            // not Vietnamese or English: the line is refused, the previous value stays (every gm_* text field comes through here)
+            if (isForeignText(value)) { console.warn(`[gm] ${key} refused, not Vietnamese or English: ${value.slice(0, 80)}`); continue }
             if (key === 'arc') {
                 const [head, ...rest] = value.split('|')
                 if (/^(done|resolved|xong|kết thúc)$/i.test(head.trim()) || isDash(value)) {
@@ -480,6 +497,11 @@ export function pathLine(state: GmState): string {
     return `No side yet${tail ? ` (${tail})` : ''}: any side can be joined, villains included, through meetings and acts, never a menu; write path: on commit or switch.`
 }
 
+// measured 2026-10-21 (Shadow Slave chat ee04f566): the seed turn followed "thở dài chầm chậm đi theo đoàn người" with a stranger
+// who spoke to the player and made a full offer, the hook and the antagonist both on stage out of nowhere. The arc lives in the
+// hidden block; the scene gets a sign of it at most.
+const SEED_PROSE = 'In the prose the hook is at most a quiet sign (something seen or overheard) that follows from what the player just did: no new character speaks to or makes an offer to the player character, the antagonist does not act yet.'
+
 /** The note for this turn, or '' when the GM is silent. */
 export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string): string {
     if (phase === 'silent') return ''
@@ -488,8 +510,8 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         const past = lines(state.gm_past).pop()
         const side = state.gm_path ? state.gm_path.split('|')[0].trim() : ''
         const fresh = dice.surface.startsWith('the side (')
-        if (side) parts.push(`No arc yet: seed it from the side the player took (${short(side, 60)}): hook = its ${fresh ? 'first order or test, due now' : 'next order, job or test'}; antagonist = whom it is against or a rival inside the side; goal = to rise in it; stakes = their standing.`)
-        else parts.push(`No arc yet: seed one fitted to who the character is (hook; an antagonist of their own, e.g. ${flavour}, never a canon villain; goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}; in prose at most the hook.`)
+        if (side) parts.push(`No arc yet: seed it from the side the player took (${short(side, 60)}): hook = its ${fresh ? 'first order or test, due now' : 'next order, job or test'}; antagonist = whom it is against or a rival inside the side; goal = to rise in it; stakes = their standing. ${SEED_PROSE}`)
+        else parts.push(`No arc yet: seed one fitted to who the character is (hook; an antagonist of their own, e.g. ${flavour}, never a canon villain; goal; stakes)${past ? `, grown from the last one: ${short(past)}` : ''}. ${SEED_PROSE}`)
     } else {
         parts.push(`Arc: ${short(state.gm_arc, 130)}.`)
         if (state.gm_beat) parts.push(`Beat: ${short(state.gm_beat, 100)}.`)

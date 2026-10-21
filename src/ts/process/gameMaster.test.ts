@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isForeignText, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
     WORLD_LAW,
 } from './gameMaster'
 
@@ -48,6 +48,21 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
     it('drops field names the model copied as values (measured: "hook|…|antagonist|…")', () => {
         expect(applyGm({}, ['arc: hook|a debt|antagonist|Kelber|goal|survive|stakes|death'], 1).gm_arc).toBe('a debt | Kelber | survive | death')
         expect(applyGm({}, ['arc: <hook> | a debt | Goal'], 1).gm_arc).toBe('a debt')
+    })
+    it('refuses a value that is neither Vietnamese nor English and keeps the previous one (measured: canon came back in Indonesian)', () => {
+        const before = { gm_canon: 'Ngày 3 | đoàn Bờ Quên Lãng vẫn đang qua mê cung', gm_arc: 'nợ | Varn | trả | em trai' }
+        const slip = 'Hari 3 | orang-orang menjalani kehidupan mereka sendiri'
+        const s = applyGm(before, [`canon: ${slip}\narc: hutang | Varn yang kuat dan jahat | bayar | adik\nbeat: 1 | x | y`], 4)
+        expect(s.gm_canon).toBe(before.gm_canon)
+        expect(s.gm_arc).toBe(before.gm_arc)
+        expect(s.gm_beat).toBe('1 | x | y')            // the rest of the block still lands
+        expect(applyGm(before, [`threat: Varn | 1/4 | tidak akan berhenti`], 4).gm_threats).toBe('')
+        expect(applyGm(before, ['canon: 国の人々は自分の生活を送っている'], 4).gm_canon).toBe(before.gm_canon)
+        // Vietnamese (with or without a Malay-looking name) and English still go through
+        expect(applyGm(before, ['canon: Ngày 4 | Dan và Kita đi về phía đông'], 4).gm_canon).toBe('Ngày 4 | Dan và Kita đi về phía đông')
+        expect(applyGm(before, ['canon: Day 4 | the people go on with their own lives'], 4).gm_canon).toBe('Day 4 | the people go on with their own lives')
+        expect(isForeignText('menjalani kehidupan mereka sendiri')).toBe(true)
+        expect(isForeignText('Mai bước qua cổng thành, gió quất vào mặt')).toBe(false)
     })
     it('the beat moved only when its number changed, not its wording (the bookkeeper rewrites it every reply)', () => {
         const s = applyGm({ gm_beat: '2 | a knock | the door', gm_beat_at: '4' }, ['beat: 2 | the knock again | the door opens'], 6)
@@ -172,6 +187,18 @@ describe('the note', () => {
         expect(n).toContain('rival Sleeper')
         expect(n).not.toContain('ESCALATE')
     })
+    it('the seed turn keeps the arc in the block: the hook shows only as a quiet sign, nobody speaks to or offers the player anything, the antagonist waits', () => {
+        // measured 2026-10-21 (chat ee04f566): "thở dài chầm chậm đi theo đoàn người" got a stranger's full spoken offer
+        for (const n of [gmNote('seed', {}, dice, worldFlavour(SS)), gmNote('seed', { gm_path: 'the garrison | recruit | low' }, dice, 'x')]) {
+            expect(n).toContain('a quiet sign (something seen or overheard)')
+            expect(n).toContain('follows from what the player just did')
+            expect(n).toContain('no new character speaks to or makes an offer to the player character')
+            expect(n).toContain('the antagonist does not act yet')
+            expect(n).not.toContain('in prose at most the hook')
+            expect(n).toContain('arc: <hook> | <antagonist> | <goal> | <stakes>')   // the arc itself still goes in the block
+        }
+        expect(gmNote('run', FULL, dice, 'x')).not.toContain('quiet sign')
+    })
     it('names the GM all-knowing and all-powerful and the world\'s laws binding on it, whenever it speaks', () => {
         // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý"
         expect(gmNote('run', FULL, dice, 'x')).toContain(WORLD_LAW)
@@ -188,7 +215,8 @@ describe('the note', () => {
     it('stays near 290 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
         const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
         expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300 + LAW)
-        expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150 + LAW)
+        // +260 for the seed turn's rule that the hook stays a quiet sign (2026-10-21)
+        expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150 + 260 + LAW)
     })
 })
 

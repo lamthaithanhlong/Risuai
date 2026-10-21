@@ -57,6 +57,16 @@ describe('the Game Master on the page', () => {
         expect(gameMasterRequest(req(), card as never, c as never)[1].content).toContain('Arc: debt | Varn')
     })
 
+    it('a canon line in Indonesian is kept out of the variables and of the next note', () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' },
+            { role: 'char', data: 'Văn.\n[[GM\narc: debt | Varn | pay | brother\ncanon: Hari 3 | menjalani kehidupan mereka sendiri\n]]', chatId: 'r2' }], { $st_name: 'Mai' })
+        db.characters = [card]
+        noteGameMaster(0, c as never)
+        expect(c.scriptstate.$gm_arc).toBe('debt | Varn | pay | brother')
+        expect(c.scriptstate.$gm_canon ?? '').toBe('')
+        expect(gameMasterRequest(req(), card as never, c as never)[1].content).not.toContain('mereka')
+    })
+
     it('a rerolled reply takes its GM change with it', () => {
         const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' },
             { role: 'char', data: 'Văn.\n[[GM\narc: debt | Varn | pay | brother\n]]', chatId: 'r2' }], { $st_name: 'Mai' })
