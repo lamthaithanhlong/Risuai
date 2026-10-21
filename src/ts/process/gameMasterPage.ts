@@ -2,12 +2,14 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardEvent, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
 import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
+import { decideMessages, decideVars, type DecideInput, type GmDecision } from './gmSolver'
+import { modeAfterDecision, modeBefore, modeFromTurn, modeVar } from './gmMachine'
 
 type Room = character | groupChat
 
@@ -45,6 +47,50 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
     return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)) + (held ? CARD_HELD : ''))
+}
+
+/**
+ * The same note with the solver's decision (gmSolver.ts, server/node/gmSolver.cjs) in place of the open rules: the dice, the card's
+ * die, the chat's state and the GM machine's scene and fight go to the solver, which picks this turn's one event and what each
+ * person in the scene does. Nothing is written before the answer; no answer (no server, slow, an error) is today's note exactly.
+ * The marks follow the decision: the pace clock moves only when the event is a new one, the card's NEW is told only when chosen.
+ */
+export async function gameMasterRequestSolved<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined,
+    decide: (input: DecideInput) => Promise<GmDecision | null>, rng?: () => number): Promise<T[]> {
+    if (!gameMasterOn(card) || !chat) return formated
+    const messages = chat.message ?? []
+    const settled = settleGm(gmStateOf(chat.scriptstate), messages)
+    if (settled.rolledBack) writeState(chat, settled.state)
+    const state = settled.state
+    const replies = messages.filter((m) => m.role === 'char')
+    const shape = storyShape(replies.map((m) => m.data ?? ''))
+    const phase = gmPhase(card, messages, chat.scriptstate, state, shape.head.length + shape.tail.length > 0)
+    if (phase === 'silent') return formated
+    const n = replies.length
+    const dice = rollGm(state, n, rng)
+    const die = phase === 'run' ? cardEvent(formated) : null
+    const player = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
+    const mode = modeFromTurn(modeBefore(chat.scriptstate, n), player)
+    const { kinds, stance } = cardDice(formated)
+    const decision = await decide({
+        chatId: chat.id ?? '', world: gmWorld(card), phase, vars: decideVars(chat.scriptstate), messages: decideMessages(messages),
+        dice: { pace: dice.pace, surface: dice.surface, consequence: dice.consequence, cardNew: die === true, firstOrder: !!dice.firstOrder },
+        prevNew: prevNewOf(chat.scriptstate, n), kinds, stance, mode,
+    }).catch(() => null)
+    if (!decision) return gameMasterRequest(formated, card, chat, rng)
+    const vars = chat.scriptstate ??= {}
+    if (phase === 'run') {
+        cardNewMark(vars, n, decision.turn === 'new')
+        if (decision.turn === 'advance' || decision.turn === 'escalate' || decision.turn === 'order') {
+            const mark = markAdvance(state, n, { ...dice, pace: 'advance' })
+            if (mark) { vars.$gm_adv_at = mark.gm_adv_at ?? ''; vars.$gm_adv_prev = mark.gm_adv_prev ?? '' }
+        } else if (String(vars.$gm_adv_at ?? '') === String(n)) {
+            // a reroll of a reply the clock was marked for, now not a new event: the mark goes back
+            vars.$gm_adv_at = vars.$gm_adv_prev ?? ''
+        }
+    }
+    vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
+    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card), decision.line))
 }
 
 const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'

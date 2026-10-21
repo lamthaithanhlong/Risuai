@@ -158,7 +158,7 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
     beforeEach(() => { db.gameMaster = undefined; db.gmBookkeeper = undefined; db.characters = [panelCard]; asks.length = 0 })
 
     it('one helper call per turn asks for the GM notes and the panel; both are written while the reply is the last one', async () => {
-        answer.text = '[[GM\nbeat: 2 | the cook watches | night\n]]\n[[STATUS\ndate: Ngày 2, đêm\nplace: Trại tù binh | lều ngủ\ncondition: cổ tay hằn đỏ\nrefused: x\nhp: 3\n]]'
+        answer.text = '[[GM\narc: a debt | the cook | pay | food\nbeat: 2 | the cook watches | night\n]]\n[[STATUS\ndate: Ngày 2, đêm\nplace: Trại tù binh | lều ngủ\ncondition: cổ tay hằn đỏ\nrefused: x\nhp: 3\n]]'
         const c = chatOf([{ role: 'char', data: RECORD }, { role: 'user', data: 'được' }, { role: 'char', data: 'Kenji tỉnh dậy.', chatId: 'r2' },
             { role: 'user', data: 'Tôi tìm chỗ ngủ qua đêm.' }, { role: 'char', data: 'Đêm xuống trên trại.', chatId: 'r3' }], { $st_name: 'Kenji', $st_rank: 'Aspirant', $st_place: 'Cổng trại' })
         noteGameMaster(0, c as never)
@@ -292,7 +292,7 @@ describe('the status panel kept by the same bookkeeper call (measured: gpt-6-lun
         storyNotesRequest(req(), ssCard as never, c as never)
         c.message.push({ role: 'char', data: 'Viên cuối xuyên qua hốc mắt.\n\n[Ngươi đã giết một Thú Ngủ Say, Kẻ Rình Khe.]', chatId: 'r3' })
         c.scriptstate.$st_frag = '3/1000'
-        answer.text = '[[GM\nbeat: 3 | dead | next\n]]\n[[STATUS\nfrag: 8/1000\n]]'
+        answer.text = '[[GM\narc: a | b | c | d\nbeat: 3 | dead | next\n]]\n[[STATUS\nfrag: 8/1000\n]]'
         noteGameMaster(0, c as never)
         await vi.waitFor(() => expect(c.scriptstate.$gm_beat).toBe('3 | dead | next'))
         expect(c.scriptstate.$st_frag).toBe('3/1000')
@@ -390,7 +390,7 @@ describe('the bookkeeper names the shelves for the next reply', () => {
         const c = story()
         let asked = ''
         let fetched = 0
-        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 1 | a | b\n]]\nshelves: 2, 1' }, { lore: lore(async () => { fetched++ }) })
+        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\narc: a | b | c | d\nbeat: 1 | a | b\n]]\nshelves: 2, 1' }, { lore: lore(async () => { fetched++ }) })
         expect(ok).toBe(true)
         expect(asked).toContain('THE LORE SHELVES')
         expect(asked).toContain('2. People')
@@ -435,5 +435,55 @@ describe('the bookkeeper names the shelves for the next reply', () => {
         await new Promise((r) => setTimeout(r, 20))
         expect(asks[0]).toContain('THE LORE SHELVES')
         expect(JSON.parse(c.scriptstate.$lore_next)[0].shelves).toEqual(['People'])
+    })
+})
+
+// ---- the solver's decision (gmSolver.ts, 2026-10-21) ---------------------------------------------------------------------------
+const { gameMasterRequestSolved } = await import('./gameMasterPage')
+describe('the GM note with the solver\'s decision', () => {
+    const running = () => chatOf([{ role: 'char', data: 'Mưa.', chatId: 'r1' }, { role: 'user', data: 'Kenji đi theo đoàn người.' }, { role: 'char', data: 'Chợ đông.', chatId: 'r2' }, { role: 'user', data: 'Kenji thở dài.' }],
+        { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1' })
+    const dieNew = () => [{ role: 'system', content: 'THIS REPLY\'S DICE\n* Event: 5. At a natural pause, 1–20 means something new surfaces.\n* Kind: a stranger.\n* Stranger\'s stance: wants to use the character.\n' }, { role: 'user', content: 'Kenji thở dài.' }]
+    const LINE = 'This turn (decided, follow it): QUIET: no new trouble.\nThe character has stated no need (no thirst, hunger, wound, being lost): nobody offers water, food, care or a way, and nobody bargains with one.'
+    beforeEach(() => { db.gameMaster = undefined; db.characters = [card] })
+
+    it('sends the turn and puts the decision in place of the dice line, the card\'s NEW and the need rule', async () => {
+        const c = running()
+        let seen: any = null
+        const out = await gameMasterRequestSolved(dieNew(), card as never, c as never, async (input) => { seen = input; return { line: LINE, newEvent: false, turn: 'quiet', present: [], hostile: [], onstage: [] } })
+        expect(seen).toMatchObject({ world: 'shadow_slave', phase: 'run', kinds: ['a stranger'], stance: 'wants to use the character', dice: { cardNew: true }, mode: { scene: 'still', combat: 'peace' } })
+        expect(seen.vars.gm_arc).toBe('a | b | c | d')
+        expect(seen.messages.at(-1)).toEqual({ role: 'user', text: 'Kenji thở dài.' })
+        const note = String(out[1].content)
+        expect(note).toContain(LINE)
+        expect(note).not.toContain('Dice:')
+        expect(note).not.toContain('Card fate die: NEW')
+        expect(note).not.toContain('never invent a need')
+        // not a new event: the card's NEW is not marked told, the pace clock stays
+        expect(c.scriptstate.$gm_new_at ?? '').toBe('')
+        expect(c.scriptstate.$gm_adv_at).toBe('1')
+    })
+    it('a new event chosen moves the marks, so the next turn knows the last one brought something new', async () => {
+        const c = running()
+        await gameMasterRequestSolved(dieNew(), card as never, c as never, async () => ({ line: LINE, newEvent: true, turn: 'new', present: [], hostile: [], onstage: [] }))
+        expect(c.scriptstate.$gm_new_at).toBe('2')
+        const d = running()
+        await gameMasterRequestSolved(req(), card as never, d as never, async () => ({ line: LINE, newEvent: true, turn: 'advance', present: ['Varn'], hostile: ['Varn'], onstage: ['Varn'] }))
+        expect(d.scriptstate.$gm_adv_at).toBe('2')
+        expect(JSON.parse(d.scriptstate.$gm_mode).mode.combat).toBe('fight')     // a hostile move in the scene starts a fight
+    })
+    it('no answer is today\'s note exactly', async () => {
+        const c = running()
+        const out = await gameMasterRequestSolved(req(), card as never, c as never, async () => null, () => 0.5)
+        const today = gameMasterRequest(req(), card as never, running() as never, () => 0.5)
+        expect(out[1].content).toBe(today[1].content)
+        expect(String(out[1].content)).toContain('Dice:')
+    })
+    it('silent before the character is confirmed: the solver is not asked', async () => {
+        let asked = false
+        const c = chatOf([{ role: 'user', data: 'surprise me' }, { role: 'char', data: 'Tên: Mai\nĐược chưa?' }, { role: 'user', data: 'sửa tên' }])
+        const out = await gameMasterRequestSolved(req(), card as never, c as never, async () => { asked = true; return null })
+        expect(asked).toBe(false)
+        expect(out[1].content).toBe('Tui đi xuống hầm.')
     })
 })

@@ -82,14 +82,33 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
     })
     it('keeps the state before the reply, and goes back to it when that reply is rerolled away', () => {
         const before: GmState = { gm_arc: 'old | A | g | s' }
-        const t = takeGm(before, msg('char', 'Văn.\n[[GM\narc: new | B | g | s\n]]', 'r2'), 3)!
+        // the same arc (its hook) with a new antagonist: a revision the quest machine allows
+        const t = takeGm(before, msg('char', 'Văn.\n[[GM\narc: old | B | g | s\n]]', 'r2'), 3)!
         expect(t.text).toBe('Văn.')
-        expect(t.state.gm_arc).toBe('new | B | g | s')
+        expect(t.state.gm_arc).toBe('old | B | g | s')
         expect(settleGm(t.state, [msg('char', 'x', 'r2')]).rolledBack).toBe(false)
         const back = settleGm(t.state, [msg('char', 'x', 'r1')])
         expect(back.rolledBack).toBe(true)
         expect(back.state.gm_arc).toBe('old | A | g | s')
         expect(takeGm(before, msg('char', 'no block'), 3)).toBeNull()
+    })
+    // asked 2026-10-21 ("cần xstate … quest"): the arc and its beat follow the quest machine (gmMachine.ts); an illegal line is refused
+    it('refuses an illegal quest transition and keeps the previous value (the quest machine, XState)', () => {
+        // another arc while one is open, without "arc: done"
+        expect(applyGm(FULL, ['arc: a new feud | Kael | win | her name'], 9).gm_arc).toBe(FULL.gm_arc)
+        // the beat goes back or skips a step
+        expect(applyGm(FULL, ['beat: 1 | Varn\'s man again | x'], 9).gm_beat).toBe(FULL.gm_beat)
+        expect(applyGm(FULL, ['beat: 5 | the crew strikes | x'], 9).gm_beat).toBe(FULL.gm_beat)
+        expect(applyGm(FULL, ['beat: 3 | the crew strikes | x'], 9).gm_beat).toBe('3 | the crew strikes | x')
+        // a beat with no arc; "arc: done" with no arc (it wrote "→ how" into the past)
+        expect(applyGm({}, ['beat: 4 | x | y'], 2).gm_beat ?? '').toBe('')
+        expect(applyGm({}, ['arc: done | it ended'], 2).gm_past ?? '').toBe('')
+        // closing and seeding again in one block is two legal steps; a seed with its first beat too
+        const again = applyGm(FULL, ['arc: done | paid\narc: a new feud | Kael | win | her name\nbeat: 1 | Kael arrives | x'], 9)
+        expect(again.gm_arc).toBe('a new feud | Kael | win | her name')
+        expect(again.gm_beat).toBe('1 | Kael arrives | x')
+        // the beat line before the arc line in a seeding block still lands
+        expect(applyGm({}, ['beat: 1 | x | y\narc: a | b | c | d'], 2).gm_beat).toBe('1 | x | y')
     })
     it('reads the chat variables as setChatVar keeps them ($gm_*)', () => {
         expect(gmStateOf({ $gm_arc: 'a | b', $st_name: 'K', $gm_canon: 'null' })).toEqual({ gm_arc: 'a | b' })
@@ -360,9 +379,9 @@ describe('the bookkeeper (the submodel keeps the notes the narrator forgot)', ()
         expect(s.gm_arc).toBe('a | b | c | d')
         expect(s.gm_path).toBe('Marlowe | probation | watched')
         expect(s.gm_enemies).toBe('Whitlock | wants the nail back')
-        expect(applyGm({}, ['beat: 2 | the threat: a wolf at the door | dusk'], 4).gm_beat).toBe('2 | the threat: a wolf at the door | dusk')
+        expect(applyGm({ gm_arc: 'a | b | c | d' }, ['beat: 2 | the threat: a wolf at the door | dusk'], 4).gm_beat).toBe('2 | the threat: a wolf at the door | dusk')
         expect(applyGm({}, ['enemy: Aldric — now named. enemy: Aldric, the gate\'s Aspirant | kills me if I open the bar'], 4).gm_enemies).toBe('Aldric, the gate\'s Aspirant | kills me if I open the bar')
-        expect(applyGm({}, ['beat: 2 | a knock | who sent him?\nenemy: the cloaked one | do they oppose?'], 4)).toMatchObject({ gm_beat: '2 | a knock | who sent him?', gm_enemies: '' })
+        expect(applyGm({ gm_arc: 'a | b | c | d' }, ['beat: 2 | a knock | who sent him?\nenemy: the cloaked one | do they oppose?'], 4)).toMatchObject({ gm_beat: '2 | a knock | who sent him?', gm_enemies: '' })
     })
     it('reads a block, or bare lines, and nothing else', () => {
         expect(parseBookkeep('ok\n[[GM\npath: the slavers | new hand | watched\n]]')).toEqual(['\npath: the slavers | new hand | watched\n'])
@@ -427,5 +446,25 @@ describe('the bookkeeper also names the shelves (the GM asks the librarian)', ()
     it('the shelves line is not mistaken for a note', () => {
         expect(parseBookkeep('[[GM\nbeat: 2 | a | b\n]]\nshelves: 1, 3')).toEqual(['\nbeat: 2 | a | b\n'])
         expect(parseBookkeep('shelves: 1, 3')).toBeNull()
+    })
+})
+
+import { cardDice, gmWorld, prevNewOf } from './gameMaster'
+describe('what the solver is sent', () => {
+    it('reads the card\'s Kind and Stance dice as rolled, in each card\'s wording', () => {
+        expect(cardDice([{ content: '* Event: 7. …\n* Kind: a stranger.\n* Stranger\'s stance: needs help.\n* Sky: rain.' }])).toEqual({ kinds: ['a stranger'], stance: 'needs help' })
+        expect(cardDice([{ content: '* Event: 50.\n* Only if that event surfaces at or near the base, it is: a sound at a barricaded door.\n* Only if it surfaces out in the city, it is: a variant\'s sign (a track, a scream, a body torn wrong).\n* Stance of whoever appears: wary. Another unturned also tests the character.' }]))
+            .toEqual({ kinds: ['a sound at a barricaded door', 'a variant\'s sign (a track, a scream, a body torn wrong)'], stance: 'wary' })
+        expect(cardDice([{ content: 'no dice' }])).toEqual({ kinds: [], stance: '' })
+    })
+    it('names the world and whether the last reply was asked for a new event (a reroll looks at the mark before)', () => {
+        expect(gmWorld({ name: 'Nô Lệ Bóng Tối' })).toBe('shadow_slave')
+        expect(gmWorld({ name: 'Thảm Họa Zombie' })).toBe('zombie')
+        expect(gmWorld({ name: 'Aiko' })).toBe('generic')
+        expect(prevNewOf({ $gm_new_at: '4' }, 5)).toBe(true)
+        expect(prevNewOf({ $gm_adv_at: '4' }, 5)).toBe(true)
+        expect(prevNewOf({ $gm_new_at: '3' }, 5)).toBe(false)
+        expect(prevNewOf({ $gm_new_at: '5', $gm_new_prev: '4' }, 5)).toBe(true)   // rerolling reply 6: the mark before
+        expect(prevNewOf({}, 5)).toBe(false)
     })
 })

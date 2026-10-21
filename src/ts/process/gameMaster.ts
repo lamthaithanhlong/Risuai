@@ -43,6 +43,8 @@ const MAX_ENEMIES = 4
 const MAX_GAINED = 4
 const MAX_LEFT = 2
 
+import { snapshotAt, step as questStep, type GmEvent } from './gmMachine'
+
 const BLOCK = /\[\[GM\b([\s\S]*?)\]\]/g
 /** a field name the model copied as a value ("hook|the debt|antagonist|Varn") */
 /** a line that is commentary, not a value */
@@ -96,8 +98,30 @@ export function gmBlocks(text: string): string[] {
 const beatStep = (v: string) => { const f = (v ?? '').split('|')[0].trim().toLowerCase(); const n = /\d+/.exec(f); return n ? n[0] : f }
 
 /** The state after one reply's blocks. `charCount` is the number of story replies, this one included (for the pace). */
+/** A beat's step number, or null when its first field has none (a rewording). */
+const beatNum = (v: string | undefined) => { const n = /\d+/.exec((v ?? '').split('|')[0]); return n ? Number(n[0]) : null }
+const hookOf = (v: string | undefined) => (v ?? '').split('|')[0].trim().toLowerCase()
+const LINE = /^\s*[-*•]?\s*([a-z_]+)\s*:\s*(.*)$/i
+/** a body's lines with its arc lines first: a seed's beat may come before its arc line */
+const arcFirst = (body: string) => { const ls = body.split(/\r?\n/); const isArc = (l: string) => LINE.exec(l)?.[1].toLowerCase() === 'arc'; return [...ls.filter(isArc), ...ls.filter((l) => !isArc(l))] }
+
 export function applyGm(state: GmState, bodies: string[], charCount: number): GmState {
     const next: GmState = { ...state }
+    // the quest machine (gmMachine.ts, XState): the arc and its beat move only along its transitions; an illegal line is refused
+    let quest = snapshotAt({ quest: state.gm_arc || state.gm_beat ? 'open' : 'none', step: beatNum(state.gm_beat) })
+    const move = (key: string, e: GmEvent, value: string) => {
+        const to = questStep(quest, e)
+        if (!to) { console.warn(`[gm] ${key} refused, the quest cannot ${e.type.toLowerCase()} from here: ${value.slice(0, 80)}`); return false }
+        quest = to
+        return true
+    }
+    // a side newly taken in this block sets the old arc aside, so a new arc in the same block is a seed, not a second arc
+    const takesSide = bodies.some((b) => b.split(/\r?\n/).some((l) => {
+        const m = PATH_LINE.exec(l)
+        if (!m) return false
+        const v = m[2].split('|')[0].trim()
+        return !isDash(v) && !NO_SIDE.test(v) && nameOf(v) !== nameOf(state.gm_path ?? '')
+    }))
     let rewards: string[] | null = null
     let costs: string[] | null = null
     let threats = lines(state.gm_threats)
@@ -106,8 +130,8 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
     let arcWritten = false
     let sideTaken = false
     for (const body of bodies) {
-        for (const raw of body.split(/\r?\n/)) {
-            const m = /^\s*[-*•]?\s*([a-z_]+)\s*:\s*(.*)$/i.exec(raw)
+        for (const raw of arcFirst(body)) {
+            const m = LINE.exec(raw)
             if (!m) continue
             const key = m[1].toLowerCase()
             // "enemy: Aldric — now named. enemy: Aldric, the gate's Aspirant | …" (measured): the last value on the line counts
@@ -118,7 +142,15 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
             if (isForeignText(value)) { console.warn(`[gm] ${key} refused, not Vietnamese or English: ${value.slice(0, 80)}`); continue }
             if (key === 'arc') {
                 const [head, ...rest] = value.split('|')
-                if (/^(done|resolved|xong|kết thúc)$/i.test(head.trim()) || isDash(value)) {
+                const closing = /^(done|resolved|xong|kết thúc)$/i.test(head.trim()) || isDash(value)
+                const arcValue = closing ? '' : value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
+                const isOpen = quest.matches({ quest: 'open' })
+                if (closing) { if (!move(key, { type: 'CLOSE' }, value)) continue }
+                else if (!isOpen) { if (!move(key, { type: 'SEED', step: null }, value)) continue }
+                else if (hookOf(arcValue) === hookOf(next.gm_arc)) { if (!move(key, { type: 'REVISE' }, value)) continue }
+                else if (takesSide) { move(key, { type: 'SET_ASIDE' }, value); if (!move(key, { type: 'SEED', step: null }, value)) continue }
+                else { move(key, { type: 'SEED', step: null }, value); continue }
+                if (closing) {
                     // the arc ends; what it left behind seeds the next one
                     const how = clean(rest.join('|'))
                     const was = (state.gm_arc ?? '').split('|').slice(0, 2).map((x) => x.trim()).filter(Boolean).join(' / ')
@@ -131,9 +163,10 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                     threats = []
                 } else if (value) {
                     arcWritten = true
-                    next.gm_arc = value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
+                    next.gm_arc = arcValue
                 }
             } else if (key === 'beat') {
+                if (!move(key, { type: 'BEAT', step: isDash(value) ? null : beatNum(value) }, value)) continue
                 // the beat moved when its number (its first field) changed, not its wording: measured with the bookkeeper, which
                 // rewrites the beat line every reply, the stall counter reset every reply and the dice held at 10% advance
                 // (2 advances in 10 replies, 4 quiet replies in a row in one room)
@@ -483,6 +516,43 @@ export function worldFlavour(card: Card): string {
     return 'a rival, a hunter, a debt, a secret'
 }
 
+/** The GM world of a card (the solver's ASP file, server/node/story/gm/<world>.lp): the same tests as worldFlavour. */
+export type GmWorld = 'shadow_slave' | 'lotm' | 'mailman' | 'zombie' | 'generic'
+export function gmWorld(card: Card): GmWorld {
+    const text = `${card?.name ?? ''}\n${(card?.globalLore ?? []).map((l) => l?.comment ?? '').join('\n')}`
+    if (/shadow slave|nô lệ bóng tối|nightmare engine|forgotten shore/i.test(text)) return 'shadow_slave'
+    if (/lord of (the )?myster|quỷ bí|beyonder potion|pathways and sequences/i.test(text)) return 'lotm'
+    if (/infinite mailman|người đưa thư|delivery world|stamp book/i.test(text)) return 'mailman'
+    if (/thảm họa zombie|hacker system|hệ thống hacker|outbreak engine/i.test(text)) return 'zombie'
+    return 'generic'
+}
+
+/** The card's Kind and Stance dice as this request rolled them (the cards' Module 10: "* Kind: a stranger.", "* Only if … it is: …",
+ *  "* Stranger's stance: wary."): the texts the solver matches against its world's kinds. */
+export function cardDice(formated: { content: unknown }[]): { kinds: string[]; stance: string } {
+    const kinds: string[] = []
+    let stance = ''
+    for (const m of formated) {
+        if (typeof m.content !== 'string' || !m.content.includes('* Event:')) continue
+        for (const k of m.content.matchAll(/^\* (?:Kind|Only if [^\n:]*?it is): ([^\n]*?)\.(?:\s|$)/gm)) kinds.push(k[1].trim())
+        const st = /^\* (?:Stranger's stance|Stance[^\n:]*): ([^.\n]*)\./m.exec(m.content)
+        if (st) stance = st[1].trim()
+        break
+    }
+    return { kinds: kinds.slice(0, 3), stance }
+}
+
+/** The last reply was asked for a new event: an advance or escalation marked on the pace clock, or the card's NEW told (a reroll
+ *  of this reply looks at the marks before it, as sinceAdvance and cardNewMark do). */
+export function prevNewOf(vars: Record<string, unknown> | undefined, n: number): boolean {
+    const num = (x: unknown) => (x === undefined || x === null || x === '' ? -1 : Number(x))
+    const at = num(vars?.$gm_new_at), prev = num(vars?.$gm_new_prev)
+    const lastNew = at === n ? prev : at
+    const adv = num(vars?.$gm_adv_at), advPrev = num(vars?.$gm_adv_prev)
+    const lastAdv = adv >= n ? advPrev : adv
+    return lastNew === n - 1 || lastAdv === n - 1
+}
+
 const short = (v: string | undefined, n = 120) => { const s = (v ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 
 /** The side the player chose, what it made and gave; or how a side is chosen when none is. */
@@ -506,8 +576,11 @@ const SEED_PROSE = 'In the prose the hook is at most a quiet sign (something see
 // for help with a knot, though nobody had shown the character thirsty. The offer must hook a need that is already established.
 export const NEED_RULE = 'An NPC\'s offer, bait or bargain may only target a need the player character already has (shown in the scene, said by the player or written in the status panel\'s condition): never invent a need (thirst, hunger, a wound, being lost) to hook a scene; with none, the NPC wants something for themselves or just acts.'
 
-/** The note for this turn, or '' when the GM is silent. */
-export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string): string {
+/**
+ * The note for this turn, or '' when the GM is silent. `decided`: the solver's decision for this turn (server/node/gmSolver.cjs),
+ * one or two lines; it takes the place of the dice line, the card's NEW and the need rule, which it already applied.
+ */
+export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string, decided = ''): string {
     if (phase === 'silent') return ''
     const parts: string[] = []
     if (phase === 'seed') {
@@ -527,9 +600,13 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         // a side not here yet (SS t14-t17, 2026-10-19: "join Nephis's group" from inside the First Nightmare; 0 of 3 replies
         // followed it): what comes is a step toward it
         const away = dice.surface.startsWith('the side (') ? ' (not here yet: a step toward it, news or someone tied to it)' : ''
-        parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${away}${dice.consequence ? '; a due consequence lands now' : ''}.`)
-        if (dice.cardNew) parts.push(CARD_NEW)
+        if (decided) parts.push(decided)
+        else {
+            parts.push(`Dice: ${dice.firstOrder ? 'the side\'s first order or test comes due now' : PACE[dice.pace]}; focus: ${dice.surface}${away}${dice.consequence ? '; a due consequence lands now' : ''}.`)
+            if (dice.cardNew) parts.push(CARD_NEW)
+        }
     }
+    if (phase === 'seed' && decided) parts.push(decided)
     parts.push(pathLine(state))
     parts.push(`Canon (${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}): canon people live their own lives off-screen, heard as news or seen afar${dice.canon ? ' (some may come up now)' : ''}; met only when paths cross or the player seeks them, never forced; canon events still happen.`)
     // measured 2026-10-19 (DeepSeek v4.1 flash, 10 turns x 2 cards): "only changed lines" left the block out of 13 of 22
@@ -542,7 +619,7 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         // asked 2026-10-20: "Game master như 1 đấng toàn trí toàn năng … nhưng quy luật thế giới là chân lý": the GM knows and runs
         // everything, and the world's laws bind it too
         + ' ' + WORLD_LAW
-        + ' ' + NEED_RULE
+        + (decided ? '' : ' ' + NEED_RULE)
         + ' The player\'s action happens; at most one new trouble a reply, card dice included; success pays, failure costs (no free rank, Sequence, stamp, power).'
         + ` Story only, no planning notes; end, after any panel, with ${block}]`
 }

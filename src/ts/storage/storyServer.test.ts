@@ -13,6 +13,9 @@ const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { findSwipl } = req('../../../server/node/storyLogic.cjs')
 const SERVER = join(__dirname, '../../../server/node/server.cjs')
+// the server runs with a temp HOME: it is told where this machine's clingo is (gmSolver.cjs looks under ~/.risu-lan otherwise)
+const CLINGO = req('../../../server/node/gmSolver.cjs').findClingo()
+if (CLINGO) process.env.RISU_CLINGO_PYTHON ??= CLINGO
 const hex = (s: string) => Buffer.from(s).toString('hex')
 const b64u = (b: Buffer | string) => Buffer.from(b).toString('base64url')
 
@@ -113,6 +116,19 @@ describe('story.sqlite next to the save, and /api/story', () => {
         expect((await get('/api/story/zzz')).status).toBe(404)
         expect((await get('/api/story/k0', false)).status).toBe(400)
         expect((await get('/api/story/bad%20id')).status).toBe(400)
+    }, 60000)
+
+    test('/api/story/decide: the GM\'s decision for a turn, its line, and nothing without auth', async () => {
+        const body = { chatId: 'k0', world: 'shadow_slave', phase: 'run', vars: { st_name: 'Kenji', st_place: 'Trại lính', led_rel: 'Nephis | Kenji | trusts', $junk: 'x' },
+            messages: [{ role: 'user', text: 'Kenji đi theo đoàn người.' }], dice: { pace: 'quiet', cardNew: true }, kinds: ['a stranger'], stance: 'wants to use the character' }
+        const post = async (auth: boolean) => fetch(`http://127.0.0.1:${port}/api/story/decide`, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', ...(auth ? { 'risu-auth': await token() } : {}) } })
+        expect((await post(false)).status).toBe(400)
+        const r = await (await post(true)).json()
+        if (!CLINGO) { expect(r.status).toBe('unavailable'); return }
+        expect(r.status).toBe('ok')
+        expect(r.decision.turn.name).toBe('new')
+        expect(r.line).toMatch(/^This turn \(decided, follow it\)/)
+        expect(r.line).toContain('stated no need')
     }, 60000)
 
     test('RISU_STORY=0: the API says unavailable and writes still work', async () => {

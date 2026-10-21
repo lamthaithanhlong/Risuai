@@ -110,6 +110,9 @@ if (process.env.RISU_DB_MERGE !== '0') {
 let storyStore = null;
 const storyLogic = require('./storyLogic.cjs');
 const jevReferee = require('./jevReferee.cjs');
+// the Game Master's symbolic turn (gmSolver.cjs): Datalog facts, an ASP choice, an NPC's plan; the page asks before the narrator's request
+const gmSolver = require('./gmSolver.cjs');
+if(process.env.RISU_GM_SOLVER !== '0') setTimeout(() => { gmSolver.warm(); }, 2000).unref?.();
 if (process.env.RISU_STORY !== '0') {
     try {
         storyStore = require('./storyStore.cjs').openStoryStore({
@@ -2100,6 +2103,29 @@ app.post('/api/story/referee', authenticatedRouteLimiter, async (req, res, next)
         const state = (storyStore && /^[A-Za-z0-9-]{1,80}$/.test(id) && storyStore.story(id)?.state) || {};
         const r = await jevReferee.referee({ state, scene: String(body.scene ?? '').slice(-6000), turn: String(body.turn ?? '').slice(0, 4000) });
         res.send(r ? { status: 'ok', ...r } : { status: 'unavailable', note: '' });
+    } catch (error) { next(error); }
+});
+
+// The GM's decision for this turn (gmSolver.cjs): the page sends the chat's variables, its last messages and this turn's dice; the
+// answer's line goes into the GM note in place of the open rules. RISU_GM_SOLVER=0 turns it off (the page keeps today's note).
+app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        if(!await checkAuth(req, res)) return;
+        if(process.env.RISU_GM_SOLVER === '0') return res.send({ status: 'unavailable', reason: 'off (RISU_GM_SOLVER=0)' });
+        const b = req.body ?? {};
+        const str = (v, n) => String(v ?? '').slice(0, n);
+        const vars = {};
+        for (const [k, v] of Object.entries(b.vars ?? {})) if (/^(st|led|gm)_[a-z0-9_]{1,40}$/.test(k)) vars[k] = str(v, 6000);
+        const input = {
+            chatId: str(b.chatId, 80), world: str(b.world, 20), phase: b.phase === 'seed' ? 'seed' : 'run', vars,
+            messages: (Array.isArray(b.messages) ? b.messages : []).slice(-4).map((m) => ({ role: m?.role === 'user' ? 'user' : 'char', text: str(m?.text, 4000) })),
+            dice: { pace: str(b.dice?.pace, 12), surface: str(b.dice?.surface, 200), consequence: !!b.dice?.consequence, cardNew: !!b.dice?.cardNew, firstOrder: !!b.dice?.firstOrder },
+            prevNew: !!b.prevNew, kinds: (Array.isArray(b.kinds) ? b.kinds : []).slice(0, 3).map((k) => str(k, 200)), stance: str(b.stance, 60),
+        };
+        const r = await gmSolver.decide(input, { store: storyStore });
+        // RISU_GM_LOG=<file>: one JSON line per decision (the acceptance run reads them back, tests/acceptance/gmMetrics.mjs)
+        if(process.env.RISU_GM_LOG) fs.appendFile(process.env.RISU_GM_LOG, JSON.stringify({ at: Date.now(), chatId: input.chatId, world: input.world, phase: input.phase, dice: input.dice, prevNew: input.prevNew, kinds: input.kinds, stance: input.stance, status: r.status, reason: r.reason, ms: r.ms, turn: r.decision?.turn ?? null, intents: r.decision?.intents ?? [], needs: r.needs ?? [], present: r.present ?? [], newEvent: r.newEvent ?? null, line: r.line ?? '' }) + '\n').catch(() => {});
+        res.send(r);
     } catch (error) { next(error); }
 });
 

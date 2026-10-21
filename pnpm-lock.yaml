@@ -227,6 +227,9 @@ importers:
       ws:
         specifier: ^8.18.3
         version: 8.18.3
+      xstate:
+        specifier: 5.33.2
+        version: 5.33.2
     devDependencies:
       '@rollup/plugin-strip':
         specifier: ^3.0.4
@@ -2877,6 +2880,9 @@ packages:
       utf-8-validate:
         optional: true
 
+  xstate@5.33.2:
+    resolution: {integrity: sha512-8tC7yXgeCvpT8gKEeEje6ikJJG1wpnoLiXe+HfECW8m10ubMd3QxKOwWA8KxPJVBcLwfdRoMKYxIBGYKmo37/A==}
+
   yallist@5.0.0:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
@@ -5124,6 +5130,8 @@ snapshots:
       stackback: 0.0.2
 
   ws@8.18.3: {}
+
+  xstate@5.33.2: {}
 
   yallist@5.0.0: {}
 

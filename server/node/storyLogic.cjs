@@ -297,7 +297,7 @@ function problemFor(store, chatId) {
     const byType = new Map()
     for (const o of objects) { if (!byType.has(o.type)) byType.set(o.type, []); byType.get(o.type).push(o.name) }
     const text = `(define (problem story) (:domain ${d.name})\n  (:objects ${[...byType].map(([t, ns]) => `${ns.join(' ')} - ${t}`).join(' ')})\n  (:init ${uniq.map(sexp).join(' ')})\n  (:goal (and)))\n`
-    return { text, domain: domainText, world: prof.id, here, rank, notes, objects: Object.fromEntries(byType) }
+    return { text, domain: domainText, world: prof.id, here, rank, notes, objects: Object.fromEntries(byType), init: uniq, aliases: al }
 }
 
 /** a plan from where the chat's story is to `goal` (PDDL), or why there is none */
@@ -317,4 +317,4 @@ function plan(store, chatId, goal, opts = {}) {
     return { status: r.reason === 'unsolvable' ? 'impossible' : 'gave_up', ...base, reason: r.reason, expanded: r.expanded }
 }
 
-module.exports = { normalizeRank, dateKey, fragments, profileFor, rulesFor, factsFor, runProlog, check, promptLine, problemFor, plan, findSwipl, DEATH }
+module.exports = { DIR, objectFor, normalizeRank, dateKey, fragments, profileFor, rulesFor, factsFor, runProlog, check, promptLine, problemFor, plan, findSwipl, DEATH }

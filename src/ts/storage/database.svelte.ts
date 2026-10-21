@@ -924,6 +924,8 @@ export interface Database{
     gameMaster?: boolean
     /** After each reply the submodel writes the GM notes that changed (gameMasterPage.ts bookkeep); on unless false. */
     gmBookkeeper?: boolean
+    /** The GM's solver (server/node/gmSolver.cjs) decides each turn's event and NPC intents on the Node server; on unless false. */
+    gmSolver?: boolean
     /** The bookkeeper names the shelves the next reply needs and the books are asked then, so the librarian waits in the chat instead of
      *  asking before the narrator (loreIndex.ts "the GM asks the librarian"); on unless false. */
     loreForward?: boolean

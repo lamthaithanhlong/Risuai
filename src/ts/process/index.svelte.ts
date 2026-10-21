@@ -16,7 +16,8 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
+import { creationRequest, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
+import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
 import { fetchRefereeNote, refereeRequest, turnAndScene } from "./jevReferee";
@@ -1588,7 +1589,13 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
-    formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+    // on the Node server (unless Settings turns it off) the solver decides this turn's event and NPC intents (gmSolver.ts)
+    if(DBState.db.gmSolver !== false && isNodeServer){
+        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+        formated = await brTimed('gm solver', () => gameMasterRequestSolved(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat, (input) => fetchGmDecision(input, { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth })), 0)
+    } else {
+        formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+    }
     // the persona is the character sheet and the card's Future Plan line is asked for, with the GM on or off (gameMasterPage.ts)
     formated = storyNotesRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // while the character is being made (the card's "Được chưa?" step): only the creation step is answered, no story yet
