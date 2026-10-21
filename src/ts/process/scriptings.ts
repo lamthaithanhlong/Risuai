@@ -392,9 +392,11 @@ export async function runScripted(code:string, arg:{
                 if(!ScriptingLowLevelIds.has(id)){
                     return
                 }
-                // the same drawing as the built-in scene pictures (scenePictureDraw.ts)
+                // the same drawing as the built-in scene pictures (scenePictureDraw.ts). On the Node server this FILES the picture with the
+                // server's picture queue and returns at once (the script's turn never waits for a picture); an `index` is a redraw of that
+                // message (the illustrate button), which replaces its picture, while the output trigger's own ask (no index) is idempotent
                 const { drawScenePicture } = await import('./scenePictureDraw')
-                return drawScenePicture(char as character, ScriptingEngineState.chat, value, negValue, index)
+                return drawScenePicture(char as character, ScriptingEngineState.chat, value, negValue, index, { redraw: typeof index === 'number' })
             })
 
             declareAPI('getCharacterImageMain', async (id:string) => {

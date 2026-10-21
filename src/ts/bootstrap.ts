@@ -174,11 +174,14 @@ export async function loadData() {
                 // while the app stays open (files/inlaySync.ts)
                 void import('./process/files/inlays').then((m) => m.startInlaySync()).catch((e) => console.warn('[inlay] sync failed', e))
                 // pictures drawn by the server while this page was closed go into the messages they were for (imageJobClient.ts)
-                if (isNodeServer) {
+                // (not the server's own turn worker page: it runs one turn and is gone; the pictures are the player's pages' and the server's)
+                if (isNodeServer && !new URLSearchParams(globalThis.location?.search ?? '').has('turnWorker')) {
                     void Promise.all([import('./process/imageJobClient'), import('./storage/nodeStorage')])
                         .then(([jobs, node]) => jobs.recoverImageJobs({ fetch: (input, init) => fetch(input, init), auth: node.getNodeServerProxyAuth }, getDatabase()))
                         .then((r) => { if (r.placed.length || r.skipped.length) console.log(`[image] recovered ${r.placed.length} picture(s), ${r.skipped.length} without a message`) })
                         .catch((e) => console.warn('[image] could not check the server picture jobs', e))
+                        // then follow the pictures of the chat on screen (status under each message, the picture into the copy this page holds)
+                        .finally(() => import('./process/pictureWatch.svelte').then((m) => m.startPictureWatch()).catch((e) => console.warn('[image] picture watch', e)))
                 }
 
                 if (await forageStorage.checkAccountSync()) {

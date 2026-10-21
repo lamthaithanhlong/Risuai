@@ -133,6 +133,8 @@ function applyResult(p: PendingTurn, chat: unknown) {
     const i = char?.chats?.findIndex((c) => c.id === p.chatId) ?? -1
     if (!char || i < 0) return false
     char.chats[i] = chat as typeof char.chats[number]
+    // pictures the server placed since this chat copy was made (the picture queue runs apart from the turns) are put in again
+    void import('./pictureWatch.svelte').then((m) => m.forgetAppliedPictures()).catch(() => {})
     return true
 }
 

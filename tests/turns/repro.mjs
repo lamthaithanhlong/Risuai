@@ -96,7 +96,7 @@ async function main() {
     const { dir, password } = copySave(runDir, base, 'turns')
     patchRoot(dir, {
         forceReplaceUrl: `http://127.0.0.1:${stub.port}/v1/chat/completions`,
-        jevGuard: JSON.stringify({ enabled: false }), jevReferee: false, gameMaster: false, autoTranslate: false,
+        jevGuard: { enabled: false }, jevReferee: false, gameMaster: false, autoTranslate: false,
     })
     fs.rmSync(path.join(base), { recursive: true, force: true })     // the copy is all we need; keep the disk free
     // the copy's server sends every request for the owner's router to the stub (server.cjs RISU_UPSTREAM_REMAP): the copied save's

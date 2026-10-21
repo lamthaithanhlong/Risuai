@@ -1317,13 +1317,31 @@ app.get('/hub-proxy/*', authenticatedRouteLimiter, hubProxyFunc);
 app.post('/proxy', authenticatedRouteLimiter, reverseProxyFunc);
 app.post('/proxy2', authenticatedRouteLimiter, reverseProxyFunc);
 app.post('/hub-proxy/*', authenticatedRouteLimiter, hubProxyFunc);
-// Chat pictures drawn on the server (imageJobs.cjs): the picture lands in inlays/<id> even when the page that asked is closed.
+// Chat pictures: their own pipeline (imageJobs.cjs), apart from the message turns. A job is drawn on the server and then put into its
+// message BY MESSAGE ID in the character file the server holds; the page that asked never waits for it.
 let imageJobs = null;
 try {
     const imageDb = path.join(path.dirname(process.env.RISU_JOBS_DB || path.join(require('os').homedir(), '.risu-lan', 'jobs.sqlite')), 'image-jobs.sqlite');
+    const { placeInCharacter } = require('./pictureText.cjs');
     imageJobs = require('./imageJobs.cjs').openImageJobs({
         dbFile: imageDb,
         writeInlay: async (id, bytes) => { saveQueue.enqueueWrite(Buffer.from(`inlays/${id}`, 'utf-8').toString('hex'), bytes); },
+        // The picture goes into remotes/<chaId>.local.bin (enableRemoteSaving: the character and all its chats). The server is one more
+        // writer of that file: this read-modify-write has no await in it, so no page write comes in between, and a page whose copy is
+        // older meets this change at its next write, merged per message by id (dbSync.cjs onRemoteWrite, dbMerge.cjs mergeRemote).
+        place: async (target, inlayId) => {
+            if (!target?.charId || typeof target.charId !== 'string') return 'unsupported';
+            const hexKey = Buffer.from(`remotes/${target.charId}.local.bin`, 'utf-8').toString('hex');
+            const bytes = currentSaveBytes(hexKey);
+            if (!bytes || !bytes.length) return 'unsupported';          // not a remote character: a page puts the picture in
+            let character;
+            try { character = JSON.parse(Buffer.from(bytes).toString('utf8')); } catch { return 'unsupported'; }
+            const outcome = placeInCharacter(character, target, inlayId);
+            if (outcome !== 'placed') return outcome;
+            saveQueue.enqueueWrite(hexKey, Buffer.from(JSON.stringify(character), 'utf8'));
+            syncStory(currentSaveBytes(DB_KEY_HEX), dbSync ? dbSync.currentRev() : null);
+            return 'placed';
+        },
     });
     console.log(`[Server] Image jobs ready (${imageDb}); pruned ${imageJobs.prune()}`);
     setInterval(() => { try { imageJobs.prune(); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
@@ -1420,8 +1438,9 @@ app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     const url = typeof request?.url === 'string' ? sanitizeTargetUrl(request.url) : null;
     if (!url) { res.status(400).send({ error: 'Invalid target URL. Only local/private network http(s) endpoints are allowed.' }); return; }
     try {
-        const id = imageJobs.submit({ ...request, url }, req.body?.target ?? null);
-        res.send({ id });
+        // key: chat + message + slot (+ a nonce for a redraw). The same key finds the job again: a request sent twice is one picture.
+        const { id, existing } = imageJobs.enqueue({ ...request, url }, req.body?.target ?? null, { key: req.body?.key });
+        res.send({ id, existing });
     } catch (error) {
         res.status(400).send({ error: String(error?.message || error) });
     }
@@ -1429,7 +1448,12 @@ app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
 
 app.get('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
-    res.send({ jobs: imageJobs ? imageJobs.unacked() : [] });
+    res.setHeader('Cache-Control', 'no-store');
+    // ?chat=<chat id>: the pictures of that chat (open, failed, and the finished ones a page has not taken yet); without it, every
+    // finished job no page has taken yet (what a page that was closed meanwhile recovers at its start)
+    const chat = typeof req.query.chat === 'string' ? req.query.chat : '';
+    // `now`: this server's clock, so a page whose clock differs (a phone) shows the seconds right
+    res.send({ jobs: !imageJobs ? [] : chat ? imageJobs.forChat(chat) : imageJobs.unacked(), now: Date.now() });
 });
 
 app.get('/api/image-jobs/:id', authenticatedRouteLimiter, async (req, res) => {
@@ -1442,6 +1466,18 @@ app.get('/api/image-jobs/:id', authenticatedRouteLimiter, async (req, res) => {
 app.post('/api/image-jobs/:id/ack', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
     res.send({ acked: imageJobs ? imageJobs.ack(req.params.id) : false });
+});
+
+// "Thử lại": another go at a picture that ended in error (its request is kept for that); "Dừng": stops one that is waiting or being drawn
+app.post('/api/image-jobs/:id/retry', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    const ok = imageJobs ? imageJobs.retry(req.params.id) : false;
+    res.status(ok ? 200 : 409).send({ retried: ok });
+});
+
+app.post('/api/image-jobs/:id/cancel', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.send({ cancelled: imageJobs ? imageJobs.cancel(req.params.id) : false });
 });
 
 app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
@@ -1601,6 +1637,17 @@ function startTurnWorker(port, secure) {
                 return false;
             }
         },
+        // the run did not save and took its reply away: the pictures it asked for are not drawn (imageJobs.cancelUnsaved)
+        undone: (chatId, since) => {
+            if (!imageJobs) return;
+            const { findMessage } = require('./pictureText.cjs');
+            const n = imageJobs.cancelUnsaved(chatId, since - 1000, (target) => {
+                const bytes = target?.charId ? currentSaveBytes(Buffer.from(`remotes/${target.charId}.local.bin`, 'utf-8').toString('hex')) : null;
+                if (!bytes) return true;           // not a remote character: cannot tell, so leave the picture
+                try { return findMessage(JSON.parse(Buffer.from(bytes).toString('utf8')), target) !== null; } catch { return true; }   // undefined (no ids) is left alone too
+            });
+            if (n) console.log(`[Turns] ${n} picture(s) asked by the undone reply were stopped`);
+        },
         log: (...a) => console.log('[Turns]', ...a),
     });
     if (turnWorker.start()) console.log(`[Turns] worker ${turnWorker.owner} on ${secure ? 'https' : 'http'}://worker.localhost:${port}`);
@@ -1674,7 +1721,17 @@ app.get('/api/turns/:key/result', authenticatedRouteLimiter, async (req, res) =>
     res.setHeader('Cache-Control', 'no-store');
     const turn = turnQueue && TURN_KEY_PARAM.test(req.params.key) ? turnQueue.get(req.params.key) : null;
     if (!turn || turn.state !== 'saved') { res.status(404).send({ error: 'No saved result' }); return; }
-    res.send({ chat: turnQueue.result(req.params.key) });
+    const chat = turnQueue.result(req.params.key);
+    // The worker's page loaded its copy of the chat when the turn began. A picture the server placed in an earlier message since then is
+    // in the file but not in that copy, and the page that takes this copy would show the message without it (the picture queue runs
+    // apart from the turns). Put those pictures back, by message id; a picture already there is left alone.
+    if (chat && imageJobs) {
+        try {
+            const { placeInCharacter } = require('./pictureText.cjs');
+            for (const job of imageJobs.placedSince(chat.id, turn.created)) placeInCharacter({ chats: [chat] }, job.target, job.inlayId);
+        } catch (error) { console.error('[Turns] result pictures:', error?.message || error); }
+    }
+    res.send({ chat });
 });
 
 app.delete('/api/turns/:key', authenticatedRouteLimiter, async (req, res) => {

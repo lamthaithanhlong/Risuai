@@ -58,3 +58,6 @@ save.story.sqlite*
 # the save as one SQLite file (saveStore.cjs) and the running server's pid next to it
 save.store.sqlite*
 save.server.pid
+
+# TLC writes states/ in the working directory when no -metadir is given
+specs/**/states/

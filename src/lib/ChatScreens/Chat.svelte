@@ -28,18 +28,27 @@
     import PartialEditController from './PartialEditController.svelte';
     import { getLLMCache, setLLMCache } from "../../ts/translator/translator"
     import { withIllustrating } from "../../ts/process/illustrateStatus.svelte"
+    import PictureStatus from './PictureStatus.svelte'
+    import { pictureWatch } from "../../ts/process/pictureWatch.svelte"
 
     let translating = $state(false)
     // "Illustrate this reply": the story's own script (onButtonClick "illustrate:<index>") describes the scene and draws it. The button
     // shows only for a story whose script has that handler, so other characters are untouched.
+    // The script describes the scene (one model call, a few seconds) and files the picture with the server's picture queue, then returns:
+    // the picture is drawn apart from the chat, shown as a status line under this message (PictureStatus.svelte), and arrives in it.
     let illustrating = $state(false)
+    const pictureBusy = $derived.by(() => {
+        const id = idx >= 0 ? getCurrentChat()?.message?.[idx]?.chatId : undefined
+        const st = id ? pictureWatch.byMessage[id]?.state : undefined
+        return st === 'drawing' || st === 'retrying'
+    })
     const canIllustrate = $derived.by(() => {
         const c = DBState.db.characters[selIdState.selId]
         if(!c || c.type === 'group') return false
         return (c.triggerscript ?? []).some((t) => t?.effect?.[0]?.type === 'triggerlua' && ((t.effect[0] as { code?: string }).code ?? '').includes('illustrate:'))
     })
     async function illustrate() {
-        if(illustrating || idx < 0) return
+        if(illustrating || pictureBusy || idx < 0) return
         illustrating = true
         try {
             const result = await withIllustrating(() => runLuaButtonTrigger(getCurrentCharacter(), 'illustrate:' + idx))
@@ -580,6 +589,7 @@
                     {rawStreamingText} />
             {/key}
         </span>
+        <PictureStatus {idx} />
         {#if idx >= 0 && !editMode && !editTranslationMode && !isOptimizedStreamingMessage && partialEditEnabled && (DBState.db.enableBlockPartialEdit || DBState.db.enableDragPartialEdit)}
             <PartialEditController
                 messageData={message}
@@ -922,13 +932,13 @@
     {/if}
     {#if idx > -1 && role !== 'user' && canIllustrate && !isOptimizedStreamingMessage}
         <button
-            class={"flex items-center transition-colors button-icon-illustrate " + (illustrating ? 'text-blue-400 cursor-wait' : 'hover:text-blue-500')}
-            disabled={illustrating}
+            class={"flex items-center transition-colors button-icon-illustrate " + (illustrating || pictureBusy ? 'text-blue-400 cursor-wait' : 'hover:text-blue-500')}
+            disabled={illustrating || pictureBusy}
             title={hasPicture ? language.redrawPicture : language.illustrate}
             aria-label={hasPicture ? language.redrawPicture : language.illustrate}
             onclick={illustrate}
         >
-            {#if illustrating}
+            {#if illustrating || pictureBusy}
                 <LoaderCircleIcon size={20} class="animate-spin" />
             {:else if hasPicture}
                 <ImagePlayIcon size={20} />

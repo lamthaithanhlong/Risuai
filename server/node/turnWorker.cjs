@@ -118,6 +118,12 @@ function createTurnWorker(opts) {
         }
     }
 
+    // A run that did not save undoes its reply (turnWorkerPage.ts undo): the pictures it asked for belong to a message that is gone. The server
+    // is told, so it does not draw them (opts.undone cancels the ones not drawn yet and not in a saved message).
+    function undone(turn, startedAt) {
+        try { opts.undone?.(turn.chat, startedAt); } catch (error) { log('undone:', String(error?.message || error).slice(0, 200)); }
+    }
+
     async function run(turn) {
         const t0 = Date.now();
         let lost = false;
@@ -149,13 +155,15 @@ function createTurnWorker(opts) {
                 : { ok: false, error: res?.error || 'the turn did not finish', retryable: res?.retryable !== false };
             const state = queue.finish(turn.key, owner, outcome);
             log(`turn ${turn.key} (${turn.kind}, attempt ${turn.attempt}) -> ${state} in ${Math.round((Date.now() - t0) / 1000)} s${outcome.ok ? '' : ': ' + String(outcome.error).slice(0, 200)}`);
+            if (!outcome.ok) undone(turn, t0);
         } catch (error) {
             const msg = String(error?.message || error).slice(0, 300);
             log(`turn ${turn.key} broke the worker page: ${msg}`);
             await closeBrowser();
-            if (!lost) queue.finish(turn.key, owner, { ok: false, error: msg, retryable: true });
+            if (!lost) { queue.finish(turn.key, owner, { ok: false, error: msg, retryable: true }); undone(turn, t0); }
         } finally {
             clearInterval(beat);
+            if (lost) undone(turn, t0);          // Stop, or the lease was taken back: this run's reply goes too
             await closeContext();
             lastUsed = Date.now();
         }

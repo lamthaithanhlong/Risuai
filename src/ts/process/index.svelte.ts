@@ -10,7 +10,6 @@ import { language } from "../../lang";
 import { alertError, alertToast } from "../alert";
 import { TRANSIENT_RETRY_DELAYS_MS, isTransientFailure } from "./transientRetry";
 import { genStatus, genStatusEvents } from "./genStatus.svelte";
-import { replyWantsPicture, withIllustrating } from "./illustrateStatus.svelte";
 import { learningRequest, noteLearningVocab } from "./learning";
 import { notePortraits, portraitRequest } from "./portraitsPage";
 import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
@@ -1932,7 +1931,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentChat = DBState.db.characters[sel.char].chats[sel.chat]        
         fixLastReplyBlocks(currentChat)   // "【STATUS" → "[[STATUS", so the card's script reads it (replyTidy.ts)
         const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
-        const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
+        // a picture the trigger asks for goes to the server's picture queue and the trigger returns at once: the turn never waits for it
+        const triggerResult = await runOutputTrigger()
         if(triggerResult && triggerResult.chat){
             currentChat = triggerResult.chat
         }
@@ -2047,7 +2047,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
         fixLastReplyBlocks(currentChat)   // "【STATUS" → "[[STATUS", so the card's script reads it (replyTidy.ts)
         const runOutputTrigger = () => runTrigger(currentChar, 'output', {chat:currentChat})
-        const triggerResult = await (replyWantsPicture(currentChat.message) ? withIllustrating(runOutputTrigger) : runOutputTrigger())
+        // a picture the trigger asks for goes to the server's picture queue and the trigger returns at once: the turn never waits for it
+        const triggerResult = await runOutputTrigger()
         if(triggerResult && triggerResult.chat){
             DBState.db.characters[sel.char].chats[sel.chat] = triggerResult.chat
         }
