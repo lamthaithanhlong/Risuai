@@ -166,3 +166,240 @@ describe.skipIf(!HAS_CLINGO)('the turn with the librarian\'s graph', () => {
         expect((await run(f)).status).toBe('ok')
     })
 })
+
+// ---- the people as people (npc.lp, npcPsych.cjs): social acts under hard rules about trust, grudge and secrets ------------------------
+describe.skipIf(!HAS_CLINGO)('NPC psychology: story/gm/npc.lp', () => {
+    const NPC = LP('npc.lp')
+    const dir = mkdtempSync(join(tmpdir(), 'npc-lp-'))
+    /** one person, "marek", in the scene; `rel` = [trust, affection, debt, grudge] toward the player; extra = more facts */
+    const person = (rel: [number, number, number, number], extra = '') => [
+        'npc("marek"). present("marek").',
+        `rel("marek","player",trust,${rel[0]}). rel("marek","player",affection,${rel[1]}). rel("marek","player",debt,${rel[2]}). rel("marek","player",grudge,${rel[3]}).`,
+        'trait("marek",extra,50). trait("marek",agree,50). mood("marek",0).', extra,
+    ].join('\n')
+    const solve = (facts: string, lp = NPC) => G.runClingo([lp], facts, { timeoutMs: 5000 })
+    const acts = (r: any, f = 'social_action') => r.atoms.filter((a: any) => a.name === f).map((a: any) => `${a.args[0]}:${a.args[1].name}`).sort()
+    const wants = (r: any) => acts(r, 'wants').map((x: string) => x.split(':')[1])
+    /** npc.lp with one line taken out (the rule is a whole line of the file; it must be there) */
+    const without = (name: string, rule: string) => {
+        const text = readFileSync(NPC, 'utf8')
+        const lines = text.split('\n')
+        const at = lines.findIndex((l) => l === rule)
+        expect(at, `rule line not found: ${rule}`).toBeGreaterThanOrEqual(0)
+        const f = join(dir, name)
+        writeFileSync(f, lines.filter((_, i) => i !== at).join('\n'))
+        return f
+    }
+    /** the bad answer is forced; with the rule it cannot be had, with the rule taken out it can */
+    const keepsOut = async (name: string, rule: string, facts: string, bad: string) => {
+        const forced = facts + `\n:- not social_action("marek", ${bad}).\n`
+        expect((await solve(forced)).status, 'with the rule').toBe('unsat')
+        expect((await solve(forced, without(name, rule))).status, 'without the rule').toBe('ok')
+    }
+
+    test('a person with no trust never confides, high debt helps, grudge 40 refuses, an open grudge and affection reconcile', async () => {
+        expect(acts(await solve(person([20, 30, 0, 0], 'has_agenda("marek").')))).not.toContain('marek:confide')
+        const open = await solve(person([70, 30, 0, 0], 'has_agenda("marek").'))
+        expect(wants(open)).toContain('confide')
+        expect(acts(open)).toEqual(['marek:confide'])
+        expect(acts(await solve(person([50, 30, 45, 0])))).toEqual(['marek:help'])
+        expect(acts(await solve(person([50, 30, 0, 45])))).toEqual(['marek:refuse'])
+        expect(acts(await solve(person([60, 60, 0, 30])))).toEqual(['marek:reconcile'])
+    })
+    test('conceal_affection beats forgive: both wanted, the guarded heart hides its affection (affection 70, trust 45, grudge 25, mood 4)', async () => {
+        const f = person([45, 70, 0, 25]).replace('mood("marek",0)', 'mood("marek",4)')
+        const r = await solve(f)
+        expect(wants(r)).toEqual(expect.arrayContaining(['conceal_affection', 'forgive']))
+        expect(acts(r)).toEqual(['marek:conceal_affection'])
+        // reserved by nature instead of by distrust (extraversion < 40) wants it as well
+        const shy = await solve(person([80, 70, 0, 0]).replace('trait("marek",extra,50)', 'trait("marek",extra,30)'))
+        expect(wants(shy)).toContain('conceal_affection')
+        // forgive alone: a small grudge, a good mood, nothing to hide
+        const only = await solve(person([80, 40, 0, 20]).replace('mood("marek",0)', 'mood("marek",5)'))
+        expect(wants(only)).toContain('forgive'); expect(wants(only)).not.toContain('conceal_affection')
+        expect(acts(only)).toEqual(['marek:forgive'])
+    })
+    test('the owner\'s example: below trust 30 a person with a secret never volunteers it, by confiding or by telling', async () => {
+        const f = person([25, 40, 0, 0], 'has_secret("marek"). has_agenda("marek"). intent("marek", tell(7)).')
+        expect((await solve(f)).status).toBe('unsat')       // an intent to tell from core.lp, below 30 with a secret: no answer at all
+        const calm = await solve(person([25, 40, 0, 0], 'has_secret("marek"). has_agenda("marek"). intent("marek", own).'))
+        expect(acts(calm)).not.toContain('marek:confide')
+    })
+    test('demeanor: hostile, cold, guarded, warm, neutral; fear or a cold reserved person may stay silent', async () => {
+        const dem = async (rel: [number, number, number, number], extra = '') => acts(await solve(person(rel, extra), NPC), 'demeanor')[0]
+        expect(await dem([50, 50, 0, 10], 'hostile("marek").')).toBe('marek:hostile')
+        expect(await dem([50, 50, 0, 35])).toBe('marek:cold')
+        expect(await dem([30, 50, 0, 10])).toBe('marek:guarded')
+        expect(await dem([60, 60, 0, 10])).toBe('marek:warm')
+        expect(await dem([60, 20, 0, 10])).toBe('marek:neutral')
+        const silent = await solve(person([50, 50, 0, 35]).replace('trait("marek",extra,50)', 'trait("marek",extra,20)'))
+        const silentOf = (r: any) => r.atoms.filter((x: any) => x.name === 'may_silent').map((x: any) => x.args[0])
+        expect(silentOf(silent)).toEqual(['marek'])
+        expect(silentOf(await solve(person([50, 50, 0, 35])))).toEqual([])                 // cold but sociable (extraversion 50)
+        expect(silentOf(await solve(person([50, 50, 0, 0], 'emotion("marek",fear,7).')))).toEqual(['marek'])
+        expect(silentOf(await solve(person([50, 50, 0, 0], 'emotion("marek",fear,3).')))).toEqual([])
+    })
+
+    // the rule taken out: the same facts now allow what it forbids (red when a rule is broken)
+    describe('each hard rule is what keeps the bad outcome out', () => {
+        test('SECRET: confiding below trust 30', () => keepsOut('no-secret.lp', ':- social_action(P, confide), rel(P, "player", trust, V), V < 30.', person([20, 50, 0, 0]), 'confide'))
+        test('SECRET: telling what they know below trust 30 with something to hide', () =>
+            keepsOut('no-tell.lp', ':- intent(P, tell(_)), has_secret(P), rel(P, "player", trust, V), V < 30.', person([20, 50, 0, 0], 'has_secret("marek"). intent("marek", tell(7)).'), 'small_talk'))
+        test('SECRET: a hidden secret needs trust 60 even above 30', () =>
+            keepsOut('no-secret60.lp', ':- social_action(P, confide), has_secret(P), rel(P, "player", trust, V), V < 60.', person([45, 50, 0, 0], 'has_secret("marek").'), 'confide'))
+        test('HOSTILE-HELP: a hostile person does not help', () => keepsOut('no-hostile-help.lp', ':- social_action(P, help), hostile(P).', person([50, 50, 0, 0], 'hostile("marek").'), 'help'))
+        test('HELP-OPPOSE: no help while the intent is to oppose', () => keepsOut('no-help-oppose.lp', ':- social_action(P, help), intent(P, oppose).', person([50, 50, 0, 0], 'intent("marek", oppose).'), 'help'))
+        test('INSULT-HELP: no insult while the intent is to help', () => keepsOut('no-insult-help.lp', ':- social_action(P, insult), intent(P, help).', person([50, 50, 0, 0], 'intent("marek", help).'), 'insult'))
+        test('THREATEN-HELP: no threat while the intent is to help', () => keepsOut('no-threaten-help.lp', ':- social_action(P, threaten), intent(P, help).', person([50, 50, 0, 0], 'intent("marek", help).'), 'threaten'))
+        test('FLIRT: not below affection 50', () => keepsOut('no-flirt.lp', ':- social_action(P, flirt), rel(P, "player", affection, V), V < 50.', person([50, 30, 0, 0]), 'flirt'))
+        test('GRUDGE-RECONCILE: not at grudge 70', () => keepsOut('no-grudge-reconcile.lp', ':- social_action(P, reconcile), rel(P, "player", grudge, G), G >= 70.', person([50, 50, 0, 75]), 'reconcile'))
+        test('GRUDGE-FORGIVE: not at grudge 70', () => keepsOut('no-grudge-forgive.lp', ':- social_action(P, forgive), rel(P, "player", grudge, G), G >= 70.', person([50, 50, 0, 75]), 'forgive'))
+        test('BETRAYED-RECONCILE: not the turn after a betrayal', () => keepsOut('no-betrayed-reconcile.lp', ':- social_action(P, reconcile), recent(_, betray, P).', person([50, 50, 0, 30], 'recent("player", betray, "marek").'), 'reconcile'))
+        test('BETRAYED-FORGIVE: not the turn after a betrayal', () => keepsOut('no-betrayed-forgive.lp', ':- social_action(P, forgive), recent(_, betray, P).', person([50, 50, 0, 30], 'recent("player", betray, "marek").'), 'forgive'))
+    })
+})
+
+// ---- decide() with the module: appraisal, npc.lp, the Subtext line --------------------------------------------------------------------
+describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
+    const { openStoryStore } = req('../../../server/node/storyStore.cjs')
+    const np = req('../../../server/node/npcPsych.cjs')
+    const tr = (open: number, consc: number, extra: number, agree: number, neuro: number) => ({ open, consc, extra, agree, neuro })
+    const SECRET = 'Marek spies for the night watch'
+    const AGENDA = 'Marek knows where the vault is'
+    const HIDE = 'the three strangers hide a map'
+    const seedOf = (marek: number[], more: any[] = [], relations: any[] = []) => ({
+        world: 'shadow_slave', version: 1, built: '2026-10-21',
+        npcs: [
+            { id: 'marek', name: 'Marek', importance: 80, traits: tr(50, 50, 30, 50, 50), speech: 'warm', wants_to_say: AGENDA, wants_to_hide: SECRET, hide_fid: null },
+            { id: 'ba kẻ lạ mặt', name: 'Ba kẻ lạ mặt', importance: 40, traits: tr(50, 50, 50, 20, 50), speech: 'cold', wants_to_hide: HIDE, hide_fid: null },
+            ...more,
+        ],
+        relations: [
+            { p: 'marek', q: 'player', trust: marek[0], affection: marek[1], debt: marek[2], grudge: marek[3] },
+            { p: 'ba kẻ lạ mặt', q: 'player', trust: 10, affection: 10, debt: 0, grudge: 60 },
+            ...relations,
+        ],
+    })
+    const open = (seed: any, o: any = {}) => {
+        const d = mkdtempSync(join(tmpdir(), 'npc-gm-'))
+        writeFileSync(join(d, 'shadow_slave.json'), JSON.stringify(seed))
+        const store = openStoryStore({ dbFile: ':memory:' })
+        return { store, npc: np.openNpcPsych({ db: store.db, npcDir: d, engine: 'asp', ...o }) }
+    }
+    const withSoc = (led_soc: string) => ({ ...lure, chatId: 'c1', dice: { pace: 'quiet' }, kinds: [], stance: '', vars: { ...vars, led_soc } })
+    const quiet = withSoc('2 | player | gift | Marek')
+    const lastLine = (r: any) => String(r.line).split('\n').at(-1) as string
+
+    test('with profiles the line ends with a Subtext, under 520 characters, and the answer carries what it came from', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const r = await G.decide(quiet, { budgetMs: 3000, npc })
+        expect(r.status).toBe('ok')
+        expect(lastLine(r)).toMatch(/^Subtext \(hidden drives; show them/)
+        expect(lastLine(r).length).toBeLessThanOrEqual(520)
+        expect(r.npc).toMatchObject({ source: 'asp', subtext: lastLine(r) })
+        expect(r.npc.actions.map((a: any) => a.who)).toEqual(['Marek', 'Ba kẻ lạ mặt'])
+        expect(r.npc.actions[0]).toMatchObject({ action: 'conceal_affection', demeanor: 'warm' })
+        expect(lastLine(r)).toContain('hides how much they care')
+        expect(r.npc.actions[1]).toMatchObject({ action: 'keep_distance', demeanor: 'hostile' })     // the enemy: opposes, never helps
+        expect(r.line).toContain('opposes the player')                                          // the arc's intents are still core.lp's
+        // the numbers the narrator was given are kept per chat and turn
+        expect(npc.stateOf('c1').map((x: any) => `${x.npc}:${x.action}`).sort()).toEqual(['ba kẻ lạ mặt:keep_distance', 'marek:conceal_affection'])
+        expect(npc.stateOf('c1')[1].turn).toBe(2)
+    })
+    test('the Subtext never carries a secret, an agenda, or a number (over every present profile and the four volitions that touch them)', async () => {
+        for (const marek of [[20, 40, 0, 0], [80, 50, 0, 0], [50, 30, 60, 0], [50, 80, 0, 45], [45, 70, 0, 25]]) {
+            for (const soc of ['', '2 | player | gift | Marek', '2 | player | insult | Marek\n2 | player | threaten | Marek']) {
+                const { npc } = open(seedOf(marek))
+                const r = await G.decide(withSoc(soc), { budgetMs: 3000, npc })
+                const text = JSON.stringify(r)
+                for (const s of [SECRET, AGENDA, HIDE]) expect(text).not.toContain(s)
+                expect(r.npc.subtext).not.toMatch(/\d/)
+            }
+        }
+        // and the table: wants_to_say / wants_to_hide of every profile of the card file are not in the lines the module builds
+        const seed = seedOf([60, 60, 0, 0])
+        const { npc } = open(seed)
+        const r = await G.decide(quiet, { budgetMs: 3000, npc })
+        for (const n of seed.npcs) for (const t of [n.wants_to_say, n.wants_to_hide]) if (t) expect(r.line).not.toContain(t)
+    })
+    test('no profile in the scene: the module changes nothing, same line as without it, no npc field', async () => {
+        const d = mkdtempSync(join(tmpdir(), 'npc-gm-'))        // an npcDir with no card file: nobody has a profile
+        const store = openStoryStore({ dbFile: ':memory:' })
+        const npc = np.openNpcPsych({ db: store.db, npcDir: d, engine: 'asp' })
+        const a = await G.decide(quiet, { budgetMs: 3000 })
+        const b = await G.decide(quiet, { budgetMs: 3000, npc })
+        expect(b.line).toBe(a.line)
+        expect(b.npc).toBeUndefined()
+        expect(b.decision).toEqual(a.decision)
+        expect(b.status).toBe('ok')
+        // a profile for someone who is not in the scene is no atom either
+        const far = open(seedOf([45, 70, 0, 25]).npcs.length ? { ...seedOf([45, 70, 0, 25]), npcs: [{ id: 'aldric', name: 'Aldric', importance: 10, traits: tr(50, 50, 50, 50, 50), speech: 'blunt' }], relations: [] } : null)
+        const c = await G.decide(quiet, { budgetMs: 3000, npc: far.npc })
+        expect(c.line).toBe(a.line)
+        expect(c.npc).toBeUndefined()
+    })
+    test('the off switch: input.npc === false is today\'s answer exactly', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const off = await G.decide({ ...quiet, npc: false }, { budgetMs: 3000, npc })
+        const none = await G.decide(quiet, { budgetMs: 3000 })
+        expect(off.line).toBe(none.line)
+        expect(off.npc).toBeUndefined()
+        expect(npc.stateOf('c1')).toEqual([])
+        const on = await G.decide({ ...quiet, npc: true }, { budgetMs: 3000, npc })
+        expect(on.npc).toBeTruthy()
+    })
+    test('the seed phase carries no Subtext', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const r = await G.decide({ ...quiet, phase: 'seed' }, { budgetMs: 3000, npc })
+        expect(r.line).not.toContain('Subtext')
+        expect(r.npc).toBeUndefined()
+    })
+    test('the ledger moves the numbers the solver reads: a betrayal the turn before is never answered by making peace', async () => {
+        const base = seedOf([60, 55, 0, 30])
+        const calm = await G.decide(withSoc(''), { budgetMs: 3000, npc: open(base).npc })
+        expect(calm.npc.actions[0]).toMatchObject({ who: 'Marek', action: 'reconcile' })
+        const hurt = await G.decide(withSoc('2 | player | betray | Marek'), { budgetMs: 3000, npc: open(base).npc })
+        expect(hurt.npc.actions[0].action).not.toBe('reconcile')
+        expect(hurt.npc.actions[0].action).not.toBe('forgive')
+        expect(hurt.npc.actions[0].action).not.toBe('help')
+    })
+    test('it fails soft: a sidecar slower than its deadline falls to the local fold in time; a module that throws or writes garbage leaves today\'s answer', async () => {
+        const { npc: real } = open(seedOf([45, 70, 0, 25]))
+        const slow = { ready: () => true, appraise: () => new Promise((r) => setTimeout(r, 1500)) }
+        const { npc } = open(seedOf([45, 70, 0, 25]), { engine: 'auto', fatima: slow })
+        const t0 = Date.now()
+        const r = await G.decide(quiet, { npc })                     // the real 300 ms budget
+        expect(r.status).toBe('ok')
+        expect(Date.now() - t0).toBeLessThan(300 + 150)
+        expect(r.npc.source).toBe('asp')
+        expect(lastLine(r)).toMatch(/^Subtext/)
+        const none = await G.decide(quiet, { budgetMs: 3000 })
+        for (const bad of [
+            { ...real, appraise: async () => { throw new Error('boom') } },
+            { ...real, resolveId: () => { throw new Error('boom') } },
+            { ...real, aspFacts: () => 'this is ((( not asp' },
+            { ...real, aspFacts: () => 'npc("marek"). present("marek"). :- social_action("marek", _).' },        // no answer set at all
+        ]) {
+            const x = await G.decide(quiet, { budgetMs: 3000, npc: bad })
+            expect(x.status).toBe('ok')
+            expect(x.line).toBe(none.line)
+            expect(x.npc).toBeUndefined()
+        }
+    })
+    test('budget: six profiled people in the scene, decide stays far under 300 ms (p95 of 20)', async () => {
+        const names = ['Marek', 'Evelyn', 'Torben', 'Sasha', 'Ilya', 'Doran']
+        const more = names.slice(1).map((n, i) => ({ id: n.toLowerCase(), name: n, importance: 70 - i, traits: tr(40 + i, 50, 40 + 3 * i, 30 + 8 * i, 60 - 5 * i), speech: 'blunt', wants_to_say: 'x'.repeat(10), wants_to_hide: i % 2 ? 'y' : null, hide_fid: null }))
+        const seed = seedOf([45, 70, 0, 25], more, names.slice(1).map((n) => ({ p: n.toLowerCase(), q: 'player', trust: 35, affection: 55, debt: 10, grudge: 30 })))
+        seed.npcs = seed.npcs.filter((n: any) => n.id !== 'ba kẻ lạ mặt'); seed.relations = seed.relations.filter((r: any) => r.p !== 'ba kẻ lạ mặt')
+        const { npc } = open(seed)
+        const six = { ...quiet, vars: { ...vars, led_soc: '1 | player | help | Marek\n2 | player | gift | Evelyn\n2 | Torben | insult | player', led_rel: names.map((n) => `${n} | Kenji Park | ally`).join('\n') },
+            messages: [{ role: 'char', text: names.join(', ') + ' đứng quanh.' }, { role: 'user', text: 'Kenji nhìn quanh.' }] }
+        const first = await G.decide(six, { budgetMs: 3000, npc })
+        expect(first.npc.actions).toHaveLength(6)
+        const ms: number[] = []
+        for (let i = 0; i < 20; i++) { const t0 = Date.now(); const r = await G.decide(six, { npc }); ms.push(Date.now() - t0); expect(r.status).toBe('ok'); expect(r.npc.actions).toHaveLength(6) }
+        ms.sort((a, b) => a - b)
+        expect(ms[Math.floor(ms.length * 0.95) - 1]).toBeLessThan(300)
+        expect(lastLine(first).length).toBeLessThanOrEqual(520)
+    })
+})

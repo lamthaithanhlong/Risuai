@@ -133,6 +133,37 @@ if (storyStore && process.env.RISU_STORY_GRAPH !== '0') {
         console.error('[Story] graph disabled:', error.message);
     }
 }
+// NPC psychology (npcPsych.cjs, plan risu-npc-psych): profiles per card (story/npcs/<world>.json), how each person sees the player and the
+// others (the bookkeeper's social ledger folded by story/npcs/appraisal.json), what they feel, and the Subtext line the GM note carries.
+// RISU_NPC_PSYCH=0 turns it off (decide gets no module). RISU_NPC_ENGINE=auto|fatima|asp (default auto): 'fatima' asks the .NET sidecar
+// (server/sidecar/fatima, fatimaClient.cjs: RISU_DOTNET, RISU_FATIMA_DLL, or RISU_FATIMA_URL to attach to one already running) and falls to
+// the local fold when it is missing, slow or sick; RISU_FATIMA=0 never starts it; RISU_NPC_DIR reads the profiles from another folder (tests).
+let npcPsych = null;
+let fatimaClient = null;
+if (storyStore && process.env.RISU_NPC_PSYCH !== '0') {
+    try {
+        const engine = ['auto', 'fatima', 'asp'].includes(process.env.RISU_NPC_ENGINE) ? process.env.RISU_NPC_ENGINE : 'auto';
+        if (engine !== 'asp' && process.env.RISU_FATIMA !== '0') {
+            try {
+                fatimaClient = require('./fatimaClient.cjs').createFatimaClient({ log: (...a) => console.log('[Story] fatima:', ...a) });
+                // a missing dll or dotnet is a spawn that fails: the client backs off and the engine stays the local fold meanwhile
+                if (process.env.RISU_FATIMA_URL || require('fs').existsSync(process.env.RISU_FATIMA_DLL || require('./fatimaClient.cjs').DEFAULT_DLL)) fatimaClient.start().catch(() => {});
+                else { console.log('[Story] npcs: no sidecar dll, engine asp'); fatimaClient = null; }
+            } catch (error) {
+                console.error('[Story] fatima client unavailable, engine asp:', error.message);
+                fatimaClient = null;
+            }
+        }
+        npcPsych = require('./npcPsych.cjs').openNpcPsych({ db: storyStore.db, engine, fatima: fatimaClient, ...(process.env.RISU_NPC_DIR ? { npcDir: process.env.RISU_NPC_DIR } : {}), log: (m) => console.log(`[Story] ${m}`) });
+        for (const w of ['shadow_slave', 'lotm', 'mailman', 'zombie']) npcPsych.loadWorld(w);
+        const worlds = Object.entries(npcPsych.stats().worlds);
+        for (const [w, x] of worlds) console.log(`[Story] npcs: ${w} ${x.npcs} profiles, ${x.pairs} pairs`);
+        console.log(`[Story] npcs: engine ${fatimaClient ? engine : 'asp'}${worlds.length ? '' : ', no profiles'}`);
+    } catch (error) {
+        console.error('[Story] npcs disabled:', error.message);
+        npcPsych = null;
+    }
+} else console.log('[Story] npcs: off');
 const SYNC_TRACE = process.env.RISU_SYNC_TRACE === '1';
 // RISU_SYNC_TRACE: how much of a write differs from what the server had, block by block (what a delta upload would carry)
 const blockDelta = (prev, next) => {
@@ -153,6 +184,10 @@ const syncStory = (bytes, rev) => {
             if (storyGraph && !r.error) {
                 const g = storyGraph.syncAll(storyStore);
                 if (SYNC_TRACE) console.log(`[Story] trace graph chats=${g.chats} ms=${g.ms}`);
+            }
+            if (npcPsych && !r.error) {
+                const n = npcPsych.syncAll(storyStore);
+                if (SYNC_TRACE) console.log(`[Story] trace npcs chats=${n.chats} ms=${n.ms}`);
             }
         } catch (error) {
             console.error('[Story] sync:', error.message);
@@ -184,6 +219,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
         if (shuttingDown) return;
         shuttingDown = true;
         try { await Promise.race([turnWorker?.stop(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* the browser goes with the process */ }
+        try { await Promise.race([fatimaClient?.stop(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* the sidecar exits when its parent does */ }
         try { await Promise.race([saveQueue.flush(), new Promise((r) => setTimeout(r, 8000))]); await saveQueue.close(); } catch (e) { console.error('[SaveQueue] shutdown:', e); }
         try { saveStore.close(); } catch (e) { console.error('[Store] shutdown:', e); }
         try { stt.close(); } catch { /* the worker goes with the process */ }
@@ -2085,7 +2121,7 @@ app.get('/api/story/:chatId', authenticatedRouteLimiter, async (req, res, next) 
         if(!id) return;
         const s = storyStore.story(id);
         if(!s) return notFound(res, id);
-        res.send({ status: 'ok', ...s });
+        res.send({ status: 'ok', ...s, npc: npcPsych?.relationsOf(id) ?? null });
     } catch (error) { next(error); }
 });
 app.get('/api/story/:chatId/check', authenticatedRouteLimiter, async (req, res, next) => {
@@ -2135,10 +2171,13 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
             messages: (Array.isArray(b.messages) ? b.messages : []).slice(-4).map((m) => ({ role: m?.role === 'user' ? 'user' : 'char', text: str(m?.text, 4000) })),
             dice: { pace: str(b.dice?.pace, 12), surface: str(b.dice?.surface, 200), consequence: !!b.dice?.consequence, cardNew: !!b.dice?.cardNew, firstOrder: !!b.dice?.firstOrder },
             prevNew: !!b.prevNew, kinds: (Array.isArray(b.kinds) ? b.kinds : []).slice(0, 3).map((k) => str(k, 200)), stance: str(b.stance, 60),
+            // the reply count (the $led_soc lines' turn numbers): the NPC appraisal ages emotions by it
+            ...(Number.isInteger(b.turn) && b.turn >= 0 ? { turn: Math.min(b.turn, 1e6) } : {}),
         };
-        const r = await gmSolver.decide(input, { store: storyStore, graph: storyGraph });
+        // npc: false (the page's db.npcPsych off) or no module (RISU_NPC_PSYCH=0): today's note, no Subtext line
+        const r = await gmSolver.decide({ ...input, npc: b.npc !== false }, { store: storyStore, graph: storyGraph, npc: b.npc === false ? null : npcPsych });
         // RISU_GM_LOG=<file>: one JSON line per decision (the acceptance run reads them back, tests/acceptance/gmMetrics.mjs)
-        if(process.env.RISU_GM_LOG) fs.appendFile(process.env.RISU_GM_LOG, JSON.stringify({ at: Date.now(), chatId: input.chatId, world: input.world, phase: input.phase, dice: input.dice, prevNew: input.prevNew, kinds: input.kinds, stance: input.stance, status: r.status, reason: r.reason, ms: r.ms, turn: r.decision?.turn ?? null, intents: r.decision?.intents ?? [], needs: r.needs ?? [], present: r.present ?? [], newEvent: r.newEvent ?? null, line: r.line ?? '' }) + '\n').catch(() => {});
+        if(process.env.RISU_GM_LOG) fs.appendFile(process.env.RISU_GM_LOG, JSON.stringify({ at: Date.now(), chatId: input.chatId, world: input.world, phase: input.phase, dice: input.dice, prevNew: input.prevNew, kinds: input.kinds, stance: input.stance, status: r.status, reason: r.reason, ms: r.ms, turn: r.decision?.turn ?? null, intents: r.decision?.intents ?? [], needs: r.needs ?? [], present: r.present ?? [], newEvent: r.newEvent ?? null, line: r.line ?? '', ...(r.npc ? { npc: r.npc } : {}) }) + '\n').catch(() => {});
         res.send(r);
     } catch (error) { next(error); }
 });
