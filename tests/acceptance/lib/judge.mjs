@@ -21,8 +21,8 @@ async function ask(cfg, prompt, opts = {}) {
 // (claude:sonnet, claude:haiku, sonnet, claude-*) runs a lean `claude -p` instead: no tools, no MCP, no
 // settings or hooks, no session kept, ~740 tokens of its own, on the plan rather than per token. At most CLAUDE_AT_ONCE run at
 // once (about the router's DeepSeek pace); a failure or a limit goes to cfg.fallback (DeepSeek) through ask().
-// Owner, 2026-10-21 (after the CFO's first call): "vẫn dùng deepseek song song với sonet và haiku nhưng task nào tiết kiệm dc thì cho
-// haiku làm": the judge stays on DeepSeek by default (it weighs and explains); this path is the option --judge-model claude:sonnet.
+// Owner's popup, 2026-10-21 (later the same day): the judge runs claude:sonnet on the plan by default ($0 real money); main-deepseek
+// was landing on GLM ($9.6 / M in, ~$0.086 a judge call) while DeepSeek's channel is out of balance.
 export const isClaudeModel = (m) => /^(claude:|sonnet$|haiku$|opus$|claude-)/i.test(String(m ?? ''))
 const claudeName = (m) => String(m).replace(/^claude:/i, '')
 const CLAUDE_AT_ONCE = 4

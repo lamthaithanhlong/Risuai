@@ -9,8 +9,9 @@
 //   node tests/acceptance/run.mjs --story ss|lotm|mailman|zombie|all     play and score (default all, the stories in parallel)
 //     --turns 20         story turns after the yes          --serial       one story at a time
 //     --no-build         serve the repo's dist as it is     --no-judge     skip the model judge
-//     --judge-model M    the judge's model (default: the DeepSeek slot, owner 2026-10-21); claude:sonnet / claude:haiku run a lean
-//                        `claude -p` on the subscription instead (judge.mjs askClaude); a failed or refused one falls back to DeepSeek
+//     --judge-model M    the judge's model (default: claude:sonnet, a lean `claude -p` on the Claude plan, owner's popup 2026-10-21:
+//                        $0 real money, where main-deepseek now lands on GLM at $9.6 / M in); a router model such as main-deepseek
+//                        goes through 9Router; a failed claude judge tries claude:haiku, a failed router one the DeepSeek slot
 //     --port 6101        first port for the copies          --store files|sqlite   override the live server's store
 //     --out DIR          default ~/.backend-review/work/risu-acceptance/<YYYY-MM-DD>
 //     --narrator web     the narrator on ChatGPT web (lib/webShim.mjs, through the Codex Web GPT bridge) instead of the
@@ -81,10 +82,11 @@ async function rescore(dir) {
         if (flag('--rejudge') && rec.play?.turns?.length) {
             // the copy may be gone; a Claude judge needs none of its settings (the DeepSeek fallback then has no router to ask)
             let ms = { slots: [], url: null, key: null, requestModel: null }
-            try { ms = modelSettings(path.join(rec.copyDir ?? path.join(meta.runDir, key), 'save'), rec.store) } catch (e) { if (!isClaudeModel(opt('--judge-model', ''))) throw e }
+            const judgeModel = opt('--judge-model', 'claude:sonnet')
+            try { ms = modelSettings(path.join(rec.copyDir ?? path.join(meta.runDir, key), 'save'), rec.store) } catch (e) { if (!isClaudeModel(judgeModel)) throw e }
             const deepseek = ms.slots.find((x) => /deepseek/i.test(x.name))?.req
             console.log(`[${key}] judging again ...`)
-            rec.judge = await judgeRecord(rec, STORIES[key], { url: ms.url, key: ms.key, model: opt('--judge-model', deepseek ?? 'main-deepseek'), fallback: deepseek }, console.log)
+            rec.judge = await judgeRecord(rec, STORIES[key], { url: ms.url, key: ms.key, model: judgeModel, fallback: isClaudeModel(judgeModel) ? 'claude:haiku' : deepseek }, console.log)
             fs.writeFileSync(f, redact(JSON.stringify(rec, null, 1)))
         }
         const checks = scoreStory(rec, rec.judge ?? {})
@@ -250,11 +252,12 @@ async function main() {
     if (opt('--narrator-slot') && !slot) throw new Error(`no model slot named "${opt('--narrator-slot')}" (have: ${ms.slots.map((x) => x.name).join(', ')})`)
     if (slot) { ms.slot = slot.name; ms.requestModel = slot.req }
     const model = { aiModel: ms.aiModel, slot: ms.slot, requestModel: ms.requestModel, url: ms.url, gameMaster: ms.gameMaster, jevReferee: ms.jevReferee, autoTranslate: ms.autoTranslate }
-    // the judge is the DeepSeek slot; --judge-model picks another (claude:sonnet: the subscription, judge.mjs askClaude); a failed one falls back to DeepSeek
+    // the judge is claude:sonnet on the Claude plan (judge.mjs askClaude); --judge-model picks another
     const deepseek = ms.slots.find((x) => /deepseek/i.test(x.name))?.req
     // the judge uses the narrator's model only when that is the router's; on ChatGPT web it takes the DeepSeek slot
     const narratorWeb = opt('--narrator', 'router') === 'web'
-    const judgeCfg = { url: ms.url, key: ms.key, model: opt('--judge-model', deepseek ?? 'main-deepseek'), fallback: deepseek }
+    const judgeModel = opt('--judge-model', 'claude:sonnet')
+    const judgeCfg = { url: ms.url, key: ms.key, model: judgeModel, fallback: isClaudeModel(judgeModel) ? 'claude:haiku' : deepseek }
     let shim = null, web = null
     if (narratorWeb) {
         web = { model: opt('--web-model', 'chatgpt-web/gpt-6-sol'), effort: opt('--web-effort', 'medium'), narrator: ms.requestModel }

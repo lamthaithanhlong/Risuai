@@ -2,12 +2,12 @@
 """Drafts a card's knowledge graph from its lore books (owner, 2026-10-21: "librarian nên có … Knowledge Graph … phân biệt sự thật,
 tin đồn, điều chưa biết và thông tin đã lỗi thời").
 
-A model only DRAFTS: the batches of books go in turn to haiku through a lean `claude -p` and to main-deepseek through 9Router
-(the default runs both side by side; ask(); never Codex) with the brief below, and the answer is one JSON object. merge.cjs then checks every entity and fact against
+A model only DRAFTS: the batches of books go to haiku through a lean `claude -p` (default), or in turn to every model --model names
+(main-deepseek through 9Router; ask(); never Codex) with the brief below, and the answer is one JSON object. merge.cjs then checks every entity and fact against
 story/schema/lore-graph.schema.json, drops what fails (dangling ids, a status the text does not support), and writes
 story/graphs/<world>.json. Nothing here touches the save or the live server.
 
-  extract.py <world> <card repo>/fate-simulator/risu_lorebook.json [--out DIR] [--jobs 4] [--model claude:haiku,main-deepseek] [--only N,M]
+  extract.py <world> <card repo>/fate-simulator/risu_lorebook.json [--out DIR] [--jobs 4] [--model claude:haiku] [--only N,M]
 """
 from __future__ import annotations
 import argparse
@@ -104,8 +104,9 @@ ROUTER = 'http://127.0.0.1:20128/v1/chat/completions'
 NO_CODEX = re.compile(r'^(cx/|gpt-|web-codex|cgw/)', re.I)
 # modelapi.vn bills mvn/deepseek-v4-flash, mvn/deepseek-flash and deepseek-v4-pro at 43.2x ($12.96 / M in, $51.84 / M out); the
 # first full build ran on v4-flash (613 calls, most of 2026-10-21's $64.56, while 9Router logged $0.58). The owner the same day:
-# "64$ này tượng trưng thui vẫn đặt ngang nó với haiku": the cost is symbolic and DeepSeek stands level with haiku. So the
-# default sends the batches to both side by side, and those models are only flagged, not refused.
+# "64$ này tượng trưng thui vẫn đặt ngang nó với haiku": those models are only flagged, not refused. Later that day, by popup, the
+# Risu callers moved to the Claude plan (main-deepseek was landing on GLM at $9.6 / M in): the default is haiku alone, and
+# --model claude:haiku,main-deepseek still runs both side by side.
 EXPENSIVE = re.compile(r'^(mvn/)?(deepseek-flash|deepseek-v4-flash|deepseek-v4-pro)$', re.I)
 CLAUDE = re.compile(r'^claude:(haiku|sonnet)$', re.I)
 CLAUDE_FLAGS = ['--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
@@ -197,8 +198,8 @@ def main():
     ap.add_argument('lorebook')
     ap.add_argument('--out', default=str(Path.home() / '.backend-review/work/risu-librarian-kg/extract'))
     ap.add_argument('--jobs', type=int, default=4)
-    ap.add_argument('--model', default='claude:haiku,main-deepseek',
-                    help='one model or several, comma-separated, taken in turn batch by batch (default: haiku on the plan and main-deepseek side by side)')
+    ap.add_argument('--model', default='claude:haiku',
+                    help='one model or several, comma-separated, taken in turn batch by batch (default: haiku on the plan; e.g. claude:haiku,main-deepseek)')
     ap.add_argument('--only', default='')
     a = ap.parse_args()
     models = [m.strip() for m in a.model.split(',') if m.strip()]
