@@ -118,8 +118,10 @@ test('property: every edit is reported with the right kind', () => {
     fc.assert(fc.property(fc.array(fc.tuple(fc.integer({ min: 0, max: edits.length - 1 }), fc.string({ minLength: 1, maxLength: 6 })), { minLength: 1, maxLength: 12 }), (seq) => {
         const w = watch()
         try {
-            for (const [i, v] of seq) {
-                const want = edits[i](w.s.db, 'x' + v)
+            // the step number makes every value new: the same short string twice was no edit at all (an assignment of the value already
+            // there fires nothing), and the property failed ~7% of runs (seed 2052363108: [[1,"x"],[1,"x"],[0," "]])
+            for (const [step, [i, v]] of seq.entries()) {
+                const want = edits[i](w.s.db, `x${v}#${step}`)
                 flushSync()
                 const got = w.take()
                 if (!got.some((c) => c.kind === want && (c.kind !== 'character' || c.chaId === 'a'))) return false
