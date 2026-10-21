@@ -3,6 +3,8 @@
 //   onRead(client, bytes)   a page read the database: that is now its base. A manifest of hashes is kept for the revision.
 //   onLoaded(client, bytes) a page holds `bytes`, not the file it read (bootstrap.ts loads a dbbackup-*.bin when database.bin does not
 //                           decode): that is its base from now on, and its writes are always merged against it (F7, see below).
+//   onRemoteRead(client, name, bytes) / onRemoteWrite(client, name, bytes, current)  the same for a remote character file
+//                           (remotes/<chaId>.local.bin, below).
 //   onWrite(client, bytes, current) a page writes: returns the bytes to store (the page's own file when nobody else wrote since it
 //                           loaded, else the merge of its file with what the server has) and the new revision.
 //
@@ -12,7 +14,14 @@
 // negative id, and the page's next write is merged against it (the server holds more than the page then) -- unless the merge took
 // nothing from the server: then the page's own file is stored and becomes the base, as a plain write would. When the base is not
 // known (a page that loaded before this started, a pruned manifest) the page's file is stored as it is, as before.
-const { manifestOf, mergeSaves, validateSave } = require('./dbMerge.cjs')
+//
+// Remote character files (enableRemoteSaving: a character and ALL its chats live in remotes/<chaId>.local.bin, database.bin only
+// points at it). Per page and per file the server keeps the version the page last read or wrote -- by hash, with the bytes once per
+// version -- and merges the page's write against it (dbMerge.cjs mergeRemote). After a write the base is the page's own file, merged or
+// not: the page holds what it wrote, and what the server holds beyond that is exactly what the next write must take from it
+// (specs/chat/RemoteSync.tla, Advance). The server's file still being the base's means nobody wrote since: the page's file as it is.
+const crypto = require('crypto')
+const { manifestOf, mergeSaves, validateSave, manifestOfRemote, mergeRemote, validateRemote } = require('./dbMerge.cjs')
 
 function loadDriver() {
     try {
@@ -27,6 +36,7 @@ function openDbSync(opts) {
     const now = opts.now ?? Date.now
     const log = opts.log ?? (() => {})
     const keep = opts.keep ?? 3000
+    const remoteKeepMs = opts.remoteKeepMs ?? 60 * 24 * 3600 * 1000
     const db = new Database(opts.dbFile)
     db.pragma('journal_mode = WAL')
     db.exec(`
@@ -34,6 +44,8 @@ function openDbSync(opts) {
         CREATE TABLE IF NOT EXISTS sync_manifest (rev INTEGER PRIMARY KEY, created INTEGER NOT NULL, data TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sync_write (rev INTEGER PRIMARY KEY, client TEXT NOT NULL, created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS sync_client (client TEXT PRIMARY KEY, base_rev INTEGER NOT NULL, updated INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS sync_remote (client TEXT NOT NULL, name TEXT NOT NULL, h TEXT NOT NULL, updated INTEGER NOT NULL, PRIMARY KEY (client, name));
+        CREATE TABLE IF NOT EXISTS sync_remote_blob (name TEXT NOT NULL, h TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (name, h));
         INSERT OR IGNORE INTO sync_state (id, rev) VALUES (1, 0);
     `)
     const getRev = db.prepare('SELECT rev FROM sync_state WHERE id = 1')
@@ -61,6 +73,27 @@ function openDbSync(opts) {
     // the base a page leaves behind when its write moves it (~29 KB a manifest on a 6 MB save, one per write): dropped unless another
     // page still has it as its base. A later read of that revision would build it again from the bytes.
     const dropBase = db.prepare('DELETE FROM sync_manifest WHERE rev = ? AND rev NOT IN (SELECT base_rev FROM sync_client)')
+
+    const getRemote = db.prepare('SELECT h FROM sync_remote WHERE client = ? AND name = ?')
+    const putRemote = db.prepare('INSERT OR REPLACE INTO sync_remote (client, name, h, updated) VALUES (?, ?, ?, ?)')
+    const hasBlob = db.prepare('SELECT 1 FROM sync_remote_blob WHERE name = ? AND h = ?')
+    const getBlob = db.prepare('SELECT data FROM sync_remote_blob WHERE name = ? AND h = ?')
+    const putBlob = db.prepare('INSERT OR IGNORE INTO sync_remote_blob (name, h, data) VALUES (?, ?, ?)')
+    // a version no page has as its base any more is dropped
+    const dropBlob = db.prepare('DELETE FROM sync_remote_blob WHERE name = ? AND h = ? AND NOT EXISTS (SELECT 1 FROM sync_remote WHERE name = ? AND h = ?)')
+    const pruneRemote = db.prepare('DELETE FROM sync_remote WHERE updated < ?')
+    const pruneBlobs = db.prepare('DELETE FROM sync_remote_blob WHERE NOT EXISTS (SELECT 1 FROM sync_remote r WHERE r.name = sync_remote_blob.name AND r.h = sync_remote_blob.h)')
+    const sha = (b) => crypto.createHash('sha1').update(b).digest('hex')
+
+    /** `client` now has `bytes` of the remote file `name` (read or written): that is its base from now on */
+    function setRemoteBase(client, name, bytes) {
+        const h = sha(bytes)
+        const old = getRemote.get(client, name)
+        if (!hasBlob.get(name, h)) putBlob.run(name, h, bytes)
+        putRemote.run(client, name, h, now())
+        if (old && old.h !== h) dropBlob.run(name, old.h, name, old.h)
+        return h
+    }
 
     const currentRev = () => getRev.get().rev
 
@@ -168,11 +201,69 @@ function openDbSync(opts) {
         return { bytes: out, rev, merged: how === 'merged', how, report, ms }
     }
 
+    /** a page loaded the remote file `name`: that is what its later writes of it are compared with */
+    function onRemoteRead(client, name, bytes) {
+        try {
+            setRemoteBase(client, name, bytes)
+            if (pruneRemote.run(now() - remoteKeepMs).changes > 0) pruneBlobs.run()
+        } catch (error) {
+            log(`sync: could not record the read of remote ${name} by ${client.slice(0, 8)}: ${error.message}`)
+        }
+    }
+
+    /** a page writes `bytes` as the remote file `name`; `current` is what the server has (Buffer or null) */
+    function onRemoteWrite(client, name, bytes, current) {
+        const t0 = performance.now()
+        let out = bytes
+        let how = 'plain'
+        let report = null
+        const row = getRemote.get(client, name)
+        if (!current || current.length === 0) {
+            how = 'first'
+        } else if (!row) {
+            how = 'unknown page'
+        } else if (row.h === sha(current)) {
+            how = 'fast'    // nobody wrote since this page read or wrote: its file is the newest
+        } else {
+            const blob = getBlob.get(name, row.h)
+            if (!blob) {
+                how = 'base pruned'
+            } else {
+                try {
+                    const r = mergeRemote(manifestOfRemote(blob.data), bytes, current)
+                    report = r.report
+                    out = r.buf
+                    how = r.merged ? 'merged' : 'unmerged: ' + r.report.reason
+                    if (r.merged && r.report.fromServer === 0 && r.report.blocksFromServer === 0 && r.report.conflicts === 0) {
+                        out = bytes    // took nothing from the server: the page's own file
+                        how = 'merged, nothing from the server'
+                    }
+                    if (how === 'merged') validateRemote(out)
+                } catch (error) {
+                    out = bytes
+                    how = 'merge failed: ' + error.message
+                }
+            }
+        }
+        // the page holds what it wrote: that is its base, whatever the server stored
+        try {
+            setRemoteBase(client, name, bytes)
+        } catch (error) {
+            log(`sync: could not record the write of remote ${name} by ${client.slice(0, 8)}: ${error.message}`)
+        }
+        if (how === 'merged') {
+            log(`sync: merged a write of remote ${name.slice(0, 8)} by ${client.slice(0, 8)}: ${report.fromServer} parts from the server, ${report.conflicts} both-changed, ${report.chatsMerged} chats merged`)
+        } else if (how !== 'fast') {
+            log(`sync: write of remote ${name.slice(0, 8)} by ${client.slice(0, 8)} stored as ${how}`)
+        }
+        return { bytes: out, merged: how === 'merged', how, report, ms: performance.now() - t0 }
+    }
+
     function close() {
         db.close()
     }
 
-    return { onRead, onLoaded, onWrite, currentRev, close, db }
+    return { onRead, onLoaded, onWrite, onRemoteRead, onRemoteWrite, currentRev, close, db }
 }
 
 module.exports = { openDbSync }

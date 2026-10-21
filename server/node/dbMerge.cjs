@@ -341,6 +341,43 @@ function sameManifest(a, b) {
     return true
 }
 
+// ---- a remote character file ---------------------------------------------------------------------------------------------------
+// With enableRemoteSaving every character is a REMOTE block in database.bin (a pointer) and its data, chats included, is the file
+// remotes/<chaId>.local.bin: the character as JSON text, written whole by every page (risuSave.ts encodeRemoteBlock). database.bin's
+// merge never saw a chat then, so two pages (or a page and the turn worker) wrote the chats last-writer-wins. The file is merged
+// like a character block: top-level keys, chats by id, messages by chatId (specs/chat/RemoteSync.tla).
+const remoteBlock = (bytes) => ({ type: 2, comp: 0, name: 'remote', data: bytes })
+
+/** what a page has of a remote file, as hashes (the same manifest a character block has) */
+function manifestOfRemote(bytes) {
+    return manifestOfBlock(remoteBlock(bytes))
+}
+
+/**
+ * @param base      manifestOfRemote of what the page last read or wrote, or null when unknown
+ * @param oursBuf   the file the page writes
+ * @param theirsBuf the file the server has
+ * @returns {buf, merged, report} merged is false when ours was used as it is (no base, or a file that is not a JSON object)
+ */
+function mergeRemote(base, oursBuf, theirsBuf) {
+    const report = { blocksFromServer: 0, keysFromServer: 0, fromServer: 0, conflicts: 0, chatsMerged: 0, reason: '' }
+    if (!base || base.kind !== 'obj') { report.reason = 'no base'; return { buf: oursBuf, merged: false, report } }
+    const o = remoteBlock(oursBuf)
+    const ov = parseBlock(o)
+    const tv = parseBlock(remoteBlock(theirsBuf))
+    if (!isPlainObject(ov) || !isPlainObject(tv)) { report.reason = 'unreadable'; return { buf: oursBuf, merged: false, report } }
+    // the page changed nothing since it read: the server's file as it is
+    if (sameManifest(base, manifestOfBlock(o))) { report.blocksFromServer = 1; return { buf: theirsBuf, merged: true, report } }
+    const merged = mergeObjects(base, ov, tv, report)
+    report.keysFromServer = report.fromServer
+    return { buf: Buffer.from(JSON.stringify(merged), 'utf8'), merged: true, report }
+}
+
+/** the file reads back: a JSON object */
+function validateRemote(buf) {
+    if (!isPlainObject(JSON.parse(Buffer.from(buf).toString('utf8')))) throw new SaveFormatError('a remote file is not a JSON object')
+}
+
 /** the root's __directory lists the blocks; after a merge it must list exactly the blocks that exist */
 function repairDirectory(blocks) {
     const root = blocks.find((b) => b.name === 'root')
@@ -375,4 +412,4 @@ function validateSave(buf) {
     return blocks.length
 }
 
-module.exports = { decodeSave, encodeSave, parseBlock, serializeBlock, manifestOf, mergeSaves, validateSave, hashValue, SaveFormatError }
+module.exports = { decodeSave, encodeSave, parseBlock, serializeBlock, manifestOf, mergeSaves, validateSave, manifestOfRemote, mergeRemote, validateRemote, hashValue, SaveFormatError }

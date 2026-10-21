@@ -150,6 +150,8 @@ const clientIdOf = (req) => {
     const tab = tabIdOf(req);
     return tab ? `${base}:${tab}` : base;
 };
+// remotes/<chaId>.local.bin: a character with all its chats, when the page saves with enableRemoteSaving (risuSave.ts encodeRemoteBlock)
+const remoteNameOf = (hexKey) => { const m = /^remotes\/([^/]+)\.local\.bin$/.exec(hexToKey(hexKey)); return m ? m[1] : null; };
 const currentSaveBytes = (hexKey) => {
     const queued = saveQueue.readPending(hexKey);
     if (queued) return queued.op === 'delete' ? null : Buffer.from(queued.data);
@@ -1827,6 +1829,17 @@ app.get('/api/read', authenticatedRouteLimiter, async (req, res, next) => {
                 try { res.setHeader('x-risu-rev', String(dbSync.onRead(clientIdOf(req), bytes))); } catch (error) { console.error('[Sync] read:', error.message); }
             }
         }
+        if(dbSync && remoteNameOf(filePath)){
+            // a page loads a remote character file: its later writes of it are merged against this version. The bytes that are
+            // recorded are the bytes that are sent (a write between two reads would leave the page on a version the server forgot).
+            const bytes = currentSaveBytes(filePath);
+            if(bytes && bytes.length > 0){
+                dbSync.onRemoteRead(clientIdOf(req), remoteNameOf(filePath), bytes);
+                res.setHeader('Content-Type','application/octet-stream');
+                res.send(bytes);
+                return;
+            }
+        }
         // an acknowledged write that has not reached the directory yet is the newest state
         const queued = saveQueue.readPending(filePath);
         if(queued){
@@ -2066,6 +2079,16 @@ app.post('/api/write', authenticatedRouteLimiter, async (req, res, next) => {
             } catch (error) {
                 // never lose a write because the merge failed: store what the page wrote
                 console.error('[Sync] write:', error.message);
+            }
+        }
+        else if(dbSync && Buffer.isBuffer(fileContent) && remoteNameOf(filePath)){
+            // a character file with all its chats: merged against what this page last read or wrote of it, like database.bin
+            try {
+                const r = dbSync.onRemoteWrite(clientIdOf(req), remoteNameOf(filePath), fileContent, currentSaveBytes(filePath));
+                toStore = r.bytes;
+                merged = r.merged;
+            } catch (error) {
+                console.error('[Sync] remote write:', error.message);
             }
         }
         // committed to SQLite before we answer; the worker moves it to the directory (atomically) in order
