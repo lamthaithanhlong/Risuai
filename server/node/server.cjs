@@ -2136,7 +2136,7 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
             dice: { pace: str(b.dice?.pace, 12), surface: str(b.dice?.surface, 200), consequence: !!b.dice?.consequence, cardNew: !!b.dice?.cardNew, firstOrder: !!b.dice?.firstOrder },
             prevNew: !!b.prevNew, kinds: (Array.isArray(b.kinds) ? b.kinds : []).slice(0, 3).map((k) => str(k, 200)), stance: str(b.stance, 60),
         };
-        const r = await gmSolver.decide(input, { store: storyStore });
+        const r = await gmSolver.decide(input, { store: storyStore, graph: storyGraph });
         // RISU_GM_LOG=<file>: one JSON line per decision (the acceptance run reads them back, tests/acceptance/gmMetrics.mjs)
         if(process.env.RISU_GM_LOG) fs.appendFile(process.env.RISU_GM_LOG, JSON.stringify({ at: Date.now(), chatId: input.chatId, world: input.world, phase: input.phase, dice: input.dice, prevNew: input.prevNew, kinds: input.kinds, stance: input.stance, status: r.status, reason: r.reason, ms: r.ms, turn: r.decision?.turn ?? null, intents: r.decision?.intents ?? [], needs: r.needs ?? [], present: r.present ?? [], newEvent: r.newEvent ?? null, line: r.line ?? '' }) + '\n').catch(() => {});
         res.send(r);

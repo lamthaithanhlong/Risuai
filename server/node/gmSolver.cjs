@@ -25,6 +25,8 @@ const { ledger, deriveNpcs, deathsIn, wordAt } = require('./storyStore.cjs')
 
 const GM_DIR = path.join(L.DIR, 'gm')
 const BUDGET_MS = 300
+/** the librarian's rules over its knowledge graph (storyGraph.cjs), loaded beside ours when the chat has a graph */
+const GRAPH_LP = path.join(GM_DIR, 'graph.lp')
 /** the GM's worlds (gameMaster.ts gmWorld) and their ASP file */
 const WORLD_LP = { shadow_slave: 'shadow_slave.lp', lotm: 'lotm.lp', mailman: 'mailman.lp', zombie: 'zombie.lp', generic: 'generic.lp' }
 
@@ -236,7 +238,7 @@ function runClingo(files, factsText, opts = {}) {
 
 /** the answer set as a decision */
 function decisionOf(atoms) {
-    const d = { turn: null, acts: [], onstage: [], offstage: [], approach: [], intents: [], needs: [], present: [], dead: [], hostile: [] }
+    const d = { turn: null, acts: [], onstage: [], offstage: [], approach: [], intents: [], needs: [], present: [], dead: [], hostile: [], knowsHere: [] }
     for (const a of atoms) {
         if (a.name === 'turn') d.turn = a.args[0]
         else if (a.name === 'need') d.needs.push(a.args[0].name)
@@ -247,7 +249,11 @@ function decisionOf(atoms) {
         else if (a.name === 'onstage') d.onstage.push(a.args[0])
         else if (a.name === 'offstage') d.offstage.push(a.args[0])
         else if (a.name === 'approach') d.approach.push(a.args[0])
-        else if (a.name === 'intent') d.intents.push({ who: typeof a.args[0] === 'string' ? a.args[0] : a.args[0].name, what: a.args[1].name, need: a.args[1].args[0]?.name ?? null })
+        else if (a.name === 'intent') {
+            const arg = a.args[1].args[0]
+            const tell = a.args[1].name === 'tell'
+            d.intents.push({ who: typeof a.args[0] === 'string' ? a.args[0] : a.args[0].name, what: a.args[1].name, need: tell ? null : arg?.name ?? null, fact: tell ? String(typeof arg === 'object' ? arg.name : arg) : null })
+        } else if (a.name === 'knows_here') d.knowsHere.push({ who: a.args[0], fact: String(typeof a.args[1] === 'object' ? a.args[1].name : a.args[1]), as: a.args[2]?.name })
     }
     d.needs.sort(); d.present.sort(); d.dead.sort()
     d.intents.sort((x, y) => (x.who === 'newcomer') - (y.who === 'newcomer') || x.who.localeCompare(y.who))
@@ -294,7 +300,7 @@ function approachPlan(store, chatId, who, input) {
 }
 
 // ---- the line -----------------------------------------------------------------------------------------------------------------------
-const q = (s) => `“${String(s).slice(0, 60)}”`
+const q = (s) => `“${String(s).slice(0, 120)}”`
 const NEED_WORD = { thirst: 'thirst', hunger: 'hunger', wound: 'a wound', exhausted: 'exhaustion', cold: 'cold', sick: 'sickness', lost: 'being lost', money: 'no money', shelter: 'no shelter' }
 const INTENT = {
     oppose: 'opposes the player',
@@ -303,7 +309,13 @@ const INTENT = {
     help: 'is willing to help, without being asked to bargain',
     ask_help: 'needs help for their own trouble',
 }
-function intentText(i) {
+function intentText(i, ctx = {}) {
+    if (i.what === 'tell') {
+        const f = ctx.told?.get(i.fact)
+        const as = ctx.knowsHere?.find((k) => k.who === i.who && k.fact === i.fact)?.as
+        const hearsay = as === 'rumor' || f?.status === 'rumor'
+        return `may tell the player what they know: ${f ? q(f.text) : 'something they know'}${hearsay ? ' (only as hearsay, a rumour they heard: never as a fact)' : ''}`
+    }
     if (i.what === 'offer') return `offers help with the character's ${NEED_WORD[i.need] ?? i.need} (stated already)`
     if (i.what === 'lure') return `baits the character with their ${NEED_WORD[i.need] ?? i.need} (stated already), for their own ends`
     return INTENT[i.what] ?? i.what
@@ -329,7 +341,7 @@ function lineOf(dec, ctx) {
     else if (t.name === 'order') ev = `the side's first order or test comes due now.`
     else if (t.name === 'land') ev = `a due consequence lands now: ${q(head(due(ctx.vars.gm_consequences_due)[Number(t.args[0].name.replace(/\D/g, '')) - 1] ?? ''))}; no other new trouble.`
     else if (t.name === 'new') ev = `at the next natural pause something new surfaces: ${kindText ?? t.args[0].name}${stance ? `, ${stance}` : ''} (the card's die), a hook in the prose, this reply's one new trouble.`
-    const people = dec.intents.map((i) => `${i.who === 'newcomer' ? 'the newcomer' : shown(i.who)} ${intentText(i)}`)
+    const people = dec.intents.map((i) => `${i.who === 'newcomer' ? 'the newcomer' : shown(i.who)} ${intentText(i, { told: ctx.told, knowsHere: dec.knowsHere })}`)
     const need = needs.length
         ? `The character's stated needs: ${needs.map((n) => NEED_WORD[n] ?? n).join(', ')}; an offer, bait or bargain may only target these.`
         : 'The character has stated no need (no thirst, hunger, wound, being lost): nobody offers water, food, care or a way, and nobody bargains with one.'
@@ -337,6 +349,20 @@ function lineOf(dec, ctx) {
     const second = [people.length ? `People in the scene: ${people.join('; ')}.` : '', need].filter(Boolean).join(' ')
     if (phase === 'seed') return second
     return [first, second].filter(Boolean).join('\n')
+}
+
+/** The graph's ASP facts for a chat and each fact's text ({text, texts: Map fid -> {text, status}}), or null when it has none. */
+function graphFacts(graph, chatId, story, ids) {
+    try {
+        const text = graph.aspFacts(chatId, story, { ids })
+        if (!/\bfact\(/.test(text)) return null
+        const texts = new Map()
+        const world = graph.chatWorld(chatId)
+        if (world) for (const f of graph.factsAbout(world, chatId, [...ids, 'player'], story?.chat?.messages ?? 0)) texts.set(String(f.fid), { text: f.text, status: f.status })
+        return { text, texts }
+    } catch {
+        return null
+    }
 }
 
 /**
@@ -353,13 +379,17 @@ async function decide(input, opts = {}) {
     const inp = { ...input, world }
     const store = opts.store ?? null
     let places = []
+    let s = null
     try {
-        const s = store && /^[A-Za-z0-9-]{1,80}$/.test(String(input?.chatId ?? '')) ? store.story(input.chatId) : null
+        s = store && /^[A-Za-z0-9-]{1,80}$/.test(String(input?.chatId ?? '')) ? store.story(input.chatId) : null
         if (s?.chat?.char_id) places = store.lore(s.chat.char_id).filter((l) => l.canon && /^\s*region/i.test(l.title)).flatMap((l) => String(l.keys).split(',').map((k) => k.trim()).filter((k) => k.length >= 4))
     } catch { places = [] }
     const ff = featureFacts(inp, places)
-    const facts = ff.text + aspFacts(inp, ff.threads, { timeline: ff.timeline })
-    const cr = await runClingo([path.join(GM_DIR, 'derive.lp'), path.join(GM_DIR, 'core.lp'), path.join(GM_DIR, WORLD_LP[world])], facts, { timeoutMs: Math.max(10, left()), python: opts.python })
+    // the librarian's knowledge graph (storyGraph.cjs): the facts touching the people of this chat, and who knows them
+    const g = s && opts.graph ? graphFacts(opts.graph, input.chatId, s, Object.keys(ff.names)) : null
+    const facts = ff.text + aspFacts(inp, ff.threads, { timeline: ff.timeline }) + (g ? g.text + '\n' : '')
+    const files = [path.join(GM_DIR, 'derive.lp'), ...(g ? [GRAPH_LP] : []), path.join(GM_DIR, 'core.lp'), path.join(GM_DIR, WORLD_LP[world])]
+    const cr = await runClingo(files, facts, { timeoutMs: Math.max(10, left()), python: opts.python })
     if (cr.status !== 'ok') return fail({ status: cr.status, reason: `clingo: ${cr.reason}` })
     const decision = decisionOf(cr.atoms)
     const plans = {}
@@ -369,7 +399,7 @@ async function decide(input, opts = {}) {
     const kindAtom = decision.turn?.name === 'new' ? decision.turn.args[0].name : null
     const kindText = kindAtom ? kindTextOf(world, kindAtom) : null
     const stance = decision.intents.some((i) => i.who === 'newcomer') && STANCE[lower(input.stance)] ? lower(input.stance) : null
-    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names })
+    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names, told: g?.texts ?? new Map() })
     return { status: 'ok', world, decision, needs: decision.needs, present: decision.present, dead: decision.dead, plans, newEvent: isNewEvent(decision.turn), line, optimal: cr.optimal, ms: Date.now() - t0, facts: opts.withFacts ? facts : undefined }
 }
 
@@ -388,4 +418,4 @@ function warm() {
     return decide({ world: 'generic', phase: 'run', vars: {}, messages: [{ role: 'user', text: 'warm' }], dice: { pace: 'quiet' } }, { budgetMs: 5000 }).catch(() => null)
 }
 
-module.exports = { decide, warm, featureFacts, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, BUDGET_MS, WORLD_LP, GM_DIR }
+module.exports = { decide, warm, featureFacts, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP }

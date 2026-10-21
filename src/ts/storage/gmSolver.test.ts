@@ -126,3 +126,43 @@ describe.skipIf(!HAS_CLINGO)('each hard rule is what keeps the bad outcome out',
         expect((await allModels(f, facts)).status).toBe('ok')
     })
 })
+
+// the librarian's knowledge graph (storyGraph.cjs, story/gm/graph.lp) joins the turn: who in the scene knows what, who the graph has dead
+describe.skipIf(!HAS_CLINGO)('the turn with the librarian\'s graph', () => {
+    const store = { story: () => ({ chat: { char_id: 'c1', messages: 9 } }), lore: () => [] }
+    const graph = (asp: string, facts: any[]) => ({ aspFacts: () => asp, chatWorld: () => 'shadow-slave', factsAbout: () => facts })
+    const watch = graph('now(9).\nfact(12, "marek", member_of, "the night watch", fact).\nknows("marek", 12, rumor).\nentity("marek", person).',
+        [{ fid: 12, text: 'Marek is in the Night Watch', status: 'fact' }])
+    const quiet = { ...lure, chatId: 'k1', dice: { pace: 'quiet' }, kinds: [], stance: '' }
+
+    test('on a quiet turn someone in the scene shares what they know, and only what they know; hearsay stays hearsay', async () => {
+        const r = await G.decide(quiet, { budgetMs: 3000, store, graph: watch })
+        expect(r.status).toBe('ok')
+        expect(intents(r)).toContain('marek:tell')
+        expect(r.line).toContain('Marek is in the Night Watch')
+        expect(r.line).toContain('hearsay')
+        // the enemy in the scene does not know it, so never tells it
+        expect(intents(r)).toContain('ba kẻ lạ mặt:oppose')
+    })
+    test('a pace with an event keeps people on their own business; without the graph nothing changes', async () => {
+        const r = await G.decide({ ...quiet, dice: { pace: 'build', surface: 'the threat "Ba kẻ lạ mặt"' } }, { budgetMs: 3000, store, graph: watch })
+        expect(intents(r).some((i: string) => /tell/.test(i))).toBe(false)
+        const none = await G.decide(quiet, { budgetMs: 3000, store })
+        expect(intents(none).some((i: string) => /tell/.test(i))).toBe(false)
+    })
+    test('the graph\'s dead are dead: never in the scene, never acting', async () => {
+        const dead = graph('now(9).\nfact(13, "marek", status, "dead", fact).\nentity("marek", person).', [])
+        const r = await G.decide(quiet, { budgetMs: 3000, store, graph: dead })
+        expect(r.dead).toContain('marek')
+        expect(r.present).not.toContain('marek')
+    })
+    test('KNOWLEDGE: without the rule someone who does not know the fact tells it', async () => {
+        const facts = (await G.decide(quiet, { budgetMs: 3000, store, graph: watch, withFacts: true })).facts + '\n:- not intent("ba kẻ lạ mặt", tell(12)).\nrole("ba kẻ lạ mặt").\n'
+        const run = (core: string) => G.runClingo([LP('derive.lp'), G.GRAPH_LP, core, LP('shadow_slave.lp')], facts, { timeoutMs: 5000 })
+        expect((await run(LP('core.lp'))).status).toBe('unsat')
+        const dir2 = mkdtempSync(join(tmpdir(), 'gm-lp-'))
+        const f = join(dir2, 'no-knowledge.lp')
+        writeFileSync(f, readFileSync(LP('core.lp'), 'utf8').replace(/^opt\(P, tell\(F\)\) :- .*$/m, 'opt(P, tell(F)) :- role(P), news(F).').replace(/^:- intent\(P, tell\(F\)\), not knows_here\(P, F, _\)\.$/m, '').replace(/^opt\(P, oppose\) :- role\(P\), hostile\(P\)\.$/m, ''))
+        expect((await run(f)).status).toBe('ok')
+    })
+})

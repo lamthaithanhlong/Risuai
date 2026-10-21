@@ -22,7 +22,10 @@
 %   present(P)   in the scene: named in the player's message or the last reply, or named lately and last seen here; never dead
 %   open(T)      the thread can still move: none of its actors is dead
 #defined panel_need/1. #defined said_need/2. #defined resolved/2. #defined person/1. #defined named/2. #defined seen_here/1.
-#defined dead/1. #defined thread/2. #defined actor/2.
+#defined dead/1. #defined thread/2. #defined actor/2. #defined graph_dead/1.
+
+% the librarian's graph (story/gm/graph.lp, loaded beside this file when the chat has one) knows deaths the timeline may not
+dead(P) :- graph_dead(P), person(P).
 
 need(N) :- panel_need(N).
 need(N) :- said_need(N, I), I <= 3, not met_after(N, I).

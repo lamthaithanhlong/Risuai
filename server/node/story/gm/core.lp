@@ -27,7 +27,7 @@
 #defined first_order/0. #defined side/1. #defined side_focus/1. #defined thread/2. #defined open/1. #defined arc/1. #defined focus/1.
 #defined actor/2. #defined present/1. #defined dead/1. #defined need/1. #defined hostile/1. #defined rolled_text/1. #defined stance/1.
 #defined done_before/0. #defined where/1. #defined kind_where/2. #defined no_chase/0. #defined kind/2. #defined kind_text/2.
-#defined hostile_thread/1. #defined combat/1. #defined scene/1.
+#defined hostile_thread/1. #defined combat/1. #defined scene/1. #defined knows_here/3. #defined knows/3.
 
 % the people a hostile thread (antagonist, threat, enemy) is about oppose the player
 hostile(P) :- actor(T, P), hostile_thread(T).
@@ -101,6 +101,9 @@ opt(P, help) :- role(P), not hostile(P).
 opt(P, ask_help) :- role(P), not hostile(P).
 opt(P, offer(N)) :- role(P), need(N), not hostile(P).
 opt(P, lure(N)) :- role(P), need(N).
+% the librarian's graph (graph.lp): someone in the scene may share a fact they know that the player does not know as true
+news(F) :- knows_here(_, F, _), not knows("player", F, fact).
+opt(P, tell(F)) :- role(P), P != newcomer, not hostile(P), knows_here(P, F, _), news(F).
 1 { intent(P, I) : opt(P, I) } 1 :- role(P).
 
 % NEED: an NPC's offer, bait or bargain targets only a need the story established (derive.pl)
@@ -109,6 +112,9 @@ opt(P, lure(N)) :- role(P), need(N).
 % PRESENCE: only someone in the scene (or the card's newcomer) acts in it; never a dead one
 :- intent(P, _), P != newcomer, not present(P).
 :- intent(P, _), dead(P).
+% KNOWLEDGE: a person tells only what they know (graph.lp knows_here), and one person shares news in a turn at most
+:- intent(P, tell(F)), not knows_here(P, F, _).
+:- #count { P : intent(P, tell(_)) } > 1.
 
 % the newcomer acts as the card's stance die says
 fits(oppose) :- stance(hostile).
@@ -146,6 +152,11 @@ took_land :- turn(land(_)).
 :~ intent(P, watch), not hostile(P). [1@1, P]
 :~ intent(P, offer(N)), P != newcomer. [1@1, P, N]
 :~ intent(P, lure(N)), not hostile(P), P != newcomer. [3@1, P, N]
+% news is shared on a quiet turn (the player's choice plays out, people talk); on a turn with an event people keep to their business
+some_tell :- intent(_, tell(_)).
+news_here :- opt(_, tell(_)).
+:~ pace(quiet), news_here, not some_tell. [1@1]
+:~ intent(P, tell(F)), not pace(quiet). [1@1, P, F]
 
 #show turn/1.
 #show acts/2.
@@ -154,6 +165,7 @@ took_land :- turn(land(_)).
 #show approach/1.
 #show intent/2.
 #show hostile/1.
+#show knows_here/3.
 
 % ---- kinds (the world file lists them) --------------------------------------------------------------------------------------------
 rolled(K) :- kind_text(K, T), rolled_text(T).
