@@ -11,7 +11,8 @@
 //   twomsg   the picture takes --img seconds; a second message is sent the moment the first reply is in the chat
 // Per scenario it prints when the reply reached the SERVER's chat, when the picture did, when the turn row said saved, when the second
 // turn was accepted and answered, and the picture job rows.
-//   node tests/images/repro.mjs [--scenarios ok,slow,fail,twomsg] [--img 90] [--sync] [--build] [--port 6311]
+//   node tests/images/repro.mjs [--scenarios ok,slow,fail,twomsg] [--img 90] [--sync] [--build | --dist <built client dir>] [--live <dir of the live server>] [--port 6311]
+// (--dist and --live let a throwaway worktree of one commit run against the live save: its client built apart, its server code)
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -35,8 +36,9 @@ async function main() {
     const stub = await startStubModel({ streamMs: 6000, helperMs: 500, reply: REPLY })
     const runDir = newRunDir()
     log('run', runDir)
-    buildClient(runDir, { noBuild: !argv.includes('--build') })
-    const base = await leanSnapshot(runDir)
+    if (opt('--dist', '')) fs.symlinkSync(path.resolve(opt('--dist', '')), path.join(runDir, 'dist'))
+    else buildClient(runDir, { noBuild: !argv.includes('--build') })
+    const base = await leanSnapshot(runDir, { liveCwd: opt('--live', REPO) })
     const { dir, password } = copySave(runDir, base, 'pics')
     fs.rmSync(base, { recursive: true, force: true })
     patchRoot(dir, {
