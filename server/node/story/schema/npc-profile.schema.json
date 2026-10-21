@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "risu:npc-profile",
+  "title": "A story card's NPC psychology seeds (server/node/story/npcs/<world>.json)",
+  "description": "Per person of the card's knowledge graph: a Big Five profile (0..100), how they speak, what they would say and what they hide (hide_fid = the index, in story/graphs/<world>.json `facts`, of the fact the secret rests on), and how they see each other at the story's start. relations are DIRECTIONAL: p's view of q (q may be \"player\"). Not expressible here, checked by npcs/build/merge.cjs and the loader: p <> q, (p, q) unique, p an npc of this file, q an npc of this file or \"player\", every id a person of the world's graph, the player's persona never an npc.",
+  "type": "object",
+  "required": [
+    "world",
+    "version",
+    "npcs",
+    "relations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "world": {
+      "enum": [
+        "shadow_slave",
+        "lotm",
+        "mailman",
+        "zombie",
+        "generic"
+      ]
+    },
+    "version": {
+      "const": 1
+    },
+    "built": {
+      "type": "string"
+    },
+    "npcs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/npc"
+      },
+      "maxItems": 40
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      },
+      "maxItems": 200
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80,
+      "pattern": "^[^A-Z\"\\n]+$"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "speech": {
+      "enum": [
+        "cold",
+        "warm",
+        "blunt",
+        "formal",
+        "playful",
+        "timid",
+        "mocking",
+        "terse"
+      ]
+    },
+    "tag": {
+      "enum": [
+        "loyal",
+        "vengeful",
+        "greedy",
+        "protective",
+        "ambitious",
+        "pious",
+        "cynical",
+        "honest",
+        "cowardly",
+        "proud",
+        "kind",
+        "ruthless"
+      ]
+    },
+    "traits": {
+      "type": "object",
+      "required": [
+        "open",
+        "consc",
+        "extra",
+        "agree",
+        "neuro"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/score"
+        },
+        "consc": {
+          "$ref": "#/$defs/score"
+        },
+        "extra": {
+          "$ref": "#/$defs/score"
+        },
+        "agree": {
+          "$ref": "#/$defs/score"
+        },
+        "neuro": {
+          "$ref": "#/$defs/score"
+        }
+      }
+    },
+    "npc": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "importance",
+        "traits",
+        "speech"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "maxItems": 30
+        },
+        "importance": {
+          "$ref": "#/$defs/score"
+        },
+        "traits": {
+          "$ref": "#/$defs/traits"
+        },
+        "speech": {
+          "$ref": "#/$defs/speech"
+        },
+        "wants_to_say": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "wants_to_hide": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "hide_fid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tag"
+          },
+          "maxItems": 5
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "required": [
+        "p",
+        "q",
+        "trust",
+        "affection",
+        "debt",
+        "grudge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "p": {
+          "$ref": "#/$defs/id"
+        },
+        "q": {
+          "$ref": "#/$defs/id"
+        },
+        "trust": {
+          "$ref": "#/$defs/score"
+        },
+        "affection": {
+          "$ref": "#/$defs/score"
+        },
+        "debt": {
+          "$ref": "#/$defs/score"
+        },
+        "grudge": {
+          "$ref": "#/$defs/score"
+        },
+        "why": {
+          "type": "string",
+          "maxLength": 160
+        }
+      }
+    }
+  }
+}

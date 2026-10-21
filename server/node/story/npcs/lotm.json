@@ -1,0 +1,1241 @@
+{
+ "world": "lotm",
+ "version": 1,
+ "built": "2026-10-21",
+ "npcs": [
+  {
+   "id": "adam",
+   "name": "Adam",
+   "aliases": [
+    "The Ancient Spreading",
+    "Đấng Truyền Bá",
+    "Sự sống Nguyên thủy",
+    "Original Life",
+    "Primordial Life"
+   ],
+   "importance": 100,
+   "traits": {
+    "open": 85,
+    "consc": 70,
+    "extra": 40,
+    "agree": 15,
+    "neuro": 30
+   },
+   "speech": "cold",
+   "wants_to_say": "The Morse Ascetic Order he leads offers guidance toward their goals to those who come to it.",
+   "wants_to_hide": "He secretly manipulates events to reunite with Amon, whom he regards as his son, and become a complete deity again.",
+   "hide_fid": 172,
+   "tags": [
+    "ambitious"
+   ],
+   "source": ""
+  },
+  {
+   "id": "klein moretti",
+   "name": "Klein Moretti",
+   "aliases": [
+    "Klein",
+    "Sherlock Moriarty",
+    "Dwayne Dantes",
+    "Hermann Sparrow",
+    "Seer",
+    "Thầy Bói",
+    "Gehrman Sparrow",
+    "Chu Minh Thuỵ"
+   ],
+   "importance": 96,
+   "traits": {
+    "open": 80,
+    "consc": 70,
+    "extra": 35,
+    "agree": 60,
+    "neuro": 55
+   },
+   "speech": "terse",
+   "wants_to_say": "He offers registration and supervision to Beyonders: regular state reports, tips on Beyonders about to harm the innocent, trade in useful items, identity papers.",
+   "wants_to_hide": "Hermann Sparrow, the bounty hunter who killed the Sequence 5 pirate Gilsey Ace, is in truth Klein.",
+   "hide_fid": 62,
+   "tags": [
+    "protective",
+    "ruthless"
+   ],
+   "source": ""
+  },
+  {
+   "id": "aurore lee",
+   "name": "Aurore Lee",
+   "aliases": [
+    "Aurore",
+    "Aurora"
+   ],
+   "importance": 94,
+   "traits": {
+    "open": 70,
+    "consc": 60,
+    "extra": 55,
+    "agree": 70,
+    "neuro": 45
+   },
+   "speech": "warm",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "alger wilson",
+   "name": "Alger Wilson",
+   "aliases": [
+    "Arges",
+    "the Hanged Man",
+    "The Hanged Man",
+    "Người Treo Ngược",
+    "Thuyền trưởng",
+    "Captain",
+    "Hermit pathway",
+    "Dãy Ẩn Sĩ"
+   ],
+   "importance": 88,
+   "traits": {
+    "open": 60,
+    "consc": 55,
+    "extra": 50,
+    "agree": 55,
+    "neuro": 35
+   },
+   "speech": "formal",
+   "wants_to_say": null,
+   "wants_to_hide": "His crew's loyalty to the Lord of Storms' faith is only nominal.",
+   "hide_fid": 468,
+   "tags": [
+    "proud"
+   ],
+   "source": ""
+  },
+  {
+   "id": "xio derecha",
+   "name": "Xio Derecha",
+   "aliases": [
+    "Ms. Judgment",
+    "The Judgment",
+    "Dãy Thẩm Phán",
+    "Nữ thám tử",
+    "Judgment",
+    "Justiciar Pathway",
+    "Judgement",
+    "Miss Judgement"
+   ],
+   "importance": 83,
+   "traits": {
+    "open": 55,
+    "consc": 70,
+    "extra": 50,
+    "agree": 55,
+    "neuro": 45
+   },
+   "speech": "blunt",
+   "wants_to_say": null,
+   "wants_to_hide": "She is an MI9 government intelligence agent who shares government intelligence with Klein Moretti's Tarot Club network.",
+   "hide_fid": 1038,
+   "tags": [
+    "honest"
+   ],
+   "source": ""
+  },
+  {
+   "id": "benson moretti",
+   "name": "Benson Moretti",
+   "aliases": [
+    "Benson"
+   ],
+   "importance": 77,
+   "traits": {
+    "open": 40,
+    "consc": 60,
+    "extra": 45,
+    "agree": 60,
+    "neuro": 65
+   },
+   "speech": "terse",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "emperor roselle",
+   "name": "Emperor Roselle",
+   "aliases": [
+    "Emperor Russell",
+    "Russell",
+    "César Russell",
+    "Roselle",
+    "Roselle Gustave",
+    "Đại đế Russell",
+    "Russell the Great",
+    "Hoàng đế Russell"
+   ],
+   "importance": 71,
+   "traits": {
+    "open": 85,
+    "consc": 70,
+    "extra": 45,
+    "agree": 35,
+    "neuro": 60
+   },
+   "speech": "formal",
+   "wants_to_say": "Acting a role quieted the whispers that nearly drove him mad, as his diary records.",
+   "wants_to_hide": "He is a transmigrator from Earth, as Klein Moretti is.",
+   "hide_fid": 262,
+   "tags": [
+    "ambitious",
+    "proud"
+   ],
+   "source": ""
+  },
+  {
+   "id": "amon",
+   "name": "Amon",
+   "aliases": [
+    "The Angel of Time",
+    "The Lord of the Spirit World",
+    "The Blasphemer",
+    "Trojan Horse of Destiny",
+    "Mệnh Môn Mộc Mã",
+    "Amon Family",
+    "gia đình Amon",
+    "Amon family"
+   ],
+   "importance": 67,
+   "traits": {
+    "open": 80,
+    "consc": 60,
+    "extra": 60,
+    "agree": 15,
+    "neuro": 35
+   },
+   "speech": "mocking",
+   "wants_to_say": "He seeks the City of Wishes, the Error pathway Sefirah that grants reality manipulation, and wants any lead to it.",
+   "wants_to_hide": "He can possess other people's bodies, as he did with Andersen.",
+   "hide_fid": 189,
+   "tags": [
+    "ambitious",
+    "cynical",
+    "ruthless"
+   ],
+   "source": ""
+  },
+  {
+   "id": "ince zangwill",
+   "name": "Ince Zangwill",
+   "aliases": [
+    "The Mad Prophet",
+    "Ince",
+    "Zangwill"
+   ],
+   "importance": 59,
+   "traits": {
+    "open": 65,
+    "consc": 55,
+    "extra": 40,
+    "agree": 25,
+    "neuro": 60
+   },
+   "speech": "formal",
+   "wants_to_say": "He is investigating the Door Keeper formula and sees feather pen 0-08 as his tool for it.",
+   "wants_to_hide": "He stole the 0-08 feather pen from Nighthawk custody.",
+   "hide_fid": 802,
+   "tags": [
+    "ambitious",
+    "ruthless"
+   ],
+   "source": ""
+  },
+  {
+   "id": "sharon",
+   "name": "Temperance",
+   "aliases": [
+    "Sharron",
+    "Chủ Nghĩa Tiết Độ",
+    "Miss Bodyguard",
+    "Sharon"
+   ],
+   "importance": 59,
+   "traits": {
+    "open": 50,
+    "consc": 70,
+    "extra": 35,
+    "agree": 60,
+    "neuro": 40
+   },
+   "speech": "terse",
+   "wants_to_say": "She leads the surviving Temperance Faction members and holds underground Beyonder and prison intelligence.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": ""
+  },
+  {
+   "id": "audrey hall",
+   "name": "Audrey Hall",
+   "aliases": [
+    "Audrey",
+    "Justice",
+    "Chính Nghĩa",
+    "Lady Audrey",
+    "tiểu thư Audrey",
+    "The Justice",
+    "Công Lý"
+   ],
+   "importance": 55,
+   "traits": {
+    "open": 75,
+    "consc": 55,
+    "extra": 55,
+    "agree": 70,
+    "neuro": 40
+   },
+   "speech": "warm",
+   "wants_to_say": "She seeks gatherings and contacts on Beyonder matters but will not give up her freedom to a church.",
+   "wants_to_hide": "She is Justice, a founding member of the Tarot Club.",
+   "hide_fid": 191,
+   "tags": [
+    "kind"
+   ],
+   "source": ""
+  },
+  {
+   "id": "old neil",
+   "name": "Old Neil",
+   "aliases": [
+    "Neil",
+    "lão Neil",
+    "old archivist"
+   ],
+   "importance": 53,
+   "traits": {
+    "open": 60,
+    "consc": 65,
+    "extra": 40,
+    "agree": 65,
+    "neuro": 40
+   },
+   "speech": "warm",
+   "wants_to_say": "He knows Tingen's black market behind the Dragon Bar and will give mysticism lessons.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "sun pathway",
+   "name": "Mặt Trời",
+   "aliases": [
+    "Derrick Berg",
+    "Mr. Sun",
+    "The Sun",
+    "Sun Pathway",
+    "Dãy Mặt Trời",
+    "Dãy Nghệ Sĩ",
+    "Bard Pathway",
+    "Sun"
+   ],
+   "importance": 46,
+   "traits": {
+    "open": 55,
+    "consc": 65,
+    "extra": 50,
+    "agree": 70,
+    "neuro": 50
+   },
+   "speech": "warm",
+   "wants_to_say": "He wants to lead the City of Silver out of the Forsaken Land of the Gods, bring sunlight back and a normal life to his people.",
+   "wants_to_hide": "His faith lies only with Mr. Fool, Klein Moretti.",
+   "hide_fid": 216,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": ""
+  },
+  {
+   "id": "franca",
+   "name": "Franca",
+   "aliases": [
+    "Queen of the Underworld",
+    "不死冥后"
+   ],
+   "importance": 42,
+   "traits": {
+    "open": 70,
+    "consc": 65,
+    "extra": 60,
+    "agree": 55,
+    "neuro": 40
+   },
+   "speech": "playful",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "leonard mitchell",
+   "name": "Leonard Mitchell",
+   "aliases": [
+    "Leonard",
+    "Midnight Poet",
+    "Thi Sĩ Nửa Đêm",
+    "The Star",
+    "Seat 8 The Star",
+    "Mr. Star",
+    "The Sleepless",
+    "Poison Standard"
+   ],
+   "importance": 38,
+   "traits": {
+    "open": 60,
+    "consc": 60,
+    "extra": 45,
+    "agree": 55,
+    "neuro": 50
+   },
+   "speech": "blunt",
+   "wants_to_say": "He serves in the Tingen Nighthawk squad and the Church of the Evernight Goddess on the Darkness Pathway.",
+   "wants_to_hide": "He feeds Church of Night intelligence to Klein Moretti's Tarot Club network.",
+   "hide_fid": 1033,
+   "tags": [
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "gardner martin",
+   "name": "Gardner Martin",
+   "aliases": [],
+   "importance": 36,
+   "traits": {
+    "open": 40,
+    "consc": 65,
+    "extra": 50,
+    "agree": 35,
+    "neuro": 40
+   },
+   "speech": "blunt",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "capella",
+   "name": "Capella",
+   "aliases": [
+    "Admiral of the Stars",
+    "Star Admiral",
+    "Thượng tướng ngôi sao",
+    "Hermit",
+    "Ẩn Giả",
+    "隐者"
+   ],
+   "importance": 30,
+   "traits": {
+    "open": 75,
+    "consc": 60,
+    "extra": 40,
+    "agree": 40,
+    "neuro": 35
+   },
+   "speech": "cold",
+   "wants_to_say": null,
+   "wants_to_hide": "She is actually on the Error pathway, not truly an Apprentice.",
+   "hide_fid": 1211,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "jenna",
+   "name": "Jenna",
+   "aliases": [],
+   "importance": 30,
+   "traits": {
+    "open": 55,
+    "consc": 50,
+    "extra": 50,
+    "agree": 55,
+    "neuro": 50
+   },
+   "speech": "blunt",
+   "wants_to_say": null,
+   "wants_to_hide": "She is a wild Beyonder made an informant for the Purifiers under a per-tip contract.",
+   "hide_fid": 19,
+   "tags": [
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "lumian lee",
+   "name": "Lumian",
+   "aliases": [
+    "Charles",
+    "Lumian Lee",
+    "Mr. Flames",
+    "Ông Que Lửa",
+    "Ciel Dubois",
+    "The Fool's subordinate"
+   ],
+   "importance": 26,
+   "traits": {
+    "open": 70,
+    "consc": 55,
+    "extra": 45,
+    "agree": 40,
+    "neuro": 60
+   },
+   "speech": "blunt",
+   "wants_to_say": "The tragic death of his foster sister Aurore drives him.",
+   "wants_to_hide": "He survived the Cordu Village ritual as the vessel holding the sealed Termiboros.",
+   "hide_fid": 594,
+   "tags": [
+    "loyal",
+    "vengeful"
+   ],
+   "source": ""
+  },
+  {
+   "id": "melissa moretti",
+   "name": "Melissa",
+   "aliases": [
+    "Melissa Moretti"
+   ],
+   "importance": 24,
+   "traits": {
+    "open": 60,
+    "consc": 55,
+    "extra": 50,
+    "agree": 70,
+    "neuro": 35
+   },
+   "speech": "warm",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "furth",
+   "name": "Magician",
+   "aliases": [
+    "Furth",
+    "Pháp Sư",
+    "Ma Thần Sư"
+   ],
+   "importance": 18,
+   "traits": {
+    "open": 65,
+    "consc": 60,
+    "extra": 45,
+    "agree": 50,
+    "neuro": 50
+   },
+   "speech": "formal",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "william james",
+   "name": "William James",
+   "aliases": [],
+   "importance": 18,
+   "traits": {
+    "open": 45,
+    "consc": 65,
+    "extra": 50,
+    "agree": 50,
+    "neuro": 35
+   },
+   "speech": "terse",
+   "wants_to_say": null,
+   "wants_to_hide": "He is Alger Wilson's liaison to the shore world and takes goods for 'the Captain'.",
+   "hide_fid": 1229,
+   "tags": [
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "daly",
+   "name": "Daly",
+   "aliases": [
+    "spirit medium Daly"
+   ],
+   "importance": 13,
+   "traits": {
+    "open": 55,
+    "consc": 70,
+    "extra": 40,
+    "agree": 55,
+    "neuro": 50
+   },
+   "speech": "formal",
+   "wants_to_say": null,
+   "wants_to_hide": "He knows the acting method under oath and may not tell it.",
+   "hide_fid": 24,
+   "tags": [
+    "honest"
+   ],
+   "source": ""
+  },
+  {
+   "id": "mr. k",
+   "name": "Mr. K",
+   "aliases": [
+    "ngài K",
+    "Mr K"
+   ],
+   "importance": 7,
+   "traits": {
+    "open": 60,
+    "consc": 60,
+    "extra": 50,
+    "agree": 45,
+    "neuro": 40
+   },
+   "speech": "formal",
+   "wants_to_say": "He is looking for people to recruit into his Aurora Order.",
+   "wants_to_hide": "His Aurora Order worships the True Creator.",
+   "hide_fid": 123,
+   "tags": [
+    "pious"
+   ],
+   "source": ""
+  },
+  {
+   "id": "cattleya",
+   "name": "Cattleya",
+   "aliases": [
+    "The Hermit",
+    "Người Ẩn Sĩ",
+    "Ma'am Hermit",
+    "Admiral of Stars",
+    "Daughter of the Sea"
+   ],
+   "importance": 1,
+   "traits": {
+    "open": 70,
+    "consc": 65,
+    "extra": 50,
+    "agree": 40,
+    "neuro": 35
+   },
+   "speech": "cold",
+   "wants_to_say": null,
+   "wants_to_hide": "She belongs to the Moses Ascetic Order, one of its ten Pillars, not to the Church of Knowledge.",
+   "hide_fid": 211,
+   "tags": [],
+   "source": ""
+  },
+  {
+   "id": "swain",
+   "name": "Swain",
+   "aliases": [],
+   "importance": 1,
+   "traits": {
+    "open": 45,
+    "consc": 65,
+    "extra": 40,
+    "agree": 45,
+    "neuro": 45
+   },
+   "speech": "blunt",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": ""
+  }
+ ],
+ "relations": [
+  {
+   "p": "adam",
+   "q": "player",
+   "trust": 25,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "adam",
+   "q": "amon",
+   "trust": 50,
+   "affection": 75,
+   "debt": 0,
+   "grudge": 0,
+   "why": "He regards Amon as his son and seeks to reunite with him."
+  },
+  {
+   "p": "klein moretti",
+   "q": "alger wilson",
+   "trust": 70,
+   "affection": 55,
+   "debt": 25,
+   "grudge": 0,
+   "why": "Alger is one of Klein's allies."
+  },
+  {
+   "p": "klein moretti",
+   "q": "benson moretti",
+   "trust": 85,
+   "affection": 85,
+   "debt": 20,
+   "grudge": 0,
+   "why": "Benson is his older brother."
+  },
+  {
+   "p": "klein moretti",
+   "q": "emperor roselle",
+   "trust": 25,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 40,
+   "why": "Klein and Roselle are separate transmigrators; the facts call them enemies."
+  },
+  {
+   "p": "klein moretti",
+   "q": "amon",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 80,
+   "why": "Amon is Klein's primary antagonist, scheming to steal his Beyonder characteristics."
+  },
+  {
+   "p": "klein moretti",
+   "q": "old neil",
+   "trust": 70,
+   "affection": 65,
+   "debt": 40,
+   "grudge": 0,
+   "why": "Old Neil gave him mysticism lessons."
+  },
+  {
+   "p": "klein moretti",
+   "q": "leonard mitchell",
+   "trust": 60,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Leonard feeds Church of Night intelligence to Klein's network."
+  },
+  {
+   "p": "klein moretti",
+   "q": "lumian lee",
+   "trust": 60,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Lumian serves as Klein's agent via the Tarot Club."
+  },
+  {
+   "p": "klein moretti",
+   "q": "melissa moretti",
+   "trust": 85,
+   "affection": 90,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Melissa is his younger sister."
+  },
+  {
+   "p": "aurore lee",
+   "q": "player",
+   "trust": 35,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "aurore lee",
+   "q": "lumian lee",
+   "trust": 90,
+   "affection": 95,
+   "debt": 40,
+   "grudge": 0,
+   "why": "Lumian is her foster brother; kin."
+  },
+  {
+   "p": "alger wilson",
+   "q": "player",
+   "trust": 35,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "alger wilson",
+   "q": "klein moretti",
+   "trust": 75,
+   "affection": 60,
+   "debt": 35,
+   "grudge": 0,
+   "why": "Klein is an ally; Alger helped him survive the first encounter with Amon."
+  },
+  {
+   "p": "alger wilson",
+   "q": "audrey hall",
+   "trust": 55,
+   "affection": 50,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Audrey's representatives delivered ghost shark blood for him."
+  },
+  {
+   "p": "alger wilson",
+   "q": "william james",
+   "trust": 75,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "William James is his liaison to the shore world."
+  },
+  {
+   "p": "xio derecha",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "xio derecha",
+   "q": "klein moretti",
+   "trust": 55,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She shares government intelligence with Klein's network."
+  },
+  {
+   "p": "benson moretti",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "benson moretti",
+   "q": "klein moretti",
+   "trust": 85,
+   "affection": 85,
+   "debt": 20,
+   "grudge": 0,
+   "why": "Klein is his younger brother."
+  },
+  {
+   "p": "benson moretti",
+   "q": "melissa moretti",
+   "trust": 80,
+   "affection": 90,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Melissa is his younger sister."
+  },
+  {
+   "p": "emperor roselle",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "emperor roselle",
+   "q": "klein moretti",
+   "trust": 20,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 45,
+   "why": "The facts name Klein and Roselle enemies; both are transmigrators."
+  },
+  {
+   "p": "amon",
+   "q": "player",
+   "trust": 25,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 5,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "amon",
+   "q": "klein moretti",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 80,
+   "why": "Primary antagonist of Klein; Klein defeated him above the gray fog but he survived."
+  },
+  {
+   "p": "ince zangwill",
+   "q": "player",
+   "trust": 25,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "ince zangwill",
+   "q": "klein moretti",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Klein orchestrated his downfall."
+  },
+  {
+   "p": "ince zangwill",
+   "q": "leonard mitchell",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 55,
+   "why": "Leonard jointly brought about his downfall."
+  },
+  {
+   "p": "sharon",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "sharon",
+   "q": "klein moretti",
+   "trust": 70,
+   "affection": 45,
+   "debt": 50,
+   "grudge": 0,
+   "why": "She serves as Klein's bodyguard in Backlund."
+  },
+  {
+   "p": "audrey hall",
+   "q": "player",
+   "trust": 35,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "audrey hall",
+   "q": "alger wilson",
+   "trust": 55,
+   "affection": 50,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Her representatives delivered ghost shark blood for Alger."
+  },
+  {
+   "p": "audrey hall",
+   "q": "capella",
+   "trust": 55,
+   "affection": 40,
+   "debt": 40,
+   "grudge": 0,
+   "why": "She got old psychic giant dragon blood through the Hermit Capella."
+  },
+  {
+   "p": "old neil",
+   "q": "player",
+   "trust": 35,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "old neil",
+   "q": "klein moretti",
+   "trust": 70,
+   "affection": 65,
+   "debt": 0,
+   "grudge": 0,
+   "why": "He gives Klein mysticism lessons and takes him to the black market."
+  },
+  {
+   "p": "sun pathway",
+   "q": "player",
+   "trust": 35,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "sun pathway",
+   "q": "klein moretti",
+   "trust": 90,
+   "affection": 80,
+   "debt": 60,
+   "grudge": 0,
+   "why": "His faith lies only with Mr. Fool, Klein Moretti."
+  },
+  {
+   "p": "franca",
+   "q": "player",
+   "trust": 30,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "franca",
+   "q": "lumian lee",
+   "trust": 75,
+   "affection": 60,
+   "debt": 20,
+   "grudge": 0,
+   "why": "She became Lumian's ally after the City of Safety."
+  },
+  {
+   "p": "leonard mitchell",
+   "q": "player",
+   "trust": 35,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "leonard mitchell",
+   "q": "klein moretti",
+   "trust": 70,
+   "affection": 55,
+   "debt": 30,
+   "grudge": 0,
+   "why": "He feeds Klein's Tarot Club network intelligence."
+  },
+  {
+   "p": "leonard mitchell",
+   "q": "ince zangwill",
+   "trust": 0,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 70,
+   "why": "He killed Ince Zangwill after the ritualistic murders in Tingen."
+  },
+  {
+   "p": "gardner martin",
+   "q": "player",
+   "trust": 25,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "capella",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "capella",
+   "q": "audrey hall",
+   "trust": 55,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She supplied Audrey with old psychic giant dragon blood."
+  },
+  {
+   "p": "jenna",
+   "q": "player",
+   "trust": 30,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "jenna",
+   "q": "lumian lee",
+   "trust": 80,
+   "affection": 65,
+   "debt": 20,
+   "grudge": 0,
+   "why": "She is loyal to Lumian's cause."
+  },
+  {
+   "p": "lumian lee",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "lumian lee",
+   "q": "klein moretti",
+   "trust": 70,
+   "affection": 55,
+   "debt": 40,
+   "grudge": 0,
+   "why": "He serves as Klein's agent through the Tarot Club."
+  },
+  {
+   "p": "lumian lee",
+   "q": "aurore lee",
+   "trust": 90,
+   "affection": 95,
+   "debt": 40,
+   "grudge": 0,
+   "why": "Aurore is his foster sister; her death drives him."
+  },
+  {
+   "p": "lumian lee",
+   "q": "franca",
+   "trust": 75,
+   "affection": 60,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Franca became his ally."
+  },
+  {
+   "p": "lumian lee",
+   "q": "jenna",
+   "trust": 75,
+   "affection": 60,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Jenna works alongside him."
+  },
+  {
+   "p": "melissa moretti",
+   "q": "player",
+   "trust": 35,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "melissa moretti",
+   "q": "klein moretti",
+   "trust": 85,
+   "affection": 90,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Klein is her older brother."
+  },
+  {
+   "p": "melissa moretti",
+   "q": "benson moretti",
+   "trust": 80,
+   "affection": 85,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Benson is her older brother."
+  },
+  {
+   "p": "furth",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "william james",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "william james",
+   "q": "alger wilson",
+   "trust": 80,
+   "affection": 50,
+   "debt": 20,
+   "grudge": 0,
+   "why": "He is Alger's logistics contact and liaison."
+  },
+  {
+   "p": "daly",
+   "q": "player",
+   "trust": 35,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "mr. k",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "mr. k",
+   "q": "lumian lee",
+   "trust": 40,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "He recruits Lumian into the Aurora Order."
+  },
+  {
+   "p": "cattleya",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  },
+  {
+   "p": "swain",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger at the start."
+  }
+ ]
+}

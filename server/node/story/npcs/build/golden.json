@@ -1,0 +1,457 @@
+{
+ "about": "Golden vectors for the appraisal fold (server/node/npcPsych.cjs foldRelations, generated from it, asserted by src/ts/storage/npcPsych.test.ts). The C# port (server/sidecar/fatima, CharacterFactory) must reproduce `expect` from `seed` + `traits` + `events` with the table in ../appraisal.json. Rules: an event {who, tag, target} moves rel(target -> who) by the tag deltas, modulated by the TARGET's traits (grudge gain x(1.5-agree/100), trust loss x(0.5+neuro/100), affection gain x(0.5+extra/100), debt gain x(0.6+consc/100*0.8); the other direction of each is unmodulated), then clamp to 0..100 and round half UP (Math.round: 14.5 -> 15; C# needs MidpointRounding.AwayFromZero) after EACH event; mutual_trust adds to rel(who -> target).trust unmodulated; a pair with no seed row starts at default_seed; unknown tag, empty name or who == target is skipped. Shape: seed rows are p's view of q; traits {id: Big Five} (an id absent is all 50); expect {p: {q: {trust, affection, debt, grudge}}}.",
+ "vectors": [
+  {
+   "name": "betrayal drops trust fast, affection slowly (neutral traits)",
+   "seed": [
+    {
+     "p": "a",
+     "q": "player",
+     "trust": 60,
+     "affection": 50,
+     "debt": 0,
+     "grudge": 10
+    }
+   ],
+   "traits": {
+    "a": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "betray",
+     "target": "a"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 30,
+      "affection": 38,
+      "debt": 0,
+      "grudge": 35
+     }
+    }
+   }
+  },
+  {
+   "name": "help raises debt and trust; a second help stacks",
+   "seed": [
+    {
+     "p": "a",
+     "q": "player",
+     "trust": 40,
+     "affection": 40,
+     "debt": 0,
+     "grudge": 10
+    }
+   ],
+   "traits": {
+    "a": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "help",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "help",
+     "target": "a"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 52,
+      "affection": 46,
+      "debt": 16,
+      "grudge": 6
+     }
+    },
+    "player": {
+     "a": {
+      "trust": 44,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     }
+    }
+   }
+  },
+  {
+   "name": "clamp at 0 and 100",
+   "seed": [
+    {
+     "p": "a",
+     "q": "player",
+     "trust": 98,
+     "affection": 50,
+     "debt": 90,
+     "grudge": 95
+    },
+    {
+     "p": "b",
+     "q": "player",
+     "trust": 5,
+     "affection": 5,
+     "debt": 5,
+     "grudge": 5
+    }
+   ],
+   "traits": {
+    "a": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    },
+    "b": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "save",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "harm",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "betray",
+     "target": "b"
+    },
+    {
+     "who": "player",
+     "tag": "debt_paid",
+     "target": "b"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 85,
+      "affection": 46,
+      "debt": 100,
+      "grudge": 100
+     }
+    },
+    "b": {
+     "player": {
+      "trust": 2,
+      "affection": 0,
+      "debt": 0,
+      "grudge": 30
+     }
+    },
+    "player": {
+     "a": {
+      "trust": 43,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     }
+    }
+   }
+  },
+  {
+   "name": "trait modulators: disagreeable grudge x1.5, neurotic trust loss x1.5 (trust of a: 37 - 22.5 = 14.5 rounds half up to 15, not to even 14), introvert affection x0.5, careless debt x0.6",
+   "seed": [
+    {
+     "p": "a",
+     "q": "player",
+     "trust": 43,
+     "affection": 50,
+     "debt": 50,
+     "grudge": 10
+    },
+    {
+     "p": "b",
+     "q": "player",
+     "trust": 50,
+     "affection": 50,
+     "debt": 0,
+     "grudge": 10
+    }
+   ],
+   "traits": {
+    "a": {
+     "open": 50,
+     "consc": 0,
+     "extra": 0,
+     "agree": 0,
+     "neuro": 100
+    },
+    "b": {
+     "open": 50,
+     "consc": 100,
+     "extra": 100,
+     "agree": 100,
+     "neuro": 0
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "insult",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "lie",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "praise",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "help",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "insult",
+     "target": "b"
+    },
+    {
+     "who": "player",
+     "tag": "lie",
+     "target": "b"
+    },
+    {
+     "who": "player",
+     "tag": "praise",
+     "target": "b"
+    },
+    {
+     "who": "player",
+     "tag": "help",
+     "target": "b"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 22,
+      "affection": 46,
+      "debt": 55,
+      "grudge": 28
+     }
+    },
+    "b": {
+     "player": {
+      "trust": 48,
+      "affection": 52,
+      "debt": 11,
+      "grudge": 14
+     }
+    },
+    "player": {
+     "a": {
+      "trust": 42,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     },
+     "b": {
+      "trust": 42,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     }
+    }
+   }
+  },
+  {
+   "name": "mutual trust: whoever confides trusts the other, both directions move; a pair no seed names starts at default_seed (40, 40, 0, 10)",
+   "seed": [],
+   "traits": {
+    "a": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    },
+    "b": {
+     "open": 50,
+     "consc": 50,
+     "extra": 50,
+     "agree": 50,
+     "neuro": 50
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "confide",
+     "target": "a"
+    },
+    {
+     "who": "a",
+     "tag": "confide",
+     "target": "player"
+    },
+    {
+     "who": "a",
+     "tag": "save",
+     "target": "b"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 53,
+      "affection": 44,
+      "debt": 0,
+      "grudge": 10
+     },
+     "b": {
+      "trust": 43,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     }
+    },
+    "player": {
+     "a": {
+      "trust": 53,
+      "affection": 44,
+      "debt": 0,
+      "grudge": 10
+     }
+    },
+    "b": {
+     "a": {
+      "trust": 52,
+      "affection": 46,
+      "debt": 20,
+      "grudge": 4
+     }
+    }
+   }
+  },
+  {
+   "name": "order matters and unknown tags, self acts and empty names are skipped",
+   "seed": [
+    {
+     "p": "a",
+     "q": "player",
+     "trust": 50,
+     "affection": 50,
+     "debt": 0,
+     "grudge": 40
+    },
+    {
+     "p": "a",
+     "q": "b",
+     "trust": 70,
+     "affection": 20,
+     "debt": 10,
+     "grudge": 0
+    }
+   ],
+   "traits": {
+    "a": {
+     "open": 30,
+     "consc": 70,
+     "extra": 60,
+     "agree": 40,
+     "neuro": 80
+    }
+   },
+   "events": [
+    {
+     "who": "player",
+     "tag": "insult",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "dance",
+     "target": "a"
+    },
+    {
+     "who": "a",
+     "tag": "help",
+     "target": "a"
+    },
+    {
+     "who": "",
+     "tag": "help",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "reconcile",
+     "target": "a"
+    },
+    {
+     "who": "b",
+     "tag": "promise_broken",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "promise_kept",
+     "target": "a"
+    },
+    {
+     "who": "player",
+     "tag": "harm",
+     "target": "a"
+    }
+   ],
+   "expect": {
+    "a": {
+     "player": {
+      "trust": 38,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 58
+     },
+     "b": {
+      "trust": 54,
+      "affection": 16,
+      "debt": 10,
+      "grudge": 7
+     }
+    },
+    "player": {
+     "a": {
+      "trust": 45,
+      "affection": 40,
+      "debt": 0,
+      "grudge": 10
+     }
+    }
+   }
+  }
+ ]
+}

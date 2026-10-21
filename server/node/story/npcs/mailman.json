@@ -1,0 +1,1261 @@
+{
+ "world": "mailman",
+ "version": 1,
+ "built": "2026-10-21",
+ "npcs": [
+  {
+   "id": "triệu khách",
+   "name": "Triệu Khách",
+   "aliases": [
+    "Người đưa thư nhân sâm",
+    "ginseng postman"
+   ],
+   "importance": 100,
+   "traits": {
+    "open": 72,
+    "consc": 70,
+    "extra": 35,
+    "agree": 38,
+    "neuro": 45
+   },
+   "speech": "terse",
+   "wants_to_say": "He is done fighting alone and wants a team he can trust.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "protective",
+    "ruthless",
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "đông tử",
+   "name": "Vương Đông Lượng",
+   "aliases": [
+    "Đông Tử",
+    "Vương"
+   ],
+   "importance": 96,
+   "traits": {
+    "open": 40,
+    "consc": 45,
+    "extra": 55,
+    "agree": 30,
+    "neuro": 65
+   },
+   "speech": "blunt",
+   "wants_to_say": "He leads a four-person group with Hắc Khổng Tước and a dwarf, and will bargain stamps to keep his life.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "cowardly",
+    "greedy"
+   ],
+   "source": ""
+  },
+  {
+   "id": "carrie",
+   "name": "Carrie",
+   "aliases": [
+    "Gia Lệ"
+   ],
+   "importance": 88,
+   "traits": {
+    "open": 75,
+    "consc": 60,
+    "extra": 40,
+    "agree": 60,
+    "neuro": 60
+   },
+   "speech": "formal",
+   "wants_to_say": "She survives on Đại Hạ aboard the crashed Noah and needs rescue; she can trigger a wormhole home.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "honest"
+   ],
+   "source": ""
+  },
+  {
+   "id": "hồng bà bà",
+   "name": "Hồng bà bà",
+   "aliases": [
+    "old woman in the kitchen",
+    "lão tổ tông",
+    "chủ nhân Quỷ thị",
+    "the Ghost Market Master",
+    "sư nương"
+   ],
+   "importance": 84,
+   "traits": {
+    "open": 70,
+    "consc": 80,
+    "extra": 25,
+    "agree": 20,
+    "neuro": 15
+   },
+   "speech": "cold",
+   "wants_to_say": "She is the sixteenth master of the Ghost Market and holds the tịch diệt seat among the ten peak postmen.",
+   "wants_to_hide": "Her real goal is to end the whole postman system, herself included.",
+   "hide_fid": 243,
+   "tags": [
+    "ruthless",
+    "proud",
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "heo mập",
+   "name": "Heo mập",
+   "aliases": [
+    "Fat Pig",
+    "lão Ngũ",
+    "Fifth",
+    "Phì Miêu"
+   ],
+   "importance": 79,
+   "traits": {
+    "open": 45,
+    "consc": 40,
+    "extra": 65,
+    "agree": 55,
+    "neuro": 40
+   },
+   "speech": "playful",
+   "wants_to_say": "He can fire Đọa ma pháo and knows the Ghost Market lies between the horror space and reality.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "ải cước hổ",
+   "name": "Ải Cước Hổ",
+   "aliases": [
+    "Short-legged Tiger"
+   ],
+   "importance": 75,
+   "traits": {
+    "open": 50,
+    "consc": 40,
+    "extra": 40,
+    "agree": 40,
+    "neuro": 70
+   },
+   "speech": "timid",
+   "wants_to_say": "He is a mid-rank postman who thinks only of running when a stronger foe like Huyền Xuyên shows up.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "cowardly"
+   ],
+   "source": ""
+  },
+  {
+   "id": "tề lượng",
+   "name": "Tề Lượng",
+   "aliases": [
+    "đại ca dẫn đầu",
+    "vú em",
+    "kẻ ba phải",
+    "big brother in the lead"
+   ],
+   "importance": 71,
+   "traits": {
+    "open": 45,
+    "consc": 75,
+    "extra": 60,
+    "agree": 70,
+    "neuro": 35
+   },
+   "speech": "warm",
+   "wants_to_say": "He stands second on the Huyền Thưởng Bảng and leads a team with healing holy light, protecting his men.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "protective",
+    "loyal",
+    "kind"
+   ],
+   "source": ""
+  },
+  {
+   "id": "âm dương lão nhân",
+   "name": "Âm Dương lão nhân",
+   "aliases": [
+    "không gian",
+    "lừa già",
+    "old man on the donkey",
+    "the keeper of Khách sạn Âm Dương"
+   ],
+   "importance": 67,
+   "traits": {
+    "open": 60,
+    "consc": 55,
+    "extra": 25,
+    "agree": 50,
+    "neuro": 40
+   },
+   "speech": "terse",
+   "wants_to_say": "He keeps the Yin-Yang Inn, the only way home, and represents space among the ten peak postmen.",
+   "wants_to_hide": "He hears the gods calling him and is slowly being assimilated.",
+   "hide_fid": 281,
+   "tags": [
+    "honest"
+   ],
+   "source": ""
+  },
+  {
+   "id": "vương ma tử",
+   "name": "Vương Ma Tử",
+   "aliases": [
+    "bản Đại Vương",
+    "Pockmark Vương",
+    "Miêu Nhân Phượng",
+    "Ngô Cửu"
+   ],
+   "importance": 63,
+   "traits": {
+    "open": 55,
+    "consc": 50,
+    "extra": 50,
+    "agree": 60,
+    "neuro": 45
+   },
+   "speech": "blunt",
+   "wants_to_say": "He lives in the abandoned land among crippled postmen and leads a second team under Triệu Khách.",
+   "wants_to_hide": "He is Ngô Cửu, who destroyed his own life stamp to hide from an enemy.",
+   "hide_fid": 471,
+   "tags": [
+    "loyal",
+    "honest"
+   ],
+   "source": ""
+  },
+  {
+   "id": "dương vạn tài",
+   "name": "Dương Vạn Tài",
+   "aliases": [
+    "Tài thần",
+    "Ninh Độc Khuyết",
+    "Mưu vương",
+    "Đại Đầu",
+    "Dương Đông",
+    "God of Wealth"
+   ],
+   "importance": 59,
+   "traits": {
+    "open": 65,
+    "consc": 70,
+    "extra": 40,
+    "agree": 25,
+    "neuro": 40
+   },
+   "speech": "mocking",
+   "wants_to_say": "He is the richest man in the Ghost Market, runs the chamber of commerce and betting, and copies medicine buns.",
+   "wants_to_hide": "His real name is Dương Đông.",
+   "hide_fid": 162,
+   "tags": [
+    "greedy",
+    "ambitious",
+    "cynical"
+   ],
+   "source": ""
+  },
+  {
+   "id": "cơ vô tuế",
+   "name": "Cơ Vô Tuế",
+   "aliases": [
+    "xác nữ",
+    "lão bà",
+    "the corpse woman",
+    "corpse woman in the red coffin"
+   ],
+   "importance": 55,
+   "traits": {
+    "open": 60,
+    "consc": 70,
+    "extra": 15,
+    "agree": 30,
+    "neuro": 15
+   },
+   "speech": "cold",
+   "wants_to_say": "She will say little, but she has given Triệu Khách the Tạo hóa châu and marks him as hers.",
+   "wants_to_hide": "She can read the old Chu script on the stele but will not explain it.",
+   "hide_fid": 258,
+   "tags": [
+    "proud",
+    "protective"
+   ],
+   "source": ""
+  },
+  {
+   "id": "hùng nhị",
+   "name": "Hùng Nhị",
+   "aliases": [
+    "Hơi thở tự nhiên",
+    "Bear Coat",
+    "Áo gấu",
+    "Hóa gấu"
+   ],
+   "importance": 51,
+   "traits": {
+    "open": 30,
+    "consc": 35,
+    "extra": 40,
+    "agree": 15,
+    "neuro": 55
+   },
+   "speech": "blunt",
+   "wants_to_say": "He is the bear spirit, son of the old bear woman lão thái and brother of Hùng Đại.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "vengeful"
+   ],
+   "source": ""
+  },
+  {
+   "id": "ngô á",
+   "name": "Ngô Á",
+   "aliases": [
+    "vampire postman",
+    "Batman",
+    "lão Nha"
+   ],
+   "importance": 46,
+   "traits": {
+    "open": 55,
+    "consc": 60,
+    "extra": 45,
+    "agree": 50,
+    "neuro": 40
+   },
+   "speech": "terse",
+   "wants_to_say": "He is a vampire-line veteran and Hồng Yên quán VIP who pushes Tề Lượng's alliance along.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "ambitious"
+   ],
+   "source": ""
+  },
+  {
+   "id": "đại giác",
+   "name": "Đại Giác",
+   "aliases": [
+    "ác niệm Đại Giác",
+    "evil thought of Đại Giác"
+   ],
+   "importance": 42,
+   "traits": {
+    "open": 50,
+    "consc": 60,
+    "extra": 35,
+    "agree": 10,
+    "neuro": 40
+   },
+   "speech": "cold",
+   "wants_to_say": "His evil thought wants to refine the relic in his skull and spread, possessing elders like Thanh Chính.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "ruthless",
+    "ambitious"
+   ],
+   "source": ""
+  },
+  {
+   "id": "kẻ nghiện thuốc",
+   "name": "Kẻ nghiện thuốc",
+   "aliases": [
+    "the Smoker",
+    "Smoker"
+   ],
+   "importance": 38,
+   "traits": {
+    "open": 55,
+    "consc": 40,
+    "extra": 45,
+    "agree": 45,
+    "neuro": 55
+   },
+   "speech": "mocking",
+   "wants_to_say": "He swaps stamps at the fairs and offers contact through his cold fire stone.",
+   "wants_to_hide": "He bears a slave mark that makes him the Market's servant for life.",
+   "hide_fid": 473,
+   "tags": [
+    "cynical",
+    "greedy",
+    "cowardly"
+   ],
+   "source": ""
+  },
+  {
+   "id": "đãng trầm",
+   "name": "Đãng Trầm",
+   "aliases": [
+    "the ragged Daoist"
+   ],
+   "importance": 34,
+   "traits": {
+    "open": 85,
+    "consc": 60,
+    "extra": 30,
+    "agree": 40,
+    "neuro": 30
+   },
+   "speech": "formal",
+   "wants_to_say": "He chose his candidate before he died, so that candidate can still enter.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "proud"
+   ],
+   "source": ""
+  },
+  {
+   "id": "lão đầu tử",
+   "name": "lão đầu tử",
+   "aliases": [
+    "Lão đầu tử",
+    "lão gia tử",
+    "sư phụ",
+    "the cooking master",
+    "Nhị ma tử"
+   ],
+   "importance": 30,
+   "traits": {
+    "open": 40,
+    "consc": 75,
+    "extra": 35,
+    "agree": 70,
+    "neuro": 45
+   },
+   "speech": "warm",
+   "wants_to_say": "He is Triệu Khách's cooking master in Lạc Đô and has searched his whole life for the woman who left him.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "kind"
+   ],
+   "source": ""
+  },
+  {
+   "id": "tam linh cô nãi nãi",
+   "name": "Tam Linh cô nãi nãi",
+   "aliases": [
+    "Linh cô lão thái",
+    "Linh cô nãi nãi",
+    "Tiên cô lão thái",
+    "the old woman"
+   ],
+   "importance": 26,
+   "traits": {
+    "open": 50,
+    "consc": 55,
+    "extra": 45,
+    "agree": 45,
+    "neuro": 40
+   },
+   "speech": "formal",
+   "wants_to_say": "Villagers revere her as a living Bồ Tát; she commands her red Hồ linh as a đệ tử xuất mã.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "pious",
+    "proud"
+   ],
+   "source": ""
+  },
+  {
+   "id": "camilleri",
+   "name": "Camilleri",
+   "aliases": [
+    "Đại Dương Mã",
+    "Thiên hậu Bắc Mĩ"
+   ],
+   "importance": 22,
+   "traits": {
+    "open": 65,
+    "consc": 50,
+    "extra": 70,
+    "agree": 60,
+    "neuro": 60
+   },
+   "speech": "playful",
+   "wants_to_say": "She keeps Gia Ngọc safe; that was her price for joining. She fears heights badly.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "protective",
+    "loyal"
+   ],
+   "source": ""
+  },
+  {
+   "id": "thuỷ lộc",
+   "name": "Thuỷ Lộc",
+   "aliases": [
+    "the old moustached demon",
+    "quản gia",
+    "old deer demon"
+   ],
+   "importance": 18,
+   "traits": {
+    "open": 75,
+    "consc": 60,
+    "extra": 40,
+    "agree": 50,
+    "neuro": 45
+   },
+   "speech": "formal",
+   "wants_to_say": "He is a self-taught yêu and former scholar who now serves Triệu Khách as steward inside the Đại Hạ đỉnh.",
+   "wants_to_hide": "He calls himself a yêu quái, but even Triệu Khách cannot tell what he really is.",
+   "hide_fid": 206,
+   "tags": [
+    "loyal",
+    "greedy"
+   ],
+   "source": ""
+  },
+  {
+   "id": "mặc cúc",
+   "name": "Mặc Cúc",
+   "aliases": [
+    "Mặc Cúc tỷ tỷ",
+    "đại chủ quản",
+    "chief steward"
+   ],
+   "importance": 13,
+   "traits": {
+    "open": 45,
+    "consc": 75,
+    "extra": 45,
+    "agree": 40,
+    "neuro": 55
+   },
+   "speech": "formal",
+   "wants_to_say": "She is chief steward of Hồng Yên quán, one of its twelve stewards, favoured by Hồng bà bà.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "ruthless",
+    "ambitious"
+   ],
+   "source": ""
+  },
+  {
+   "id": "lôi mẫu",
+   "name": "Lôi Mẫu",
+   "aliases": [
+    "little-girl personality Lôi Mẫu"
+   ],
+   "importance": 9,
+   "traits": {
+    "open": 60,
+    "consc": 45,
+    "extra": 35,
+    "agree": 60,
+    "neuro": 50
+   },
+   "speech": "playful",
+   "wants_to_say": "She is a personality living in Triệu Khách's body, talking to him mind-to-mind like twins.",
+   "wants_to_hide": "She lives inside Triệu Khách's body as a personality built to pass through to his main mind.",
+   "hide_fid": 213,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": ""
+  },
+  {
+   "id": "trù tam điên",
+   "name": "Trù Tam Điên",
+   "aliases": [
+    "Quỷ Trù Vương",
+    "Ghost Chef King",
+    "Điên gia",
+    "Điên lão"
+   ],
+   "importance": 5,
+   "traits": {
+    "open": 55,
+    "consc": 70,
+    "extra": 45,
+    "agree": 45,
+    "neuro": 45
+   },
+   "speech": "blunt",
+   "wants_to_say": "He is the head cook of the Bạch gia back kitchen, devoted to his paper wife Thúy Lan and their noodle shop.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "proud"
+   ],
+   "source": ""
+  },
+  {
+   "id": "yuri",
+   "name": "Yuri",
+   "aliases": [],
+   "importance": 1,
+   "traits": {
+    "open": 45,
+    "consc": 65,
+    "extra": 30,
+    "agree": 25,
+    "neuro": 70
+   },
+   "speech": "cold",
+   "wants_to_say": "He is the weakened Tinh Minh captain who commanded the Noah, and he needs help.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "proud",
+    "vengeful"
+   ],
+   "source": ""
+  }
+ ],
+ "relations": [
+  {
+   "p": "triệu khách",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "triệu khách",
+   "q": "hồng bà bà",
+   "trust": 40,
+   "affection": 30,
+   "debt": 40,
+   "grudge": 30,
+   "why": "She gave him Trọng sinh đan; he refused the stamp she wanted (fid 254, 680)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "heo mập",
+   "trust": 75,
+   "affection": 70,
+   "debt": 30,
+   "grudge": 0,
+   "why": "Heo mập is his partner, bound by half a drop of zombie blood (fid 168, 514)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "vương ma tử",
+   "trust": 90,
+   "affection": 80,
+   "debt": 20,
+   "grudge": 0,
+   "why": "In the mysterious land he trusted no one but Vương Ma Tử (fid 63)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "cơ vô tuế",
+   "trust": 85,
+   "affection": 95,
+   "debt": 30,
+   "grudge": 10,
+   "why": "He treats her as his wife (fid 156, 211)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "lão đầu tử",
+   "trust": 85,
+   "affection": 85,
+   "debt": 70,
+   "grudge": 0,
+   "why": "Lão đầu tử is his cooking master (fid 146)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "camilleri",
+   "trust": 65,
+   "affection": 50,
+   "debt": 10,
+   "grudge": 0,
+   "why": "Allied with Camilleri against Mân Côi đoàn (fid 76, 542)"
+  },
+  {
+   "p": "triệu khách",
+   "q": "yuri",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 85,
+   "why": "Triệu Khách abused Yuri; Yuri's hatred puts him in the enemy camp (fid 104)"
+  },
+  {
+   "p": "đông tử",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "đông tử",
+   "q": "triệu khách",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 35,
+   "why": "Triệu Khách cuts his throat when he will not open his stamp book (fid 160)"
+  },
+  {
+   "p": "carrie",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "player",
+   "trust": 25,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 10,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "triệu khách",
+   "trust": 45,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 35,
+   "why": "Pair enemy_of yet she gave him the gold Trọng sinh đan (fid 254)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "dương vạn tài",
+   "trust": 55,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She made him raise 30 million post points (fid 247)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "cơ vô tuế",
+   "trust": 40,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She calls Cơ Vô Tuế a special case that escaped by a road that cannot be copied (fid 282)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "kẻ nghiện thuốc",
+   "trust": 55,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She sends the Smoker to help Triệu Khách (fid 171)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "đãng trầm",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 85,
+   "why": "She shattered his stamp and cut his throat (fid 15)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "lão đầu tử",
+   "trust": 60,
+   "affection": 70,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Pair loves; he searched all his life for her (fid 149)"
+  },
+  {
+   "p": "hồng bà bà",
+   "q": "mặc cúc",
+   "trust": 75,
+   "affection": 60,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Mặc Cúc, her favoured chief steward, serves her (fid 169, 78)"
+  },
+  {
+   "p": "heo mập",
+   "q": "player",
+   "trust": 35,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "heo mập",
+   "q": "triệu khách",
+   "trust": 80,
+   "affection": 70,
+   "debt": 45,
+   "grudge": 0,
+   "why": "Bound to Triệu Khách by zombie blood; received Bàn Tam's gold stamp from him (fid 514, 702)"
+  },
+  {
+   "p": "heo mập",
+   "q": "vương ma tử",
+   "trust": 70,
+   "affection": 60,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Vương Ma Tử partners Triệu Khách together with Heo mập (fid 221)"
+  },
+  {
+   "p": "ải cước hổ",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "ải cước hổ",
+   "q": "triệu khách",
+   "trust": 60,
+   "affection": 45,
+   "debt": 40,
+   "grudge": 0,
+   "why": "Triệu Khách gave him a seat on the team and kept his body in a bottle (fid 515, 109)"
+  },
+  {
+   "p": "tề lượng",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "tề lượng",
+   "q": "triệu khách",
+   "trust": 55,
+   "affection": 45,
+   "debt": 30,
+   "grudge": 5,
+   "why": "Fought the sound army at the gate beside him (fid 542); he left Tề Lượng the black command flag (fid 693)"
+  },
+  {
+   "p": "tề lượng",
+   "q": "ngô á",
+   "trust": 65,
+   "affection": 50,
+   "debt": 25,
+   "grudge": 0,
+   "why": "Ngô Á belongs to his alliance (fid 530)"
+  },
+  {
+   "p": "âm dương lão nhân",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "vương ma tử",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "vương ma tử",
+   "q": "triệu khách",
+   "trust": 85,
+   "affection": 80,
+   "debt": 10,
+   "grudge": 0,
+   "why": "Most frequent partner of Triệu Khách (fid 63, 221)"
+  },
+  {
+   "p": "vương ma tử",
+   "q": "hồng bà bà",
+   "trust": 50,
+   "affection": 30,
+   "debt": 60,
+   "grudge": 0,
+   "why": "Owes the Market's master a favour for the refuge (lore)"
+  },
+  {
+   "p": "vương ma tử",
+   "q": "heo mập",
+   "trust": 65,
+   "affection": 60,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Partner with Heo mập beside Triệu Khách (fid 221)"
+  },
+  {
+   "p": "vương ma tử",
+   "q": "camilleri",
+   "trust": 50,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Co-party with Triệu Khách to Camilleri's Khế ước chi chương (fid 76)"
+  },
+  {
+   "p": "dương vạn tài",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "dương vạn tài",
+   "q": "triệu khách",
+   "trust": 35,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 40,
+   "why": "Pair enemy_of; shares first place on the bounty board (fid 56)"
+  },
+  {
+   "p": "dương vạn tài",
+   "q": "hồng bà bà",
+   "trust": 50,
+   "affection": 25,
+   "debt": 55,
+   "grudge": 40,
+   "why": "She made him raise 30 million points by any means, leaving him penniless (fid 247)"
+  },
+  {
+   "p": "cơ vô tuế",
+   "q": "player",
+   "trust": 25,
+   "affection": 15,
+   "debt": 0,
+   "grudge": 10,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "cơ vô tuế",
+   "q": "triệu khách",
+   "trust": 65,
+   "affection": 85,
+   "debt": 20,
+   "grudge": 20,
+   "why": "Treated by him as his wife, yet struck him in the runners' hunt (fid 156, 416)"
+  },
+  {
+   "p": "hùng nhị",
+   "q": "player",
+   "trust": 15,
+   "affection": 15,
+   "debt": 0,
+   "grudge": 25,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "hùng nhị",
+   "q": "triệu khách",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 85,
+   "why": "Triệu Khách taunted him into a spiked pit and killed him (fid 750)"
+  },
+  {
+   "p": "ngô á",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "ngô á",
+   "q": "triệu khách",
+   "trust": 55,
+   "affection": 40,
+   "debt": 15,
+   "grudge": 0,
+   "why": "Triệu Khách lent him Ác quỷ túc cụ (fid 631)"
+  },
+  {
+   "p": "ngô á",
+   "q": "tề lượng",
+   "trust": 70,
+   "affection": 55,
+   "debt": 30,
+   "grudge": 0,
+   "why": "Member of his alliance; gave him a Thái dương thủy (fid 339, 530)"
+  },
+  {
+   "p": "đại giác",
+   "q": "player",
+   "trust": 10,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 30,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "đại giác",
+   "q": "triệu khách",
+   "trust": 0,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 90,
+   "why": "Triệu Khách crushed the last of his evil thought (fid 898)"
+  },
+  {
+   "p": "kẻ nghiện thuốc",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "kẻ nghiện thuốc",
+   "q": "triệu khách",
+   "trust": 55,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Sent to help him and gave him a Lãnh hỏa thạch (fid 171, lore)"
+  },
+  {
+   "p": "kẻ nghiện thuốc",
+   "q": "hồng bà bà",
+   "trust": 55,
+   "affection": 25,
+   "debt": 70,
+   "grudge": 45,
+   "why": "He bears a slave mark and serves her; she sends him to help Triệu Khách (fid 171, 473)"
+  },
+  {
+   "p": "kẻ nghiện thuốc",
+   "q": "dương vạn tài",
+   "trust": 45,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Told Triệu Khách about Dương Đông and his unique stamp (fid 659)"
+  },
+  {
+   "p": "đãng trầm",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "đãng trầm",
+   "q": "hồng bà bà",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 85,
+   "why": "She shattered his gold stamp and cut his throat (fid 15, 799)"
+  },
+  {
+   "p": "lão đầu tử",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "lão đầu tử",
+   "q": "triệu khách",
+   "trust": 80,
+   "affection": 90,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Triệu Khách's cooking master (fid 146)"
+  },
+  {
+   "p": "lão đầu tử",
+   "q": "hồng bà bà",
+   "trust": 50,
+   "affection": 90,
+   "debt": 0,
+   "grudge": 20,
+   "why": "He loves her; she left him and sealed him in the ice tomb (fid 149, 390)"
+  },
+  {
+   "p": "tam linh cô nãi nãi",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "camilleri",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "camilleri",
+   "q": "triệu khách",
+   "trust": 65,
+   "affection": 50,
+   "debt": 15,
+   "grudge": 0,
+   "why": "Ally; co-party to the Khế ước chi chương (fid 76, 344)"
+  },
+  {
+   "p": "camilleri",
+   "q": "vương ma tử",
+   "trust": 50,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Co-party to the Khế ước chi chương (fid 76)"
+  },
+  {
+   "p": "thuỷ lộc",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "thuỷ lộc",
+   "q": "triệu khách",
+   "trust": 70,
+   "affection": 60,
+   "debt": 45,
+   "grudge": 0,
+   "why": "Serves Triệu Khách as steward; received buns for his blood (fid 203, 322)"
+  },
+  {
+   "p": "mặc cúc",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "mặc cúc",
+   "q": "triệu khách",
+   "trust": 50,
+   "affection": 40,
+   "debt": 20,
+   "grudge": 0,
+   "why": "Offered the Chân Vũ stamp; later calls him 'thiếu gia' (fid 187, 680)"
+  },
+  {
+   "p": "mặc cúc",
+   "q": "hồng bà bà",
+   "trust": 80,
+   "affection": 60,
+   "debt": 60,
+   "grudge": 0,
+   "why": "Her favoured chief steward; serves her (fid 78, 169)"
+  },
+  {
+   "p": "mặc cúc",
+   "q": "cơ vô tuế",
+   "trust": 15,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 35,
+   "why": "She fears Cơ Vô Tuế (fid 187)"
+  },
+  {
+   "p": "lôi mẫu",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "lôi mẫu",
+   "q": "triệu khách",
+   "trust": 95,
+   "affection": 90,
+   "debt": 50,
+   "grudge": 0,
+   "why": "A personality living in his body (fid 213)"
+  },
+  {
+   "p": "trù tam điên",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "trù tam điên",
+   "q": "triệu khách",
+   "trust": 55,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Triệu Khách became his sous-chef (fid 712)"
+  },
+  {
+   "p": "yuri",
+   "q": "player",
+   "trust": 15,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 20,
+   "why": "unknown newcomer: stranger level"
+  },
+  {
+   "p": "yuri",
+   "q": "triệu khách",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 90,
+   "why": "Triệu Khách abused him; Yuri's hatred made the enemy camp (fid 104, 769)"
+  }
+ ]
+}

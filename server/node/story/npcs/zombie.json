@@ -1,0 +1,904 @@
+{
+ "world": "zombie",
+ "version": 1,
+ "built": "2026-10-21",
+ "npcs": [
+  {
+   "id": "trần khải",
+   "name": "Trần Khải",
+   "aliases": [
+    "Chen Kai",
+    "thiếu tá Trần",
+    "Major Trần Khải"
+   ],
+   "importance": 100,
+   "traits": {
+    "open": 60,
+    "consc": 78,
+    "extra": 35,
+    "agree": 45,
+    "neuro": 40
+   },
+   "speech": "terse",
+   "wants_to_say": "He commands the defence of Dalian's port and buys fuel from Xiao Beifeng; he feels where a defensive line will break.",
+   "wants_to_hide": "He holds the Line System and hides it from Tô Cảnh's institute, which wants all unturned.",
+   "hide_fid": 1088,
+   "tags": [
+    "protective",
+    "proud",
+    "honest"
+   ],
+   "source": "Trần Khải; Line System"
+  },
+  {
+   "id": "taro whitman",
+   "name": "Taro Whitman",
+   "aliases": [
+    "Whitman",
+    "Taro",
+    "người đưa hàng"
+   ],
+   "importance": 91,
+   "traits": {
+    "open": 62,
+    "consc": 60,
+    "extra": 66,
+    "agree": 62,
+    "neuro": 45
+   },
+   "speech": "playful",
+   "wants_to_say": "He knows Kisaragi Nam to Khu Đông better than anyone and will sell a safe route or teach scavenging through it.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "honest",
+    "kind"
+   ],
+   "source": "Route System"
+  },
+  {
+   "id": "tetsuo price",
+   "name": "Tetsuo Price",
+   "aliases": [
+    "Price",
+    "ông Price",
+    "the Nagoya ham operator"
+   ],
+   "importance": 87,
+   "traits": {
+    "open": 55,
+    "consc": 72,
+    "extra": 40,
+    "agree": 66,
+    "neuro": 48
+   },
+   "speech": "formal",
+   "wants_to_say": "He broadcasts nightly at 22:00 on the ham bands from Nagoya and relays Yoon Ha-eun's Korean broadcasts at 20:00.",
+   "wants_to_hide": "He is surrounded and starving in his tower but tells no one, eating once a day.",
+   "hide_fid": 1084,
+   "tags": [
+    "honest",
+    "protective",
+    "proud"
+   ],
+   "source": "Tetsuo Price, the Nagoya ham operator"
+  },
+  {
+   "id": "the observer",
+   "name": "the Observer",
+   "aliases": [
+    "Ren Halloway",
+    "Observer",
+    "Kẻ Quan Sát",
+    "Halloway"
+   ],
+   "importance": 83,
+   "traits": {
+    "open": 88,
+    "consc": 70,
+    "extra": 40,
+    "agree": 12,
+    "neuro": 22
+   },
+   "speech": "mocking",
+   "wants_to_say": "He wants the Mother for himself.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "ruthless",
+    "cynical",
+    "proud"
+   ],
+   "source": "The Observer"
+  },
+  {
+   "id": "daisuke morgan",
+   "name": "Captain Daisuke Morgan",
+   "aliases": [
+    "Daisuke Morgan",
+    "Morgan",
+    "đại úy Morgan"
+   ],
+   "importance": 74,
+   "traits": {
+    "open": 48,
+    "consc": 74,
+    "extra": 42,
+    "agree": 60,
+    "neuro": 52
+   },
+   "speech": "terse",
+   "wants_to_say": "His company holds the bridges, and his wife and two children are in a refugee block in the Green Zone's park.",
+   "wants_to_hide": "He is secretly a hidden unturned with a Command System, hiding it from Lab K and from Langley.",
+   "hide_fid": 1233,
+   "tags": [
+    "loyal",
+    "protective",
+    "honest"
+   ],
+   "source": "The Cordon"
+  },
+  {
+   "id": "reina carter",
+   "name": "Reina Carter",
+   "aliases": [
+    "Reina",
+    "Null",
+    "trung sĩ Carter"
+   ],
+   "importance": 70,
+   "traits": {
+    "open": 45,
+    "consc": 65,
+    "extra": 30,
+    "agree": 55,
+    "neuro": 50
+   },
+   "speech": "blunt",
+   "wants_to_say": "She grew up in her father's garage in Kisaragi Cũ; she watches from the rear on a roof and her rifle can pop a Bloat from afar.",
+   "wants_to_hide": "After a bite she gained Null, a zone of biological silence, and hides it from her squad and Captain Morgan.",
+   "hide_fid": 668,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": "Reina Carter"
+  },
+  {
+   "id": "mari ford",
+   "name": "Lieutenant Mari Ford",
+   "aliases": [
+    "Ford",
+    "Mari Ford",
+    "trung úy Ford"
+   ],
+   "importance": 66,
+   "traits": {
+    "open": 60,
+    "consc": 70,
+    "extra": 55,
+    "agree": 62,
+    "neuro": 42
+   },
+   "speech": "formal",
+   "wants_to_say": "She wants her mother's family in Itoman on a flight to Hawaii, and she speaks for the bases to the prefecture.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "kind",
+    "honest"
+   ],
+   "source": "USFK liaison"
+  },
+  {
+   "id": "dr. takeshi morrow",
+   "name": "Dr. Takeshi Morrow",
+   "aliases": [
+    "Morrow",
+    "Dr. Morrow",
+    "nhà virus học"
+   ],
+   "importance": 61,
+   "traits": {
+    "open": 85,
+    "consc": 72,
+    "extra": 25,
+    "agree": 38,
+    "neuro": 35
+   },
+   "speech": "cold",
+   "wants_to_say": "He pays or asks for sealed tissue samples (Bloater fluid, Lurker throat, Node ridge) and will tell Test Subject 7's weakness only if pressed.",
+   "wants_to_hide": "He treats the infection of the Hacker System's holder as a dataset he may slow or steer.",
+   "hide_fid": 1909,
+   "tags": [
+    "ambitious",
+    "cynical",
+    "ruthless"
+   ],
+   "source": "Lab K; White Cross"
+  },
+  {
+   "id": "haruto quinn",
+   "name": "Haruto Quinn",
+   "aliases": [
+    "Haruto",
+    "WATCHMAN-7",
+    "Yoshiro Pembroke",
+    "K-2"
+   ],
+   "importance": 53,
+   "traits": {
+    "open": 52,
+    "consc": 68,
+    "extra": 36,
+    "agree": 58,
+    "neuro": 45
+   },
+   "speech": "warm",
+   "wants_to_say": "He wants the character to live and to stop reporting to Lighthouse.",
+   "wants_to_hide": "He is WATCHMAN-7 of Lighthouse and keeps a case holding a sealed sample of the strain in his flat.",
+   "hide_fid": 952,
+   "tags": [
+    "protective",
+    "loyal",
+    "kind"
+   ],
+   "source": "Lighthouse; Chung cư Kisaragi"
+  },
+  {
+   "id": "sakura",
+   "name": "Sakura",
+   "aliases": [
+    "Sakura Ellis",
+    "Ellis",
+    "vận động viên"
+   ],
+   "importance": 48,
+   "traits": {
+    "open": 55,
+    "consc": 70,
+    "extra": 50,
+    "agree": 58,
+    "neuro": 45
+   },
+   "speech": "blunt",
+   "wants_to_say": "She wants her younger brother Ken alive in Nagoya and to be useful to someone who does not waste her.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "protective",
+    "proud"
+   ],
+   "source": "Sakura Ellis"
+  },
+  {
+   "id": "mio ashford",
+   "name": "Mio Ashford",
+   "aliases": [
+    "Dr. Mio Ashford",
+    "Mio",
+    "Dr. Ashford",
+    "bác sĩ Mio"
+   ],
+   "importance": 44,
+   "traits": {
+    "open": 62,
+    "consc": 70,
+    "extra": 38,
+    "agree": 60,
+    "neuro": 62
+   },
+   "speech": "blunt",
+   "wants_to_say": "With Dr. Morrow's data she wants a real treatment for the infection, and she wants the Night Nurse gone for the pharmacy stock and basement stair.",
+   "wants_to_hide": "She has Stasis, which slows infection at the cost of blue hands for an hour.",
+   "hide_fid": 651,
+   "tags": [
+    "protective",
+    "kind",
+    "proud"
+   ],
+   "source": "White Cross; Lab K"
+  },
+  {
+   "id": "hana whitlock",
+   "name": "Hana Whitlock",
+   "aliases": [
+    "Hana",
+    "Cầu Chì",
+    "cô kỹ sư"
+   ],
+   "importance": 35,
+   "traits": {
+    "open": 78,
+    "consc": 66,
+    "extra": 28,
+    "agree": 55,
+    "neuro": 62
+   },
+   "speech": "timid",
+   "wants_to_say": "She wants a project bigger than a single drone and praise from someone who knows good work.",
+   "wants_to_hide": "She knows Kazuo was bitten on a vending-machine run and hides it.",
+   "hide_fid": 769,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": "Hana Whitlock"
+  },
+  {
+   "id": "kaede rowe",
+   "name": "Kaede Rowe",
+   "aliases": [
+    "Rowe",
+    "Kaede",
+    "thợ săn K"
+   ],
+   "importance": 31,
+   "traits": {
+    "open": 48,
+    "consc": 72,
+    "extra": 40,
+    "agree": 28,
+    "neuro": 40
+   },
+   "speech": "cold",
+   "wants_to_say": "She leads hunters who capture unturned for the Cordon's bounty; her younger sister Nanako is in the Green Zone's refugee camp.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "ruthless",
+    "protective",
+    "loyal"
+   ],
+   "source": "The K-hunters; Cordon"
+  },
+  {
+   "id": "reed maynard",
+   "name": "Reed",
+   "aliases": [
+    "Reed Maynard",
+    "Utako Reed",
+    "Corporal Reed"
+   ],
+   "importance": 27,
+   "traits": {
+    "open": 45,
+    "consc": 60,
+    "extra": 45,
+    "agree": 50,
+    "neuro": 48
+   },
+   "speech": "blunt",
+   "wants_to_say": "He carries cable ties for Kaede's hunts and is a hired hand of the K-hunters.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "greedy"
+   ],
+   "source": "K-hunters"
+  },
+  {
+   "id": "kang seo-yeon",
+   "name": "Kang Seo-yeon",
+   "aliases": [
+    "Seo-yeon",
+    "Triage"
+   ],
+   "importance": 23,
+   "traits": {
+    "open": 55,
+    "consc": 80,
+    "extra": 35,
+    "agree": 58,
+    "neuro": 48
+   },
+   "speech": "terse",
+   "wants_to_say": "She works the triage tent at Busan port at dawn and dusk and can read on sight who among the bitten will turn.",
+   "wants_to_hide": "She is secretly an unturned hiding inside the system.",
+   "hide_fid": 1368,
+   "tags": [
+    "protective",
+    "honest"
+   ],
+   "source": "Triage System"
+  },
+  {
+   "id": "ryota banks",
+   "name": "Sergeant Ryota Banks",
+   "aliases": [
+    "Ryota Banks",
+    "Banks",
+    "trung sĩ Banks"
+   ],
+   "importance": 18,
+   "traits": {
+    "open": 40,
+    "consc": 50,
+    "extra": 48,
+    "agree": 38,
+    "neuro": 62
+   },
+   "speech": "blunt",
+   "wants_to_say": "He wants his wife and five-year-old son out of Kōtō ward and runs the Rainbow Bridge checkpoint.",
+   "wants_to_hide": "He secretly sells crossings through his checkpoint to the Kurogane-kai to pay for a boat.",
+   "hide_fid": 1002,
+   "tags": [
+    "greedy",
+    "protective",
+    "cowardly"
+   ],
+   "source": "JSDF"
+  },
+  {
+   "id": "jin archer",
+   "name": "Jin Archer",
+   "aliases": [
+    "Archer",
+    "Mirror",
+    "thằng Gương"
+   ],
+   "importance": 10,
+   "traits": {
+    "open": 65,
+    "consc": 35,
+    "extra": 58,
+    "agree": 45,
+    "neuro": 60
+   },
+   "speech": "playful",
+   "wants_to_say": "He is a 19-year-old skater and petty thief from Westbridge; he fears the Cordon's lab.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "cowardly",
+    "greedy"
+   ],
+   "source": "Mirror System"
+  },
+  {
+   "id": "hideki graves",
+   "name": "Colonel Hideki Graves",
+   "aliases": [
+    "Graves",
+    "Colonel Graves",
+    "Đại tá Graves"
+   ],
+   "importance": 5,
+   "traits": {
+    "open": 30,
+    "consc": 80,
+    "extra": 35,
+    "agree": 15,
+    "neuro": 55
+   },
+   "speech": "cold",
+   "wants_to_say": "He wants to capture Đối tượng K for the university lab, believing they are a cure or a weapon.",
+   "wants_to_hide": "He hides an outbreak in the Camp Harlan field hospital from his ranks.",
+   "hide_fid": 797,
+   "tags": [
+    "ruthless",
+    "ambitious",
+    "proud"
+   ],
+   "source": "The Cordon"
+  },
+  {
+   "id": "tetsu hargrove",
+   "name": "Tetsu Hargrove",
+   "aliases": [
+    "Tetsu",
+    "thủ lĩnh Những Kẻ Bên Lề"
+   ],
+   "importance": 1,
+   "traits": {
+    "open": 55,
+    "consc": 65,
+    "extra": 45,
+    "agree": 62,
+    "neuro": 50
+   },
+   "speech": "warm",
+   "wants_to_say": "He asks that a rope be tied at nightfall, knowing the Hive's pull, and for secrecy about the Fringe's tunnels.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "protective",
+    "honest",
+    "loyal"
+   ],
+   "source": "The Fringe"
+  }
+ ],
+ "relations": [
+  {
+   "p": "trần khải",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "taro whitman",
+   "q": "player",
+   "trust": 45,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "taro whitman",
+   "q": "reina carter",
+   "trust": 50,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Taro has sold maps to Reina's squad."
+  },
+  {
+   "p": "tetsuo price",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "the observer",
+   "q": "player",
+   "trust": 10,
+   "affection": 15,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger is a new mind to watch; he treats the living as sport and study."
+  },
+  {
+   "p": "the observer",
+   "q": "haruto quinn",
+   "trust": 5,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 40,
+   "why": "He reads Lighthouse agents through the dead and is their enemy; Haruto is Lighthouse."
+  },
+  {
+   "p": "the observer",
+   "q": "hana whitlock",
+   "trust": 5,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 30,
+   "why": "He is a threat to drone flyers; Hana is one."
+  },
+  {
+   "p": "the observer",
+   "q": "hideki graves",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 25,
+   "why": "The Cordon treats him as an enemy and wants his head; he treats its patrols as sport."
+  },
+  {
+   "p": "the observer",
+   "q": "tetsu hargrove",
+   "trust": 5,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 25,
+   "why": "He watches the Fringe and sometimes herds the dead onto them."
+  },
+  {
+   "p": "daisuke morgan",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger; he guards his men and his secret first."
+  },
+  {
+   "p": "daisuke morgan",
+   "q": "reina carter",
+   "trust": 70,
+   "affection": 55,
+   "debt": 20,
+   "grudge": 0,
+   "why": "Reina is the sergeant of his company; he is loyal to his men."
+  },
+  {
+   "p": "daisuke morgan",
+   "q": "hideki graves",
+   "trust": 45,
+   "affection": 25,
+   "debt": 10,
+   "grudge": 10,
+   "why": "He serves Graves in the Cordon but is loyal to his men above it."
+  },
+  {
+   "p": "reina carter",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "reina carter",
+   "q": "daisuke morgan",
+   "trust": 65,
+   "affection": 55,
+   "debt": 30,
+   "grudge": 0,
+   "why": "Morgan is her company commander, though she hides Null from him."
+  },
+  {
+   "p": "mari ford",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "dr. takeshi morrow",
+   "q": "player",
+   "trust": 30,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger; to him a newcomer is first a possible source of samples."
+  },
+  {
+   "p": "dr. takeshi morrow",
+   "q": "mio ashford",
+   "trust": 55,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 5,
+   "why": "Mio and Morrow work together at the hospital and want the same samples."
+  },
+  {
+   "p": "dr. takeshi morrow",
+   "q": "kaede rowe",
+   "trust": 45,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Kaede's K-hunters are Lab K's men, as Morrow is."
+  },
+  {
+   "p": "haruto quinn",
+   "q": "player",
+   "trust": 45,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Facts say he wants the character to live; to a newcomer he is guarded but friendly."
+  },
+  {
+   "p": "haruto quinn",
+   "q": "sakura",
+   "trust": 50,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 0,
+   "why": "He reads people well; she dislikes that but grows to like his curry."
+  },
+  {
+   "p": "sakura",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "sakura",
+   "q": "haruto quinn",
+   "trust": 45,
+   "affection": 45,
+   "debt": 0,
+   "grudge": 5,
+   "why": "She dislikes how well Haruto reads people but grows to like his curry."
+  },
+  {
+   "p": "sakura",
+   "q": "mio ashford",
+   "trust": 60,
+   "affection": 55,
+   "debt": 25,
+   "grudge": 0,
+   "why": "Mio can strap Sakura's injured knee properly."
+  },
+  {
+   "p": "mio ashford",
+   "q": "player",
+   "trust": 40,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Doctor in a besieged hospital: wary of strangers who may carry a bite."
+  },
+  {
+   "p": "mio ashford",
+   "q": "dr. takeshi morrow",
+   "trust": 55,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 10,
+   "why": "She shares his data goal, but her ex-husband worked for him and may have known."
+  },
+  {
+   "p": "mio ashford",
+   "q": "sakura",
+   "trust": 60,
+   "affection": 55,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She treats Sakura's knee and is her ally."
+  },
+  {
+   "p": "hana whitlock",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Hidden behind a welded door; trusts little at first."
+  },
+  {
+   "p": "hana whitlock",
+   "q": "the observer",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 35,
+   "why": "He is a threat to drone flyers; Hana flies a night drone."
+  },
+  {
+   "p": "kaede rowe",
+   "q": "player",
+   "trust": 20,
+   "affection": 15,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A hunter of the unturned: a stranger is a possible target."
+  },
+  {
+   "p": "kaede rowe",
+   "q": "reed maynard",
+   "trust": 60,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Reed carries cable ties for her hunts."
+  },
+  {
+   "p": "kaede rowe",
+   "q": "hideki graves",
+   "trust": 50,
+   "affection": 25,
+   "debt": 10,
+   "grudge": 5,
+   "why": "She works for the Cordon, which Graves commands, for its bounty."
+  },
+  {
+   "p": "reed maynard",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "reed maynard",
+   "q": "kaede rowe",
+   "trust": 60,
+   "affection": 40,
+   "debt": 25,
+   "grudge": 0,
+   "why": "He is a hired hand of her K-hunters."
+  },
+  {
+   "p": "kang seo-yeon",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "ryota banks",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Sells crossings: a stranger is first a customer or a risk."
+  },
+  {
+   "p": "jin archer",
+   "q": "player",
+   "trust": 30,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Stranger at the start of the story: no history, cautious default."
+  },
+  {
+   "p": "jin archer",
+   "q": "hideki graves",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 35,
+   "why": "He fears the Cordon's lab, which Graves commands."
+  },
+  {
+   "p": "hideki graves",
+   "q": "player",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Commander of the Cordon: sees any stranger as a possible unturned or asset."
+  },
+  {
+   "p": "hideki graves",
+   "q": "daisuke morgan",
+   "trust": 55,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Morgan commands the company Graves relies on."
+  },
+  {
+   "p": "hideki graves",
+   "q": "haruto quinn",
+   "trust": 10,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 50,
+   "why": "He tolerates Lighthouse because he must, and hates it; Haruto is Lighthouse."
+  },
+  {
+   "p": "hideki graves",
+   "q": "kaede rowe",
+   "trust": 50,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Her hunters bring unturned for his Cordon's bounty."
+  },
+  {
+   "p": "tetsu hargrove",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Leads mutants with minds; cautious but not hostile to those who keep secrets."
+  },
+  {
+   "p": "tetsu hargrove",
+   "q": "the observer",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 50,
+   "why": "The Observer watches the Fringe and sometimes herds the dead onto them."
+  }
+ ]
+}

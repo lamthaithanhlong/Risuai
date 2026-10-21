@@ -82,6 +82,13 @@ describe('JSON Schema (jsonSchemaLite.cjs over story/schema)', () => {
         expect(validate(fact, { ...ok, source: 'wiki' }).join()).toMatch(/does not match/)
         expect(validate(sub(SCHEMA, 'entity'), { id: 'Hồng', kind: 'person', name: 'x' }).join()).toMatch(/does not match/)   // ids are lower-case
     })
+    test('maximum is checked, the mirror of minimum', () => {
+        const traits = { type: 'object', properties: { open: { type: 'integer', minimum: 0, maximum: 100 } } }
+        expect(validate(traits, { open: 100 })).toEqual([])
+        expect(validate(traits, { open: 0 })).toEqual([])
+        expect(validate(traits, { open: 101 }).join()).toMatch(/\$\.open: above 100/)
+        expect(validate(traits, { open: -1 }).join()).toMatch(/below 0/)
+    })
     test('a graph that fails its schema is not loaded', () => {
         const { g } = setup({ ...GRAPH, facts: [{ ...GRAPH.facts[0], status: 'gossip' }] })
         expect(g.loadWorld('mailman')).toBe(false)

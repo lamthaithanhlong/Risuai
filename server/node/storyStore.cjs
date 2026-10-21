@@ -224,7 +224,7 @@ function openStoryStore(opts) {
         // change of the Game Master's state (gm_*: the player's arc, side, enemies; src/ts/process/gameMaster.ts) for a long chat
         const before = new Map(q.stateOf.all(chat.id).map((r) => [r.key, r.value]))
         for (const [k, v] of Object.entries(vars)) {
-            if (k.startsWith('led_')) continue
+            if (k.startsWith('led_') && k !== 'led_soc') continue   // led_soc (the social ledger, npcPsych.cjs) is read by the server; the other ledgers have their own tables
             if (before.get(k) === v) continue
             if (keepsHistory(k) && row) q.putHistory.run(chat.id, k, rev, before.has(k) ? before.get(k) : null, v, t)
             q.putState.run(chat.id, k, v, rev)

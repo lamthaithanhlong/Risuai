@@ -1,7 +1,7 @@
 'use strict'
 // A JSON Schema check for the subset the story schemas use (story/schema/*.schema.json): $ref to #/$defs, type (one or a list,
 // "integer" included), enum, const, required, properties, additionalProperties: false, items, minLength, maxLength, pattern,
-// minItems, maxItems, minimum. Anything else in a schema is ignored. Why not a library: the server has none, and these schemas
+// minItems, maxItems, minimum, maximum. Anything else in a schema is ignored. Why not a library: the server has none, and these schemas
 // are small and ours; tests/storyGraph.test.ts checks this against the schemas' own examples.
 
 const typeOf = (v) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v)
@@ -28,6 +28,7 @@ function validate(schema, value, root = schema, at = '$', out = []) {
         if (schema.pattern && !new RegExp(schema.pattern, 'u').test(value)) out.push(`${at}: does not match ${schema.pattern}`)
     }
     if (typeof value === 'number' && schema.minimum !== undefined && value < schema.minimum) out.push(`${at}: below ${schema.minimum}`)
+    if (typeof value === 'number' && schema.maximum !== undefined && value > schema.maximum) out.push(`${at}: above ${schema.maximum}`)
     if (Array.isArray(value)) {
         if (schema.minItems !== undefined && value.length < schema.minItems) out.push(`${at}: fewer than ${schema.minItems} items`)
         if (schema.maxItems !== undefined && value.length > schema.maxItems) out.push(`${at}: more than ${schema.maxItems} items`)

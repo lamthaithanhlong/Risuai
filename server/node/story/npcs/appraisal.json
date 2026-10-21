@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "about": "OCC-style appraisal of one social act (the bookkeeper's `social: who | tag | whom` line). Deltas move rel(whom -> who): how the one acted upon now sees the actor. mutual_trust also moves rel(who -> whom, trust). Read by server/node/npcPsych.cjs (path B, the JS fold) and server/sidecar/fatima (path A, FAtiMA appraisal rules): one table for both.",
+  "dims": ["trust", "affection", "debt", "grudge"],
+  "modulators": {
+    "about": "applied with the TARGET's Big Five (0..100); clamp 0..100 and Math.round after each event",
+    "grudge_gain": "1.5 - agree/100",
+    "trust_loss": "0.5 + neuro/100",
+    "affection_gain": "0.5 + extra/100",
+    "debt_gain": "0.6 + consc/100*0.8"
+  },
+  "default_seed": { "trust": 40, "affection": 40, "debt": 0, "grudge": 10 },
+  "ledger_seed": {
+    "enemy": { "trust": 10, "affection": 15, "debt": 0, "grudge": 60 },
+    "ally": { "trust": 60, "affection": 50, "debt": 0, "grudge": 5 }
+  },
+  "tags": {
+    "help":           { "vi": ["giúp", "giúp đỡ", "che chở", "bảo vệ"], "trust": 6,   "affection": 3,   "debt": 8,   "grudge": -2, "emotion": "gratitude", "intensity": 4, "mutual_trust": 2 },
+    "gift":           { "vi": ["tặng", "biếu", "cho quà"],             "trust": 3,   "affection": 4,   "debt": 6,   "grudge": -1, "emotion": "gratitude", "intensity": 3, "mutual_trust": 0 },
+    "save":           { "vi": ["cứu", "cứu mạng", "cứu sống"],          "trust": 12,  "affection": 6,   "debt": 20,  "grudge": -6, "emotion": "gratitude", "intensity": 8, "mutual_trust": 3 },
+    "praise":         { "vi": ["khen", "khen ngợi", "ca ngợi"],         "trust": 1,   "affection": 3,   "debt": 0,   "grudge": -1, "emotion": "joy",       "intensity": 2, "mutual_trust": 0 },
+    "confide":        { "vi": ["tâm sự", "thổ lộ", "thú nhận"],         "trust": 5,   "affection": 4,   "debt": 0,   "grudge": 0,  "emotion": "love",      "intensity": 3, "mutual_trust": 8 },
+    "promise_kept":   { "vi": ["giữ lời", "giữ lời hứa"],               "trust": 8,   "affection": 2,   "debt": 0,   "grudge": -3, "emotion": "admiration","intensity": 4, "mutual_trust": 2 },
+    "reconcile":      { "vi": ["làm lành", "xin lỗi", "tha thứ"],       "trust": 4,   "affection": 3,   "debt": 0,   "grudge": -10,"emotion": "joy",       "intensity": 4, "mutual_trust": 3 },
+    "debt_paid":      { "vi": ["trả nợ", "trả ơn", "đền ơn"],           "trust": 2,   "affection": 0,   "debt": -25, "grudge": 0,  "emotion": "joy",       "intensity": 2, "mutual_trust": 0 },
+    "flirt":          { "vi": ["tán tỉnh", "ve vãn"],                   "trust": 0,   "affection": 2,   "debt": 0,   "grudge": 0,  "emotion": "love",      "intensity": 2, "mutual_trust": 0 },
+    "insult":         { "vi": ["sỉ nhục", "xúc phạm", "chế giễu", "chửi"], "trust": -4, "affection": -5, "debt": 0,   "grudge": 10, "emotion": "anger",     "intensity": 6, "mutual_trust": 0 },
+    "threaten":       { "vi": ["đe dọa", "hăm dọa", "uy hiếp"],         "trust": -8,  "affection": -4,  "debt": 0,   "grudge": 8,  "emotion": "fear",      "intensity": 6, "mutual_trust": 0 },
+    "lie":            { "vi": ["nói dối", "lừa dối", "lừa gạt"],        "trust": -15, "affection": -3,  "debt": 0,   "grudge": 4,  "emotion": "reproach",  "intensity": 5, "mutual_trust": 0 },
+    "refuse":         { "vi": ["từ chối", "khước từ"],                  "trust": -2,  "affection": -1,  "debt": 0,   "grudge": 2,  "emotion": "distress",  "intensity": 2, "mutual_trust": 0 },
+    "ignore":         { "vi": ["phớt lờ", "làm ngơ"],                   "trust": -1,  "affection": -2,  "debt": 0,   "grudge": 1,  "emotion": "distress",  "intensity": 2, "mutual_trust": 0 },
+    "promise_broken": { "vi": ["thất hứa", "nuốt lời"],                 "trust": -12, "affection": -4,  "debt": 0,   "grudge": 6,  "emotion": "reproach",  "intensity": 5, "mutual_trust": 0 },
+    "harm":           { "vi": ["làm hại", "tấn công", "đánh", "làm bị thương"], "trust": -15, "affection": -10, "debt": 0, "grudge": 18, "emotion": "anger", "intensity": 8, "mutual_trust": 0 },
+    "betray":         { "vi": ["phản bội", "bán đứng"],                 "trust": -30, "affection": -12, "debt": 0,   "grudge": 25, "emotion": "hate",      "intensity": 9, "mutual_trust": 0 }
+  }
+}

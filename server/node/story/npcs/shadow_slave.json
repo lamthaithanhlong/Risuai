@@ -1,0 +1,988 @@
+{
+ "world": "shadow_slave",
+ "version": 1,
+ "built": "2026-10-21",
+ "npcs": [
+  {
+   "id": "sunny",
+   "name": "Sunny",
+   "aliases": [
+    "Devil of Antarctica",
+    "Ác Quỷ của Nam Cực",
+    "Rain",
+    "Demon of Choice"
+   ],
+   "importance": 100,
+   "traits": {
+    "open": 78,
+    "consc": 62,
+    "extra": 35,
+    "agree": 38,
+    "neuro": 58
+   },
+   "speech": "mocking",
+   "wants_to_say": "His brother Mordret is his obsessive rival and has tried repeatedly to claim his soul.",
+   "wants_to_hide": "He knows a cult holds his True Name and will strike again when he is vulnerable.",
+   "hide_fid": 792,
+   "tags": [
+    "cynical",
+    "protective",
+    "proud"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "jet",
+   "name": "Jet",
+   "aliases": [
+    "Kai",
+    "Nightingale",
+    "Chim Sơn Ca",
+    "Dragonslayer"
+   ],
+   "importance": 96,
+   "traits": {
+    "open": 58,
+    "consc": 78,
+    "extra": 40,
+    "agree": 52,
+    "neuro": 35
+   },
+   "speech": "terse",
+   "wants_to_say": "She leads the First Irregular Company with Sunny and five other Ascended, and respects his cunning.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "loyal",
+    "honest",
+    "protective"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "nephis",
+   "name": "Nephis",
+   "aliases": [
+    "Changing Star",
+    "Immortal Flame",
+    "Ngôi Sao Đổi Thay",
+    "Saint Nephis",
+    "Thánh Nephis",
+    "Bright Lady"
+   ],
+   "importance": 92,
+   "traits": {
+    "open": 55,
+    "consc": 90,
+    "extra": 25,
+    "agree": 42,
+    "neuro": 30
+   },
+   "speech": "cold",
+   "wants_to_say": "She chooses to protect those she considers hers.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "proud",
+    "protective",
+    "ambitious"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "forgotten god",
+   "name": "Forgotten God",
+   "aliases": [
+    "Vị Thần Bị Lãng Quên",
+    "Dream God",
+    "the Forgotten God",
+    "Dream King",
+    "the Dream King",
+    "the Forgotten One"
+   ],
+   "importance": 88,
+   "traits": {
+    "open": 60,
+    "consc": 50,
+    "extra": 15,
+    "agree": 45,
+    "neuro": 40
+   },
+   "speech": "formal",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "weaver",
+   "name": "Weaver",
+   "aliases": [
+    "Kẻ Dệt",
+    "Demon of Fate",
+    "Quỷ Của Số Phận",
+    "Ariel"
+   ],
+   "importance": 84,
+   "traits": {
+    "open": 75,
+    "consc": 85,
+    "extra": 20,
+    "agree": 40,
+    "neuro": 30
+   },
+   "speech": "cold",
+   "wants_to_say": "The Weaver wants her Spell's binding of the Forgotten God to hold and quietly keeps a watch on Sunny.",
+   "wants_to_hide": "She secretly watches Sunny as an unexpected contingency she did not design.",
+   "hide_fid": 405,
+   "tags": [
+    "ambitious",
+    "cynical"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "gunlaug",
+   "name": "Gunlaug",
+   "aliases": [
+    "Bright Lord",
+    "Chúa Tể Bright",
+    "Bright Lord of Dark City"
+   ],
+   "importance": 79,
+   "traits": {
+    "open": 35,
+    "consc": 82,
+    "extra": 45,
+    "agree": 15,
+    "neuro": 40
+   },
+   "speech": "blunt",
+   "wants_to_say": "Gunlaug demands order and obedience in Dark City and expects people to accept his laws over justice.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "ruthless",
+    "proud",
+    "ambitious"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "asterion",
+   "name": "Asterion",
+   "aliases": [
+    "the Dreamspawn",
+    "The Dreamspawn",
+    "Dreamspawn"
+   ],
+   "importance": 75,
+   "traits": {
+    "open": 80,
+    "consc": 55,
+    "extra": 45,
+    "agree": 15,
+    "neuro": 30
+   },
+   "speech": "mocking",
+   "wants_to_say": "Asterion finds Sunny fascinating, as something new the Spell is making, and wants to see what he becomes.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "ruthless",
+    "proud"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "mordret",
+   "name": "Mordret",
+   "aliases": [
+    "King of Nothing",
+    "Vua Của Hư Vô",
+    "King of Shadows",
+    "Prince of Nothing",
+    "Prince of War",
+    "seventh Sovereign"
+   ],
+   "importance": 71,
+   "traits": {
+    "open": 72,
+    "consc": 60,
+    "extra": 40,
+    "agree": 10,
+    "neuro": 65
+   },
+   "speech": "playful",
+   "wants_to_say": "Mordret wants to offer Sunny a partnership and to take his soul to cure his own dissolving identity.",
+   "wants_to_hide": "His identity is dissolving and he believes Sunny's complete soul would cure it.",
+   "hide_fid": 956,
+   "tags": [
+    "vengeful",
+    "ambitious",
+    "ruthless"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "cassie",
+   "name": "Cassie",
+   "aliases": [
+    "Cassia",
+    "Seneschal",
+    "Song of the Fallen",
+    "Cassandra",
+    "Cassandra (Cassie)",
+    "The Song of the Fallen"
+   ],
+   "importance": 63,
+   "traits": {
+    "open": 68,
+    "consc": 70,
+    "extra": 30,
+    "agree": 70,
+    "neuro": 45
+   },
+   "speech": "warm",
+   "wants_to_say": "She wants to understand the Spell's true purpose: that it binds the Forgotten God and uses humanity as fuel.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "kind",
+    "loyal",
+    "honest"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "ki song",
+   "name": "Ki Song",
+   "aliases": [
+    "Song Jiwon",
+    "Raven Queen",
+    "Queen of Worms",
+    "Nữ Hoàng của Sâu Bọ",
+    "Queen Song",
+    "the Queen"
+   ],
+   "importance": 46,
+   "traits": {
+    "open": 65,
+    "consc": 80,
+    "extra": 40,
+    "agree": 55,
+    "neuro": 25
+   },
+   "speech": "formal",
+   "wants_to_say": "Ki Song wants to preserve Divine power, and treats Sunny as her student whose potential she first saw.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "proud",
+    "protective",
+    "ambitious"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "effie",
+   "name": "Effie",
+   "aliases": [
+    "The Unyielding",
+    "Stoneheart"
+   ],
+   "importance": 38,
+   "traits": {
+    "open": 45,
+    "consc": 68,
+    "extra": 55,
+    "agree": 62,
+    "neuro": 30
+   },
+   "speech": "blunt",
+   "wants_to_say": "She is a senior instructor at the Awakened Academy and trains Rank 1-2 Awakened.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "kind",
+    "honest",
+    "protective",
+    "loyal"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "hope",
+   "name": "Hope",
+   "aliases": [
+    "Demon of Desire",
+    "Hy Vọng",
+    "Desire"
+   ],
+   "importance": 30,
+   "traits": {
+    "open": 50,
+    "consc": 50,
+    "extra": 50,
+    "agree": 50,
+    "neuro": 50
+   },
+   "speech": "terse",
+   "wants_to_say": null,
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "old tom",
+   "name": "Old Tom",
+   "aliases": [
+    "Tom",
+    "Covenant Keeper",
+    "Neutral Arbiter"
+   ],
+   "importance": 26,
+   "traits": {
+    "open": 60,
+    "consc": 75,
+    "extra": 25,
+    "agree": 55,
+    "neuro": 20
+   },
+   "speech": "formal",
+   "wants_to_say": "Old Tom wants the Covenant's sanctuary rules in Antarctica observed and explains them to those he shelters.",
+   "wants_to_hide": "His true name is unknown; he may be a diminished Divine being or something older than the Divine-human distinction.",
+   "hide_fid": 486,
+   "tags": [
+    "honest",
+    "protective"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "titan",
+   "name": "Titan",
+   "aliases": [
+    "Flame Sentinel",
+    "The Flame Sentinel"
+   ],
+   "importance": 22,
+   "traits": {
+    "open": 40,
+    "consc": 80,
+    "extra": 35,
+    "agree": 60,
+    "neuro": 25
+   },
+   "speech": "blunt",
+   "wants_to_say": "Titan wants the Antarctic survivors protected and treats strength as a duty to those who cannot fight.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "protective",
+    "loyal",
+    "honest"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "sol",
+   "name": "Sol",
+   "aliases": [
+    "Sun God",
+    "Thần Mặt Trời",
+    "Lord of Light",
+    "Chúa Tể Ánh Sáng",
+    "Beast God",
+    "the Wounded One"
+   ],
+   "importance": 18,
+   "traits": {
+    "open": 55,
+    "consc": 70,
+    "extra": 30,
+    "agree": 15,
+    "neuro": 35
+   },
+   "speech": "cold",
+   "wants_to_say": "He waits to return and sees the Shadow God as his mortal enemy, the being who killed him.",
+   "wants_to_hide": "He is not truly dead: fragments of him persist and he waits to return.",
+   "hide_fid": 885,
+   "tags": [
+    "proud",
+    "vengeful",
+    "ruthless"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "aiko",
+   "name": "Aiko",
+   "aliases": [
+    "Spymaster",
+    "Shadow Fairy",
+    "The Paired",
+    "Name Partner",
+    "Paired-Name Partner"
+   ],
+   "importance": 13,
+   "traits": {
+    "open": 62,
+    "consc": 80,
+    "extra": 30,
+    "agree": 60,
+    "neuro": 35
+   },
+   "speech": "terse",
+   "wants_to_say": "Aiko wants her Clan's operations ready and wants nothing to threaten Sunny.",
+   "wants_to_hide": "She is Sunny's Paired-Name partner, a bond of shadow and light deeper than love, friendship or blood.",
+   "hide_fid": 757,
+   "tags": [
+    "loyal",
+    "protective"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "weaver crone",
+   "name": "elder",
+   "aliases": [
+    "Weaver Crone",
+    "The Keeper of Lost Threads",
+    "Thread Keeper"
+   ],
+   "importance": 9,
+   "traits": {
+    "open": 70,
+    "consc": 60,
+    "extra": 35,
+    "agree": 50,
+    "neuro": 40
+   },
+   "speech": "formal",
+   "wants_to_say": "She wants people to see the threads of fate that connect them and the Dream Weavers' study of perception.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "eurys",
+   "name": "Eurys",
+   "aliases": [
+    "The Talking Skeleton",
+    "One of the Nine",
+    "Omer"
+   ],
+   "importance": 5,
+   "traits": {
+    "open": 60,
+    "consc": 55,
+    "extra": 30,
+    "agree": 50,
+    "neuro": 40
+   },
+   "speech": "formal",
+   "wants_to_say": "He carries ancient knowledge of the Doom War and the true history of the world.",
+   "wants_to_hide": null,
+   "hide_fid": null,
+   "tags": [
+    "honest"
+   ],
+   "source": "Shadow Slave"
+  },
+  {
+   "id": "madoc",
+   "name": "Whispering Blade",
+   "aliases": [
+    "Madoc",
+    "Saint Madoc",
+    "Lưỡi Kiếm Thì Thầm",
+    "Sovereign of the Moon",
+    "Sovereign of Moon",
+    "The Demon of Secrets and Assassination"
+   ],
+   "importance": 1,
+   "traits": {
+    "open": 70,
+    "consc": 75,
+    "extra": 25,
+    "agree": 25,
+    "neuro": 35
+   },
+   "speech": "cold",
+   "wants_to_say": "Madoc wants to recruit or destroy Sunny and is genuinely interested in him.",
+   "wants_to_hide": "He took Valor soldiers into the Dream Realm and vanished while the clan pretended he was still there.",
+   "hide_fid": 158,
+   "tags": [
+    "proud",
+    "ruthless",
+    "ambitious"
+   ],
+   "source": "Shadow Slave"
+  }
+ ],
+ "relations": [
+  {
+   "p": "sunny",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A newcomer is a stranger to Sunny; he trusts few people (fid 812)."
+  },
+  {
+   "p": "sunny",
+   "q": "nephis",
+   "trust": 55,
+   "affection": 50,
+   "debt": 10,
+   "grudge": 25,
+   "why": "Founding alliance at Falcon Scott, adversarial at key points (fid 580, 465)."
+  },
+  {
+   "p": "sunny",
+   "q": "mordret",
+   "trust": 10,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 90,
+   "why": "Mordret is Sunny's obsessive rival and brother (fid 250, 696)."
+  },
+  {
+   "p": "sunny",
+   "q": "aiko",
+   "trust": 95,
+   "affection": 85,
+   "debt": 30,
+   "grudge": 0,
+   "why": "Paired-Name Bond; one of the few he trusts completely (fid 757, 812)."
+  },
+  {
+   "p": "jet",
+   "q": "player",
+   "trust": 40,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger to Kai; he can tell when someone is lying (fid 30)."
+  },
+  {
+   "p": "jet",
+   "q": "sunny",
+   "trust": 65,
+   "affection": 55,
+   "debt": 10,
+   "grudge": 5,
+   "why": "Often teams up with Sunny and respects his cunning (fid 671)."
+  },
+  {
+   "p": "jet",
+   "q": "madoc",
+   "trust": 45,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 20,
+   "why": "Madoc is the older brother of the King of Swords; Valor kin (fid 55, 56)."
+  },
+  {
+   "p": "nephis",
+   "q": "player",
+   "trust": 30,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A newcomer is a stranger to Nephis, who protects those she considers hers (fid 408)."
+  },
+  {
+   "p": "nephis",
+   "q": "sunny",
+   "trust": 65,
+   "affection": 55,
+   "debt": 20,
+   "grudge": 15,
+   "why": "Share the Luminous aspect, allies and at times adversaries (fid 728, 465)."
+  },
+  {
+   "p": "nephis",
+   "q": "gunlaug",
+   "trust": 10,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 80,
+   "why": "Gunlaug is her primary rival in a cold war (fid 246)."
+  },
+  {
+   "p": "nephis",
+   "q": "cassie",
+   "trust": 80,
+   "affection": 65,
+   "debt": 15,
+   "grudge": 0,
+   "why": "Cassie followed Nephis as a retainer (fid 154)."
+  },
+  {
+   "p": "forgotten god",
+   "q": "player",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Asleep and sealed; a mortal is nothing to it (fid 69, 271)."
+  },
+  {
+   "p": "forgotten god",
+   "q": "old tom",
+   "trust": 50,
+   "affection": 20,
+   "debt": 10,
+   "grudge": 0,
+   "why": "The Dream King defers to Old Tom for an unknown reason (fid 204)."
+  },
+  {
+   "p": "weaver",
+   "q": "player",
+   "trust": 30,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 0,
+   "why": "The player is unknown to her; her attention is on Sunny (fid 405)."
+  },
+  {
+   "p": "weaver",
+   "q": "sunny",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She watches Sunny as an unexpected contingency (fid 304, 405)."
+  },
+  {
+   "p": "gunlaug",
+   "q": "player",
+   "trust": 25,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 10,
+   "why": "A stranger in his Dark City, ruled through fear and control (fid 59)."
+  },
+  {
+   "p": "gunlaug",
+   "q": "nephis",
+   "trust": 5,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 85,
+   "why": "Cold-war rival Nephis (fid 400, 246)."
+  },
+  {
+   "p": "gunlaug",
+   "q": "mordret",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 70,
+   "why": "Classified Mordret an existential threat (fid 762)."
+  },
+  {
+   "p": "gunlaug",
+   "q": "effie",
+   "trust": 5,
+   "affection": 25,
+   "debt": 0,
+   "grudge": 85,
+   "why": "Swore that if he could not have Effie, nobody would (fid 137)."
+  },
+  {
+   "p": "asterion",
+   "q": "player",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger; Asterion is fixed on Sunny (fid 455)."
+  },
+  {
+   "p": "asterion",
+   "q": "sunny",
+   "trust": 35,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Finds Sunny fascinating as something new the Spell is creating (fid 455)."
+  },
+  {
+   "p": "asterion",
+   "q": "nephis",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Enemy of Nephis (fid 339)."
+  },
+  {
+   "p": "mordret",
+   "q": "player",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger to Mordret, who is obsessed with Sunny (fid 956)."
+  },
+  {
+   "p": "mordret",
+   "q": "sunny",
+   "trust": 30,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 80,
+   "why": "Once his friend and ally, now his greatest enemy and brother (fid 704, 633)."
+  },
+  {
+   "p": "mordret",
+   "q": "nephis",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Enemy of Nephis, growing stronger from every Sovereign who fails to eliminate him (fid 1031)."
+  },
+  {
+   "p": "mordret",
+   "q": "gunlaug",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Gunlaug runs counter-intelligence against him (fid 762)."
+  },
+  {
+   "p": "cassie",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A newcomer is a stranger; she reads people gently (lore)."
+  },
+  {
+   "p": "cassie",
+   "q": "sunny",
+   "trust": 75,
+   "affection": 65,
+   "debt": 10,
+   "grudge": 0,
+   "why": "Founding alliance with Sunny and Nephis (fid 581)."
+  },
+  {
+   "p": "cassie",
+   "q": "nephis",
+   "trust": 85,
+   "affection": 75,
+   "debt": 20,
+   "grudge": 0,
+   "why": "Followed Nephis as a retainer, nominal leader of the Fire Keepers (fid 148, 154)."
+  },
+  {
+   "p": "ki song",
+   "q": "player",
+   "trust": 30,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger to the Queen of Song."
+  },
+  {
+   "p": "ki song",
+   "q": "sunny",
+   "trust": 70,
+   "affection": 70,
+   "debt": 0,
+   "grudge": 0,
+   "why": "She is Sunny's mother figure and mentor who first recognized his potential (fid 681)."
+  },
+  {
+   "p": "effie",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A newcomer is a stranger; she trains new Awakened (fid 558)."
+  },
+  {
+   "p": "effie",
+   "q": "nephis",
+   "trust": 65,
+   "affection": 55,
+   "debt": 10,
+   "grudge": 0,
+   "why": "Member of the Fire Keepers Command Council with Nephis (fid 233)."
+  },
+  {
+   "p": "effie",
+   "q": "gunlaug",
+   "trust": 5,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 70,
+   "why": "Refused to join Gunlaug's Host (fid 167)."
+  },
+  {
+   "p": "hope",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Nothing in the facts speaks of the player; stranger-level."
+  },
+  {
+   "p": "hope",
+   "q": "sol",
+   "trust": 10,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 90,
+   "why": "The Sun God destroyed his Kingdom and imprisoned him in the Ivory Tower (fid 40)."
+  },
+  {
+   "p": "old tom",
+   "q": "player",
+   "trust": 45,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger; Old Tom gives newcomers sanctuary and explains the Covenant (fid 609)."
+  },
+  {
+   "p": "old tom",
+   "q": "nephis",
+   "trust": 60,
+   "affection": 50,
+   "debt": 0,
+   "grudge": 0,
+   "why": "Offered the Exodus survivors sanctuary and explained the Covenant (fid 609)."
+  },
+  {
+   "p": "old tom",
+   "q": "forgotten god",
+   "trust": 50,
+   "affection": 20,
+   "debt": 0,
+   "grudge": 0,
+   "why": "The Dream King defers to Old Tom (fid 204)."
+  },
+  {
+   "p": "titan",
+   "q": "player",
+   "trust": 40,
+   "affection": 35,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A newcomer is a stranger to the Guard Commander (fid 897)."
+  },
+  {
+   "p": "titan",
+   "q": "nephis",
+   "trust": 85,
+   "affection": 65,
+   "debt": 10,
+   "grudge": 0,
+   "why": "Fire Keeper leadership, member of Nephis group (fid 612)."
+  },
+  {
+   "p": "sol",
+   "q": "player",
+   "trust": 15,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 40,
+   "why": "A mortal stranger to a being who sees Sunny as his enemy (fid 886)."
+  },
+  {
+   "p": "sol",
+   "q": "sunny",
+   "trust": 15,
+   "affection": 5,
+   "debt": 0,
+   "grudge": 95,
+   "why": "Views Sunny as his mortal enemy, the being who killed him (fid 886)."
+  },
+  {
+   "p": "sol",
+   "q": "hope",
+   "trust": 20,
+   "affection": 0,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Destroyed the Kingdom of Hope and imprisoned Hope (fid 40)."
+  },
+  {
+   "p": "aiko",
+   "q": "player",
+   "trust": 35,
+   "affection": 30,
+   "debt": 0,
+   "grudge": 0,
+   "why": "A stranger to Aiko, intelligence chief of the Shadow Clan (fid 398)."
+  },
+  {
+   "p": "aiko",
+   "q": "sunny",
+   "trust": 95,
+   "affection": 90,
+   "debt": 30,
+   "grudge": 0,
+   "why": "Fiercely loyal to Sunny and his Paired-Name partner (fid 420)."
+  },
+  {
+   "p": "weaver crone",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "No fact speaks of the player; stranger-level."
+  },
+  {
+   "p": "eurys",
+   "q": "player",
+   "trust": 40,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 0,
+   "why": "No fact speaks of the player; stranger-level."
+  },
+  {
+   "p": "madoc",
+   "q": "player",
+   "trust": 20,
+   "affection": 10,
+   "debt": 0,
+   "grudge": 30,
+   "why": "A stranger to Madoc, whose interest is on Sunny (fid 693)."
+  },
+  {
+   "p": "madoc",
+   "q": "sunny",
+   "trust": 20,
+   "affection": 15,
+   "debt": 0,
+   "grudge": 60,
+   "why": "Madoc is an antagonist to Sunny, wanting to recruit or destroy him (fid 692, 693)."
+  },
+  {
+   "p": "madoc",
+   "q": "jet",
+   "trust": 55,
+   "affection": 40,
+   "debt": 0,
+   "grudge": 5,
+   "why": "Older brother of the King of Swords and nominal head of Clan Valor (fid 55, 56)."
+  }
+ ]
+}
