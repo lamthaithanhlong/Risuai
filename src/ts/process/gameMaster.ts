@@ -695,7 +695,7 @@ export function stateLines(state: GmState): string {
  * own panel part (statusBook.ts), asked in the same call so a turn costs one helper call; `state` null leaves the GM part out.
  * `lore`: the librarian's shelf question (loreIndex.ts shelvesAsk), asked in the same call too.
  */
-export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = '', lore = ''): string {
+export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = '', lore = '', opts: { social?: boolean } = {}): string {
     const cut = (s: string, n: number) => { const t = (s ?? '').trim(); return t.length > n ? '…' + t.slice(-n) : t }
     const turn = `THE PLAYER'S LAST ACTION:
 ${cut(player, 800)}
@@ -723,8 +723,93 @@ gained: <what a side or deed gave>
 reward: <what> | <when it is paid>   (paid in this reply: reward: <what> | done)
 consequence: <what> | <when it lands>   (landed in this reply: consequence: <what> | done)
 canon: <in-world date> | <what canon people are doing off-screen>
-]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${status ? `\n\n${status}` : ''}${shelves}`
+${opts.social ? SOCIAL_TEMPLATE : ''}]]
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${opts.social ? SOCIAL_RULE : ''}${status ? `\n\n${status}` : ''}${shelves}`
+}
+
+// ---- NPC psychology: who did what to whom (2026-10-21) ------------------------------------------------------------------------
+// The bookkeeper reads the reply anyway, so it also names the social acts the reply SHOWS. They go to the ledger ($led_soc, one
+// line "n | who | tag | whom"), which the server folds into relations and the solver turns into a Subtext line (server/node/story/npcs).
+// The tag list is the server's appraisal table (appraisal.json "tags"); gameMaster.test.ts reads that file so the two never drift.
+
+/** tag -> its Vietnamese words (the first is the gloss shown to the helper); the same keys and words as server/node/story/npcs/appraisal.json */
+export const SOCIAL_TAGS: Record<string, string[]> = {
+    help: ['giúp', 'giúp đỡ', 'che chở', 'bảo vệ'],
+    gift: ['tặng', 'biếu', 'cho quà'],
+    save: ['cứu', 'cứu mạng', 'cứu sống'],
+    praise: ['khen', 'khen ngợi', 'ca ngợi'],
+    confide: ['tâm sự', 'thổ lộ', 'thú nhận'],
+    promise_kept: ['giữ lời', 'giữ lời hứa'],
+    reconcile: ['làm lành', 'xin lỗi', 'tha thứ'],
+    debt_paid: ['trả nợ', 'trả ơn', 'đền ơn'],
+    flirt: ['tán tỉnh', 've vãn'],
+    insult: ['sỉ nhục', 'xúc phạm', 'chế giễu', 'chửi'],
+    threaten: ['đe dọa', 'hăm dọa', 'uy hiếp'],
+    lie: ['nói dối', 'lừa dối', 'lừa gạt'],
+    refuse: ['từ chối', 'khước từ'],
+    ignore: ['phớt lờ', 'làm ngơ'],
+    promise_broken: ['thất hứa', 'nuốt lời'],
+    harm: ['làm hại', 'tấn công', 'đánh', 'làm bị thương'],
+    betray: ['phản bội', 'bán đứng'],
+}
+const SOCIAL_LIST = Object.entries(SOCIAL_TAGS).map(([t, vi]) => `${t} (${vi[0]})`).join(', ')
+const SOCIAL_TEMPLATE = `social: <who> | <tag> | <whom>   (one line per notable social act in this reply, at most 3; tags: ${SOCIAL_LIST})\n`
+const SOCIAL_RULE = ' social: only an act the reply SHOWS between the player\'s character and a named person, or between two named people (who = the one who acts; whom = the one it is done to; use "player" for the player\'s character); never for the narrator\'s mood words.'
+const SOCIAL_LINE = /^\s*[-*•]?\s*social\s*:\s*(.*)$/i
+const SOCIAL_MAX_LINES = 3
+const PLAYER_WORDS = new Set(['player', 'tôi', 'người chơi'])
+const nfc = (s: string) => (s ?? '').normalize('NFC')
+const socialName = (s: string) => { const n = clean(nfc(s).replace(/[|"“”]/g, ' ')).slice(0, 60).trim(); return PLAYER_WORDS.has(n.toLowerCase()) ? 'player' : n }
+const WORD_TAG = new Map<string, string>(Object.entries(SOCIAL_TAGS).flatMap(([t, vi]) => [[t, t], ...vi.map((w): [string, string] => [nfc(w).toLowerCase(), t])]))
+/** a tag as the helper wrote it ("help", "giúp", "help (giúp)", "promise-kept") -> the tag, or null when it is none of the list */
+const tagOf = (raw: string): string | null => {
+    const t = nfc(raw).toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[.*"“”]/g, '').replace(/[-\s]+/g, ' ').trim()
+    return WORD_TAG.get(t) ?? WORD_TAG.get(t.replace(/ /g, '_')) ?? null
+}
+
+export type SocialEvent = { who: string; tag: string; target: string }
+
+/** The social acts in the helper's answer (bodies, or the whole answer text): known tags only, never an act on oneself, at most 3. */
+export function socialOf(bodies: string[]): SocialEvent[] {
+    const out: SocialEvent[] = []
+    const seen = new Set<string>()
+    for (const body of bodies) {
+        for (const raw of (body ?? '').split(/\r?\n/)) {
+            const m = SOCIAL_LINE.exec(raw)
+            if (!m) continue
+            const [who, tag, target] = m[1].split('|').map((x) => x.trim())
+            const t = tagOf(tag ?? '')
+            const a = socialName(who ?? ''), b = socialName(target ?? '')
+            if (!t || !a || !b || a.toLowerCase() === b.toLowerCase()) continue
+            const key = `${a}|${t}|${b}`.toLowerCase()
+            if (seen.has(key)) continue
+            seen.add(key)
+            out.push({ who: a, tag: t, target: b })
+            if (out.length >= SOCIAL_MAX_LINES) return out
+        }
+    }
+    return out
+}
+
+/**
+ * The ledger var $led_soc with this reply's acts: one line "n | who | tag | whom" each, n = the reply count (the idempotency key: a
+ * helper run twice on the same reply writes nothing twice; a reroll takes the lines away with the panel snapshot), the last `max` lines kept.
+ * True when a line was added.
+ */
+export function appendSocial(vars: Record<string, unknown>, n: number, events: SocialEvent[], max = 120): boolean {
+    const have = lines(String(vars.$led_soc ?? ''))
+    const key = (l: string) => l.split('|').map((x) => x.trim()).join('|').toLowerCase()
+    const seen = new Set(have.map(key))
+    let added = false
+    for (const e of events) {
+        const line = `${n} | ${e.who} | ${e.tag} | ${e.target}`
+        if (seen.has(key(line))) continue
+        seen.add(key(line))
+        have.push(line)
+        added = true
+    }
+    if (added || have.length > max) vars.$led_soc = have.slice(-max).join('\n')
+    return added
 }
 
 /** The block in the helper's answer (a bare list of lines counts too), or null. Its [[STATUS]] block is not part of it. */
@@ -732,7 +817,7 @@ export function parseBookkeep(text: string): string[] | null {
     const t = (text ?? '').replace(/\[\[STATUS\b[\s\S]*?(\]\]|$)/g, '')
     const bodies = gmBlocks(t)
     if (bodies.length) return bodies
-    const bare = t.split('\n').filter((l) => /^\s*(arc|beat|threat|path|enemy|gained|reward|consequence|canon)\s*:/i.test(l))
+    const bare = t.split('\n').filter((l) => /^\s*(arc|beat|threat|path|enemy|gained|reward|consequence|canon|social)\s*:/i.test(l))
     return bare.length ? [bare.join('\n')] : null
 }
 

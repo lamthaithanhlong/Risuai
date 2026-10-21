@@ -13,11 +13,20 @@ export type DecideInput = {
     chatId: string; world: string; phase: 'seed' | 'run'; vars: Record<string, string>; messages: { role: string; text: string }[]
     dice: { pace: string; surface: string; consequence: boolean; cardNew: boolean; firstOrder: boolean }; prevNew: boolean
     kinds: string[]; stance: string; mode: { scene: string; combat: string }
+    /** NPC psychology (server/node/story/npcs): the server appends a Subtext line to the note; false (db.npcPsych off) skips it */
+    npc: boolean
+    /** the reply count now: the $led_soc lines' turn numbers are counted the same way, so the server ages emotions by it */
+    turn?: number
 }
 type Term = { name: string; args: Term[] }
 export type GmDecision = {
     line: string; newEvent: boolean; turn: string | null; present: string[]; hostile: string[]; onstage: string[]
+    /** the Subtext line the server appended to `line` ('' when none), and which engine appraised it ('fatima' | 'asp'; null when none) */
+    subtext: string; npcSource: string | null
 }
+
+/** the longest note line taken: the solver's own lines plus the Subtext line (server cap 520 chars) */
+export const DECIDE_LINE_MAX = 2600
 
 /** the chat's variables the solver reads (panel, ledger, the GM's notes), as text */
 export function decideVars(vars: Record<string, unknown> | undefined): Record<string, string> {
@@ -46,10 +55,11 @@ export async function fetchGmDecision(input: DecideInput, deps: DecideDeps): Pro
         if (!res.ok) return null
         const r = await res.json()
         const line = typeof r?.line === 'string' ? r.line : ''
-        if (r?.status !== 'ok' || line.length > 1500 || !/^(This turn|People in the scene|The character)/.test(line)) return null
+        if (r?.status !== 'ok' || line.length > DECIDE_LINE_MAX || !/^(This turn|People in the scene|The character)/.test(line)) return null
         const d = r.decision ?? {}
         const names = (x: unknown) => (Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string') : [])
-        return { line, newEvent: !!r.newEvent, turn: (d.turn as Term | null)?.name ?? null, present: names(d.present), hostile: names(d.hostile), onstage: names(d.onstage) }
+        return { line, newEvent: !!r.newEvent, turn: (d.turn as Term | null)?.name ?? null, present: names(d.present), hostile: names(d.hostile), onstage: names(d.onstage),
+            subtext: typeof r.npc?.subtext === 'string' ? r.npc.subtext : '', npcSource: typeof r.npc?.source === 'string' ? r.npc.source : null }
     } catch {
         return null
     } finally {

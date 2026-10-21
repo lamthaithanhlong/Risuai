@@ -928,6 +928,9 @@ export interface Database{
     gmBookkeeper?: boolean
     /** The GM's solver (server/node/gmSolver.cjs) decides each turn's event and NPC intents on the Node server; on unless false. */
     gmSolver?: boolean
+    /** NPC psychology: the bookkeeper also writes `social:` acts into the ledger ($led_soc) and the solver adds a Subtext line (hidden drives, relations)
+     *  to the GM note (server/node/story/npcs, gameMaster.ts socialOf); on unless false. */
+    npcPsych?: boolean
     /** The bookkeeper names the shelves the next reply needs and the books are asked then, so the librarian waits in the chat instead of
      *  asking before the narrator (loreIndex.ts "the GM asks the librarian"); on unless false. */
     loreForward?: boolean

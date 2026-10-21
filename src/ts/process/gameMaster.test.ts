@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isForeignText, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
+    applyBookkeep, applyGm, cardEvent, playerSide, sidePaths, markAdvance, sideAge, sinceAdvance, bookkeepPrompt, gmBlocks, parseBookkeep, SOCIAL_TAGS, socialOf, appendSocial, stateLines, gmNote, gmPhase, gmRequest, gmStateOf, isForeignText, isYes, rollGm, settleGm, stripGm, takeGm, worldFlavour, type GmState,
     WORLD_LAW, NEED_RULE,
 } from './gameMaster'
 
@@ -466,5 +466,77 @@ describe('what the solver is sent', () => {
         expect(prevNewOf({ $gm_new_at: '3' }, 5)).toBe(false)
         expect(prevNewOf({ $gm_new_at: '5', $gm_new_prev: '4' }, 5)).toBe(true)   // rerolling reply 6: the mark before
         expect(prevNewOf({}, 5)).toBe(false)
+    })
+})
+
+// ---- NPC psychology: the social acts the bookkeeper names (2026-10-21) -----------------------------------------------------------
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+describe('social acts for the NPC psychology (the bookkeeper line, $led_soc)', () => {
+    it('SOCIAL_TAGS is the server\'s appraisal table: same tags, same Vietnamese words', () => {
+        const table = JSON.parse(readFileSync(resolve(process.cwd(), 'server/node/story/npcs/appraisal.json'), 'utf8')).tags as Record<string, { vi: string[] }>
+        expect(Object.keys(SOCIAL_TAGS)).toEqual(Object.keys(table))
+        expect(Object.keys(table).length).toBe(17)
+        for (const [tag, row] of Object.entries(table)) expect(SOCIAL_TAGS[tag]).toEqual(row.vi)
+    })
+    it('the prompt lists the tags with their Vietnamese gloss, and the rule, only when social is asked', () => {
+        const on = bookkeepPrompt({}, 'p', 'r', 'x', '', '', { social: true })
+        expect(on).toContain('social: <who> | <tag> | <whom>')
+        expect(on).toContain('help (giúp)')
+        expect(on).toContain('betray (phản bội)')
+        expect(on).toContain('promise_broken (thất hứa)')
+        for (const tag of Object.keys(SOCIAL_TAGS)) expect(on).toContain(tag + ' (')
+        expect(on).toContain('use "player" for the player\'s character')
+        for (const p of [bookkeepPrompt({}, 'p', 'r', 'x'), bookkeepPrompt({}, 'p', 'r', 'x', '', '', {}), bookkeepPrompt({}, 'p', 'r', 'x', '', '', { social: false })]) {
+            expect(p).not.toContain('social:')
+            expect(p).not.toContain('promise_kept')
+        }
+        // the status-only call (no GM notes) never asks for it
+        expect(bookkeepPrompt(null, 'p', 'r', 'x', 'STATUS PART', '', { social: true })).not.toContain('social:')
+    })
+    it('parseBookkeep keeps social lines (in the block, or bare)', () => {
+        expect(parseBookkeep('[[GM\nbeat: 2 | a | b\nsocial: Marek | help | player\n]]')).toEqual(['\nbeat: 2 | a | b\nsocial: Marek | help | player\n'])
+        expect(parseBookkeep('social: Marek | help | player\nblah')).toEqual(['social: Marek | help | player'])
+    })
+    it('a social line in the block moves no GM note', () => {
+        const st: GmState = { gm_arc: 'a | b | c | d', gm_beat: '1 | x | y' }
+        const s = applyBookkeep(st, ['social: Marek | help | player'], 'r1', 3)
+        expect(s).toMatchObject({ gm_arc: 'a | b | c | d', gm_beat: '1 | x | y' })
+    })
+    it('socialOf: known tags, Vietnamese words mapped, never an act on oneself, player kept, at most 3', () => {
+        const got = socialOf(['beat: 1 | a | b\nsocial: Marek | help | player\n- social: Evelyn | giúp | Kenji\nsocial: Kenji | khen ngợi | Evelyn\nsocial: Varn | phản bội | Tôi'])
+        expect(got).toEqual([
+            { who: 'Marek', tag: 'help', target: 'player' },
+            { who: 'Evelyn', tag: 'help', target: 'Kenji' },
+            { who: 'Kenji', tag: 'praise', target: 'Evelyn' },
+        ])
+        expect(socialOf(['social: Varn | betray | Tôi', 'social: Người chơi | tặng | Marek'])).toEqual([
+            { who: 'Varn', tag: 'betray', target: 'player' }, { who: 'player', tag: 'gift', target: 'Marek' }])
+        expect(socialOf(['social: Marek | help | marek'])).toEqual([])                          // who === whom
+        expect(socialOf(['social: player | help | Tôi'])).toEqual([])                          // both the player
+        expect(socialOf(['social: Marek | love | Evelyn', 'social: Marek | help'])).toEqual([])    // unknown tag, no whom
+        expect(socialOf(['social: Marek | help (giúp) | Evelyn', 'social: Marek | promise-kept | Evelyn'])).toEqual([
+            { who: 'Marek', tag: 'help', target: 'Evelyn' }, { who: 'Marek', tag: 'promise_kept', target: 'Evelyn' }])
+        expect(socialOf(['social: A | help | B\nsocial: A | help | B\nsocial: C | gift | D\nsocial: E | save | F\nsocial: G | harm | H']).length).toBe(3)
+        expect(socialOf(['Marek helped the player.', ''])).toEqual([])
+    })
+    it('appendSocial writes "n | who | tag | whom", dedupes on (n, who, tag, whom) and keeps the last 120 lines', () => {
+        const vars: Record<string, string> = {}
+        const e = [{ who: 'Marek', tag: 'help', target: 'player' }]
+        expect(appendSocial(vars, 4, e)).toBe(true)
+        expect(vars.$led_soc).toBe('4 | Marek | help | player')
+        expect(appendSocial(vars, 4, e)).toBe(false)                     // the helper ran twice on the same reply
+        expect(vars.$led_soc).toBe('4 | Marek | help | player')
+        expect(appendSocial(vars, 5, e)).toBe(true)                      // the same act in the next reply is a new line
+        expect(vars.$led_soc).toBe('4 | Marek | help | player\n5 | Marek | help | player')
+        expect(appendSocial(vars, 5, [{ who: 'Marek', tag: 'help', target: 'player' }, { who: 'Marek', tag: 'gift', target: 'player' }])).toBe(true)
+        expect(vars.$led_soc.split('\n')).toHaveLength(3)
+        const long: Record<string, string> = {}
+        for (let n = 1; n <= 130; n++) appendSocial(long, n, [{ who: 'A', tag: 'help', target: 'B' }])
+        const ls = long.$led_soc.split('\n')
+        expect(ls).toHaveLength(120)
+        expect(ls[0]).toBe('11 | A | help | B')
+        expect(ls.at(-1)).toBe('130 | A | help | B')
+        expect(appendSocial({}, 1, [])).toBe(false)
     })
 })

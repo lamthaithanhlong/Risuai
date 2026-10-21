@@ -2,7 +2,7 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { appendSocial, applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, socialOf, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
@@ -75,7 +75,7 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
     const decision = await decide({
         chatId: chat.id ?? '', world: gmWorld(card), phase, vars: decideVars(chat.scriptstate), messages: decideMessages(messages),
         dice: { pace: dice.pace, surface: dice.surface, consequence: dice.consequence, cardNew: die === true, firstOrder: !!dice.firstOrder },
-        prevNew: prevNewOf(chat.scriptstate, n), kinds, stance, mode,
+        prevNew: prevNewOf(chat.scriptstate, n), kinds, stance, mode, npc: getDatabase().npcPsych !== false, turn: n,
     }).catch(() => null)
     if (!decision) return gameMasterRequest(formated, card, chat, rng)
     const vars = chat.scriptstate ??= {}
@@ -159,8 +159,9 @@ function notePanelAtRequest(card: character, chat: Chat): string {
     return note
 }
 
-/** The card's ledger (status.lua's [[LEDGER]]: memories, relations, timeline), written by the reply as the panel is. */
-const LEDGER_VARS = ['$led_mem', '$led_rel', '$led_ev']
+/** The card's ledger (status.lua's [[LEDGER]]: memories, relations, timeline), written by the reply as the panel is; $led_soc is the
+ *  bookkeeper's social acts (gameMaster.ts appendSocial), kept in the snapshot so a rerolled reply takes its acts with it. */
+const LEDGER_VARS = ['$led_mem', '$led_rel', '$led_ev', '$led_soc']
 /** Replies whose rollback is kept: a rollback over more replies at once goes back to before the oldest of these. */
 const PANEL_LOG_MAX = 20
 type PanelLog = [string, Record<string, string>][]
@@ -269,7 +270,7 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     // is tracked so the next turn waits for it rather than asking the shelf question itself
     const ask = forwardAsk(card)
     const lore = ask ? { ...ask, prefetch: () => prefetchBooks(card, live()) } : undefined
-    const run = bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written, lore })
+    const run = bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written, lore, social: getDatabase().npcPsych !== false })
     trackForward(chat, run)
     void run.catch((e) => console.warn('[game master] bookkeeper failed', e))
 }
@@ -282,15 +283,17 @@ const BOOKKEEP_TIMEOUT_MS = 60_000
  */
 export async function bookkeep(live: () => Chat, reply: { data: string; chatId?: string }, replies: number, flavour: string,
     ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void; written?: Record<string, string>
-        lore?: { shelves: Shelf[]; indexLength: number; prefetch?: () => Promise<void> } } = {}): Promise<boolean> {
+        lore?: { shelves: Shelf[]; indexLength: number; prefetch?: () => Promise<void> }; social?: boolean } = {}): Promise<boolean> {
     const wantGm = opts.gm !== false
+    // the social acts of the reply (NPC psychology) are asked with the GM's notes, never for the status-only call
+    const wantSocial = wantGm && opts.social !== false
     const before = live()
     const player = [...before.message].reverse().find((m) => m.role === 'user')?.data ?? ''
     // the reply before this one: what it showed is on the panel already (a body seen again is not a second kill)
     const said = before.message.filter((m) => m.role === 'char')
     const previous = (said.at(-1)?.data === reply.data || (!!reply.chatId && said.at(-1)?.chatId === reply.chatId) ? said.at(-2) : said.at(-1))?.data ?? ''
     const written = opts.written ?? {}
-    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '')
+    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '', { social: wantSocial })
     const answer = await (ask ?? askSubmodel)(prompt)
     const chat = live()
     const last = chat.message[chat.message.length - 1]
@@ -300,6 +303,11 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     if (bodies) {
         writeState(chat, applyBookkeep(gmStateOf(chat.scriptstate), bodies, reply.chatId ?? '', replies, player))
         wrote = true
+    }
+    // who did what to whom, kept in the ledger under this reply's number (a repeat of the same call adds nothing)
+    if (wantSocial) {
+        const acts = socialOf([...(bodies ?? []), answer])
+        if (acts.length && appendSocial(chat.scriptstate ??= {}, replies, acts)) wrote = true
     }
     if (opts.status) {
         const updates = parseStatus(answer, opts.status, chat.scriptstate, { reply: reply.data ?? '', written })

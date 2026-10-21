@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const db: { gameMaster?: boolean; gmBookkeeper?: boolean; characters: unknown[] } = { characters: [] }
+const db: { gameMaster?: boolean; gmBookkeeper?: boolean; npcPsych?: boolean; characters: unknown[] } = { characters: [] }
 vi.mock('../storage/database.svelte', () => ({ getDatabase: () => db }))
 const persona = { text: '' }
 vi.mock('../util', () => ({ getPersonaPrompt: () => persona.text }))
@@ -450,7 +450,7 @@ describe('the GM note with the solver\'s decision', () => {
     it('sends the turn and puts the decision in place of the dice line, the card\'s NEW and the need rule', async () => {
         const c = running()
         let seen: any = null
-        const out = await gameMasterRequestSolved(dieNew(), card as never, c as never, async (input) => { seen = input; return { line: LINE, newEvent: false, turn: 'quiet', present: [], hostile: [], onstage: [] } })
+        const out = await gameMasterRequestSolved(dieNew(), card as never, c as never, async (input) => { seen = input; return { line: LINE, newEvent: false, turn: 'quiet', present: [], hostile: [], onstage: [], subtext: '', npcSource: null } })
         expect(seen).toMatchObject({ world: 'shadow_slave', phase: 'run', kinds: ['a stranger'], stance: 'wants to use the character', dice: { cardNew: true }, mode: { scene: 'still', combat: 'peace' } })
         expect(seen.vars.gm_arc).toBe('a | b | c | d')
         expect(seen.messages.at(-1)).toEqual({ role: 'user', text: 'Kenji thở dài.' })
@@ -465,10 +465,10 @@ describe('the GM note with the solver\'s decision', () => {
     })
     it('a new event chosen moves the marks, so the next turn knows the last one brought something new', async () => {
         const c = running()
-        await gameMasterRequestSolved(dieNew(), card as never, c as never, async () => ({ line: LINE, newEvent: true, turn: 'new', present: [], hostile: [], onstage: [] }))
+        await gameMasterRequestSolved(dieNew(), card as never, c as never, async () => ({ line: LINE, newEvent: true, turn: 'new', present: [], hostile: [], onstage: [], subtext: '', npcSource: null }))
         expect(c.scriptstate.$gm_new_at).toBe('2')
         const d = running()
-        await gameMasterRequestSolved(req(), card as never, d as never, async () => ({ line: LINE, newEvent: true, turn: 'advance', present: ['Varn'], hostile: ['Varn'], onstage: ['Varn'] }))
+        await gameMasterRequestSolved(req(), card as never, d as never, async () => ({ line: LINE, newEvent: true, turn: 'advance', present: ['Varn'], hostile: ['Varn'], onstage: ['Varn'], subtext: '', npcSource: null }))
         expect(d.scriptstate.$gm_adv_at).toBe('2')
         expect(JSON.parse(d.scriptstate.$gm_mode).mode.combat).toBe('fight')     // a hostile move in the scene starts a fight
     })
@@ -485,5 +485,108 @@ describe('the GM note with the solver\'s decision', () => {
         const out = await gameMasterRequestSolved(req(), card as never, c as never, async () => { asked = true; return null })
         expect(asked).toBe(false)
         expect(out[1].content).toBe('Tui đi xuống hầm.')
+    })
+})
+
+// ---- NPC psychology on the page (2026-10-21) -----------------------------------------------------------------------------------
+describe('NPC psychology: $led_soc and the solver flag', () => {
+    const ssCard = { ...card, globalLore: [{ content: '[[STATUS\nfrag: 12/1000\n]]\nCURRENT RUNES\nfrag={{getvar::st_frag}}; place={{getvar::st_place}}' }] }
+    beforeEach(() => { db.gameMaster = undefined; db.gmBookkeeper = undefined; db.npcPsych = undefined; db.characters = [ssCard]; asks.length = 0 })
+
+    it('the bookkeeper asks for social lines and writes them to $led_soc under the reply count', async () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'Tui băng bó cho Marek.' }, { role: 'char', data: 'Marek gật đầu.', chatId: 'r2' }], { $st_name: 'Mai' })
+        let asked = ''
+        const ok = await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 1 | x | y\nsocial: player | giúp | Marek\nsocial: Marek | thanks | Mai\n]]' })
+        expect(ok).toBe(true)
+        expect(asked).toContain('social: <who> | <tag> | <whom>')
+        expect(c.scriptstate.$led_soc).toBe('2 | player | help | Marek')
+        // the same call again on the same reply writes nothing twice
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async () => 'social: player | help | Marek')
+        expect(c.scriptstate.$led_soc).toBe('2 | player | help | Marek')
+        // lines the helper wrote after the block count too
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async () => '[[GM\nbeat: 1 | x | y\n]]\nsocial: Marek | save | player')
+        expect(c.scriptstate.$led_soc).toBe('2 | player | help | Marek\n2 | Marek | save | player')
+    })
+
+    it('a reply the helper answers with only a social line still counts as written', async () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'x' }, { role: 'char', data: 'b', chatId: 'r2' }], { $st_name: 'Mai' })
+        expect(await bookkeep(() => c as never, c.message[2], 2, 'x', async () => 'Nothing else.')).toBe(false)
+        expect(c.scriptstate.$led_soc).toBeUndefined()
+    })
+
+    it('db.npcPsych = false: no social lines asked or kept, and the solver is told npc:false', async () => {
+        db.npcPsych = false
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'Tui băng bó cho Marek.' }, { role: 'char', data: 'Marek gật đầu.', chatId: 'r2' }], { $st_name: 'Mai' })
+        let asked = ''
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return '[[GM\nbeat: 1 | x | y\nsocial: player | help | Marek\n]]' }, { social: false })
+        expect(asked).not.toContain('social:')
+        expect(c.scriptstate.$led_soc).toBeUndefined()
+        // through noteGameMaster: the page passes the setting
+        answer.text = '[[GM\nbeat: 1 | x | y\nsocial: player | help | Marek\n]]'
+        const d = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' }, { role: 'char', data: 'Văn.\n[[GM\narc: debt | Varn | pay | brother\n]]', chatId: 'r2' }], { $st_name: 'Mai' })
+        noteGameMaster(0, d as never)
+        await settle()
+        expect(asks.at(-1)).not.toContain('social:')
+        expect(d.scriptstate.$led_soc).toBeUndefined()
+        db.npcPsych = undefined
+        const e = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'đi' }, { role: 'char', data: 'Văn.\n[[GM\narc: debt | Varn | pay | brother\n]]', chatId: 'r2' }], { $st_name: 'Mai' })
+        noteGameMaster(0, e as never)
+        await vi.waitFor(() => expect(e.scriptstate.$led_soc).toBe('2 | player | help | Marek'))
+        expect(asks.at(-1)).toContain('social: <who> | <tag> | <whom>')
+        answer.text = '[[GM\nbeat: 1 | x | y\n]]'
+        // the decide input
+        const run = () => chatOf([{ role: 'char', data: 'Mưa.', chatId: 'r1' }, { role: 'user', data: 'Kenji đi theo đoàn người.' }, { role: 'char', data: 'Chợ đông.', chatId: 'r2' }, { role: 'user', data: 'Kenji thở dài.' }],
+            { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1', $led_soc: '2 | Marek | help | player' })
+        db.characters = [card]
+        const seen: { npc?: boolean; vars?: Record<string, string> }[] = []
+        const decide = async (input: any) => { seen.push(input); return null }
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        db.npcPsych = false
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        expect(seen.map((i) => i.npc)).toEqual([true, false])
+        expect(seen[0].vars!.led_soc).toBe('2 | Marek | help | player')     // the ledger goes to the server with the other led_* vars
+    })
+
+    it('a rerolled reply takes its $led_soc lines with it (settlePanel)', async () => {
+        const c = { ...chatOf([{ role: 'char', data: 'Tên: Mai\nĐược chưa?', chatId: 'r1' }, { role: 'user', data: 'được' }, { role: 'char', data: 'Hầm tối.', chatId: 'r2' }, { role: 'user', data: 'Tui cứu Marek' }], { $st_frag: '0/1000', $led_soc: '1 | Evelyn | gift | player' }), id: 'chat-soc' }
+        const ask = () => { settlePanel(c as never); storyNotesRequest(req(), ssCard as never, c as never) }
+        ask()
+        c.message.push({ role: 'char', data: 'Marek thở ra.', chatId: 'r3' })
+        answer.text = '[[GM\nbeat: 3 | x | y\nsocial: player | save | Marek\n]]'
+        noteGameMaster(0, c as never)
+        await vi.waitFor(() => expect(c.scriptstate.$led_soc).toBe('1 | Evelyn | gift | player\n3 | player | save | Marek'))
+        // reroll: the reply is gone, the request finds the ledger as it was before it
+        c.message.pop()
+        ask()
+        expect(c.scriptstate.$led_soc).toBe('1 | Evelyn | gift | player')
+        // the new reply gets its own lines, once
+        c.message.push({ role: 'char', data: 'Marek ngất.', chatId: 'r3b' })
+        answer.text = '[[GM\nbeat: 3 | x | y\nsocial: player | harm | Marek\n]]'
+        noteGameMaster(0, c as never)
+        await vi.waitFor(() => expect(c.scriptstate.$led_soc).toBe('1 | Evelyn | gift | player\n3 | player | harm | Marek'))
+        answer.text = '[[GM\nbeat: 1 | x | y\n]]'
+    })
+
+    it('the solver\'s Subtext line reaches the note, as the last line, and its source and text are on the decision', async () => {
+        const SUB = 'Subtext (hidden drives; show them through action, tone and what is left unsaid, never state them): “Marek” grateful, offers help unasked; warm.'
+        const LINE = `This turn (decided, follow it): QUIET: no new trouble.\n${SUB}`
+        const { fetchGmDecision, DECIDE_LINE_MAX } = await import('./gmSolver')
+        const call = (body: unknown) => fetchGmDecision({ chatId: 'c', world: 'generic', phase: 'run', vars: {}, messages: [], dice: { pace: 'quiet', surface: '', consequence: false, cardNew: false, firstOrder: false }, prevNew: false, kinds: [], stance: '', mode: { scene: 'still', combat: 'peace' }, npc: true },
+            { fetch: (async () => ({ ok: true, json: async () => body })) as never, auth: async () => 'x' })
+        const d = await call({ status: 'ok', line: LINE, newEvent: false, decision: { turn: { name: 'quiet', args: [] } }, npc: { subtext: SUB, source: 'asp', ms: 12 } })
+        expect(d).toMatchObject({ line: LINE, subtext: SUB, npcSource: 'asp', turn: 'quiet' })
+        // no npc block: none; a line up to 2600 chars is taken, longer is not; the first line keeps its prefix check
+        expect(await call({ status: 'ok', line: LINE })).toMatchObject({ subtext: '', npcSource: null })
+        const pad = 'x'.repeat(DECIDE_LINE_MAX - 'This turn '.length)
+        expect(await call({ status: 'ok', line: 'This turn ' + pad })).not.toBeNull()
+        expect(await call({ status: 'ok', line: 'This turn ' + pad + 'x' })).toBeNull()
+        expect(await call({ status: 'ok', line: `Hello\n${SUB}` })).toBeNull()
+        const c = chatOf([{ role: 'char', data: 'Mưa.', chatId: 'r1' }, { role: 'user', data: 'Kenji đi theo đoàn người.' }, { role: 'char', data: 'Chợ đông.', chatId: 'r2' }, { role: 'user', data: 'Kenji thở dài.' }],
+            { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1' })
+        db.characters = [card]
+        const out = await gameMasterRequestSolved(req(), card as never, c as never, async () => d)
+        const note = String(out[1].content)
+        expect(note).toContain(SUB)
+        expect(note.indexOf('This turn (decided')).toBeLessThan(note.indexOf('Subtext (hidden drives'))
     })
 })
