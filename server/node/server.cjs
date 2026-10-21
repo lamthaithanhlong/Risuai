@@ -1483,6 +1483,14 @@ if (process.env.RISU_TURNS !== '0') {
         mkdirSync(path.dirname(turnsDbPath), { recursive: true });
         turnQueue = require('./turnQueue.cjs').openTurnQueue(turnsDbPath);
         turnQueue.onEvent(() => { for (const w of [...turnWaiters]) w(); });
+        // a push to the owner's phone when a turn ends (turnNotify.cjs; off unless ~/.risu-lan/notify.json or RISU_NOTIFY_URL)
+        const notifier = require('./turnNotify.cjs').createTurnNotifier({ nameOf: (chaId) => turnCharName(chaId) });
+        if (notifier.enabled) {
+            turnQueue.onEvent((key, _seq, event) => {
+                if (event?.type === 'state' && (event.state === 'saved' || event.state === 'failed')) void notifier.onState(turnQueue.get(key), event.state);
+            });
+            console.log('[Turns] a push goes to the phone when a turn ends');
+        }
         console.log(`[Turns] queue ready (${turnsDbPath}); pruned ${turnQueue.prune()}; open ${turnQueue.open().length}`);
         setInterval(() => { try { turnQueue.prune(); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
     } catch (error) {
@@ -1491,6 +1499,19 @@ if (process.env.RISU_TURNS !== '0') {
     }
 }
 const turnsOn = () => !!(turnQueue && turnWorker && turnWorker.available);
+
+/** The card's name for a notification (a REMOTE character is read from remotes/<chaId>.local.bin). */
+function turnCharName(chaId) {
+    try {
+        const { decodeSave, parseBlock } = require('./dbMerge.cjs');
+        const block = decodeSave(currentSaveBytes(DB_KEY_HEX)).find((b) => b.name === chaId);
+        const remote = block?.type === 6 ? currentSaveBytes(Buffer.from(`remotes/${chaId}.local.bin`, 'utf-8').toString('hex')) : null;
+        const char = remote ? JSON.parse(Buffer.from(remote).toString('utf8')) : block ? parseBlock(block) : null;
+        return typeof char?.name === 'string' ? char.name.split(/[:—–-]/)[0].trim() : '';
+    } catch {
+        return '';
+    }
+}
 
 /** A stream job made for "<chat id>:<uuid>#n" while the server runs a turn of that chat: the turn is generating, with that job. */
 function noteTurnJob(idempotencyKey, jobId) {
