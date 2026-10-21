@@ -13,6 +13,7 @@ export function storyMarkdown(rec, checks) {
     L.push(`Chats: step-by-step \`${rec.steps?.chatId ?? '-'}\`, surprise \`${rec.play?.chatId ?? '-'}\` (new chats on the copy; the owner's chats untouched). Duration ${Math.round((rec.ms ?? 0) / 60000)} min.`, '')
     if (rec.narrator) L.push(`**Narrator** — ${rec.narrator}.`, '')
     if (rec.diagnostic) L.push(`**DIAGNOSTIC RUN** — ${rec.diagnostic}. Not how the owner plays today.`, '')
+    if (rec.loreBudget) L.push(`**LORE BUDGET MEASURED** — the copy's lore token budget was scaled to ${rec.loreBudget.percent}% (${rec.loreBudget.before} -> ${rec.loreBudget.after}). Not how the owner plays today.`, '')
     L.push(`**${t.pass} pass, ${t.fail} fail, ${t.na} n/a${t.info ? `, ${t.info} info` : ''}**`, '')
     L.push('| Check | Result | Summary |', '|---|---|---|')
     for (const c of checks) L.push(`| ${esc(c.title)} \`${c.id}\` | ${mark[c.status]} | ${esc(c.summary)} |`)

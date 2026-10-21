@@ -19,6 +19,7 @@
 //                        scorecards say so, and the default out dir gets a -diag suffix
 //     --lore-forward M   on | off | shadow: the COPY's loreForward (the GM names the shelves, loreIndex.ts); shadow keeps the live librarian
 //                        and logs what the GM's answer would have loaded ($lore_shadow). Not diagnostic: the scorecards are comparable.
+//     --lore-budget P    the COPY's card gets loreSettings.tokenBudget scaled to P percent (70 = cut 30%); the live card keeps its budget
 //     --gm-solver off    the COPY's gmSolver=false: the GM's note keeps its open rules (the symbolic solver is skipped); "on" leaves it as it is
 //     --base-from RUN    take the snapshot from RUN/_base of an earlier run (an APFS clone: no new disk, and two runs start from the same save)
 //     --keep-runs        do not remove the earlier runs under ~/.risu-story-work/acceptance (another session may still need a copy)
@@ -38,7 +39,7 @@ import path from 'path'
 import { STORIES, STORY_KEYS, planOf } from './stories.mjs'
 import { buildClient, copySave, freePort, liveServer, newRunDir, pruneRuns, snapshotLive, startServer, storeBackend } from './lib/env.mjs'
 import { Player } from './lib/play.mjs'
-import { modelSettings, patchCopyRoot, redact } from './lib/save.mjs'
+import { modelSettings, patchCopyCardBudget, patchCopyRoot, redact } from './lib/save.mjs'
 import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
@@ -50,6 +51,8 @@ const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] 
 const today = new Date().toLocaleDateString('sv-SE')
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
+const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
+if (LORE_BUDGET !== null && !(LORE_BUDGET > 0 && LORE_BUDGET <= 200)) throw new Error('--lore-budget wants a percent between 1 and 200')
 const GM_SOLVER = opt('--gm-solver') === 'off' ? { gmSolver: false } : null
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
 const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
@@ -130,6 +133,11 @@ async function playStory(key, ctx) {
         patchCopyRoot(path.join(dir, 'save'), ctx.backend, LORE_FORWARD)
         rec.loreForward = opt('--lore-forward')
         log(`lore forward: ${rec.loreForward}`)
+    }
+    if (LORE_BUDGET !== null) {
+        const b = patchCopyCardBudget(path.join(dir, 'save'), ctx.backend, story.cardId, LORE_BUDGET)
+        rec.loreBudget = { percent: LORE_BUDGET, ...b }
+        log(`lore token budget: ${b.before} -> ${b.after} (${LORE_BUDGET}%)`)
     }
     if (GM_SOLVER) {
         patchCopyRoot(path.join(dir, 'save'), ctx.backend, GM_SOLVER)

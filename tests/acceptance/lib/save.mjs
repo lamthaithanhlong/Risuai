@@ -66,3 +66,35 @@ export function patchCopyRoot(saveDir, backend, patch) {
     } else fs.writeFileSync(path.join(saveDir, DB_KEY), bytes)
     return before
 }
+
+/**
+ * DIAGNOSTIC, on a COPY only: scale a card's loreSettings.tokenBudget (the lore books' token budget). With enableRemoteSaving the card
+ * is the file remotes/<chaId>.local.bin (JSON text) in the copy's store, not a block of database.bin. Returns {before, after}.
+ */
+export function patchCopyCardBudget(saveDir, backend, chaId, percent) {
+    if (!/\.risu-story-work\/acceptance\//.test(saveDir)) throw new Error(`refusing to patch ${saveDir}: not an acceptance copy`)
+    const key = Buffer.from(`remotes/${chaId}.local.bin`, 'utf-8').toString('hex')
+    const edit = (bytes) => {
+        const card = JSON.parse(Buffer.from(bytes).toString('utf8'))
+        const before = card.loreSettings?.tokenBudget
+        if (!(before > 0)) throw new Error(`card ${chaId} has no loreSettings.tokenBudget to scale`)
+        const after = Math.round((before * percent) / 100)
+        card.loreSettings.tokenBudget = after
+        return { out: Buffer.from(JSON.stringify(card), 'utf8'), before, after }
+    }
+    if (backend === 'sqlite') {
+        const Database = require(path.join(REPO, 'node_modules/better-sqlite3'))
+        const db = new Database(saveDir + '.store.sqlite')
+        try {
+            const row = db.prepare('SELECT data FROM files WHERE key = ?').get(key)
+            if (!row) throw new Error(`remotes/${chaId}.local.bin not found in the copy store`)
+            const { out, before, after } = edit(row.data)
+            db.prepare('UPDATE files SET data = ?, size = ? WHERE key = ?').run(out, out.length, key)
+            return { before, after }
+        } finally { db.close() }
+    }
+    const f = path.join(saveDir, key)
+    const { out, before, after } = edit(fs.readFileSync(f))
+    fs.writeFileSync(f, out)
+    return { before, after }
+}
