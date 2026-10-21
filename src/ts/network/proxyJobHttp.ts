@@ -3,11 +3,16 @@ import type { ProxyJobWsEvent } from "./proxyJobWs"
 export interface JobLine { seq: number, event: ProxyJobWsEvent }
 export type JobReadResult = 'done' | 'error' | 'aborted' | 'gave_up'
 
-export interface JobReaderOptions {
+export interface JobReaderOptions<E = ProxyJobWsEvent> {
     /** Opens the event stream from a sequence number (GET /proxy-stream-jobs/:id/events?from=N). */
     openEvents: (from: number) => Promise<Response>
     /** Called once per event, in order, never twice for the same sequence number. */
-    onEvent: (event: ProxyJobWsEvent) => void
+    onEvent: (event: E) => void
+    /**
+     * The event that ends the stream, as 'done' or 'error' (null: not an end). Default: a stream job's "done" and "error". The turn
+     * events (GET /api/turns/:key/events) end with the states saved, failed and cancelled.
+     */
+    finalOf?: (event: E) => 'done' | 'error' | null
     isAborted: () => boolean
     sleep: (ms: number) => Promise<void>
     /** Give up after this many failed attempts in a row (an event or ping that arrives resets the count). */
@@ -40,7 +45,11 @@ async function readOrIdle(reader: ReadableStreamDefaultReader<Uint8Array>, ms: n
  * Follows a stream job to its end. When the connection drops (phone screen locked, Wi-Fi blip, Safari suspending
  * the page) it opens the stream again from the next sequence number, so nothing is lost and nothing is repeated.
  */
-export async function readJobEvents(opt: JobReaderOptions): Promise<JobReadResult> {
+export async function readJobEvents<E = ProxyJobWsEvent>(opt: JobReaderOptions<E>): Promise<JobReadResult> {
+    const finalOf = opt.finalOf ?? ((e: E) => {
+        const t = (e as { type?: string }).type
+        return t === 'done' ? 'done' : t === 'error' ? 'error' : null
+    })
     // Count failed attempts, never wall-clock time: a locked phone freezes the page for minutes while the job keeps
     // running on the server, and Date.now() jumps over that gap. Measured with UPPAAL (specs/generation/uppaal):
     // "give up when now - lastProgress > 120 s" gave up at the first failure after any lock longer than 2 minutes.
@@ -57,7 +66,7 @@ export async function readJobEvents(opt: JobReaderOptions): Promise<JobReadResul
             const res = await opt.openEvents(next)
             if (res.status === 404) {
                 // The server no longer knows this job: nothing to wait for.
-                opt.onEvent({ type: 'error', status: 404, message: 'The stream job is gone (server restarted or job expired)' })
+                opt.onEvent({ type: 'error', status: 404, message: 'The stream job is gone (server restarted or job expired)' } as E)
                 return 'error'
             }
             if (!res.ok || !res.body) {
@@ -84,7 +93,7 @@ export async function readJobEvents(opt: JobReaderOptions): Promise<JobReadResul
                     if (!line) {
                         continue
                     }
-                    let parsed: Partial<JobLine> & { type?: string }
+                    let parsed: { seq?: number, event?: E, type?: string }
                     try {
                         parsed = JSON.parse(line)
                     } catch {
@@ -100,11 +109,9 @@ export async function readJobEvents(opt: JobReaderOptions): Promise<JobReadResul
                     next = parsed.seq + 1
                     attempt = 0
                     opt.onEvent(parsed.event)
-                    if (parsed.event.type === 'done') {
-                        return 'done'
-                    }
-                    if (parsed.event.type === 'error') {
-                        return 'error'
+                    const end = finalOf(parsed.event)
+                    if (end) {
+                        return end
                     }
                 }
             }

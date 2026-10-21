@@ -932,6 +932,8 @@ export interface Database{
     learningNotebook?: { [lang: string]: { vocab?: string; mistakes?: string; history?: string } }
     fullScreen:boolean
     playMessage:boolean
+    /** Async turn (specs/turns): "send" hands the turn to the server (turnQueue.cjs); unset follows the server's RISU_ASYNC_TURNS */
+    asyncTurns?:boolean
     iconsize:number
     theme: string
     subModel:string

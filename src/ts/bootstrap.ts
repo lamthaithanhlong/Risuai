@@ -290,7 +290,13 @@ export async function loadData() {
             registerModelDynamic()
             saveDb()
             moduleUpdate()
-            const pending = readPending()
+            // the server's turn worker drives this page (turnWorker.cjs): it runs the server's turns, never the resume of a note
+            const { isTurnWorker } = await import('./process/turnWorkerState')
+            if (isTurnWorker) {
+                const { installTurnWorker } = await import('./process/turnWorkerPage')
+                installTurnWorker()
+            }
+            const pending = isTurnWorker ? null : readPending()
             if (pending) {
                 const index = findCharacterIndexbyId(pending.chaId)
                 if (index === -1) {

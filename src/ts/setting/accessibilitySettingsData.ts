@@ -46,6 +46,14 @@ export const accessibilitySettingsItems: SettingItem[] = [
         keywords: ['send', 'enter', 'keyboard', 'submit']
     },
     {
+        // specs/turns: the server keeps and runs the turn; the page shows its progress and loads the reply when it is back
+        id: 'acc.asyncTurns',
+        type: 'check',
+        fallbackLabel: 'Async turn: Enter gửi prompt lên server, server tự chạy; mở lại app là thấy kết quả hoặc tiến độ',
+        bindKey: 'asyncTurns',
+        keywords: ['async', 'server', 'queue', 'background', 'turn', 'chatgpt web']
+    },
+    {
         id: 'acc.fixedChatTextarea',
         type: 'check',
         labelKey: 'fixedChatTextarea',

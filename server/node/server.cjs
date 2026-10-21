@@ -163,6 +163,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, async () => {
         if (shuttingDown) return;
         shuttingDown = true;
+        try { await Promise.race([turnWorker?.stop(), new Promise((r) => setTimeout(r, 3000))]); } catch { /* the browser goes with the process */ }
         try { await Promise.race([saveQueue.flush(), new Promise((r) => setTimeout(r, 8000))]); await saveQueue.close(); } catch (e) { console.error('[SaveQueue] shutdown:', e); }
         try { saveStore.close(); } catch (e) { console.error('[Store] shutdown:', e); }
         process.exit(0);
@@ -466,6 +467,20 @@ function isLocalNetworkHost(hostname) {
     return false;
 }
 
+// RISU_UPSTREAM_REMAP='{"http://localhost:20128":"http://127.0.0.1:5555"}': a test copy (tests/turns) sends the model requests of
+// its pages and of its turn worker to a stub instead of the owner's router, whatever URL a setting or a plugin of the copied save
+// names. Unset (the live server) it changes nothing.
+const UPSTREAM_REMAP = (() => {
+    try { return Object.entries(JSON.parse(process.env.RISU_UPSTREAM_REMAP || '{}')); } catch { return []; }
+})();
+function remapUpstream(url) {
+    if (typeof url !== 'string') return url;
+    for (const [from, to] of UPSTREAM_REMAP) {
+        if (url.startsWith(from)) return to + url.slice(from.length);
+    }
+    return url;
+}
+
 function sanitizeTargetUrl(raw) {
     if (typeof raw !== 'string' || raw.trim() === '') {
         return null;
@@ -480,7 +495,7 @@ function sanitizeTargetUrl(raw) {
         }
         parsed.username = '';
         parsed.password = '';
-        return parsed.toString();
+        return remapUpstream(parsed.toString());
     } catch {
         return null;
     } // lgtm[js/request-forgery]
@@ -988,7 +1003,7 @@ const reverseProxyFunc = async (req, res, next) => {
         return;
     }
     
-    const urlParam = req.headers['risu-url'] ? decodeURIComponent(req.headers['risu-url']) : req.query.url;
+    const urlParam = remapUpstream(req.headers['risu-url'] ? decodeURIComponent(req.headers['risu-url']) : req.query.url);
 
     if (!urlParam) {
         res.status(400).send({
@@ -1069,7 +1084,7 @@ const reverseProxyFunc_get = async (req, res, next) => {
         return;
     }
     
-    const urlParam = req.headers['risu-url'] ? decodeURIComponent(req.headers['risu-url']) : req.query.url;
+    const urlParam = remapUpstream(req.headers['risu-url'] ? decodeURIComponent(req.headers['risu-url']) : req.query.url);
 
     if (!urlParam) {
         res.status(400).send({
@@ -1424,6 +1439,7 @@ app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (reusable) {
         // The same generation asked again (the page was refreshed): hand back the job that already has, or is
         // producing, the reply instead of asking the model a second time.
+        noteTurnJob(idempotencyKey, reusable.id);
         res.send({ jobId: reusable.id, heartbeatSec, reused: true });
         return;
     }
@@ -1445,11 +1461,193 @@ app.post('/proxy-stream-jobs', authenticatedRouteLimiter, async (req, res) => {
         bodyBase64,
         clientIp: req.ip
     });
+    noteTurnJob(idempotencyKey, job.id);
 
     res.send({
         jobId: job.id,
         heartbeatSec: job.heartbeatSec
     });
+});
+
+// ---- Turns: once the player presses send, the turn is the server's (turnQueue.cjs, turnWorker.cjs, specs/turns) -----------------
+// RISU_TURNS=0 turns it off (the page runs its turns as before); without Playwright there is no worker and the pages are told so.
+let turnQueue = null;
+let turnWorker = null;
+const turnWaiters = new Set();
+if (process.env.RISU_TURNS !== '0') {
+    try {
+        const turnsDbPath = process.env.RISU_TURNS_DB
+            || path.join(process.env.RISU_JOBS_DB ? path.dirname(process.env.RISU_JOBS_DB) : path.join(require('os').homedir(), '.risu-lan'), 'turns.sqlite');
+        mkdirSync(path.dirname(turnsDbPath), { recursive: true });
+        turnQueue = require('./turnQueue.cjs').openTurnQueue(turnsDbPath);
+        turnQueue.onEvent(() => { for (const w of [...turnWaiters]) w(); });
+        console.log(`[Turns] queue ready (${turnsDbPath}); pruned ${turnQueue.prune()}; open ${turnQueue.open().length}`);
+        setInterval(() => { try { turnQueue.prune(); } catch { /* ignore */ } }, 60 * 60 * 1000).unref();
+    } catch (error) {
+        console.error('[Turns] queue unavailable, the pages run their own turns:', error?.message || error);
+        turnQueue = null;
+    }
+}
+const turnsOn = () => !!(turnQueue && turnWorker && turnWorker.available);
+
+/** A stream job made for "<chat id>:<uuid>#n" while the server runs a turn of that chat: the turn is generating, with that job. */
+function noteTurnJob(idempotencyKey, jobId) {
+    if (!turnQueue || !idempotencyKey) return;
+    const m = /^([A-Za-z0-9-]+):/.exec(idempotencyKey);
+    if (!m) return;
+    try {
+        const active = turnQueue.activeOfChat(m[1]);
+        if (active) turnQueue.phase(active.key, null, 'generating', jobId);
+    } catch (error) {
+        console.error('[Turns] job hook:', error?.message || error);
+    }
+}
+
+function startTurnWorker(port, secure) {
+    if (!turnQueue || process.env.RISU_TURN_WORKER === '0') return;
+    turnWorker = require('./turnWorker.cjs').createTurnWorker({
+        queue: turnQueue,
+        baseUrl: `${secure ? 'https' : 'http'}://worker.localhost:${port}`,
+        getPassword: () => password,
+        dropKey: async (publicKey) => {
+            const h = await hashJSON(publicKey);
+            const i = knownPublicKeysHashes.indexOf(h);
+            if (i >= 0) {
+                knownPublicKeysHashes.splice(i, 1);
+                writeFileSync(knownPublicKeysPath, JSON.stringify(knownPublicKeysHashes), 'utf-8');
+            }
+        },
+        // the turn's last stream job ended well ("done"), or the turn made none; "error"/"interrupted"/"aborted": the reply is not whole
+        jobOk: async (key) => {
+            for (let i = 0; i < 30; i++) {
+                const t = turnQueue.get(key);
+                const job = t?.jobId && jobStore ? jobStore.getJob(t.jobId) : null;
+                if (!job) return true;
+                if (job.status !== 'running') return job.status === 'done';
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            return true;
+        },
+        // the turn's messages are in the chat as the server holds it (a reader gets this file): "saved" means saved here, not
+        // that the page's flushSave returned (it gives up after its timeout; a turn once reported saved before its write landed and
+        // the next turn, loading the save, wrote over the reply: tests/turns/repro.mjs double)
+        inSave: (chaId, chatId, ids) => {
+            try {
+                const { decodeSave, parseBlock } = require('./dbMerge.cjs');
+                const block = decodeSave(currentSaveBytes(DB_KEY_HEX)).find((b) => b.name === chaId);
+                // with enableRemoteSaving (the live save) a character is a REMOTE block: its data is remotes/<chaId>.local.bin
+                const remote = block?.type === 6 ? currentSaveBytes(Buffer.from(`remotes/${chaId}.local.bin`, 'utf-8').toString('hex')) : null;
+                const char = remote ? JSON.parse(Buffer.from(remote).toString('utf8')) : block ? parseBlock(block) : null;
+                const chat = char?.chats?.find((c) => c?.id === chatId) ?? null;
+                const have = new Set((chat?.message ?? []).map((m) => m?.chatId));
+                return ids.every((id) => have.has(id));
+            } catch (error) {
+                console.error('[Turns] inSave:', error?.message || error);
+                return false;
+            }
+        },
+        log: (...a) => console.log('[Turns]', ...a),
+    });
+    if (turnWorker.start()) console.log(`[Turns] worker ${turnWorker.owner} on ${secure ? 'https' : 'http'}://worker.localhost:${port}`);
+}
+
+const TURN_KEY_PARAM = /^[A-Za-z0-9-]{1,80}:[A-Za-z0-9-]{8,80}$/;
+
+app.get('/api/turns/config', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
+    // asyncDefault: what a page that never set Async turn uses (RISU_ASYNC_TURNS=1; unset: off)
+    res.send({ enabled: turnsOn(), asyncDefault: process.env.RISU_ASYNC_TURNS === '1' });
+});
+
+app.post('/api/turns', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    if (!turnsOn()) { res.status(503).send({ error: 'The server does not run turns' }); return; }
+    try {
+        const { turn, created } = turnQueue.create(req.body || {});
+        if (created) turnWorker.poke();
+        res.send({ turn, created });
+    } catch (error) {
+        if (error instanceof TypeError) { res.status(400).send({ error: error.message }); return; }
+        console.error('[Turns] create:', error?.message || error);
+        res.status(500).send({ error: 'Could not queue the turn' });
+    }
+});
+
+app.get('/api/turns', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const chat = typeof req.query.chat === 'string' ? req.query.chat : '';
+    if (!turnQueue || !/^[A-Za-z0-9-]{1,80}$/.test(chat)) { res.send({ turns: [] }); return; }
+    res.send({ turns: turnQueue.ofChat(chat) });
+});
+
+app.get('/api/turns/:key', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const turn = turnQueue && TURN_KEY_PARAM.test(req.params.key) ? turnQueue.get(req.params.key) : null;
+    if (!turn) { res.status(404).send({ error: 'Unknown turn' }); return; }
+    res.send({ turn });
+});
+
+// the chat as the turn saved it: the page takes it in place of its own copy of that chat
+app.get('/api/turns/:key/result', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
+    const turn = turnQueue && TURN_KEY_PARAM.test(req.params.key) ? turnQueue.get(req.params.key) : null;
+    if (!turn || turn.state !== 'saved') { res.status(404).send({ error: 'No saved result' }); return; }
+    res.send({ chat: turnQueue.result(req.params.key) });
+});
+
+app.delete('/api/turns/:key', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    if (!turnQueue || !TURN_KEY_PARAM.test(req.params.key)) { res.status(404).send({ error: 'Unknown turn' }); return; }
+    const before = turnQueue.get(req.params.key);
+    const r = turnQueue.cancel(req.params.key);
+    // the model stops at once; the worker's page learns at its next beat
+    const job = before?.jobId ? proxyStreamJobs.get(before.jobId) : null;
+    if (r.wasActive && job && !job.done) { job.aborted = true; job.abortController.abort(); markJobDone(job); }
+    res.send({ state: r.state });
+});
+
+// A turn's events from a cursor, then live, until it ends: GET /api/turns/:key/events?from=N, one JSON line per event
+// ({"seq":N,"event":{...}}), {"type":"ping"} every 15 s. A page that dropped asks again from the next seq (specs/turns/TurnApply.dfy C).
+app.get('/api/turns/:key/events', authenticatedRouteLimiter, async (req, res) => {
+    if (!await checkAuth(req, res)) return;
+    const key = req.params.key;
+    if (!turnQueue || !TURN_KEY_PARAM.test(key) || !turnQueue.get(key)) { res.status(404).send({ error: 'Unknown turn' }); return; }
+    let next = Math.max(1, Number.parseInt(String(req.query.from), 10) || 1);
+    let closed = false;
+    let wake = null;
+    const waiter = () => { if (wake) { const w = wake; wake = null; w(); } };
+    turnWaiters.add(waiter);
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    req.on('close', () => { closed = true; waiter(); });
+    const heartbeat = setInterval(() => { if (!closed) res.write('{"type":"ping"}\n'); }, 15000);
+    try {
+        while (!closed) {
+            const rows = turnQueue.eventsFrom(key, next, 200);
+            let ended = false;
+            for (const row of rows) {
+                res.write(JSON.stringify(row) + '\n');
+                next = row.seq + 1;
+                if (['saved', 'failed', 'cancelled'].includes(row.event.state)) ended = true;
+            }
+            if (ended) break;
+            if (rows.length > 0) continue;
+            await new Promise((resolve) => { wake = resolve; setTimeout(resolve, 15000); });
+        }
+    } catch (error) {
+        console.error('[Turns] events stream failed:', error?.message || error);
+    } finally {
+        turnWaiters.delete(waiter);
+        clearInterval(heartbeat);
+        res.end();
+    }
 });
 
 // The chats whose reply is still being generated on this server (the idempotency key starts with the chat id). A page that loads a
@@ -2112,6 +2310,7 @@ async function startServer() {
             server.listen(port, () => {
                 console.log("[Server] HTTPS server is running.");
                 console.log(`[Server] https://localhost:${port}/`);
+                startTurnWorker(port, true);
             });
         } else {
             // HTTP
@@ -2120,6 +2319,7 @@ async function startServer() {
             server.listen(port, () => {
                 console.log("[Server] HTTP server is running.");
                 console.log(`[Server] http://localhost:${port}/`);
+                startTurnWorker(port, false);
             });
         }
     } catch (error) {

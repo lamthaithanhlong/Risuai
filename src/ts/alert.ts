@@ -4,6 +4,7 @@ import { language } from "../lang"
 import { isTauri, isNodeServer } from "src/ts/platform"
 import { getDatabase, type MessageGenerationInfo } from "./storage/database.svelte"
 import { alertStore as alertStoreImported } from "./stores.svelte"
+import { noteTurnError } from "./process/turnWorkerState"
 
 export interface alertData{
     type: 'error'|'normal'|'none'|'ask'|'wait'|'selectChar'
@@ -30,6 +31,8 @@ export const alertStore = {
 
 export function alertError(msg: string | Error) {
     console.error(msg)
+    // the server's worker page is running a turn: the error is the turn's outcome (turnWorkerPage.ts)
+    noteTurnError(msg)
     const db = getDatabase()
 
     let stackTrace: string | undefined = undefined; 

@@ -6,6 +6,12 @@
     import { beginGeneration, endGeneration, isGenerationActive } from "src/ts/process/generationKey";
     import { clearPending, markPending, resumeGeneration } from "src/ts/process/pendingGeneration";
     import { planResumeWithRestore } from "src/ts/process/pendingGenerationCore";
+    import { asyncTurnsOn, cancelTurn, chatBusy, resumeTurns, submitTurn, turnViews } from "src/ts/process/turnClient";
+    import { registerTurnRunner } from "src/ts/process/turnWorkerPage";
+    import { isTurnWorker, takeTurnKey, turnInputMessageId } from "src/ts/process/turnWorkerState";
+    import TurnPanel from "./TurnPanel.svelte";
+    import type { TurnKind } from "src/ts/process/turnCore";
+    import { onMount } from "svelte";
 
     import Suggestion from './Suggestion.svelte';
     import { CameraIcon, DatabaseIcon, DicesIcon, GlobeIcon, ImagePlusIcon, LanguagesIcon, Laugh, MenuIcon, MicOffIcon, PackageIcon, Plus, RefreshCcwIcon, ReplyIcon, Send, StepForwardIcon, XIcon, BrainIcon, ArrowDown, SparkleIcon } from "@lucide/svelte";
@@ -179,6 +185,12 @@
             fileInput = []
         }
 
+        // the server runs the turn (turnQueue.cjs): the page sends it and follows it, and does not write the chat meanwhile
+        if(await useServerTurns()){
+            await sendViaServer(continueResponse ? 'continue' : 'send', messageInput)
+            return
+        }
+
         if(messageInput === ''){
             if(DBState.db.characters[selectedChar].type !== 'group'){
                 if(cha.length === 0 || cha[cha.length - 1].role !== 'user'){
@@ -204,7 +216,8 @@
                     role: 'user',
                     data: await processScript(char,messageInput,'editinput'),
                     time: Date.now(),
-                    name: $ConnectionOpenStore ? DBState.db.username : null
+                    name: $ConnectionOpenStore ? DBState.db.username : null,
+                    ...(turnInputMessageId() ? { chatId: turnInputMessageId() } : {})
                 })
             }
             else{
@@ -257,6 +270,14 @@
         if(rerolls.length === 0){
             rerolls.push(safeStructuredClone([DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.at(-1)]))
             rerollid = rerolls.length - 1
+        }
+        if(guardRetry === 0 && await useServerTurns()){
+            openMenu = false
+            const last = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message.at(-1)
+            if(last){
+                await sendViaServer('reroll', '', last.chatId)
+            }
+            return
         }
         let cha = safeStructuredClone(DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message)
         if(cha.length === 0 ){
@@ -317,7 +338,7 @@
         // "<chat id>:<uuid>": the server can then tell which chat a running job answers (GET /proxy-stream-jobs/running), so another
         // page loading this chat does not settle it as cut off while the phone is locked and the job runs on
         const keyChatId = DBState.db.characters[$selectedCharID]?.chats?.[DBState.db.characters[$selectedCharID]?.chatPage]?.id
-        const generationKey = resumeKey ?? (typeof keyChatId === 'string' && /^[A-Za-z0-9-]+$/.test(keyChatId) ? `${keyChatId}:${crypto.randomUUID()}` : crypto.randomUUID())
+        const generationKey = resumeKey ?? takeTurnKey() ?? (typeof keyChatId === 'string' && /^[A-Za-z0-9-]+$/.test(keyChatId) ? `${keyChatId}:${crypto.randomUUID()}` : crypto.randomUUID())
         if(!beginGeneration(generationKey, { aiModel: DBState.db.aiModel, requestModel: DBState.db.customProxyRequestModel })){
             // A reply is already being generated: leave its key, resume note, busy flag and Stop button alone.
             return
@@ -341,7 +362,7 @@
         let previousLength = pendingChar.chats[pendingChar.chatPage].message.length
         messageInput = ''
         abortController = new AbortController()
-        if(!continued && pendingChar?.type === 'character'){
+        if(!continued && pendingChar?.type === 'character' && !isTurnWorker){
             // A refresh mid-reply loses it; this note lets the next load generate it again.
             const sent = pendingChar.chats[pendingChar.chatPage].message[previousLength - 1]
             markPending({
@@ -395,7 +416,7 @@
         $doingChat = false
         genStatusEvents.end()
         endGeneration(generationKey)
-        if(DBState.db.playMessage){
+        if(DBState.db.playMessage && !isTurnWorker){
             const audio = new Audio(sendSound);
             audio.play().catch(() => {});
         }
@@ -460,6 +481,85 @@
             abortController.abort()
         }
     }
+
+    // ---- turns the server runs (server/node/turnQueue.cjs, src/ts/process/turnClient.ts) ----
+    let currentChatId = $derived(currentCharacter?.chats?.[currentCharacter.chatPage]?.id as string | undefined)
+
+    async function useServerTurns(): Promise<boolean> {
+        // only when the player turned Async turn on (Settings → Accessibility), and the server runs turns
+        if(isTurnWorker || DBState.db.characters[$selectedCharID]?.type !== 'character'){
+            return false
+        }
+        return await asyncTurnsOn(DBState.db.asyncTurns)
+    }
+
+    async function sendViaServer(kind: TurnKind, text: string, target?: string) {
+        const char = DBState.db.characters[$selectedCharID]
+        const chat = char?.chats?.[char.chatPage]
+        if(!char || !chat?.id){
+            return
+        }
+        if(kind !== 'send' && chatBusy(chat.id)){
+            // a reroll or a continue is about the reply a turn still running will write: it waits for that one to end
+            alertNormal('Server còn đang viết lượt trước của chat này; đợi nó xong rồi bấm lại.')
+            return
+        }
+        messageInput = ''
+        messageInputTranslate = ''
+        updateInputSizeAll()
+        // the turn goes first: a phone put away a moment after "send" must already have handed it over (measured: tests/turns/repro.mjs
+        // freeze, suspended 300 ms after the click). The page's own last edits follow at once; the worker needs seconds to load the save.
+        const flushing = flushSave().catch(() => {})
+        try {
+            // a new chat (a few messages) goes with the turn: the phone may be put away before its autosave reaches the server
+            const snapshot = chat.message.length <= 3 ? safeStructuredClone($state.snapshot(chat)) : undefined
+            await submitTurn({ chaId: char.chaId, chatId: chat.id, kind, text, target, chat: snapshot })
+            await flushing
+        } catch (error) {
+            if(kind === 'send' && messageInput === ''){
+                messageInput = text
+                updateInputSizeAll()
+            }
+            alertError(error)
+        }
+    }
+
+    function stopServerTurn() {
+        const list = currentChatId ? ($turnViews[currentChatId] ?? []) : []
+        const active = list.find((v) => !['saved', 'failed', 'cancelled'].includes(v.state))
+        if(active){
+            void cancelTurn(active.key)
+        }
+    }
+
+    // the page opened a chat, or came back from the background: follow the turns that are not finished (sent from here or elsewhere)
+    $effect(() => {
+        const chatId = currentChatId
+        const chaId = currentCharacter?.chaId
+        if(isTurnWorker || !chatId || !chaId){
+            return
+        }
+        untrack(() => { void resumeTurns(chatId, chaId) })
+    })
+    onMount(() => {
+        if(isTurnWorker){
+            return registerTurnRunner({
+                chaId: () => DBState.db.characters[$selectedCharID]?.chaId,
+                send: async (text) => { messageInput = text; await sendMain(false) },
+                generate: async () => { await sendChatMain(false) },
+                reroll: async () => { await reroll() },
+                continue: async () => { messageInput = ''; await sendMain(true) },
+                abort: () => abortChat(),
+            })
+        }
+        const onVisible = () => {
+            if(document.visibilityState === 'visible' && currentChatId && currentCharacter?.chaId){
+                void resumeTurns(currentChatId, currentCharacter.chaId)
+            }
+        }
+        document.addEventListener('visibilitychange', onVisible)
+        return () => document.removeEventListener('visibilitychange', onVisible)
+    })
 
     async function runAutoMode() {
         if(autoMode){
@@ -711,6 +811,9 @@
             }
         }}>
             <GenStatusLine />
+            {#if currentChatId && ($turnViews[currentChatId]?.length ?? 0) > 0}
+                <TurnPanel chatId={currentChatId} onstop={stopServerTurn} onresend={(text) => sendViaServer('send', text)} />
+            {/if}
             <div
                     class="{DBState.db.fixedChatTextarea ? 'sticky pt-2 pb-2 right-0 bottom-0 bg-bgcolor' : 'mt-2 mb-2'} flex items-stretch w-full"
                     style="{DBState.db.fixedChatTextarea ? 'z-index:29;' : ''}"
