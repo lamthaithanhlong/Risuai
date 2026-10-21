@@ -8,7 +8,7 @@ import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
 import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
-import { decideMessages, decideVars, type DecideInput, type GmDecision } from './gmSolver'
+import { decideMessages, decidePeople, decideVars, type DecideInput, type GmDecision } from './gmSolver'
 import { modeAfterDecision, modeBefore, modeFromTurn, modeVar } from './gmMachine'
 
 type Room = character | groupChat
@@ -76,6 +76,7 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
         chatId: chat.id ?? '', world: gmWorld(card), phase, vars: decideVars(chat.scriptstate), messages: decideMessages(messages),
         dice: { pace: dice.pace, surface: dice.surface, consequence: dice.consequence, cardNew: die === true, firstOrder: !!dice.firstOrder },
         prevNew: prevNewOf(chat.scriptstate, n), kinds, stance, mode, npc: getDatabase().npcPsych !== false, turn: n,
+        people: getDatabase().npcPsych !== false ? decidePeople(messages, (card as { extentions?: { vjPortraits?: Record<string, { name?: string }> } } | undefined)?.extentions?.vjPortraits) : [],
     }).catch(() => null)
     if (!decision) return gameMasterRequest(formated, card, chat, rng)
     const vars = chat.scriptstate ??= {}

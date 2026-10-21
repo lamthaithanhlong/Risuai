@@ -753,8 +753,11 @@ export const SOCIAL_TAGS: Record<string, string[]> = {
     betray: ['phản bội', 'bán đứng'],
 }
 const SOCIAL_LIST = Object.entries(SOCIAL_TAGS).map(([t, vi]) => `${t} (${vi[0]})`).join(', ')
-const SOCIAL_TEMPLATE = `social: <who> | <tag> | <whom>   (one line per notable social act in this reply, at most 3; tags: ${SOCIAL_LIST})\n`
-const SOCIAL_RULE = ' social: only an act the reply SHOWS between the player\'s character and a named person, or between two named people (who = the one who acts; whom = the one it is done to; use "player" for the player\'s character); never for the narrator\'s mood words.'
+const SOCIAL_TEMPLATE = `social: <who> | <tag> | <whom>   (one line per social act in this reply, at most 3; tags: ${SOCIAL_LIST})\n`
+// Measured 2026-10-21 (acceptance ss, the "story" helper on 4 real replies): with "notable" and only "leave out every line that did
+// not change" to go by, the helper wrote no social line at all, though "Martin Vale" warned and advised the character in two of them:
+// a warning is no tag it could see. The line is now asked whenever a named person does something to someone, and what counts is said.
+const SOCIAL_RULE = ' social: write one for every act the reply SHOWS between the player\'s character and a named person, or between two named people (who = the one who acts; whom = the one it is done to; use "player" for the player\'s character), and leave it out only when no named person did anything to anyone: a warning, advice, a guide, shared news or what they know is help; telling a secret or their own trouble is confide; an apology is reconcile; a mocking or contemptuous word is insult; turning down a request or holding back an answer is refuse; never for the narrator\'s mood words, never for a person without a name.'
 const SOCIAL_LINE = /^\s*[-*•]?\s*social\s*:\s*(.*)$/i
 const SOCIAL_MAX_LINES = 3
 const PLAYER_WORDS = new Set(['player', 'tôi', 'người chơi'])

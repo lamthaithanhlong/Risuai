@@ -3,6 +3,8 @@
 // rules (gameMaster.ts gmNote). No server, a slow answer (the solver's budget is 300 ms) or any error gives null, and the page keeps
 // today's note.
 
+import { isUnnamed, parseLooks } from './portraits'
+
 export interface DecideDeps {
     fetch: typeof fetch
     auth(): Promise<string>
@@ -17,6 +19,8 @@ export type DecideInput = {
     npc: boolean
     /** the reply count now: the $led_soc lines' turn numbers are counted the same way, so the server ages emotions by it */
     turn?: number
+    /** named people the ledger may not have (decidePeople): the server counts them as people of the story, present when named */
+    people?: string[]
 }
 type Term = { name: string; args: Term[] }
 export type GmDecision = {
@@ -41,6 +45,30 @@ export function decideVars(vars: Record<string, unknown> | undefined): Record<st
 /** the chat's last 4 messages, the player's turn last, without hidden blocks */
 export function decideMessages(messages: { role: string; data: string }[] | undefined): { role: string; text: string }[] {
     return (messages ?? []).slice(-4).map((m) => ({ role: m.role === 'user' ? 'user' : 'char', text: String(m.data ?? '').replace(/\[\[[A-Z_]+[\s\S]*?(\]\]|$)/g, '').slice(-1500) }))
+}
+
+/** at most this many names go with a decide request */
+export const DECIDE_PEOPLE_MAX = 40
+
+/**
+ * The named people of the chat the ledger may have no line for: the [[LOOK name | ...]] lines of the last messages (the narrator
+ * writes one when a named character first appears) and the card's portraits (what earlier replies named). Roles ("Người lính") are
+ * no name. Measured 2026-10-21 (acceptance ss): "Martin Vale" walked beside the character for twelve replies, the ledger never named
+ * him, and the NPC layer had nobody to read. Newest first, at most DECIDE_PEOPLE_MAX.
+ */
+export function decidePeople(messages: { data: string }[] | undefined, portraits?: Record<string, { name?: string; hand?: boolean }> | null): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const add = (n: string | undefined) => {
+        const name = String(n ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
+        const k = name.normalize('NFC').toLowerCase()
+        if (!name || seen.has(k) || isUnnamed(name)) return
+        seen.add(k)
+        out.push(name)
+    }
+    for (const m of [...(messages ?? [])].slice(-8).reverse()) for (const l of parseLooks(String(m.data ?? ''))) add(l.name)
+    for (const e of Object.values(portraits ?? {})) add(e?.name)
+    return out.slice(0, DECIDE_PEOPLE_MAX)
 }
 
 export async function fetchGmDecision(input: DecideInput, deps: DecideDeps): Promise<GmDecision | null> {

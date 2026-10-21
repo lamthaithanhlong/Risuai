@@ -10,6 +10,7 @@ vi.mock('./request/request', () => ({ requestChatData: async (arg: { formated: {
 
 const { bookkeep, cardNewMark, creationRequest, gameMasterRequest, noteGameMaster, settlePanel, storyNotesRequest } = await import('./gameMasterPage')
 const { statusSpec } = await import('./statusBook')
+const { bookkeepPrompt } = await import('./gameMaster')
 
 const card = { type: 'character', name: 'Shadow Slave', desc: 'Character Creation … Được chưa?', firstMessage: '', globalLore: [] }
 type M = { role: string; data: string; chatId?: string }
@@ -545,6 +546,40 @@ describe('NPC psychology: $led_soc and the solver flag', () => {
         await gameMasterRequestSolved(req(), card as never, run() as never, decide)
         expect(seen.map((i) => i.npc)).toEqual([true, false])
         expect(seen[0].vars!.led_soc).toBe('2 | Marek | help | player')     // the ledger goes to the server with the other led_* vars
+    })
+
+    it('the decide input names the people the ledger may lack: LOOK names of the last messages (newest first), then the card\'s portraits; roles are no name', async () => {
+        const { decidePeople, DECIDE_PEOPLE_MAX } = await import('./gmSolver')
+        const msgs = [
+            { data: 'Cũ.\n[[LOOK Aiko | short hair]]' },
+            { data: 'Ông bảo trì ló ra.\n[[LOOK Martin Vale | grey uniform, about 40]]\n[[LOOK Người lính | armour]]' },
+            { data: 'Martin đi theo.' },
+        ]
+        expect(decidePeople(msgs, { 'nephis': { name: 'Nephis' }, 'martin vale': { name: 'Martin Vale' }, 'guard': { name: 'Lính gác' } })).toEqual(['Martin Vale', 'Aiko', 'Nephis'])
+        expect(decidePeople([], null)).toEqual([])
+        const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`p${i}`, { name: `Ana${i}` }]))
+        expect(decidePeople([], many)).toHaveLength(DECIDE_PEOPLE_MAX)
+        // and the page sends them (only with NPC psychology on)
+        const lookCard = { ...card, extentions: { vjPortraits: { 'evelyn': { name: 'Evelyn' } } } }
+        const run = () => chatOf([{ role: 'char', data: 'Mưa.\n[[LOOK Martin Vale | grey uniform]]', chatId: 'r1' }, { role: 'user', data: 'Kenji đi theo Martin.' }],
+            { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1' })
+        db.characters = [lookCard]
+        const seen: { people?: string[] }[] = []
+        const decide = async (input: any) => { seen.push(input); return null }
+        await gameMasterRequestSolved(req(), lookCard as never, run() as never, decide)
+        db.npcPsych = false
+        await gameMasterRequestSolved(req(), lookCard as never, run() as never, decide)
+        db.npcPsych = undefined
+        expect(seen.map((i) => i.people)).toEqual([['Martin Vale', 'Evelyn'], []])
+    })
+
+    it('the social rule asks a line for every act a named person does, and says what a warning, advice, an apology or a mocking word is (measured: 0 of 4 real replies had one without it)', () => {
+        const on = bookkeepPrompt({}, 'p', 'r', 'x', '', '', { social: true })
+        expect(on).toContain('leave it out only when no named person did anything to anyone')
+        expect(on).toMatch(/a warning, advice, a guide, shared news or what they know is help/)
+        expect(on).toMatch(/an apology is reconcile/)
+        expect(on).toMatch(/a mocking or contemptuous word is insult/)
+        expect(on).not.toContain('notable social act')
     })
 
     it('a rerolled reply takes its $led_soc lines with it (settlePanel)', async () => {
