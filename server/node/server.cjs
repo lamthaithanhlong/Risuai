@@ -123,6 +123,16 @@ if (process.env.RISU_STORY !== '0') {
         console.error('[Story] disabled:', error.message);
     }
 }
+// the librarian's knowledge graph (storyGraph.cjs): kg_* tables in story.sqlite, the card's graph (story/graphs/<world>.json) and each
+// chat's own facts from its ledger; fact / rumor / unknown / outdated. RISU_STORY_GRAPH=0 turns it off.
+let storyGraph = null;
+if (storyStore && process.env.RISU_STORY_GRAPH !== '0') {
+    try {
+        storyGraph = require('./storyGraph.cjs').openStoryGraph({ db: storyStore.db, log: (m) => console.log(`[Story] ${m}`) });
+    } catch (error) {
+        console.error('[Story] graph disabled:', error.message);
+    }
+}
 const SYNC_TRACE = process.env.RISU_SYNC_TRACE === '1';
 // RISU_SYNC_TRACE: how much of a write differs from what the server had, block by block (what a delta upload would carry)
 const blockDelta = (prev, next) => {
@@ -140,6 +150,10 @@ const syncStory = (bytes, rev) => {
             const r = storyStore.sync(bytes, rev, (name) => currentSaveBytes(Buffer.from(`remotes/${name}.local.bin`, 'utf-8').toString('hex')));
             if (SYNC_TRACE) console.log(`[Story] trace sync=${(performance.now() - t0).toFixed(1)}`);
             if (r.error) console.error('[Story] sync:', r.error);
+            if (storyGraph && !r.error) {
+                const g = storyGraph.syncAll(storyStore);
+                if (SYNC_TRACE) console.log(`[Story] trace graph chats=${g.chats} ms=${g.ms}`);
+            }
         } catch (error) {
             console.error('[Story] sync:', error.message);
         }
@@ -2126,6 +2140,33 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
         // RISU_GM_LOG=<file>: one JSON line per decision (the acceptance run reads them back, tests/acceptance/gmMetrics.mjs)
         if(process.env.RISU_GM_LOG) fs.appendFile(process.env.RISU_GM_LOG, JSON.stringify({ at: Date.now(), chatId: input.chatId, world: input.world, phase: input.phase, dice: input.dice, prevNew: input.prevNew, kinds: input.kinds, stance: input.stance, status: r.status, reason: r.reason, ms: r.ms, turn: r.decision?.turn ?? null, intents: r.decision?.intents ?? [], needs: r.needs ?? [], present: r.present ?? [], newEvent: r.newEvent ?? null, line: r.line ?? '' }) + '\n').catch(() => {});
         res.send(r);
+    } catch (error) { next(error); }
+});
+
+// The librarian's facts for a turn (storyGraph.cjs facts): the page sends the scene's text, the answer is the facts about who and what it
+// names, each tagged fact / rumor / unknown / outdated with who knows it, and `lines`, which go with the scene's books. POST
+// /api/story/graph runs the Datalog questions (story/gm/graph.lp). Both answer {status: 'unavailable'} when the graph is off.
+app.post('/api/story/facts', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        if(!await checkAuth(req, res)) return;
+        const b = req.body ?? {};
+        const id = String(b.chatId || '');
+        if(!storyGraph || !/^[A-Za-z0-9-]{1,80}$/.test(id)) return res.send({ status: 'unavailable', reason: storyGraph ? 'bad chat id' : 'graph is off' });
+        const story = storyStore.story(id);
+        const r = storyGraph.facts(id, story, { text: String(b.text ?? '').slice(-6000), present: (Array.isArray(b.present) ? b.present : []).slice(0, 12).map((p) => String(p).slice(0, 80)), maxTokens: Math.min(Number(b.maxTokens) || 450, 1500) });
+        // RISU_FACTS_LOG=<file>: one JSON line per answer (the acceptance run reads them: how many facts, of which status, tokens)
+        if(process.env.RISU_FACTS_LOG) fs.appendFile(process.env.RISU_FACTS_LOG, JSON.stringify({ at: Date.now(), chatId: id, status: r.status, world: r.world, now: r.now, ms: r.ms, tokens: r.tokens ?? 0, entities: (r.entities ?? []).map((e) => e.id), statuses: (r.facts ?? []).map((f) => f.status), player: (r.facts ?? []).map((f) => f.player_knows) }) + '\n').catch(() => {});
+        res.send(r);
+    } catch (error) { next(error); }
+});
+app.post('/api/story/graph', authenticatedRouteLimiter, async (req, res, next) => {
+    try {
+        if(!await checkAuth(req, res)) return;
+        const b = req.body ?? {};
+        const id = String(b.chatId || '');
+        if(!storyGraph || !/^[A-Za-z0-9-]{1,80}$/.test(id)) return res.send({ status: 'unavailable', reason: storyGraph ? 'bad chat id' : 'graph is off' });
+        const arr = (x) => (Array.isArray(x) ? x : []).slice(0, 24).map((v) => String(v).slice(0, 80));
+        res.send(await storyGraph.query(id, storyStore.story(id), { text: String(b.text ?? '').slice(-6000), ids: arr(b.ids), present: arr(b.present) }));
     } catch (error) { next(error); }
 });
 

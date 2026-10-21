@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "risu:lore-graph",
+  "title": "A story card's knowledge graph (server/node/story/graphs/<world>.json)",
+  "description": "Entities and facts drawn from the card's lore books. Every fact carries its truth status: fact (true in the story's world at its start), rumor (said, believed or legend, not confirmed), unknown (an open question the lore keeps open), outdated (was true once, no longer). known_by says who knows it and as what; empty = not said (common knowledge unless status is unknown).",
+  "type": "object",
+  "required": [
+    "world",
+    "version",
+    "entities",
+    "facts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "world": {
+      "enum": [
+        "shadow_slave",
+        "lotm",
+        "mailman",
+        "zombie",
+        "generic"
+      ]
+    },
+    "version": {
+      "const": 1
+    },
+    "built": {
+      "type": "string"
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entity"
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fact"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80,
+      "pattern": "^[^A-Z\"\\n]+$"
+    },
+    "kind": {
+      "enum": [
+        "person",
+        "faction",
+        "place",
+        "item",
+        "event"
+      ]
+    },
+    "status": {
+      "enum": [
+        "fact",
+        "rumor",
+        "unknown",
+        "outdated"
+      ]
+    },
+    "rel": {
+      "enum": [
+        "knows",
+        "member_of",
+        "leads",
+        "located_at",
+        "part_of",
+        "owns",
+        "enemy_of",
+        "ally_of",
+        "controls",
+        "kin_of",
+        "serves",
+        "mentor_of",
+        "loves",
+        "status",
+        "identity",
+        "rank",
+        "ability",
+        "wants",
+        "created",
+        "killed",
+        "happened_at",
+        "note"
+      ]
+    },
+    "entity": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "maxItems": 30
+        },
+        "books": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40
+        }
+      }
+    },
+    "knower": {
+      "type": "object",
+      "required": [
+        "who",
+        "as"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "who": {
+          "$ref": "#/$defs/id"
+        },
+        "as": {
+          "enum": [
+            "fact",
+            "rumor"
+          ]
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "required": [
+        "s",
+        "r",
+        "status",
+        "text",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "s": {
+          "$ref": "#/$defs/id"
+        },
+        "r": {
+          "$ref": "#/$defs/rel"
+        },
+        "o": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 400
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^(book|canon|turn|rumor):",
+          "maxLength": 200
+        },
+        "until": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "known_by": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/knower"
+          },
+          "maxItems": 20
+        }
+      }
+    }
+  }
+}

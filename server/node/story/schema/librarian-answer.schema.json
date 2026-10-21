@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "risu:librarian-answer",
+  "title": "What the librarian hands the GM and the narrator for one turn (GET /api/story/:chatId/facts)",
+  "description": "Only the facts about who and what the scene names, each tagged by status, with who knows it. The narrator states only status fact as true; a rumor is something people say; unknown is not revealed; outdated was true until the turn or event in until.",
+  "type": "object",
+  "required": ["status", "world", "now", "entities", "facts"],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "enum": ["ok", "unavailable", "error"] },
+    "reason": { "type": "string" },
+    "world": { "type": "string" },
+    "now": { "type": "integer", "minimum": 0 },
+    "ms": { "type": "number" },
+    "entities": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "name", "why"], "additionalProperties": false,
+      "properties": { "id": { "type": "string" }, "kind": { "type": "string" }, "name": { "type": "string" }, "why": { "enum": ["named", "present", "player", "linked"] } } } },
+    "facts": { "type": "array", "maxItems": 40, "items": { "type": "object", "required": ["fid", "status", "text", "source"], "additionalProperties": false,
+      "properties": {
+        "fid": { "type": "integer" },
+        "s": { "type": "string" }, "r": { "type": "string" }, "o": { "type": ["string", "null"] },
+        "status": { "enum": ["fact", "rumor", "unknown", "outdated"] },
+        "text": { "type": "string" },
+        "source": { "type": "string" },
+        "until": { "type": ["string", "null"] },
+        "known_by": { "type": "array", "items": { "type": "object", "required": ["who", "as"], "properties": { "who": { "type": "string" }, "as": { "enum": ["fact", "rumor"] } } } },
+        "player_knows": { "enum": ["fact", "rumor", "no"] }
+      } } },
+    "lines": { "type": "string" },
+    "tokens": { "type": "integer" }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "risu:lore-record",
+  "title": "One lore book as the librarian files it (kg_book)",
+  "type": "object",
+  "required": ["world", "title", "shelf", "keys", "tokens", "canon"],
+  "additionalProperties": false,
+  "properties": {
+    "world": { "enum": ["shadow_slave", "lotm", "mailman", "zombie", "generic"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "shelf": { "type": "string", "maxLength": 200 },
+    "keys": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+    "tokens": { "type": "integer", "minimum": 0 },
+    "canon": { "type": "boolean" },
+    "entities": { "type": "array", "items": { "type": "string" } }
+  }
+}
