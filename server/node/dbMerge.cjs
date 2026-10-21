@@ -175,6 +175,14 @@ function mergeById(bElems, oursArr, theirsArr, report, bMsgs, key = 'id') {
             const message = mergeById(bMsgs[id], o.message, t.message, report, undefined, 'chatId')
             fromPage.push(message ? { ...o, message } : o)
             if (message) report.chatsMerged++
+        } else if (t && bElems[id] === undefined && key === 'id' && Array.isArray(o?.message) && Array.isArray(t?.message)) {
+            // a chat both sides added: the phone made it and was put away before its autosave, the server's turn worker rebuilt it
+            // from the turn and answered it (specs/turns, turnWorkerPage.ts). Taking the page's copy whole erased the reply; the
+            // messages are merged one by one (none in the base), and the chat's own state (scriptstate, the story panel) is the
+            // server's, which the turn moved on from the page's fresh copy.
+            const message = mergeById({}, o.message, t.message, report, undefined, 'chatId')
+            fromPage.push(message ? { ...t, message } : o)
+            if (message) report.chatsMerged++
         } else {
             fromPage.push(o)               // changed or added by the page
         }

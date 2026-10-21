@@ -94,6 +94,20 @@ describe('three-way merge of a write', () => {
         expect(c1.chats.find((x: any) => x.id === 'k2').message).toEqual(['yo', 'from the laptop'])
     })
 
+    test('a chat both sides added (the phone made it, the server turn worker answered it from the turn): the reply and the server state stay', () => {
+        // specs/turns: the phone was put away before its autosave; the worker rebuilt the chat from the turn, answered it and saved;
+        // then the phone's late autosave arrived with the chat as it made it. Taking the page's copy whole erased the reply.
+        const mk = (msgs: any[], scriptstate: any) => ({ id: 'k9', message: msgs, scriptstate })
+        const greet = { role: 'char', data: 'greeting', chatId: 'g', time: 1 }
+        const input = { role: 'user', data: 'Tôi gõ cửa', chatId: 'in', time: 2 }
+        const reply = { role: 'char', data: 'reply', chatId: 'r', time: 3 }
+        const theirs = edit(base, (g, s) => { const c = g('c1'); c.chats.unshift(mk([greet, input, reply], { $hp: '9' })); s('c1', c) })
+        const ours = edit(base, (g, s) => { const c = g('c1'); c.chats.unshift(mk([greet], {})); s('c1', c) })
+        const k9 = read(M(base, ours, theirs).buf, 'c1').chats.find((x: any) => x.id === 'k9')
+        expect(k9.message.map((m: any) => m.chatId)).toEqual(['g', 'in', 'r'])
+        expect(k9.scriptstate).toEqual({ $hp: '9' })
+    })
+
     test('a chat started on the other page is kept, and a chat deleted by this page stays deleted', () => {
         const theirs = edit(base, (g, s) => { const c = g('c1'); c.chats.push({ id: 'k9', message: ['new'] }); s('c1', c) })
         const ours = edit(base, (g, s) => { const c = g('c1'); c.chats = c.chats.filter((x: any) => x.id !== 'k2'); s('c1', c) })
