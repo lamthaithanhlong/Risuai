@@ -19,7 +19,10 @@
     "runserver": "node server/node/server.cjs",
     "sync": "node electron/sync",
     "electron": "node electron/dist/electron",
-    "hono:build": "vite build --sourcemap && node server/hono/src/utils/postbuild.js"
+    "hono:build": "vite build --sourcemap && node server/hono/src/utils/postbuild.js",
+    "sidecar:setup": "sh server/sidecar/fatima/setup.sh",
+    "sidecar:build": "dotnet build server/sidecar/fatima -c Release",
+    "sidecar:test": "dotnet test server/sidecar/fatima/tests"
   },
   "dependencies": {
     "@adobe/css-tools": "4.4.4",

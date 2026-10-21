@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AssemblyName>Fatima.Sidecar</AssemblyName>
+    <RootNamespace>Fatima.Sidecar</RootNamespace>
+    <!-- The FAtiMA Toolkit is not vendored: server/sidecar/fatima/setup.sh clones it (pinned commit) into this directory. -->
+    <FatimaToolkitDir Condition="'$(FatimaToolkitDir)' == ''">$(HOME)/.risu-lan/fatima-toolkit</FatimaToolkitDir>
+    <!-- tests/ is its own project -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(FatimaToolkitDir)/Assets/RolePlayCharacter/RolePlayCharacter.csproj" />
+  </ItemGroup>
+</Project>
