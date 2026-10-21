@@ -156,6 +156,9 @@ describe('the chat: the ledger each turn (statuses, who knows, what goes stale)'
         expect(rel.known_by.map((k: any) => k.who)).toEqual(['mặc cúc'])
         expect(all.find((f: any) => f.s === 'hồng bà bà' && f.r === 'note')).toMatchObject({ status: 'rumor', player_knows: 'rumor' })
         expect(all.find((f: any) => f.s === 'kai' && f.r === 'note')).toMatchObject({ status: 'unknown', player_knows: 'no' })
+        // the ledger's short name for the player is the player ("Triệu" for "Triệu Khách"), not a new person
+        play(store, g, { led_rel: 'Mặc Cúc | Triệu | đồng minh' })
+        expect(g.factsAbout('mailman', 'c1', ['mặc cúc'], 4).find((f: any) => f.chat && f.r === 'ally_of')?.o).toBe('player')
     })
     test('a death ends the card facts about that person from the turn it is first seen, and only from then', () => {
         const { store, g } = setup()

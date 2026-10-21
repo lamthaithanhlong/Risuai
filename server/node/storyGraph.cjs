@@ -235,7 +235,8 @@ function openStoryGraph(opts) {
             const idOf = (name, kind = 'person') => {
                 const n = lower(name)
                 if (!n || n.length < 2) return null
-                if (player && (n === player || n === lower(st.st_truename))) return PLAYER
+                // the player by full name, true name, or the first name the ledger often uses ("Kenji" for "Kenji Park")
+                if (player && (n === player || n === lower(st.st_truename) || (n.length >= 3 && player.startsWith(n + ' ')))) return PLAYER
                 const hit = known.get(world, chatId, n)
                 if (hit) return hit.id
                 ent.run(world, n, kind, String(name).trim(), chatId)
