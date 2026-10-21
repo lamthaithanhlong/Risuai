@@ -112,3 +112,21 @@ test('dice.events: a pause the GM pace pushed is not counted against the card di
     for (const t of pauses) judge.pauses[t.label] = { newThing: false }
     assert.equal(scoreStory(rec, judge).find((c) => c.id === 'dice.events').status, 'FAIL')
 })
+
+test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, and what the judge said of the reply', async () => {
+    const { factsIn } = await import('./lib/play.mjs')
+    const block = '[Facts the librarian checked for this scene. FACT: true …]\n- FACT · Kai is a postman.\n- RUMOR · Some say Kai killed a man.\n- OUTDATED · Mặc Cúc works at the inn. (no longer: she died)\n- not a fact line'
+    assert.deepEqual(factsIn('x\n' + block).map((f) => f.status), ['fact', 'rumor', 'outdated'])
+    assert.deepEqual(factsIn('no block here'), [])
+    const rec = goodRecord()
+    const t5 = rec.play.turns.find((t) => t.label === 't5')
+    t5.net = [{ type: 'completion', kind: 'main', event: '50', eventNew: false, gmNote: true, facts: factsIn(block) }]
+    const J = { impossible: { granted: false, why: 'failed' }, sideLife: { t10: { follows: true }, t11: { follows: true }, t12: { follows: true } } }
+    const ok = { rumorAsFact: false, unknownRevealed: false, outdatedAsCurrent: false, touched: true, quote: 'người ta đồn Kai đã giết người' }
+    assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: ok } }), 'facts.rumor').status, 'PASS')
+    assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: ok } }), 'facts.outdated').status, 'PASS')
+    assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: { ...ok, rumorAsFact: true } } }), 'facts.rumor').status, 'FAIL')
+    assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: { ...ok, outdatedAsCurrent: true } } }), 'facts.outdated').status, 'FAIL')
+    assert.equal(byId(scoreStory(rec, J), 'facts.rumor').status, 'N/A')                    // not judged (--no-judge)
+    assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story requests carried facts; .*rumor 1, unknown 0, outdated 1/)
+})

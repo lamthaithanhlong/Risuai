@@ -295,6 +295,27 @@ export function scoreStory(rec, judge = {}) {
                 ...life.map((t) => `${t.label}: ${sj[t.label] ? (sj[t.label].follows ? 'follows: ' : 'does NOT follow: ') + oneLine(sj[t.label].how, 150) : 'not judged'} — ${oneLine(t.shown || t.reply, 100)}`)]))
     }
 
+    // ---- the librarian's tagged facts (loreFacts.ts, storyGraph.cjs) ----------------------------------------------------------------
+    const mains = story.map((t) => ({ t, facts: (t.net ?? []).filter((n) => n.kind === 'main').flatMap((n) => n.facts ?? []) }))
+    const withFacts = mains.filter((x) => x.facts.length)
+    const count = (st) => withFacts.reduce((n, x) => n + x.facts.filter((f) => f.status === st).length, 0)
+    if (mains.length) out.push(check('lore.facts', 'Tagged facts the librarian sent (FACT / RUMOR / UNKNOWN / OUTDATED)', 'INFO',
+        `${withFacts.length}/${mains.length} story requests carried facts; lines per request median ${median(withFacts.map((x) => x.facts.length))}; fact ${count('fact')}, rumor ${count('rumor')}, unknown ${count('unknown')}, outdated ${count('outdated')}`,
+        withFacts.slice(0, 3).flatMap((x) => x.facts.filter((f) => f.status !== 'fact').slice(0, 2).map((f) => `${x.t.label}: ${f.status.toUpperCase()} · ${oneLine(f.text, 140)}`))))
+    const fj = judge.facts ?? {}
+    const factJudged = Object.entries(fj)
+    const tagsIn = (label, st) => withFacts.find((x) => x.t.label === label)?.facts.some((f) => f.status === st)
+    const rumorT = factJudged.filter(([l]) => tagsIn(l, 'rumor') || tagsIn(l, 'unknown'))
+    const rumorBad = rumorT.filter(([, a]) => a?.rumorAsFact || a?.unknownRevealed)
+    out.push(check('facts.rumor', 'A rumor is never told as true, an unknown never revealed', rumorT.length ? pass(!rumorBad.length) : 'N/A',
+        rumorT.length ? `${rumorBad.length}/${rumorT.length} factJudged turn(s) told a rumor as fact or revealed an unknown; ${rumorT.filter(([, a]) => a?.touched).length} touched one` : (withFacts.some((x) => x.facts.some((f) => f.status === 'rumor' || f.status === 'unknown')) ? 'not factJudged' : 'no rumor or unknown was sent'),
+        rumorBad.map(([l, a]) => `${l}: ${oneLine(a.quote, 200)}`)))
+    const oldT = factJudged.filter(([l]) => tagsIn(l, 'outdated'))
+    const oldBad = oldT.filter(([, a]) => a?.outdatedAsCurrent)
+    out.push(check('facts.outdated', 'An outdated fact is never told as still so', oldT.length ? pass(!oldBad.length) : 'N/A',
+        oldT.length ? `${oldBad.length}/${oldT.length} factJudged turn(s) told an outdated fact as current` : (count('outdated') ? 'not factJudged' : 'no outdated fact was sent'),
+        oldBad.map(([l, a]) => `${l}: ${oneLine(a.quote, 200)}`)))
+
     // ---- what reaches the player ------------------------------------------------------------------------------------------------
     const leaked = [...steps, ...play].filter((t) => t.ok).map((t) => ({ t, l: shownLeaks(t.shown) })).filter((x) => x.l.length)
     out.push(check('prose.no_leaks', 'No planning notes or English leak into what the player sees', pass(!leaked.length),

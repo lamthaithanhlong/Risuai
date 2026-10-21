@@ -142,6 +142,27 @@ Answer only JSON: {"follows": true|false, "how": "<one sentence, quoting the rep
 
     out.voice = await judgeVoice(rec, story, cfg, out.errors)
 
+    // the librarian's tagged facts (loreFacts.ts): a turn whose request carried a RUMOR, an UNKNOWN or an OUTDATED line is asked
+    // whether the reply told it as true, revealed it, or as still so (at most 8 turns)
+    out.facts = {}
+    const tagged = storyTurns.map((t) => ({ t, lines: (t.net ?? []).filter((n) => n.kind === 'main').flatMap((n) => n.facts ?? []).filter((f) => f.status !== 'fact') })).filter((x) => x.lines.length).slice(0, 8)
+    for (const { t, lines } of tagged) {
+        try {
+            out.facts[t.label] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese). Before this reply the narrator was given lore lines, each tagged: RUMOR = only said or believed, never to be narrated as true; UNKNOWN = nobody in the story knows it, not to be revealed; OUTDATED = was true and is no longer.
+
+TAGGED LINES:
+${[...new Set(lines.map((f) => `${f.status.toUpperCase()} · ${f.text}`))].slice(0, 20).join('\n')}
+
+PLAYER: ${t.text}
+
+REPLY:
+${String(t.shown || t.reply).slice(0, 5000)}
+
+Only judge what the REPLY says about these lines (most replies do not touch them: then all false). A character repeating a rumor as a rumor ("người ta đồn…", "nghe nói…") is fine.
+Answer only JSON: {"rumorAsFact": true|false, "unknownRevealed": true|false, "outdatedAsCurrent": true|false, "touched": true|false, "quote": "<the words of the reply, or empty>"}`)
+        } catch (e) { out.errors.push(`facts ${t.label}: ${e.message}`) }
+    }
+
     // five replies spread over the story part
     const picks = []
     for (let k = 0; k < 5 && storyTurns.length; k++) {

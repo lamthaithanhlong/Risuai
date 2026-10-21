@@ -59,7 +59,16 @@ export function readMainRequest(bodyText) {
         cardNew: /Card fate die: NEW/.test(lu),
         storyCheckLine: /\[Story consistency check:/.test(lu),
         lastUserHead: lu.slice(0, 400),
+        // the librarian's tagged facts (loreFacts.ts) in the scene's lore message: [{status, text}]
+        facts: factsIn(all),
     }
+}
+
+/** the librarian's fact lines in a request ("- RUMOR · …"), after its "[Facts the librarian checked" header */
+export function factsIn(text) {
+    const at = String(text ?? '').indexOf('[Facts the librarian checked for this scene.')
+    if (at < 0) return []
+    return String(text).slice(at).split('\n').slice(1).map((l) => /^- (FACT|RUMOR|UNKNOWN|OUTDATED) · (.*)$/.exec(l)).filter(Boolean).map((m) => ({ status: m[1].toLowerCase(), text: m[2].slice(0, 400) }))
 }
 
 export class Player {
