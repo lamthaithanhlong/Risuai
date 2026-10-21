@@ -221,6 +221,54 @@ Answer only JSON: {"rumorAsFact": true|false, "unknownRevealed": true|false, "ou
         } catch (e) { out.errors.push(`facts ${t.label}: ${e.message}`) }
     }
 
+    // NPC psychology (server/node/npcPsych.cjs): a turn whose GM note carried a Subtext line (the copy server's gm.jsonl as a 'decide'
+    // net) is asked whether the reply SHOWS each person's drive or STATES it (at most 8 turns, spread over the story), and two adjacent
+    // turns that name the same person are asked whether that person's feeling carries over or changes for a cause (at most 6 pairs);
+    // read by score.mjs npc.subtext and npc.emotion_consistent
+    const subOf = (t) => String((t?.net ?? []).filter((n) => n.type === 'decide' && String(n.npc?.subtext ?? '').trim()).at(-1)?.npc?.subtext ?? '').trim()
+    const namesOf = (s) => [...String(s).matchAll(/[“"]([^”"\n]{1,60})[”"]([^“"]*)/g)].map((m) => ({ name: m[1].trim(), text: `“${m[1].trim()}”${m[2]}`.trim() }))
+    const withSub = storyTurns.filter((t) => subOf(t))
+    const spread = withSub.length <= 8 ? withSub : Array.from({ length: 8 }, (_, k) => withSub[Math.round((k * (withSub.length - 1)) / 7)])
+    out.npcSubtext = {}
+    for (const t of spread) {
+        try {
+            out.npcSubtext[t.label] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese). Before this reply the narrator was given hidden NPC subtext (what each named person wants and how they carry themselves), to be SHOWN through what they do, say, avoid saying, and their tone — never STATED as a label.
+
+SUBTEXT GIVEN:
+${subOf(t)}
+
+PLAYER: ${t.text}
+
+REPLY:
+${String(t.shown || t.reply).slice(0, 5000)}
+
+For each person named in the subtext who appears in the reply: is their drive or feeling conveyed through action, dialogue, silence, body language or tone ("shown")? Does the narration state the feeling or motive flatly as a label ("cô ấy cảm thấy tức giận", "anh ta muốn làm lành với bạn") instead of showing it ("stated")? A person absent from the reply counts as neither. "consistent" = what they do fits the subtext given (a warm person not suddenly cold without cause).
+Answer only JSON: {"people": [{"name": "...", "inReply": true|false, "shown": true|false, "stated": true|false, "consistent": true|false, "quote": "<the words, or empty>"}]}`)
+        } catch (e) { out.errors.push(`npc subtext ${t.label}: ${e.message}`) }
+    }
+    out.npcConsistent = {}
+    const npcPairs = []
+    for (let i = 1; i < storyTurns.length && npcPairs.length < 6; i++) {
+        const a = storyTurns[i - 1], b = storyTurns[i]
+        const before = namesOf(subOf(a)), now = namesOf(subOf(b))
+        const p = now.find((x) => before.some((y) => y.name === x.name) && String(b.shown || b.reply).includes(x.name))
+        if (p) npcPairs.push({ a, b, name: p.name, then: before.find((y) => y.name === p.name).text, now: p.text })
+    }
+    for (const { a, b, name, then, now } of npcPairs) {
+        try {
+            out.npcConsistent[`${a.label}>${b.label}:${name}`] = await ask(cfg, `You check an interactive story (${story.title}, played in Vietnamese) for emotional continuity of one person across two consecutive replies. The narrator was told, hidden, how ${name} felt and what they wanted in each.
+
+REPLY 1 (end): ${String(a.shown || a.reply).slice(-1800)}
+${name} THEN: ${then}
+PLAYER BETWEEN: ${b.text}
+REPLY 2: ${String(b.shown || b.reply).slice(0, 4000)}
+${name} NOW: ${now}
+
+Is ${name}'s feeling toward the player's character in REPLY 2 continuous with REPLY 1, or changed only for a cause shown in the player's action or REPLY 2 itself? An unexplained swing (cold to affectionate, hostile to helpful with nothing happening) is a contradiction.
+Answer only JSON: {"consistent": true|false, "shift": true|false, "justified": true|false, "quote": "<the words showing it, or empty>"}`)
+        } catch (e) { out.errors.push(`npc consistent ${a.label}>${b.label}: ${e.message}`) }
+    }
+
     // five replies spread over the story part
     const picks = []
     for (let k = 0; k < 5 && storyTurns.length; k++) {

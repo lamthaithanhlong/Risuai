@@ -23,8 +23,9 @@ export function viShare(text) {
     return { vi, en, isVi: vi >= 3 && vi >= 3 * en }
 }
 
-const PLAN_MARK = /(^|\n)\s*(?:\*\*)?(plan|planning|note|notes|ooc|beat|arc|threat|dice|referee|gm|status|ledger|path|reward|consequence|canon|next)(?:\*\*)?\s*:/i
-const PLAN_WORDS = /\[GM\b|\bthe player\b|\bthe narrator\b|\bthis reply\b|\bI will\b|\bI'll\b|\(OOC|\bwordcount\b|\bhidden block\b/i
+const PLAN_MARK = /(^|\n)\s*(?:\*\*)?(plan|planning|note|notes|ooc|beat|arc|threat|dice|referee|gm|status|ledger|path|reward|consequence|canon|next|subtext)(?:\*\*)?\s*:/i
+// "Subtext (hidden drives; …)" is the GM note's NPC line (gmSolver.cjs lineOf): it must never be echoed to the player
+const PLAN_WORDS = /\[GM\b|\bSubtext\s*\(|\bhidden drives\b|\bthe player\b|\bthe narrator\b|\bthis reply\b|\bI will\b|\bI'll\b|\(OOC|\bwordcount\b|\bhidden block\b/i
 /** what of the narrator's planning or untranslated English reached the player: [{kind, text}] */
 export function shownLeaks(text) {
     const out = []
@@ -64,6 +65,18 @@ export const gmKeys = (vars) => Object.entries(vars ?? {}).filter(([k, v]) => /^
 export function changed(prefix, before, after) {
     const keys = new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})].filter((k) => k.startsWith(prefix)))
     return [...keys].filter((k) => String(before?.[k] ?? '') !== String(after?.[k] ?? '') && (isSet(after?.[k]) || isSet(before?.[k])))
+}
+
+/** the NPC subtext the GM was given for a turn: the last 'decide' net (the copy server's gm.jsonl, play.mjs gmSince) whose npc line is not empty, or '' */
+export function npcSubtextOf(t) {
+    const d = (t?.net ?? []).filter((n) => n.type === 'decide' && String(n.npc?.subtext ?? '').trim()).at(-1)
+    return d ? String(d.npc.subtext).trim() : ''
+}
+/** the people a subtext line names: { name: its sentence } — the line is `Subtext (…): “Evelyn” wants …; …. “Marek” grateful …` */
+export function npcPeople(subtext) {
+    const out = {}
+    for (const m of String(subtext ?? '').matchAll(/[“"]([^”"\n]{1,60})[”"]([^“"]*)/g)) out[m[1].trim()] = `“${m[1].trim()}”${m[2]}`.trim()
+    return out
 }
 
 const check = (id, title, status, summary, evidence = []) => ({ id, title, status, summary, evidence: evidence.filter(Boolean).slice(0, 12) })
@@ -316,6 +329,37 @@ export function scoreStory(rec, judge = {}) {
         oldT.length ? `${oldBad.length}/${oldT.length} judged turn(s) told an outdated fact as current` : (count('outdated') ? 'not judged' : 'no outdated fact was sent'),
         oldBad.map(([l, a]) => `${l}: ${oneLine(a.quote, 200)}`)))
 
+    // ---- NPC psychology (the GM note's Subtext line; the copy server's gm.jsonl as 'decide' nets) --------------------------------------
+    const decides = story.map((t) => ({ t, nets: (t.net ?? []).filter((n) => n.type === 'decide'), sub: npcSubtextOf(t) }))
+    const withSub = decides.filter((x) => x.sub)
+    if (decides.some((x) => x.nets.length)) {
+        const npcNets = decides.flatMap((x) => x.nets.filter((n) => n.npc))
+        const sources = {}
+        for (const n of npcNets) sources[n.npc.source ?? '?'] = (sources[n.npc.source ?? '?'] ?? 0) + 1
+        const ms = npcNets.map((n) => n.npc.ms).filter((x) => typeof x === 'number')
+        out.push(check('npc.lines', 'Subtext lines the GM sent', 'INFO',
+            `${withSub.length}/${story.length} story turns had a Subtext line; ${median(withSub.map((x) => Object.keys(npcPeople(x.sub)).length))} NPCs/turn median, ${median(withSub.map((x) => x.sub.length))} chars median; npc ms p50 ${ms.length ? median(ms) : '-'} / p95 ${ms.length ? pct(ms, 0.95) : '-'}; sources ${Object.entries(sources).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`,
+            withSub.slice(0, 3).map((x) => quote(x.t.label, x.sub, 200))))
+    }
+    const ns = Object.entries(judge.npcSubtext ?? {})
+    const people = ns.flatMap(([label, a]) => (a?.people ?? []).filter((p) => p?.inReply).map((p) => ({ label, ...p })))
+    const shownN = people.filter((p) => p.shown).length
+    const statedP = people.filter((p) => p.stated)
+    const srcCount = (k) => sourceCount(decides, k)
+    const srcText = `fatima ${srcCount('fatima')}, asp ${srcCount('asp')}`
+    out.push(check('npc.subtext', 'NPC emotion is shown through action and subtext, not stated outright',
+        !withSub.length || !ns.length || !people.length ? 'N/A' : pass(statedP.length <= people.length * 0.25 && shownN >= people.length * 0.6),
+        !withSub.length ? 'no turn carried a Subtext line' : !ns.length ? 'not judged'
+            : !people.length ? `no person named in a Subtext line appeared in a judged reply; ${withSub.length}/${story.length} turns had subtext (${srcText})`
+                : `${shownN}/${people.length} shown, ${statedP.length}/${people.length} stated; ${withSub.length}/${story.length} turns had subtext (${srcText})`,
+        [...statedP.map((p) => `${p.label} STATED ${p.name}: ${oneLine(p.quote, 200)}`), ...people.filter((p) => p.shown && !p.stated).slice(0, 3).map((p) => `${p.label} shown ${p.name}: ${oneLine(p.quote, 200)}`)]))
+    const nc = Object.entries(judge.npcConsistent ?? {}).filter(([, a]) => a && typeof a === 'object')
+    const ncBad = nc.filter(([, a]) => a.consistent === false || (a.shift === true && a.justified === false))
+    out.push(check('npc.emotion_consistent', 'NPC emotion is consistent across consecutive turns (shifts have a cause)',
+        !withSub.length || !nc.length ? 'N/A' : pass(ncBad.length <= Math.floor(nc.length * 0.2)),
+        !withSub.length ? 'no turn carried a Subtext line' : !nc.length ? 'not judged (or no person had subtext in two consecutive turns)' : `${ncBad.length}/${nc.length} pairs contradict`,
+        ncBad.map(([k, a]) => `${k}: ${oneLine(a.quote, 200)}`)))
+
     // ---- what reaches the player ------------------------------------------------------------------------------------------------
     const leaked = [...steps, ...play].filter((t) => t.ok).map((t) => ({ t, l: shownLeaks(t.shown) })).filter((x) => x.l.length)
     out.push(check('prose.no_leaks', 'No planning notes or English leak into what the player sees', pass(!leaked.length),
@@ -348,6 +392,7 @@ export function scoreStory(rec, judge = {}) {
     return out
 }
 
+function sourceCount(decides, source) { return decides.reduce((n, x) => n + x.nets.filter((d) => d.npc?.source === source).length, 0) }
 function pct(xs, p) { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))] }
 function median(xs) { if (!xs.length) return 0; const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] }
 

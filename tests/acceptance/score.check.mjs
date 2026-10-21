@@ -78,6 +78,8 @@ test('a good record passes and each breakage fails its own check', () => {
         ['gm.side', (r) => { for (const t of r.play.turns) delete t.vars.gm_path }],
         ['gm.side', (r) => { for (const t of r.play.turns) if (t.vars.gm_path) t.vars.gm_path = 'Song | lính | mới' }],
         ['prose.no_leaks', (r) => { r.play.turns[5].shown += '\n\nBeat: 3 | the player meets the guard | next the camp' }],
+        ['prose.no_leaks', (r) => { r.play.turns[5].shown += '\n\nSubtext (hidden drives; show them through action, tone and what is left unsaid, never state them): “Evelyn” wants distance.' }],
+        ['prose.no_leaks', (r) => { r.play.turns[5].shown += '\n\nSubtext: Evelyn wants distance.' }],
         ['prose.no_leaks', (r) => { r.play.turns[5].shown += '\n\nThe guard looks at you and you know that the gate is closed for the night.' }],
     ]
     for (const [id, breakIt] of breaks) {
@@ -129,6 +131,69 @@ test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, a
     assert.equal(byId(scoreStory(rec, { ...J, facts: { t5: { ...ok, outdatedAsCurrent: true } } }), 'facts.outdated').status, 'FAIL')
     assert.equal(byId(scoreStory(rec, J), 'facts.rumor').status, 'N/A')                    // not judged (--no-judge)
     assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story turns got facts; .*rumor 1, unknown 0, outdated 1/)
+})
+
+test('npc.subtext / npc.emotion_consistent / npc.lines: the GM decisions the server logged, and what the judge said of the replies', () => {
+    const SUB = 'Subtext (hidden drives; show them through action, tone and what is left unsaid, never state them): “Evelyn” wants to reconcile but keeps distance; cold, few words. “Marek” wants to help; warm.'
+    const withDecide = () => {
+        const r = goodRecord()
+        for (const t of r.play.turns.filter((x) => ['t3', 't4', 't5', 't6', 't7', 't8'].includes(x.label)))
+            t.net = [...t.net, { at: 1, type: 'decide', status: 'ok', ms: 40, npc: { source: t.label < 't6' ? 'asp' : 'fatima', ms: 12, subtext: SUB, actions: [{ who: 'Evelyn', action: 'keep_distance', demeanor: 'cold' }] } }]
+        return r
+    }
+    const J = { impossible: { granted: false, why: 'failed' }, sideLife: { t10: { follows: true }, t11: { follows: true }, t12: { follows: true } } }
+    const person = (over = {}) => ({ name: 'Evelyn', inReply: true, shown: true, stated: false, consistent: true, quote: 'cô ấy quay đi, không nhìn anh' , ...over })
+    const sub = (statedOn = []) => Object.fromEntries(['t3', 't4', 't5', 't6'].map((l, i) => [l, { people: [person(statedOn.includes(i) ? { stated: true, quote: 'cô ấy cảm thấy tức giận' } : {})] }]))
+    const pair = (k, over = {}) => [`t${k}>t${k + 1}:Evelyn`, { consistent: true, shift: false, justified: true, quote: 'vẫn lạnh', ...over }]
+    const cons = (badOn = [], n = 3) => Object.fromEntries(Array.from({ length: n }, (_, i) => pair(3 + i, badOn.includes(i) ? { consistent: false, shift: true, justified: false, quote: 'bỗng ôm lấy anh' } : {})))
+    const rec = withDecide()
+    // the good case
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons() }), 'npc.subtext').status, 'PASS')
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons() }), 'npc.emotion_consistent').status, 'PASS')
+    assert.match(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons() }), 'npc.subtext').summary, /4\/4 shown, 0\/4 stated; 6\/10 turns had subtext \(fatima 3, asp 3\)/)
+    // breakage: the narrator states the feeling on 2 of 4 judged turns -> red; 1 of 4 is exactly 25% -> still green
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub([0, 2]), npcConsistent: cons() }), 'npc.subtext').status, 'FAIL')
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub([1]), npcConsistent: cons() }), 'npc.subtext').status, 'PASS')
+    // breakage: nothing is shown (people in the reply, none conveyed) -> red
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: Object.fromEntries(Object.keys(sub()).map((l) => [l, { people: [person({ shown: false })] }])), npcConsistent: cons() }), 'npc.subtext').status, 'FAIL')
+    // breakage: a contradiction on 2 of 3 pairs -> red (one of 3 too: floor(3 * 0.2) = 0)
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons([0, 2]) }), 'npc.emotion_consistent').status, 'FAIL')
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons([1]) }), 'npc.emotion_consistent').status, 'FAIL')
+    // one in five is allowed, two are not
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons([1], 5) }), 'npc.emotion_consistent').status, 'PASS')
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: cons([1, 3], 5) }), 'npc.emotion_consistent').status, 'FAIL')
+    // a shift with no cause is a contradiction even if the judge called it "consistent"
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: sub(), npcConsistent: { ...cons([], 2), ...Object.fromEntries([pair(5, { consistent: true, shift: true, justified: false })]) } }), 'npc.emotion_consistent').status, 'FAIL')
+    // people who never appeared in a reply count as neither shown nor stated
+    assert.equal(byId(scoreStory(rec, { ...J, npcSubtext: Object.fromEntries(Object.keys(sub()).map((l) => [l, { people: [person({ inReply: false, shown: false })] }])), npcConsistent: cons() }), 'npc.subtext').status, 'N/A')
+    // no decide nets (npc-psych off, or no GM log): N/A and no INFO line
+    const none = goodRecord()
+    for (const id of ['npc.subtext', 'npc.emotion_consistent']) assert.equal(byId(scoreStory(none, { ...J, npcSubtext: sub(), npcConsistent: cons() }), id).status, 'N/A', id)
+    assert.equal(byId(scoreStory(none, J), 'npc.lines'), undefined)
+    // decide nets with no npc field at all (the server with psychology off): still N/A
+    const off = goodRecord()
+    for (const t of off.play.turns.filter((x) => x.phase === 'story')) t.net = [...t.net, { at: 1, type: 'decide', status: 'ok', ms: 30 }]
+    assert.equal(byId(scoreStory(off, { ...J, npcSubtext: sub() }), 'npc.subtext').status, 'N/A')
+    assert.match(byId(scoreStory(off, J), 'npc.lines').summary, /^0\/10 story turns had a Subtext line/)
+    // not judged (--no-judge)
+    assert.equal(byId(scoreStory(rec, J), 'npc.subtext').status, 'N/A'); assert.match(byId(scoreStory(rec, J), 'npc.subtext').summary, /not judged/)
+    assert.equal(byId(scoreStory(rec, J), 'npc.emotion_consistent').status, 'N/A')
+    // INFO npc.lines
+    const info = byId(scoreStory(rec, J), 'npc.lines')
+    assert.equal(info.status, 'INFO')
+    assert.match(info.summary, /6\/10 story turns had a Subtext line; 2 NPCs\/turn median, \d+ chars median; npc ms p50 12 \/ p95 12; sources asp 3, fatima 3/)
+})
+
+test('npcPeople / npcSubtextOf: the named people of a Subtext line, the last decide net that carried one', async () => {
+    const { npcPeople, npcSubtextOf } = await import('./lib/score.mjs')
+    const line = 'Subtext (hidden drives; show them through action, tone and what is left unsaid, never state them): “Evelyn” wants to reconcile but keeps distance; cold, few words; may stay silent. “Marek” grateful, offers help unasked; warm.'
+    assert.deepEqual(Object.keys(npcPeople(line)), ['Evelyn', 'Marek'])
+    assert.match(npcPeople(line).Marek, /^“Marek” grateful/)
+    assert.doesNotMatch(npcPeople(line).Evelyn, /Marek/)
+    assert.deepEqual(npcPeople(''), {})
+    assert.equal(npcSubtextOf({ net: [{ type: 'decide', npc: { subtext: 'a' } }, { type: 'decide', npc: { subtext: '' } }] }), 'a')
+    assert.equal(npcSubtextOf({ net: [{ type: 'decide' }] }), '')
+    assert.equal(npcSubtextOf({}), '')
 })
 
 test('the judge on the Claude subscription (--judge-model claude:sonnet): claude -p lean call, its JSON, its error flag, at most 4 at once', async () => {

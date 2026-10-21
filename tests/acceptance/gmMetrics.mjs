@@ -7,6 +7,8 @@
 //   absent     an NPC last seen at another place speaks or acts in the reply with no arrival, and the player did not seek them
 //   newTwice   two story turns in a row asked for a new event (the pace clock's advance mark or the card's NEW mark on both)
 //   beatTwice  the beat's step rose on two story turns in a row (the bookkeeper writes a step only when a new event arrived)
+//   npc        NPC psychology (the 'decide' nets, the copy server's gm.jsonl): story turns whose decision carried a Subtext line, the engine
+//              that answered each decision (fatima / asp / none), and the npc part's ms p50 / p95
 // The first three are word heuristics: every candidate is printed with its sentence so it can be read, and the totals say "flagged".
 //   node tests/acceptance/gmMetrics.mjs DIR [DIR2]     one run, or two side by side (before, after)
 import fs from 'fs'
@@ -37,7 +39,7 @@ const num = (x) => (x === undefined || x === null || x === '' ? -1 : Number(x))
 
 function storyMetrics(rec) {
     const turns = rec.play?.turns ?? []
-    const out = { story: rec.story, turns: 0, invented: [], dead: [], absent: [], newTwice: 0, beatTwice: 0, askedNew: 0 }
+    const out = { story: rec.story, turns: 0, invented: [], dead: [], absent: [], newTwice: 0, beatTwice: 0, askedNew: 0, npc: { decisions: 0, subtext: 0, sources: {}, ms: [] } }
     let replies = 0
     let prevAsked = false, prevBeatUp = false
     let prevVars = {}
@@ -47,6 +49,12 @@ function storyMetrics(rec) {
         if (t.ok) replies++
         if (t.phase !== 'story' || !t.ok) { history.push({ role: 'user', text: t.text }, { role: 'char', text: t.reply }); prevVars = t.vars ?? prevVars; continue }
         out.turns++
+        const decides = (t.net ?? []).filter((n) => n.type === 'decide')
+        for (const d of decides) {
+            out.npc.decisions++
+            if (d.npc) { out.npc.sources[d.npc.source ?? '?'] = (out.npc.sources[d.npc.source ?? '?'] ?? 0) + 1; if (typeof d.npc.ms === 'number') out.npc.ms.push(d.npc.ms) }
+        }
+        if (decides.some((d) => String(d.npc?.subtext ?? '').trim())) out.npc.subtext++
         const v = t.vars ?? {}
         const pv = prevVars
         // the window the solver reads: the panel before the turn and the last 4 messages, the player's turn included
@@ -102,6 +110,9 @@ function runMetrics(dir) {
     return out
 }
 
+const pctile = (xs, p) => { if (!xs.length) return '-'; const a = [...xs].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(p * a.length))] }
+const srcText = (src) => Object.entries(src).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'
+const npcText = (n) => `${n.subtext} with subtext of ${n.decisions} decisions; sources ${srcText(n.sources)}; npc ms p50 ${pctile(n.ms, 0.5)} / p95 ${pctile(n.ms, 0.95)}`
 const sum = (rows, key) => rows.reduce((a, r) => a + (Array.isArray(r[key]) ? r[key].length : r[key]), 0)
 const dirs = process.argv.slice(2)
 if (!dirs.length) { console.error('usage: gmMetrics.mjs DIR [DIR2]'); process.exit(2) }
@@ -109,8 +120,11 @@ const runs = dirs.map((d) => ({ dir: d, rows: runMetrics(d) }))
 for (const r of runs) {
     console.log(`\n== ${r.dir}`)
     for (const x of r.rows) {
-        console.log(`${x.story}: ${x.turns} story turns; invented-need offers flagged ${x.invented.length}; dead acting ${x.dead.length}; absent acting flagged ${x.absent.length}; asked new ${x.askedNew}, twice in a row ${x.newTwice}; beat rose twice in a row ${x.beatTwice}`)
+        console.log(`${x.story}: ${x.turns} story turns; invented-need offers flagged ${x.invented.length}; dead acting ${x.dead.length}; absent acting flagged ${x.absent.length}; asked new ${x.askedNew}, twice in a row ${x.newTwice}; beat rose twice in a row ${x.beatTwice}; npc: ${npcText(x.npc)}`)
         for (const c of [...x.invented.map((c) => ['invented', c]), ...x.dead.map((c) => ['dead', c]), ...x.absent.map((c) => ['absent', c])]) console.log(`   ${c[0]} ${c[1].turn} ${c[1].need ?? c[1].who}: ${c[1].sentence}`)
     }
     console.log(`TOTAL ${sum(r.rows, 'turns')} turns: invented ${sum(r.rows, 'invented')}, dead ${sum(r.rows, 'dead')}, absent ${sum(r.rows, 'absent')}, newTwice ${sum(r.rows, 'newTwice')}/${sum(r.rows, 'askedNew')} asked, beatTwice ${sum(r.rows, 'beatTwice')}`)
+    const all = { decisions: 0, subtext: 0, sources: {}, ms: [] }
+    for (const x of r.rows) { all.decisions += x.npc.decisions; all.subtext += x.npc.subtext; all.ms.push(...x.npc.ms); for (const [k, v] of Object.entries(x.npc.sources)) all.sources[k] = (all.sources[k] ?? 0) + v }
+    console.log(`TOTAL npc: ${npcText(all)}`)
 }

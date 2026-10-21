@@ -133,12 +133,17 @@ export function copySave(runDir, base, story, { log = console.log } = {}) {
 }
 
 /** Start server.cjs with cwd = the copy. Resolves once it listens; the handle stops it. */
-export async function startServer(dir, port, { backend = 'files', log = console.log } = {}) {
+export async function startServer(dir, port, { backend = 'files', log = console.log, npcEngine = null } = {}) {
     const out = fs.openSync(path.join(dir, 'server.log'), 'a')
     const env = { ...process.env, PORT: String(port), RISU_JOBS_DB: path.join(dir, 'jobs.sqlite') }
     env.RISU_STORE = backend
     // the librarian's facts of every turn (server.cjs /api/story/facts), read back by play.mjs factsSince
     env.RISU_FACTS_LOG = path.join(dir, 'facts.jsonl')
+    // the GM's decision of every turn (server.cjs /api/story/decide; with NPC psychology its `npc` field), read back by play.mjs gmSince
+    env.RISU_GM_LOG = path.join(dir, 'gm.jsonl')
+    // --npc-psych asp|fatima pins the copy's appraisal engine (RISU_NPC_ENGINE); otherwise the server's own default (auto) and the
+    // parent's environment stand
+    if (npcEngine) env.RISU_NPC_ENGINE = npcEngine
     delete env.RISU_SYNC_DB; delete env.RISU_STORY_DB; delete env.LAN_TLS_PORT
     const child = spawn(process.execPath, [path.join(REPO, 'server/node/server.cjs')], { cwd: dir, env, stdio: ['ignore', out, out] })
     const t0 = Date.now()

@@ -76,8 +76,9 @@ export class Player {
     /** dumpDir: each narrator and lore-helper request body is written there (--dump-requests: the prompt cache's shared prefix) */
     /** factsLog: the copy server's RISU_FACTS_LOG; a turn's lines are added to its net as type 'facts' (the turn runs in the
      *  server's own page since Async turns, so this page never sees the facts request) */
-    constructor({ port, password, outDir, label, log = console.log, dumpDir = null, factsLog = null }) {
-        Object.assign(this, { port, password, outDir, label, log, dumpDir, factsLog })
+    /** gmLog: the copy server's RISU_GM_LOG; a turn's decisions are added to its net as type 'decide' (with the NPC subtext when on) */
+    constructor({ port, password, outDir, label, log = console.log, dumpDir = null, factsLog = null, gmLog = null }) {
+        Object.assign(this, { port, password, outDir, label, log, dumpDir, factsLog, gmLog })
         this.dumped = 0
         this.base = `http://localhost:${port}`
         this.net = []
@@ -299,9 +300,9 @@ export class Player {
             const shown = d.find((x) => x.idx === s.messages.length - 1)?.full ?? ''
             const sig = last.data + '\u0000' + shown
             if (sig === lastText) stable++; else { stable = 0; lastText = sig }
-            if (stable >= 3) return { ok: true, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0)] }
+            if (stable >= 3) return { ok: true, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0), ...this.gmSince(t0)] }
         }
-        return { ok: false, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0)], timeout: Date.now() - t0 >= timeoutMs }
+        return { ok: false, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0), ...this.gmSince(t0)], timeout: Date.now() - t0 >= timeoutMs }
     }
 
     /** the facts the server answered since t0 (RISU_FACTS_LOG lines), as net entries of type 'facts' */
@@ -310,6 +311,16 @@ export class Player {
         try {
             return fs.readFileSync(this.factsLog, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
                 .filter((r) => r.at >= t0).map((r) => ({ at: r.at, type: 'facts', status: r.status, tokens: r.tokens ?? 0, facts: r.lines ?? [] }))
+        } catch { return [] }
+    }
+
+    /** the GM decisions the server made since t0 (RISU_GM_LOG lines), as net entries of type 'decide': { at, status, ms, npc? } where
+     *  npc is { source, ms, subtext, actions: [{who, action, demeanor}] } and absent when NPC psychology is off */
+    gmSince(t0) {
+        if (!this.gmLog) return []
+        try {
+            return fs.readFileSync(this.gmLog, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+                .filter((r) => r.at >= t0).map((r) => ({ at: r.at, type: 'decide', status: r.status, ms: r.ms ?? 0, ...(r.npc ? { npc: r.npc } : {}) }))
         } catch { return [] }
     }
 

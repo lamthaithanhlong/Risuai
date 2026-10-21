@@ -25,6 +25,9 @@
 //     --req-log          count each request's tokens at a loopback proxy in front of the router (the whole request, the lore message, its tagged
 //                        facts): the turns run in the server's page, so lore.tokens has no other source; not with --narrator web
 //     --gm-solver off    the COPY's gmSolver=false: the GM's note keeps its open rules (the symbolic solver is skipped); "on" leaves it as it is
+//     --npc-psych M      off | asp | fatima: NPC psychology (the GM's Subtext line). off = the COPY's npcPsych=false (the note as before);
+//                        asp / fatima = the copy server's RISU_NPC_ENGINE (the data+ASP appraisal, or the FAtiMA sidecar); unset = the app's default
+//                        (auto). The scorecards then carry npc.subtext, npc.emotion_consistent and npc.lines
 //     --base-from RUN    take the snapshot from RUN/_base of an earlier run (an APFS clone: no new disk, and two runs start from the same save)
 //     --keep-runs        do not remove the earlier runs under ~/.risu-story-work/acceptance (another session may still need a copy)
 //     --dump-requests    write each narrator and lore-helper request body to OUT/requests/<story>/ (the prompt cache's shared prefix)
@@ -59,6 +62,8 @@ const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward'
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
 if (LORE_BUDGET !== null && !(LORE_BUDGET > 0 && LORE_BUDGET <= 200)) throw new Error('--lore-budget wants a percent between 1 and 200')
 const GM_SOLVER = opt('--gm-solver') === 'off' ? { gmSolver: false } : null
+const NPC_PSYCH = opt('--npc-psych')
+if (NPC_PSYCH !== undefined && !['off', 'asp', 'fatima'].includes(NPC_PSYCH)) throw new Error('--npc-psych wants off, asp or fatima')
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
 const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
 
@@ -152,6 +157,11 @@ async function playStory(key, ctx) {
         rec.gmSolver = 'off'
         log('gm solver: off')
     }
+    if (NPC_PSYCH === 'off') {
+        patchCopyRoot(path.join(dir, 'save'), ctx.backend, { npcPsych: false })
+        log('npc psychology: off')
+    }
+    rec.npcPsych = NPC_PSYCH ?? 'default'
     if (DIAG) {
         const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, DIAG)
         rec.diagnostic = `copy settings changed for this run: ${Object.entries(DIAG).map(([k, v]) => `${k} ${was[k]} -> ${v}`).join(', ')} (the owner's real save keeps ${JSON.stringify(was)})`
@@ -166,8 +176,8 @@ async function playStory(key, ctx) {
         rec.reqLogFile = f
         log(`request log: ${reqLog.url} -> ${ctx.model.url}`)
     }
-    const server = await startServer(dir, ctx.port, { backend: ctx.backend, log })
-    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null, factsLog: path.join(dir, 'facts.jsonl') })
+    const server = await startServer(dir, ctx.port, { backend: ctx.backend, log, npcEngine: NPC_PSYCH === 'asp' || NPC_PSYCH === 'fatima' ? NPC_PSYCH : null })
+    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null, factsLog: path.join(dir, 'facts.jsonl'), gmLog: path.join(dir, 'gm.jsonl') })
     let failsInRow = 0
     const play1 = async (run, label, phase, kind, text) => {
         log(`${label} ${kind}: ${oneLine(text, 70)}`)
