@@ -16,7 +16,62 @@ async function ask(cfg, prompt, opts = {}) {
     }
 }
 
+// ---- the judge on the Claude subscription (CFO, 2026-10-21) ------------------------------------------------------------------
+// Of the day's 399 DeepSeek requests through 9Router, 298 were this judge and 101 its canon reviewer, and the owner asked to move
+// work off DeepSeek. A Claude model name (sonnet, haiku, opus, claude-*) runs a lean `claude -p` instead: no tools, no MCP, no
+// settings or hooks, no session kept, ~740 tokens of its own, on the plan rather than per token. At most CLAUDE_AT_ONCE run at
+// once (about the router's DeepSeek pace); a failure or a limit goes to cfg.fallback (DeepSeek) through ask().
+export const isClaudeModel = (m) => /^(sonnet|haiku|opus|claude-)/i.test(String(m ?? ''))
+const CLAUDE_AT_ONCE = 4
+let claudeRunning = 0
+const claudeWaiting = []
+async function claudeSlot() {
+    if (claudeRunning < CLAUDE_AT_ONCE) { claudeRunning++; return }
+    await new Promise((r) => claudeWaiting.push(r))
+}
+function claudeDone() {
+    const next = claudeWaiting.shift()
+    if (next) next(); else claudeRunning--
+}
+export async function askClaude(model, prompt, { timeoutMs = 240000, bin = process.env.RISU_JUDGE_CLAUDE_BIN || 'claude' } = {}) {
+    await claudeSlot()
+    try {
+        const { spawn } = await import('child_process')
+        const args = ['-p', '--model', model, '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
+            '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json',
+            '--system-prompt', 'You are a strict, careful judge of an interactive story. Answer only with the JSON object asked for.']
+        const out = await new Promise((resolve, reject) => {
+            const child = spawn(bin, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+            let o = '', e = ''
+            const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error(`claude -p timed out after ${timeoutMs} ms`)) }, timeoutMs)
+            child.stdout.on('data', (d) => { o += d })
+            child.stderr.on('data', (d) => { e += d })
+            child.on('error', (err) => { clearTimeout(timer); reject(err) })
+            child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve(o) : reject(new Error(`claude -p exit ${code}: ${oneLine(e || o, 200)}`)) })
+            child.stdin.on('error', () => {})
+            child.stdin.end(prompt)
+        })
+        const j = JSON.parse(out)
+        if (j.is_error) throw new Error(`claude -p: ${oneLine(j.result ?? j.subtype ?? 'error', 200)}`)
+        return String(j.result ?? '')
+    } finally {
+        claudeDone()
+    }
+}
+
 async function askOnce(cfg, prompt, { maxTokens = 1200 } = {}) {
+    if (isClaudeModel(cfg.model)) {
+        let lastErr = ''
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const content = await askClaude(cfg.model, prompt)
+                const m = /\{[\s\S]*\}/.exec(content.replace(/```json|```/g, ''))
+                if (!m) { lastErr = `no JSON in: ${oneLine(content, 200)}`; continue }
+                return JSON.parse(m[0])
+            } catch (e) { lastErr = String(e.message || e) }
+        }
+        throw new Error(lastErr)
+    }
     let lastErr = ''
     for (let attempt = 0; attempt < 3; attempt++) {
         try {

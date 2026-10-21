@@ -130,3 +130,31 @@ test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, a
     assert.equal(byId(scoreStory(rec, J), 'facts.rumor').status, 'N/A')                    // not judged (--no-judge)
     assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story turns got facts; .*rumor 1, unknown 0, outdated 1/)
 })
+
+test('the judge on the Claude subscription: claude -p lean call, its JSON, its error flag, at most 4 at once', async () => {
+    const fs = await import('fs'); const os = await import('os'); const path = await import('path')
+    const { askClaude, isClaudeModel } = await import('./lib/judge.mjs')
+    assert.equal(isClaudeModel('sonnet'), true); assert.equal(isClaudeModel('claude-haiku-5-5'), true); assert.equal(isClaudeModel('main-deepseek'), false)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-claude-'))
+    const bin = path.join(dir, 'claude')
+    // a fake claude: checks the lean flags, logs its start and end (ms), sleeps 300 ms, echoes the prompt back as the result
+    fs.writeFileSync(bin, [
+        '#!/bin/sh',
+        'case "$*" in *"--tools  --strict-mcp-config"*"--setting-sources  --disable-slash-commands --no-session-persistence --output-format json"*) ;; *) echo "bad args: $*" >&2; exit 2;; esac',
+        `echo "s $(perl -MTime::HiRes=time -e 'printf "%d", time*1000')" >> "${dir}/log"`,
+        'p=$(cat); sleep 0.3',
+        `echo "e $(perl -MTime::HiRes=time -e 'printf "%d", time*1000')" >> "${dir}/log"`,
+        'case "$p" in *FAIL*) printf \'{"is_error":true,"result":"limit reached"}\';; *) printf \'{"is_error":false,"result":"%s"}\' "$p";; esac',
+    ].join('\n') + '\n')
+    fs.chmodSync(bin, 0o755)
+    assert.equal(await askClaude('sonnet', 'ok', { bin }), 'ok')
+    await assert.rejects(askClaude('sonnet', 'FAIL', { bin }), /limit reached/)
+    fs.writeFileSync(path.join(dir, 'log'), '')
+    await Promise.all(Array.from({ length: 10 }, (_, i) => askClaude('sonnet', `q${i}`, { bin })))
+    const ev = fs.readFileSync(path.join(dir, 'log'), 'utf8').split('\n').filter(Boolean).map((l) => l.split(' ')).map(([k, t]) => [Number(t), k === 's' ? 1 : -1])
+    ev.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    let run = 0, peak = 0
+    for (const [, d] of ev) { run += d; peak = Math.max(peak, run) }
+    assert.ok(peak <= 4, `peak ${peak} > 4`)
+    assert.ok(peak >= 2, `peak ${peak}: they did not run in parallel`)
+})
