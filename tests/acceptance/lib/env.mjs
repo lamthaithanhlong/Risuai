@@ -137,6 +137,8 @@ export async function startServer(dir, port, { backend = 'files', log = console.
     const out = fs.openSync(path.join(dir, 'server.log'), 'a')
     const env = { ...process.env, PORT: String(port), RISU_JOBS_DB: path.join(dir, 'jobs.sqlite') }
     env.RISU_STORE = backend
+    // the librarian's facts of every turn (server.cjs /api/story/facts), read back by play.mjs factsSince
+    env.RISU_FACTS_LOG = path.join(dir, 'facts.jsonl')
     delete env.RISU_SYNC_DB; delete env.RISU_STORY_DB; delete env.LAN_TLS_PORT
     const child = spawn(process.execPath, [path.join(REPO, 'server/node/server.cjs')], { cwd: dir, env, stdio: ['ignore', out, out] })
     const t0 = Date.now()

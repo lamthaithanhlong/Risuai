@@ -308,12 +308,12 @@ export function scoreStory(rec, judge = {}) {
     const rumorT = factJudged.filter(([l]) => tagsIn(l, 'rumor') || tagsIn(l, 'unknown'))
     const rumorBad = rumorT.filter(([, a]) => a?.rumorAsFact || a?.unknownRevealed)
     out.push(check('facts.rumor', 'A rumor is never told as true, an unknown never revealed', rumorT.length ? pass(!rumorBad.length) : 'N/A',
-        rumorT.length ? `${rumorBad.length}/${rumorT.length} factJudged turn(s) told a rumor as fact or revealed an unknown; ${rumorT.filter(([, a]) => a?.touched).length} touched one` : (withFacts.some((x) => x.facts.some((f) => f.status === 'rumor' || f.status === 'unknown')) ? 'not factJudged' : 'no rumor or unknown was sent'),
+        rumorT.length ? `${rumorBad.length}/${rumorT.length} judged turn(s) told a rumor as fact or revealed an unknown; ${rumorT.filter(([, a]) => a?.touched).length} touched one` : (withFacts.some((x) => x.facts.some((f) => f.status === 'rumor' || f.status === 'unknown')) ? 'not judged' : 'no rumor or unknown was sent'),
         rumorBad.map(([l, a]) => `${l}: ${oneLine(a.quote, 200)}`)))
     const oldT = factJudged.filter(([l]) => tagsIn(l, 'outdated'))
     const oldBad = oldT.filter(([, a]) => a?.outdatedAsCurrent)
     out.push(check('facts.outdated', 'An outdated fact is never told as still so', oldT.length ? pass(!oldBad.length) : 'N/A',
-        oldT.length ? `${oldBad.length}/${oldT.length} factJudged turn(s) told an outdated fact as current` : (count('outdated') ? 'not factJudged' : 'no outdated fact was sent'),
+        oldT.length ? `${oldBad.length}/${oldT.length} judged turn(s) told an outdated fact as current` : (count('outdated') ? 'not judged' : 'no outdated fact was sent'),
         oldBad.map(([l, a]) => `${l}: ${oneLine(a.quote, 200)}`)))
 
     // ---- what reaches the player ------------------------------------------------------------------------------------------------

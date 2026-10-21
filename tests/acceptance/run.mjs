@@ -142,7 +142,7 @@ async function playStory(key, ctx) {
         log(rec.diagnostic)
     }
     const server = await startServer(dir, ctx.port, { backend: ctx.backend, log })
-    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null })
+    const player = new Player({ port: ctx.port, password, outDir: path.join(OUT, 'shots'), label: key, log, dumpDir: flag('--dump-requests') ? path.join(OUT, 'requests', key) : null, factsLog: path.join(dir, 'facts.jsonl') })
     let failsInRow = 0
     const play1 = async (run, label, phase, kind, text) => {
         log(`${label} ${kind}: ${oneLine(text, 70)}`)

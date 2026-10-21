@@ -1,6 +1,7 @@
 // Drives the real Risu page in headless Chromium the way the owner plays: log in, pick the card, New Chat, type, press send,
 // wait for the reply. Reads what the player sees (the chat DOM) and what the app keeps (the chat's variables, through the page's
 // own plugin API getChar()), and records the model requests the page makes (the turn's dice, the GM note, the referee note).
+import fs from 'fs'
 import path from 'path'
 import { createRequire } from 'module'
 
@@ -73,8 +74,10 @@ export function factsIn(text) {
 
 export class Player {
     /** dumpDir: each narrator and lore-helper request body is written there (--dump-requests: the prompt cache's shared prefix) */
-    constructor({ port, password, outDir, label, log = console.log, dumpDir = null }) {
-        Object.assign(this, { port, password, outDir, label, log, dumpDir })
+    /** factsLog: the copy server's RISU_FACTS_LOG; a turn's lines are added to its net as type 'facts' (the turn runs in the
+     *  server's own page since Async turns, so this page never sees the facts request) */
+    constructor({ port, password, outDir, label, log = console.log, dumpDir = null, factsLog = null }) {
+        Object.assign(this, { port, password, outDir, label, log, dumpDir, factsLog })
         this.dumped = 0
         this.base = `http://localhost:${port}`
         this.net = []
@@ -296,9 +299,18 @@ export class Player {
             const shown = d.find((x) => x.idx === s.messages.length - 1)?.full ?? ''
             const sig = last.data + '\u0000' + shown
             if (sig === lastText) stable++; else { stable = 0; lastText = sig }
-            if (stable >= 3) return { ok: true, ms: Date.now() - t0, errors, net: this.net.slice(netFrom) }
+            if (stable >= 3) return { ok: true, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0)] }
         }
-        return { ok: false, ms: Date.now() - t0, errors, net: this.net.slice(netFrom), timeout: Date.now() - t0 >= timeoutMs }
+        return { ok: false, ms: Date.now() - t0, errors, net: [...this.net.slice(netFrom), ...this.factsSince(t0)], timeout: Date.now() - t0 >= timeoutMs }
+    }
+
+    /** the facts the server answered since t0 (RISU_FACTS_LOG lines), as net entries of type 'facts' */
+    factsSince(t0) {
+        if (!this.factsLog) return []
+        try {
+            return fs.readFileSync(this.factsLog, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+                .filter((r) => r.at >= t0).map((r) => ({ at: r.at, type: 'facts', status: r.status, tokens: r.tokens ?? 0, facts: r.lines ?? [] }))
+        } catch { return [] }
     }
 
     /** GET /api/story/:chatId/check with the page's own auth token */

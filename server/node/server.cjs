@@ -2155,7 +2155,7 @@ app.post('/api/story/facts', authenticatedRouteLimiter, async (req, res, next) =
         const story = storyStore.story(id);
         const r = storyGraph.facts(id, story, { text: String(b.text ?? '').slice(-6000), present: (Array.isArray(b.present) ? b.present : []).slice(0, 12).map((p) => String(p).slice(0, 80)), maxTokens: Math.min(Number(b.maxTokens) || 450, 1500) });
         // RISU_FACTS_LOG=<file>: one JSON line per answer (the acceptance run reads them: how many facts, of which status, tokens)
-        if(process.env.RISU_FACTS_LOG) fs.appendFile(process.env.RISU_FACTS_LOG, JSON.stringify({ at: Date.now(), chatId: id, status: r.status, world: r.world, now: r.now, ms: r.ms, tokens: r.tokens ?? 0, entities: (r.entities ?? []).map((e) => e.id), statuses: (r.facts ?? []).map((f) => f.status), player: (r.facts ?? []).map((f) => f.player_knows) }) + '\n').catch(() => {});
+        if(process.env.RISU_FACTS_LOG) fs.appendFile(process.env.RISU_FACTS_LOG, JSON.stringify({ at: Date.now(), chatId: id, status: r.status, world: r.world, now: r.now, ms: r.ms, tokens: r.tokens ?? 0, entities: (r.entities ?? []).map((e) => e.id), statuses: (r.facts ?? []).map((f) => f.status), player: (r.facts ?? []).map((f) => f.player_knows), lines: (r.facts ?? []).map((f) => ({ status: f.status, text: f.text.slice(0, 300) })) }) + '\n').catch(() => {});
         res.send(r);
     } catch (error) { next(error); }
 });
