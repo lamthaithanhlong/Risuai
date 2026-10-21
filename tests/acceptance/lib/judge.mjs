@@ -16,12 +16,15 @@ async function ask(cfg, prompt, opts = {}) {
     }
 }
 
-// ---- the judge on the Claude subscription (CFO, 2026-10-21) ------------------------------------------------------------------
-// Of the day's 399 DeepSeek requests through 9Router, 298 were this judge and 101 its canon reviewer, and the owner asked to move
-// work off DeepSeek. A Claude model name (sonnet, haiku, opus, claude-*) runs a lean `claude -p` instead: no tools, no MCP, no
+// ---- the judge on the Claude subscription (an option, 2026-10-21) --------------------------------------------------------------
+// Of the day's 399 DeepSeek requests through 9Router, 298 were this judge and 101 its canon reviewer. A Claude model name
+// (claude:sonnet, claude:haiku, sonnet, claude-*) runs a lean `claude -p` instead: no tools, no MCP, no
 // settings or hooks, no session kept, ~740 tokens of its own, on the plan rather than per token. At most CLAUDE_AT_ONCE run at
 // once (about the router's DeepSeek pace); a failure or a limit goes to cfg.fallback (DeepSeek) through ask().
-export const isClaudeModel = (m) => /^(sonnet|haiku|opus|claude-)/i.test(String(m ?? ''))
+// Owner, 2026-10-21 (after the CFO's first call): "vẫn dùng deepseek song song với sonet và haiku nhưng task nào tiết kiệm dc thì cho
+// haiku làm": the judge stays on DeepSeek by default (it weighs and explains); this path is the option --judge-model claude:sonnet.
+export const isClaudeModel = (m) => /^(claude:|sonnet$|haiku$|opus$|claude-)/i.test(String(m ?? ''))
+const claudeName = (m) => String(m).replace(/^claude:/i, '')
 const CLAUDE_AT_ONCE = 4
 let claudeRunning = 0
 const claudeWaiting = []
@@ -64,7 +67,7 @@ async function askOnce(cfg, prompt, { maxTokens = 1200 } = {}) {
         let lastErr = ''
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                const content = await askClaude(cfg.model, prompt)
+                const content = await askClaude(claudeName(cfg.model), prompt)
                 const m = /\{[\s\S]*\}/.exec(content.replace(/```json|```/g, ''))
                 if (!m) { lastErr = `no JSON in: ${oneLine(content, 200)}`; continue }
                 return JSON.parse(m[0])

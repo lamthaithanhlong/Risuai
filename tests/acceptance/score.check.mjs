@@ -131,10 +131,11 @@ test('facts.rumor / facts.outdated: the librarian tagged lines a turn carried, a
     assert.match(byId(scoreStory(rec, J), 'lore.facts').summary, /1\/\d+ story turns got facts; .*rumor 1, unknown 0, outdated 1/)
 })
 
-test('the judge on the Claude subscription: claude -p lean call, its JSON, its error flag, at most 4 at once', async () => {
+test('the judge on the Claude subscription (--judge-model claude:sonnet): claude -p lean call, its JSON, its error flag, at most 4 at once', async () => {
     const fs = await import('fs'); const os = await import('os'); const path = await import('path')
     const { askClaude, isClaudeModel } = await import('./lib/judge.mjs')
-    assert.equal(isClaudeModel('sonnet'), true); assert.equal(isClaudeModel('claude-haiku-5-5'), true); assert.equal(isClaudeModel('main-deepseek'), false)
+    assert.equal(isClaudeModel('claude:sonnet'), true); assert.equal(isClaudeModel('claude-haiku-5-5'), true); assert.equal(isClaudeModel('main-deepseek'), false)
+    assert.equal(isClaudeModel('sonnet-something-routed'), false)
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-claude-'))
     const bin = path.join(dir, 'claude')
     // a fake claude: checks the lean flags, logs its start and end (ms), sleeps 300 ms, echoes the prompt back as the result
