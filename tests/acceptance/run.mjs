@@ -19,6 +19,9 @@
 //                        scorecards say so, and the default out dir gets a -diag suffix
 //     --lore-forward M   on | off | shadow: the COPY's loreForward (the GM names the shelves, loreIndex.ts); shadow keeps the live librarian
 //                        and logs what the GM's answer would have loaded ($lore_shadow). Not diagnostic: the scorecards are comparable.
+//     --gm-solver off    the COPY's gmSolver=false: the GM's note keeps its open rules (the symbolic solver is skipped); "on" leaves it as it is
+//     --base-from RUN    take the snapshot from RUN/_base of an earlier run (an APFS clone: no new disk, and two runs start from the same save)
+//     --keep-runs        do not remove the earlier runs under ~/.risu-story-work/acceptance (another session may still need a copy)
 //     --dump-requests    write each narrator and lore-helper request body to OUT/requests/<story>/ (the prompt cache's shared prefix)
 //     --script FILE      play FILE's turns instead of the story's own ({"ss": [{"kind": "action", "text": "…"}], …}), no
 //                        step-by-step run; each turn waits for the bookkeeper and records the panel after it (turn.after)
@@ -29,6 +32,7 @@
 // Never touches the live server (:6001) or the real save: the save is snapshotted read-only into ~/.risu-story-work/acceptance/<stamp>
 // (only the newest run is kept: --rejudge needs that run's copy) and the owner's settings are used from the copy as they are. Outputs are not committed.
 import fs from 'fs'
+import { execFileSync } from 'child_process'
 import os from 'os'
 import path from 'path'
 import { STORIES, STORY_KEYS, planOf } from './stories.mjs'
@@ -46,8 +50,19 @@ const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] 
 const today = new Date().toLocaleDateString('sv-SE')
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
+const GM_SOLVER = opt('--gm-solver') === 'off' ? { gmSolver: false } : null
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
 const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
+
+/** RUN/_base as an APFS clone of an earlier run's _base: no new disk, and both runs start from the same save. */
+function cloneBase(fromRun, runDir) {
+    const from = path.join(fromRun, '_base')
+    const b = path.join(runDir, '_base')
+    fs.mkdirSync(b, { recursive: true })
+    for (const n of fs.readdirSync(from)) execFileSync('cp', ['-cR', path.join(from, n), path.join(b, n)])
+    console.log(`[env] snapshot cloned from ${from}`)
+    return b
+}
 
 function writeRecord(file, rec) { fs.writeFileSync(file, redact(JSON.stringify(rec, null, 1))) }
 
@@ -115,6 +130,11 @@ async function playStory(key, ctx) {
         patchCopyRoot(path.join(dir, 'save'), ctx.backend, LORE_FORWARD)
         rec.loreForward = opt('--lore-forward')
         log(`lore forward: ${rec.loreForward}`)
+    }
+    if (GM_SOLVER) {
+        patchCopyRoot(path.join(dir, 'save'), ctx.backend, GM_SOLVER)
+        rec.gmSolver = 'off'
+        log('gm solver: off')
     }
     if (DIAG) {
         const was = patchCopyRoot(path.join(dir, 'save'), ctx.backend, DIAG)
@@ -205,14 +225,14 @@ async function main() {
     const keys = which === 'all' ? STORY_KEYS : which.split(',')
     for (const k of keys) if (!STORIES[k]) throw new Error(`unknown story "${k}" (${STORY_KEYS.join(", ")}, all)`)
     fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true })
-    pruneRuns()
+    if (!flag('--keep-runs')) pruneRuns()
     const runDir = newRunDir()
     const live = liveServer()
     const backend = storeBackend(live, opt('--store'))
     console.log(`[env] live server ${live ? `pid ${live.pid} in ${live.cwd}` : 'not running'}; copy uses the ${backend} store`)
     const build = flag('--no-build') ? "the repo's dist" : 'built from the working tree at ' + new Date().toISOString().slice(0, 16)
     buildClient(runDir, { noBuild: flag('--no-build') })
-    const base = await snapshotLive(runDir, { liveCwd: live?.cwd || undefined, backend })
+    const base = opt('--base-from') ? cloneBase(opt('--base-from'), runDir) : await snapshotLive(runDir, { liveCwd: live?.cwd || undefined, backend })
     const ms = modelSettings(path.join(base, 'save'), backend)
     // the owner may have another slot active on the live server; the run can pin the narrator to a named one (copy only)
     const slot = opt('--narrator-slot') ? ms.slots.find((x) => x.name === opt('--narrator-slot')) : null
