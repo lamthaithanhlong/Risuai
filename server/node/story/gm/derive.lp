@@ -15,13 +15,18 @@
 %   resolved(N, I)       message I says N was met (drank, ate, bandaged, rested)
 %   person(P)            a person the story knows (the ledger's NPCs, the GM's enemies, antagonist and threats)
 %   named(P, I)          message I names P;   seen_here(P): the ledger last saw P at the player's place
+%   left(P, I)           reply I says P walked off / vanished (narration, not speech, not negated, same sentence as the name)
+%   returned(P, I)       reply I says P came back
 %   dead(P)              the timeline says P died (storyStore.cjs DEATH, the same words as canon.pl's death_word)
 %   thread(T, Kind), actor(T, P)
 % Derived:
 %   need(N)      established: on the panel, or said in the last 4 messages and not met after
 %   present(P)   in the scene: named in the player's message or the last reply, or named lately and last seen here; never dead
+%   away(P)      the newest message that names P says P left, and no return at or after it: not in the scene, however recently named
+%                (measured 2026-10-22, Mailman: two replies said Mặt Sẹo was gone, the names kept him "present", the third made him speak)
 %   open(T)      the thread can still move: none of its actors is dead
 #defined panel_need/1. #defined said_need/2. #defined resolved/2. #defined person/1. #defined named/2. #defined seen_here/1.
+#defined left/2. #defined returned/2.
 #defined dead/1. #defined thread/2. #defined actor/2. #defined graph_dead/1.
 
 % the librarian's graph (story/gm/graph.lp, loaded beside this file when the chat has one) knows deaths the timeline may not
@@ -31,12 +36,19 @@ need(N) :- panel_need(N).
 need(N) :- said_need(N, I), I <= 3, not met_after(N, I).
 met_after(N, I) :- said_need(N, I), resolved(N, J), J < I.
 
-present(P) :- person(P), not dead(P), named(P, I), I <= 1.
-present(P) :- person(P), not dead(P), seen_here(P), named(P, I), I <= 3.
+% the newest message naming P is a reply that says P left, and nothing at or after it brings P back; message 0 (the player calling
+% P) is never a leave, so naming P in the player's message ends it
+newer(P, I) :- named(P, J), named(P, I), J < I.
+back(P, I) :- returned(P, J), left(P, I), J <= I.
+away(P) :- person(P), left(P, I), I >= 1, not newer(P, I), not back(P, I).
+
+present(P) :- person(P), not dead(P), not away(P), named(P, I), I <= 1.
+present(P) :- person(P), not dead(P), not away(P), seen_here(P), named(P, I), I <= 3.
 
 closed(T) :- actor(T, P), dead(P).
 open(T) :- thread(T, _), not closed(T).
 
 #show need/1.
 #show present/1.
+#show away/1.
 #show dead/1.

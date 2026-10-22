@@ -121,6 +121,45 @@ function needsIn(t) {
 }
 const metIn = (t, need) => (MET[need] ?? []).some((w) => wordAt(t, w).length > 0) && !needsIn(t).has(need)
 
+// ---- who walked off, who came back (left/2, returned/2 of story/gm/derive.lp) ------------------------------------------------
+// Measured 2026-10-22, Mailman chat: two replies said Mặt Sẹo was gone ("đã biến mất khỏi tầm mắt"), and because those replies NAMED him
+// he stayed "present"; the next reply made him speak with nothing showing him come back. A name in a message says he was talked about,
+// not that he is here: only a leave/return word beside the name, in narration, says which.
+const LEAVE_WORDS = ['biến mất', 'khuất hẳn', 'khuất dạng', 'khuất', 'đi khỏi', 'bỏ đi', 'rời đi', 'rời khỏi', 'đi mất', 'xa dần', 'quay lưng đi', 'lẩn mất', 'mất hút', 'bỏ chạy', 'chạy mất', 'left', 'walked away', 'walks away', 'disappeared', 'vanished', 'gone']
+const RETURN_WORDS = ['quay lại', 'trở lại', 'quay về', 'xuất hiện', 'bước vào', 'bước ra', 'came back', 'comes back', 'returned', 'returns']
+/** a word just before it that says it did not happen or is only supposed/wished ("không bỏ đi", "nếu hắn bỏ đi", "if he left") */
+const NOT_SO = /(không|chưa|chẳng|đừng|nếu|giá như|mong|định|if|not|never|didn't|wasn't|won't)\s+(?:\S+\s+)?(?:\S+\s+)?$/
+/** a message with what the characters SAY taken out (“…”, "…", «…»): "hắn đã đi rồi" in a mouth is talk, not what the narration shows */
+const unquoted = (t) => String(t).replace(/“[^”]*”|"[^"]*"|«[^»]*»/g, ' ')
+/** which of the persons a text says left (kind 'leave') or came back (kind 'return'): same sentence, within 60 characters, no other
+ *  person between the name and the word, the word not negated and not inside speech */
+function movesIn(text, kind, keysOf) {
+    const words = kind === 'leave' ? LEAVE_WORDS : RETURN_WORDS
+    const out = new Set()
+    const names = []
+    for (const [k, ns] of keysOf) for (const n of ns) names.push([k, n])
+    for (const sent of unquoted(text).split(/[.!?;\n]+/)) {
+        const at = []                                    // [position, person, length] of every name in the sentence
+        for (const [k, n] of names) for (const i of wordAt(sent, n)) at.push([i, k, n.length])
+        if (!at.length) continue
+        for (const w of words) {
+            for (const j of wordAt(sent, w)) {
+                if (NOT_SO.test(sent.slice(Math.max(0, j - 30), j))) continue
+                let best = null                                                   // the nearest name, either side of the word
+                for (const [i, k, len] of at) {
+                    const d = i < j ? j - (i + len) : i - (j + w.length)
+                    if (d <= 60 && (!best || d < best.d)) best = { d, k, i }
+                }
+                if (!best) continue
+                const lo = Math.min(best.i, j), hi = Math.max(best.i, j)
+                if (at.some(([i, k]) => k !== best.k && i > lo && i < hi)) continue          // another person stands between
+                out.add(best.k)
+            }
+        }
+    }
+    return out
+}
+
 /**
  * The facts of a turn for story/gm/derive.lp (the words read here: needs, names, deaths), and what they were built from.
  * The deaths are the story index's own (storyStore.cjs deathsIn over the timeline, the canon rules' death words).
@@ -162,6 +201,8 @@ function featureFacts(input, places = [], extra = {}) {
     for (const e of led.timeline) for (const d of deathsIn(e.event, keys)) dead.add(d)
     const msgs = (input.messages ?? []).slice(-4).reverse().map((m) => plain(m.text))
     const here = lower(v.st_place)
+    const keysOf = keys.map((k) => [k, [k, shortName(k)].filter(Boolean)])
+    const moved = { leave: msgs.map((t) => movesIn(t, 'leave', keysOf)), back: msgs.map((t) => movesIn(t, 'return', keysOf)) }
     const present = []     // derive.lp's present/1, worked out here too: the NPC appraisal starts before clingo does
     for (const [k, n] of persons) {
         out.push(`person(${str(k)}).`)
@@ -172,7 +213,16 @@ function featureFacts(input, places = [], extra = {}) {
         let first = null
         const short = shortName(k)
         msgs.forEach((t, i) => { if (wordAt(t, k).length || (short && wordAt(t, short).length)) { out.push(`named(${str(k)}, ${i}).`); if (first === null) first = i } })
-        if (!gone && first !== null && (first <= 1 || (seen && first <= 3))) present.push(k)
+        // walked off / came back, read from the replies (message 0 is the player's: calling someone is never "they left")
+        let lastLeft = null, lastBack = null
+        msgs.forEach((t, i) => {
+            if (i === 0) return
+            if (moved.leave[i].has(k)) { out.push(`left(${str(k)}, ${i}).`); if (lastLeft === null) lastLeft = i }
+            if (moved.back[i].has(k)) { out.push(`returned(${str(k)}, ${i}).`); if (lastBack === null) lastBack = i }
+        })
+        // derive.lp's away/1: the newest mention of P is a leave that no return at or after it undoes (and the player has not just named P)
+        const away = first !== null && first >= 1 && lastLeft === first && !(lastBack !== null && lastBack <= first)
+        if (!gone && !away && first !== null && (first <= 1 || (seen && first <= 3))) present.push(k)
     }
     for (const [k, x] of Object.entries(v)) if (PANEL_NEED_KEY.test(k) && !isDash(x)) for (const n of needsIn(plain(x, 400))) out.push(`panel_need(${n}).`)
     msgs.forEach((t, i) => {
@@ -551,4 +601,4 @@ function warm() {
     return decide({ world: 'generic', phase: 'run', vars: {}, messages: [{ role: 'user', text: 'warm' }], dice: { pace: 'quiet' } }, { budgetMs: 5000 }).catch(() => null)
 }
 
-module.exports = { decide, warm, featureFacts, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }
+module.exports = { decide, warm, featureFacts, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }

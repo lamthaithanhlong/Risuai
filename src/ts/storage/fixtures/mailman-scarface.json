@@ -1,0 +1,61 @@
+{
+ "note": "Mailman live chat, 2026-10-22. messages[0..4] is the input of the turn that wrote messages[5] (the chat so far, last = the player's message); messages[1] and [3] say Mat Seo left, messages[5] is the bad reply where he speaks. vars = the chat's st_/led_/gm_ state.",
+ "messages": [
+  {
+   "role": "user",
+   "text": "Tôi sử dụng kỹ năng gió dùng một hòn đá như dưới đất và đẻo nó thành hình một cái đinh nhọn. Sau đó tôi dùng gió xoay cái đinh nó thật là nhanh, tạo như một viên đạn bắn thẳng về phía trước. Tôi lỗng làm thế với hai ba viên liên tiếp."
+  },
+  {
+   "role": "char",
+   "text": "Kenji dùng gió cuốn một hòn đá khỏi lớp đất dưới chân. Luồng khí ép quanh viên đá, nén rồi mài nó thành một mũi nhọn thô. Đất vụn xoáy quanh những ngón tay anh, bị gió hất văng vào đám lá mục.\n\nAnh xoay mũi đá thật nhanh trong luồng khí rồi phóng thẳng về phía trước. Viên đá lao vút qua màn sương, cắm phập vào thân cây lớn phía trước. Kenji làm thêm hai viên nữa, liên tiếp bắn chúng cùng hướng. Viên thứ hai ghim vào vỏ cây; viên cuối sượt qua cành thấp, làm cành gãy răng rắc rồi rơi xuống.\n\nNhững người trong nhóm giật mình vì tiếng đá va vào gỗ. Người đàn ông áo lao động quay phắt về phía Kenji, hai tay vẫn siết chặt. Cô gái mặc đồng phục lùi sát người phụ nữ áo bông. Không ai trong số họ nhìn thấy luồng gió; chỉ có đá vụn bay tứ tung và những tiếng va đập giữa rừng.\n\nTừ phía trái, bóng đen chuyển động sau màn sương. Con gấu bước ra giữa những thân cây, mõm cúi thấp, bộ lông đen dính lá khô. Nó chẳng buồn để ý đến những mũi đá ghim trên thân cây. Một tiếng gầm bật khỏi cổ họng nó, đủ gần để mặt đất dưới lớp lá rung lên.\n\nThanh niên mặc đồ thể thao khựng lại, rồi lùi về phía sau. Người phụ nữ áo bông bật ra một tiếng kêu ngắn. Gã mặt sẹo đã khuất hẳn; chỉ còn tiếng gậy gõ xa dần, chìm trong rừng.\n\nEvelyn trở về bên Kenji, mắt không rời con gấu. “Tớ nghĩ mấy viên đá làm nó chú ý rồi.”\n\nCon gấu hạ đầu và bắt đầu lao tới.\n\n]]"
+  },
+  {
+   "role": "user",
+   "text": "Tôi kêu Evelyn đánh lạc hướng con gấu bằng tiếng động, sau đó tôi dùng 3 bóng viên đá trong tay bắn vào mắt của con gấu kia và kêu mọi người hãy chạy đi."
+  },
+  {
+   "role": "char",
+   "text": "Luồng gió quanh Evelyn rung lên, rồi tiếng sột soạt bất ngờ bật ra từ đám cây bên phải, xa khỏi nhóm. Con gấu khựng lại, ngoặt đầu theo âm thanh. Nó chuyển hướng được một nhịp, đủ để Kenji xoay cổ tay và phóng liền ba mũi đá.\n\nMũi đầu đập vào mõm con vật. Mũi thứ hai sượt qua mặt, còn mũi thứ ba trúng sát một bên mắt. Con gấu tru lên, chồm nghiêng, hai chân trước quào mạnh vào không khí. Những viên đá không xuyên sâu qua lớp lông dày, nhưng cú đánh vào mặt khiến nó lảo đảo và mất đà.\n\nKenji kêu mọi người chạy. Người đàn ông áo lao động lập tức túm lấy tay cô gái mặc đồng phục, kéo cô về phía vệt lá mục. Người phụ nữ áo bông chạy theo, suýt trượt trên đất ướt; thanh niên mặc đồ thể thao đứng chết cứng một khoảnh khắc rồi mới quay đầu lao đi. Không ai chờ xem con gấu có đứng dậy được không.\n\nNó gầm lên sau lưng họ. Lá mục tung mù khi con vật quật xuống đất, rồi tiếng chân nặng nề cào qua nền rừng. Evelyn lướt sát bên Kenji, vừa chạy vừa ngoái nhìn. “Nó còn đuổi theo đấy!”\n\nPhía trước, màn sương che khuất lối đi giữa hai hàng cây. Xa hơn, một tấm biển gỗ nghiêng bên đường mòn, mặt biển lấm bùn nhưng có những nét mực đen mới viết. Mặt Sẹo đã biến mất khỏi tầm mắt; tiếng gậy của gã cũng không còn nghe thấy. Phía sau, tiếng gầm lại vang lên, gần hơn."
+  },
+  {
+   "role": "user",
+   "text": "Tôi quyết định là chạy lên một cái hãng núi cao và sau đó dùng thấu thuyền để quan sát coi con gấu kia đang ở đâu. Trong lúc đó tôi cũng kêu mọi người tụ hợp tại một chỗ để dành xe quan sát để dành cùng nhau giết con quái vật kia."
+  },
+  {
+   "role": "char",
+   "text": "Con đường mòn dốc lên sườn núi, đất trơn dưới lớp lá ướt. Kenji chạy lên cao hơn, trong khi tiếng chân phía sau không còn dội sát bên tai. Nắng đứng gắt trên ngọn cây, nhưng dưới tán rừng ánh sáng vẫn đục và xanh xám.\n\nTừ chỗ cao hơn, Kenji nhìn xuyên qua những thân cây và màn sương để tìm con gấu. Nó đã chệch khỏi đường mòn, ở xa phía dưới; thân hình đen lẫn giữa những gốc cây, còn một bên mặt bê bết máu. Nó không nằm lại. Mỗi lần nó thúc qua bụi rậm, cành khô gãy vang lên, rồi tiếng gầm vọng dọc sườn núi.\n\nKenji gọi mọi người tụ họp để cùng quan sát và tìm cách giết con quái vật. Người đàn ông áo lao động dừng lại, vẫn giữ cô gái mặc đồng phục sát bên mình. Người phụ nữ áo bông và thanh niên mặc đồ thể thao cũng tụ lại gần lối lên; vài bước chân còn ngập ngừng giữa họ và Kenji.\n\n😐 Mặt Sẹo liếc về phía tiếng gầm rồi nhìn nhóm tân thủ. “Tôi không định đứng gần con gấu. Muốn tụ lại thì tụ, nhưng đừng trông chờ tôi xông vào đánh.”\n\nEvelyn lướt bên Kenji, giọng nhẹ tênh giữa tiếng thở gấp của cả nhóm. “Ít nhất giờ mình biết nó đang ở đâu. Nhưng nó cũng biết hướng đường mòn này.”\n\nPhía dưới, một thân cây rung lên rồi nghiêng xuống, khuất dần trong màn sương. Tiếng gầm tiếp theo vang xa hơn trước, nhưng dọc lối đi không có vật gì đủ vững để chặn hẳn con vật.\n\n[💡Kế hoạch| Không ]"
+  }
+ ],
+ "vars": {
+  "st_name": "Kenji Park",
+  "st_job": "Nhân viên văn phòng",
+  "st_rank": "người đưa thư thực tập",
+  "st_date": "20/10/2026, giữa trưa",
+  "st_place": "Sườn núi phía trên đường mòn",
+  "st_world": "Khu rừng mù sương",
+  "st_condition": "Chưa bị thương; căng thẳng",
+  "st_notes": "Năng lực bí mật và Evelyn chưa bị phát hiện.",
+  "led_ev": "20/10/2026, đêm | Nhận hộp không nhãn, bị kéo vào thế giới đầu tiên.\n20/10/2026, sáng | Gặp nhóm tân thủ và Mặt Sẹo; được biết phải tìm nhiệm vụ để rời đi.\n20/10/2026, sáng | Tiếng gầm vọng gần hơn; cành cây gãy trong màn sương.\n20/10/2026, sáng | Evelyn đánh lạc hướng gấu; Kenji bắn ba mũi đá vào mặt nó và cả nhóm bỏ ch\n20/10/2026, giữa trưa | Kenji đưa nhóm lên sườn núi; xác định gấu còn ở dưới rừng",
+  "gm_mode": "{\"at\":2,\"mode\":{\"scene\":\"still\",\"combat\":\"peace\"},\"prev\":{\"scene\":\"still\",\"combat\":\"peace\"}}",
+  "gm_arc": "Dấu vết của một kiện hàng lạc tuyến | Người gửi chưa rõ | Tìm nguồn gốc những gói hàng bất thường | Kenji có thể bị kéo vào một cuộc tranh g",
+  "gm_beat": "5 | Nhóm tụ lại trên sườn núi; gấu còn dưới rừng và đang tiến về phía đường mòn | Nhóm sẽ làm gì tiếp?",
+  "gm_threats": "Gấu đen | 3/4 | Bị thương ở mặt; đang tìm đường tiến lên sườn núi",
+  "gm_rewards_due": "",
+  "gm_consequences_due": "",
+  "gm_canon": "20/10/2026 | Các nhân vật canon tiếp tục sống ngoài khung cảnh",
+  "gm_past": "",
+  "gm_path": "",
+  "gm_enemies": "",
+  "gm_gained": "",
+  "gm_left": "",
+  "gm_beat_at": "8",
+  "gm_path_at": "",
+  "gm_at": "f4e432bb-6784-444e-b2aa-bf9afe958d4b",
+  "gm_prev": "{\"gm_arc\":\"Dấu vết của một kiện hàng lạc tuyến | Người gửi chưa rõ | Tìm nguồn gốc những gói hàng bất thường | Kenji có thể bị kéo vào một cuộc tranh g\",\"gm_beat\":\"4 | Nhóm chạy trên đường mòn; tấm biển lấm bùn phía trước | Gấu đen vẫn đuổi theo\",\"gm_threats\":\"Gấu đen | 3/4 | Bị trúng đá ở mặt, vẫn đuổi theo\",\"gm_rewards_due\":\"\",\"gm_consequences_due\":\"\",\"gm_canon\":\"20/10/2026 | Các nhân vật canon tiếp tục sống ngoài khung cảnh\",\"gm_past\":\"\",\"gm_path\":\"\",\"gm_enemies\":\"\",\"gm_gained\":\"\",\"gm_left\":\"\",\"gm_beat_at\":\"7\",\"gm_path_at\":\"\",\"gm_adv_at\":\"3\",\"gm_adv_prev\":\"\"}",
+  "gm_new_at": "",
+  "gm_new_prev": "",
+  "gm_adv_at": "3",
+  "gm_adv_prev": "",
+  "led_soc": "4 | Evelyn | help | player\n6 | Evelyn | help | player\n7 | Evelyn | help | player\n8 | Evelyn | help | player\n8 | Mặt Sẹo | refuse | player"
+ }
+}

@@ -445,3 +445,81 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         expect(lastLine(first).length).toBeLessThanOrEqual(520)
     })
 })
+
+// The Mailman chat of 2026-10-22: two replies said Mặt Sẹo was gone, and the next had him speak with nothing showing his return.
+// A name in a message made him "present"; now a leave word beside the name (narration, not negated, not in speech) takes him out
+// until a return word or the player calling him.
+describe.skipIf(!HAS_CLINGO)('who left the scene (left/returned in derive.lp)', () => {
+    const fx = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'mailman-scarface.json'), 'utf8'))
+    const turnOf = (messages: any[], over: any = {}) => ({ world: 'mailman', phase: 'run', vars: fx.vars, messages, dice: { pace: 'quiet' }, kinds: [], stance: '', ...over })
+    const history = fx.messages.slice(0, 5)                       // what the turn that wrote the bad reply was given
+    const MS = 'mặt sẹo'
+    const presentOf = async (messages: any[]) => (await G.decide(turnOf(messages), { budgetMs: 4000 })).present as string[]
+    const withReply = (reply: string) => [...history.slice(0, 4), { role: 'char', text: reply }, { role: 'user', text: 'Tôi nhìn quanh.' }]
+
+    test('the fixture is the bug: his name is in the last replies, which say he left', () => {
+        expect(history.at(-2).text).toMatch(/Mặt Sẹo đã biến mất/)
+        expect(history[1].text).toMatch(/Gã mặt sẹo đã khuất hẳn/)
+        expect(fx.messages.at(-1).text).toMatch(/^😐 Mặt Sẹo/m)
+    })
+    test('on the live chat he is not present, has no intent and no Subtext line', async () => {
+        const r = await G.decide(turnOf(history), { budgetMs: 4000, withFacts: true })
+        expect(r.present).not.toContain(MS)
+        expect(r.present).toContain('evelyn')                     // the others are untouched
+        expect(intents(r).join(' ')).not.toContain(MS)
+        expect(r.line).not.toContain('Mặt Sẹo')
+        expect(r.facts).toMatch(/left\("mặt sẹo", 1\)/)
+        expect(r.facts).toMatch(/left\("mặt sẹo", 3\)/)
+    })
+    test('with a profile he gets no npc action either', async () => {
+        const { openStoryStore } = req('../../../server/node/storyStore.cjs')
+        const np = req('../../../server/node/npcPsych.cjs')
+        const t = { open: 50, consc: 50, extra: 30, agree: 40, neuro: 50 }
+        const d = mkdtempSync(join(tmpdir(), 'npc-gm-'))
+        writeFileSync(join(d, 'mailman.json'), JSON.stringify({ world: 'mailman', version: 1, built: '2026-10-22',
+            npcs: [{ id: MS, name: 'Mặt Sẹo', importance: 60, traits: t, speech: 'cold', wants_to_hide: 'he fears bears', hide_fid: null }, { id: 'evelyn', name: 'Evelyn', importance: 60, traits: t, speech: 'warm', hide_fid: null }],
+            relations: [{ p: MS, q: 'player', trust: 30, affection: 20, debt: 0, grudge: 10 }, { p: 'evelyn', q: 'player', trust: 60, affection: 50, debt: 0, grudge: 0 }] }))
+        const store = openStoryStore({ dbFile: ':memory:' })
+        const npc = np.openNpcPsych({ db: store.db, npcDir: d, engine: 'asp' })
+        const r = await G.decide(turnOf(history, { chatId: 'c-ms' }), { budgetMs: 4000, npc })
+        const who = (r.npc?.actions ?? []).map((a: any) => String(a.who).toLowerCase())
+        expect(who).toContain('evelyn')
+        expect(who).not.toContain(MS)
+        expect(String(r.npc?.subtext ?? '')).not.toMatch(/Mặt Sẹo/)
+    })
+    test('he comes back: "Mặt Sẹo quay lại" in the last reply makes him present again', async () => {
+        expect(await presentOf(withReply('Tiếng gầm vang xa. Mặt Sẹo quay lại bên lối mòn, tay vẫn cầm gậy.'))).toContain(MS)
+    })
+    test('a return after the leave (newer reply) wins; a leave after the return does not', async () => {
+        const left = 'Mặt Sẹo biến mất sau thân cây.'
+        const back = 'Mặt Sẹo trở lại, thở hổn hển.'
+        expect(await presentOf([{ role: 'char', text: left }, { role: 'user', text: 'Tôi chờ.' }, { role: 'char', text: back }, { role: 'user', text: 'Tôi nhìn.' }])).toContain(MS)
+        expect(await presentOf([{ role: 'char', text: back }, { role: 'user', text: 'Tôi chờ.' }, { role: 'char', text: left }, { role: 'user', text: 'Tôi nhìn.' }])).not.toContain(MS)
+    })
+    test('left and back in the same reply: present', async () => {
+        expect(await presentOf(withReply('Mặt Sẹo biến mất sau thân cây rồi quay lại với một cành khô.'))).toContain(MS)
+    })
+    test('speech does not count: "hắn đã đi rồi" inside quotes leaves him in the scene', async () => {
+        expect(await presentOf(withReply('Evelyn thì thầm: “Mặt Sẹo bỏ đi rồi, hắn biến mất từ nãy.” Mặt Sẹo đứng ngay sau lưng cô.'))).toContain(MS)
+        expect(await presentOf(withReply('Mặt Sẹo nói "tôi sẽ không rời đi đâu" rồi khoanh tay.'))).toContain(MS)
+    })
+    test('a negated or wished leave does not count', async () => {
+        expect(await presentOf(withReply('Mặt Sẹo không bỏ đi, gã đứng nhìn con gấu.'))).toContain(MS)
+        expect(await presentOf(withReply('Mặt Sẹo chưa hề biến mất, gã vẫn ở cuối nhóm.'))).toContain(MS)
+        expect(await presentOf(withReply('Nếu Mặt Sẹo bỏ đi thì nhóm mất người dẫn đường.'))).toContain(MS)
+    })
+    test('the player calling him makes him present again, however the replies left him', async () => {
+        const called = [...history.slice(0, 4), { role: 'user', text: 'Tôi gọi Mặt Sẹo lại đây giúp một tay.' }]
+        expect(await presentOf(called)).toContain(MS)
+    })
+    test('a leave word beside another person does not move him', async () => {
+        expect(await presentOf(withReply('Evelyn biến mất sau tán cây. Mặt Sẹo đứng khoanh tay.'))).toContain(MS)
+    })
+    test('movesIn reads English and Vietnamese', () => {
+        const keys: [string, string[]][] = [['marek', ['marek']], ['mặt sẹo', ['mặt sẹo']]]
+        expect([...G.movesIn('marek walked away into the fog.', 'leave', keys)]).toEqual(['marek'])
+        expect([...G.movesIn('marek came back at dawn.', 'return', keys)]).toEqual(['marek'])
+        expect([...G.movesIn('marek never left.', 'leave', keys)]).toEqual([])
+        expect([...G.movesIn('mặt sẹo rời khỏi nhóm, marek ở lại.', 'leave', keys)]).toEqual(['mặt sẹo'])
+    })
+})
