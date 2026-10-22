@@ -556,6 +556,10 @@ function openNpcPsych(opts = {}) {
             const head = want ? (want === act ? SAME_PHRASE[want] ?? `${WANT_PHRASE[want]} and says so` : `${WANT_PHRASE[want]} but ${ACT_PHRASE[act]}`) : ACT_PHRASE[act]
             const dem = demeanor.get(n.id)?.[0]
             const speech = SPEECH_PHRASE[n.speech]
+            // small talk is the solver's default, not a drive: wanting nothing, neutral, plain spoken and holding nothing back says nothing,
+            // and "makes small talk" made the narrator give them a filler line every turn (Mailman 2026-10-22: Evelyn, the persona's
+            // companion with no card profile, read the bear chase back to the player)
+            if (act === 'small_talk' && !want && (!dem || dem === 'neutral') && !speech && !silent.has(n.id) && !n.hasAgenda && !n.hasSecret) continue
             // the optional tails, dropped from the end of the list until the fragment fits
             const tails = [dem ? (speech ? `${dem}, ${speech}` : dem) : speech ?? null, silent.has(n.id) ? 'may stay silent' : null, n.hasAgenda && act !== 'confide' ? 'has something unsaid' : null, n.hasSecret ? 'keeps something back' : null].filter(Boolean)
             const nm = [...String(nameOf(n.id, n.name))].slice(0, 30).join('')

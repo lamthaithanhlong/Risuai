@@ -573,6 +573,19 @@ describe('the Subtext line (subtextOf)', () => {
         expect(odd).toContain('“Kai” offers help; speaks tersely; may stay silent; keeps something back.')
         expect(s.p.subtextOf({ social: [['kai', 'dance']] }, result, {})).toBe('')              // an act it has no phrase for
     })
+    test('small talk that wants nothing, neutral, plain and holding nothing back is no drive: no fragment (Mailman 2026-10-22, Evelyn mid bear chase)', async () => {
+        const s = setup({ engine: 'asp' })
+        const result = await s.p.appraise({ ...ASK, present: ['evelyn', 'kai'], strangers: [{ id: 'evelyn', name: 'Evelyn' }] })
+        expect(result.npcs.map((n: any) => n.id)).toContain('evelyn')
+        const idle = { social: [['evelyn', 'small_talk']], demeanor: [['evelyn', 'neutral']] }
+        expect(s.p.subtextOf(idle, result, {})).toBe('')
+        // anything that is a drive brings the fragment back: a want, a demeanor, silence
+        expect(s.p.subtextOf({ ...idle, wants: [['evelyn', 'help']] }, result, {})).toContain('“Evelyn” wants to help but makes small talk')
+        expect(s.p.subtextOf({ ...idle, demeanor: [['evelyn', 'warm']] }, result, {})).toContain('“Evelyn” makes small talk; warm.')
+        expect(s.p.subtextOf({ ...idle, mayStay: ['evelyn'] }, result, {})).toContain('“Evelyn” makes small talk; neutral; may stay silent.')
+        // a profiled person keeps theirs (Kai speaks tersely and keeps something back)
+        expect(s.p.subtextOf({ social: [['kai', 'small_talk']], demeanor: [['kai', 'neutral']] }, result, {})).toContain('“Kai” makes small talk')
+    })
     test('at most 4 people, 110 characters each, 520 in all, however long the names and tails', () => {
         const s = setup({ engine: 'asp' })
         const result = {

@@ -381,14 +381,19 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         const byLook = await G.decide(scene([reply, { role: 'user', text: 'Tôi đi tiếp.' }], { people: ['Martin Vale'] }), { budgetMs: 3000, npc, withFacts: true })
         expect(byLook.present).toEqual(['martin vale'])                    // "Martin" in the prose is Martin Vale
         expect(byLook.npc.actions[0]).toMatchObject({ who: 'Martin Vale', demeanor: 'neutral' })
-        expect(lastLine(byLook)).toMatch(/^Subtext .*“Martin Vale”/)
-        expect(lastLine(byLook)).not.toMatch(/keeps something back|has something unsaid/)
+        // a neutral stranger who wants nothing has no drive to show: no Subtext (it read "makes small talk" and the narrator gave him
+        // a filler line); he is still in the scene and his act is still recorded
+        expect(byLook.line).not.toMatch(/Subtext/)
+        expect(byLook.line).toMatch(/“Martin Vale”/)
+        expect(byLook.npc.actions[0]).toMatchObject({ action: 'small_talk' })
         expect(byLook.facts).not.toMatch(/has_secret|has_agenda/)
         // the bookkeeper's social line names him, no page list: the same; "Martin" in a later line is still him, and what the player
         // did to him moves how he sees the player (insults: a grudge, so he is cold and keeps away)
         const bySoc = await G.decide(scene([reply, { role: 'user', text: 'Tôi đi tiếp.' }], { vars: { led_soc: '7 | Martin Vale | help | player\n8 | player | insult | Martin\n9 | player | insult | Martin' } }), { budgetMs: 3000, npc })
         expect(bySoc.present).toEqual(['martin vale'])
         expect(bySoc.npc.actions[0]).toMatchObject({ who: 'Martin Vale', demeanor: 'cold' })
+        expect(lastLine(bySoc)).toMatch(/^Subtext .*“Martin Vale”.*cold/)
+        expect(lastLine(bySoc)).not.toMatch(/keeps something back|has something unsaid/)
         const rel = npc.stateOf('c2').find((x: any) => x.npc === 'martin vale').rel.player
         expect(rel.grudge).toBeGreaterThanOrEqual(30)
         // a role is no name, and a name nobody says in the last two messages is not in the scene
