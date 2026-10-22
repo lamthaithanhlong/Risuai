@@ -409,7 +409,8 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         expect(as.facts).toContain('companion("evelyn")')
         expect(as.decision.intents).toEqual([expect.objectContaining({ who: 'evelyn', what: 'help' })])
         expect(as.npc.actions[0]).toMatchObject({ who: 'Evelyn', action: 'help', demeanor: 'warm' })
-        expect(lastLine(as)).toMatch(/^Subtext .*“Evelyn” wants to help/)
+        expect(lastLine(as)).toMatch(/^Subtext .*“Evelyn” helps as a close friend: feeling first, a few words in their own voice, never a report of the scene/)
+        expect(lastLine(as)).not.toMatch(/says so/)
         expect(lastLine(as)).not.toMatch(/small talk|keeps something back|has something unsaid/)
         const rel = npc.stateOf('c2').find((x: any) => x.npc === 'evelyn').rel.player
         expect(rel).toMatchObject({ trust: 85, affection: 80, grudge: 0 })

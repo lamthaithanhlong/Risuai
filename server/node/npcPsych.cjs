@@ -556,6 +556,8 @@ function openNpcPsych(opts = {}) {
     /** what a person who wants the very act they take reads as, where "and says so" would be wrong (hiding is not saying) */
     const SAME_PHRASE = { conceal_affection: 'wants to hide how much they care, and does', forgive: 'wants to let the grudge go, and does, quietly' }
     const SPEECH_PHRASE = { cold: 'speaks coldly', warm: 'speaks warmly', blunt: 'speaks bluntly', formal: 'speaks formally', playful: 'speaks playfully', timid: 'speaks timidly', mocking: 'speaks mockingly', terse: 'speaks tersely' }
+    /** a companion helping, by the voice their persona gives them: feeling and a friend's few words, never a report of the scene */
+    const COMPANION_HELP = 'helps as a close friend: feeling first, a few words in their own voice, never a report of the scene'
     const SUBTEXT_HEAD = 'Subtext (hidden drives; show them through action, tone and what is left unsaid, never state them): '
     /** one fragment per person with a social action, by importance: [{id, text}] (what subtextOf joins and persist stores) */
     function subtextParts(decision, result, names, max = SUBTEXT_MAX.npcs) {
@@ -567,7 +569,10 @@ function openNpcPsych(opts = {}) {
             const act = action.get(n.id)?.[0]
             if (!act || !ACT_PHRASE[act]) continue
             const want = WANT_ORDER.find((w) => wants.get(n.id)?.includes(w))
-            const head = want ? (want === act ? SAME_PHRASE[want] ?? `${WANT_PHRASE[want]} and says so` : `${WANT_PHRASE[want]} but ${ACT_PHRASE[act]}`) : ACT_PHRASE[act]
+            // the persona's companion helping: "wants to help and says so" read as a scout's report (Mailman 2026-10-22: "Nó còn đuổi theo,
+            // nhưng chân sau bên trái có vẻ khựng lại..."); a friend feels first and leaves the scene to the narration
+            const head = isCompanion(n) && act === 'help' ? COMPANION_HELP
+                : want ? (want === act ? SAME_PHRASE[want] ?? `${WANT_PHRASE[want]} and says so` : `${WANT_PHRASE[want]} but ${ACT_PHRASE[act]}`) : ACT_PHRASE[act]
             const dem = demeanor.get(n.id)?.[0]
             const speech = SPEECH_PHRASE[n.speech]
             // small talk is the solver's default, not a drive: wanting nothing, neutral, plain spoken and holding nothing back says nothing,
