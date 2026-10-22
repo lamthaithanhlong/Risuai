@@ -6,12 +6,14 @@
     import { createDictation, formatClock, MIC_HINT, type DictationDeps, type DictationState } from "src/ts/process/dictation";
 
     interface Props {
-        onText: (text: string) => void
+        /** `tag` is what `tag()` returned when this dictation started (the chat it was spoken for) */
+        onText: (text: string, tag?: unknown) => void
+        tag?: () => unknown
         height?: string
         /** tests pass fakes; the page uses the browser's own */
         deps?: DictationDeps
     }
-    let { onText, height = undefined, deps = undefined }: Props = $props()
+    let { onText, tag = undefined, height = undefined, deps = undefined }: Props = $props()
 
     function browserDeps(): DictationDeps {
         const w = window as any
@@ -27,12 +29,14 @@
             auth: async () => (await import('src/ts/storage/nodeStorage')).getNodeServerProxyAuth(),
             setInterval: (fn, ms) => window.setInterval(fn, ms),
             clearInterval: (id) => window.clearInterval(id as number),
+            setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+            clearTimeout: (id) => window.clearTimeout(id as number),
         }
     }
 
     let view = $state<DictationState>({ phase: 'idle', seconds: 0, error: null, browser: false })
     // svelte-ignore state_referenced_locally: the deps are read once, when the button is made
-    const dictation = createDictation(deps ?? browserDeps(), (t) => onText(t), (s) => { view = s })
+    const dictation = createDictation(deps ?? browserDeps(), (t, said) => onText(t, said), (s) => { view = s }, undefined, () => tag?.())
     onDestroy(() => dictation.dispose())
 </script>
 

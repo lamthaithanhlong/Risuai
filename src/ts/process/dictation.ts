@@ -12,6 +12,9 @@ export type DictationPhase = 'idle' | 'recording' | 'transcribing'
 export interface DictationState { phase: DictationPhase; seconds: number; error: string | null; /** the browser's recogniser is in use, not the server */ browser: boolean }
 
 export const MAX_SECONDS = 120
+/** How long the page waits for /api/stt: past the server's own worst case (a model load of up to 180 s, then 60 s for the clip).
+ *  Without it a request lost on the way (a phone changing network) left the button "transcribing", disabled, until a reload. */
+export const CLIENT_LIMIT_MS = 300_000
 export const STT_PATH = '/api/stt'
 
 /** Hint shown on the button: the iPhone keyboard has its own dictation mic too. */
@@ -26,6 +29,7 @@ export const MESSAGES = {
     timeout: 'Chép giọng quá lâu (quá 60 giây), thử ngắn hơn.',
     tooLarge: 'Đoạn ghi âm quá lớn, thử ngắn hơn.',
     micBusy: 'Không mở được micro (đang bị app khác dùng?).',
+    noAnswer: 'Máy chủ không trả lời (mất mạng?). Bấm micro để nói lại.',
 } as const
 
 /** The first container this browser can record: audio/mp4 on WebKit, audio/webm elsewhere. '' lets the browser choose. */
@@ -77,9 +81,16 @@ export interface DictationDeps {
     auth: () => Promise<string>
     setInterval: (fn: () => void, ms: number) => unknown
     clearInterval: (id: unknown) => void
+    /** the page's own; tests pass fakes */
+    setTimeout?: (fn: () => void, ms: number) => unknown
+    clearTimeout?: (id: unknown) => void
 }
 
-export function createDictation(deps: DictationDeps, onText: (text: string) => void, onState: (s: DictationState) => void, maxSeconds = MAX_SECONDS) {
+/**
+ * `tag` is read when a recording starts and handed back with its text: the screen tags each dictation with the chat it was started in,
+ * so words that come back after the player opened another chat still go to the chat they were spoken for (chatDraft.ts deliver).
+ */
+export function createDictation(deps: DictationDeps, onText: (text: string, tag?: unknown) => void, onState: (s: DictationState) => void, maxSeconds = MAX_SECONDS, tag: () => unknown = () => undefined) {
     let state: DictationState = { phase: 'idle', seconds: 0, error: null, browser: false }
     let recorder: RecorderLike | null = null
     let recognition: RecognitionLike | null = null
@@ -88,6 +99,7 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
     let chunks: Blob[] = []
     let useBrowser = false          // set once the server failed: the next tap uses the browser's recogniser
     let busy = false                // a tap arrived while getUserMedia was still asking for permission
+    let target: unknown = undefined // tag() when this recording started
 
     const set = (patch: Partial<DictationState>) => { state = { ...state, ...patch }; onState(state) }
     const stopTicker = () => { if (ticker !== null) deps.clearInterval(ticker); ticker = null }
@@ -116,7 +128,8 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
             recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data) }
             recorder.onerror = () => { stopTicker(); releaseMic(); recorder = null; set({ phase: 'idle', error: MESSAGES.micBusy }) }
             recorder.onstop = () => { void finish(recorder?.mimeType || mime || 'audio/webm') }
-            recorder.start()
+            // a recorder that cannot start (the track ended, the mic taken meanwhile) must not keep the mic open behind an alert
+            try { recorder.start() } catch { recorder.onstop = null; recorder = null; releaseMic(); set({ phase: 'idle', error: MESSAGES.micBusy }); return }
             set({ phase: 'recording', error: null, browser: false })
             startTicker()
             // the model loads while the player is still talking (it takes ~3 s warm, ~20 s the first time after a restart)
@@ -131,6 +144,7 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
         r.continuous = true
         r.interimResults = false
         const heard: string[] = []
+        const said = target
         r.onresult = (e) => {
             for (let i = 0; i < e.results.length; i++) {
                 const res = e.results[i]
@@ -147,7 +161,7 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
             stopTicker()
             const text = heard.filter(Boolean).join(' ').trim()
             set({ phase: 'idle', browser: false, error: text ? null : MESSAGES.noSpeech })
-            if (text) onText(text)
+            if (text) onText(text, said)
         }
         r.start()
         set({ phase: 'recording', error: null, browser: true })
@@ -160,30 +174,46 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
         const parts = chunks
         chunks = []
         recorder = null
+        const said = target
         if (parts.length === 0) { set({ phase: 'idle', error: MESSAGES.noSpeech }); return }
         set({ phase: 'transcribing', error: null })
-        try {
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+        const giveUpAfter = deps.setTimeout ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
+        let timer: unknown = null
+        const noAnswer = Symbol('no answer')
+        const limit = new Promise<typeof noAnswer>((resolve) => { timer = giveUpAfter(() => { ctrl?.abort(); resolve(noAnswer) }, CLIENT_LIMIT_MS) })
+        const ask = async (): Promise<{ ok: true, text: string } | { ok: false, code: string, status: number }> => {
             const body = new Blob(parts, { type: mime })
             const res = await deps.fetch(STT_PATH, {
                 method: 'POST',
                 headers: { 'content-type': mime.split(';')[0] || 'audio/webm', 'risu-auth': await deps.auth(), 'x-stt-language': 'auto' },
                 body,
+                ...(ctrl ? { signal: ctrl.signal } : {}),
             })
             if (!res.ok) {
                 let code = ''
                 try { code = (await res.json())?.error?.code ?? '' } catch { /* not json */ }
-                if (code === 'timeout') { set({ phase: 'idle', error: MESSAGES.timeout }); return }
-                if (code === 'too_large') { set({ phase: 'idle', error: MESSAGES.tooLarge }); return }
-                throw new Error(`stt ${res.status}`)
+                return { ok: false, code, status: res.status }
             }
-            const text = String((await res.json())?.text ?? '').trim()
-            if (!text) { set({ phase: 'idle', error: MESSAGES.noSpeech }); return }
+            return { ok: true, text: String((await res.json())?.text ?? '').trim() }
+        }
+        try {
+            const r = await Promise.race([ask(), limit])
+            if (r === noAnswer) { set({ phase: 'idle', error: MESSAGES.noAnswer }); return }
+            if (!r.ok) {
+                if (r.code === 'timeout') { set({ phase: 'idle', error: MESSAGES.timeout }); return }
+                if (r.code === 'too_large') { set({ phase: 'idle', error: MESSAGES.tooLarge }); return }
+                throw new Error(`stt ${r.status}`)
+            }
+            if (!r.text) { set({ phase: 'idle', error: MESSAGES.noSpeech }); return }
             set({ phase: 'idle', error: null })
-            onText(text)
+            onText(r.text, said)
         } catch {
             // the server cannot transcribe: the browser's own recogniser, if there is one, on the next tap
             useBrowser = !!deps.createRecognition
             set({ phase: 'idle', error: useBrowser ? MESSAGES.serverBrowser : MESSAGES.serverNone })
+        } finally {
+            if (timer !== null) (deps.clearTimeout ?? ((id: unknown) => clearTimeout(id as any)))(timer)
         }
     }
 
@@ -198,12 +228,14 @@ export function createDictation(deps: DictationDeps, onText: (text: string) => v
     function toggle() {
         if (state.phase === 'transcribing' || busy) return
         if (state.phase === 'recording') { stop(); return }
+        target = tag()
         if (useBrowser && deps.createRecognition) { set({ error: null }); startBrowser(); return }
         set({ error: null })
         void startRecording()
     }
 
-    /** Drops everything (the page goes away): no text is delivered. */
+    /** The page goes away: a recording still going is dropped. A clip already sent for transcription still comes back through onText,
+     *  with its tag, so the screen's draft book can store it under its chat. */
     function dispose() {
         stopTicker()
         recognition = null

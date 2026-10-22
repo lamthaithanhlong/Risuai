@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { appendText, createDictation, formatClock, MESSAGES, pickMimeType, type DictationDeps, type DictationState } from './dictation'
+import { appendText, CLIENT_LIMIT_MS, createDictation, formatClock, MESSAGES, pickMimeType, type DictationDeps, type DictationState } from './dictation'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -144,6 +144,59 @@ describe('server cannot transcribe', () => {
         const b = setup({ getUserMedia: undefined, createRecorder: undefined, createRecognition: () => new FakeRecognition() })
         b.d.toggle(); await tick()
         expect(b.last()).toMatchObject({ phase: 'recording', browser: true })
+    })
+})
+
+describe('the recorder cannot start', () => {
+    it('releases the mic and says so, instead of an alert with the mic still open', async () => {
+        const t = setup({ createRecorder: (s, m) => { const r = new FakeRecorder(s, m); r.start = () => { throw new Error('NotSupportedError') }; return r } })
+        t.d.toggle(); await tick()
+        expect(t.tracksStopped.length).toBe(1)
+        expect(t.last().phase).toBe('idle')
+        expect(t.last().error).toBe(MESSAGES.micBusy)
+    })
+})
+
+describe('the tag of a dictation', () => {
+    it('is read when recording starts and comes back with the text, whatever it is by then', async () => {
+        let open = 'chat A'
+        const got: [string, unknown][] = []
+        let release: (r: Response) => void = () => {}
+        const deps: DictationDeps = {
+            getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+            createRecorder: (s, m) => new FakeRecorder(s, m),
+            fetch: async (url) => url.endsWith('/warm') ? new Response('{}') : new Promise<Response>((r) => { release = r }),
+            auth: async () => 'token', setInterval: () => 1, clearInterval: () => {},
+        }
+        const d = createDictation(deps, (t, tag) => got.push([t, tag]), () => {}, 120, () => open)
+        d.toggle(); await tick(); d.toggle(); await tick()
+        open = 'chat B'
+        release(new Response(JSON.stringify({ text: 'xin chào' })))
+        await new Promise((r) => setTimeout(r, 5))
+        expect(got).toEqual([['xin chào', 'chat A']])
+    })
+})
+
+describe('a request that never comes back', () => {
+    it('gives up after the page\'s limit: the button is usable again and says so, with the request aborted', async () => {
+        let giveUp: (() => void) | null = null
+        let limitMs = 0
+        let signal: AbortSignal | undefined
+        const t = setup({
+            reply: () => new Promise<Response>(() => { /* lost on the way */ }),
+            fetch: async (url, init) => { if (url.endsWith('/warm')) return new Response('{}'); signal = (init as any).signal; return new Promise<Response>(() => {}) },
+            setTimeout: (fn, ms) => { giveUp = fn; limitMs = ms; return 7 },
+            clearTimeout: () => {},
+        })
+        t.d.toggle(); await tick(); t.d.toggle(); await tick()
+        expect(t.last().phase).toBe('transcribing')
+        expect(limitMs).toBe(CLIENT_LIMIT_MS)
+        expect(CLIENT_LIMIT_MS).toBeGreaterThan((180 + 60) * 1000)
+        giveUp!(); await tick()
+        expect(t.last().phase).toBe('idle')
+        expect(t.last().error).toBe(MESSAGES.noAnswer)
+        expect(signal?.aborted).toBe(true)
+        expect(t.texts).toEqual([])
     })
 })
 

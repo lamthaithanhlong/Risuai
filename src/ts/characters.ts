@@ -451,10 +451,14 @@ export async function importChat(){
             if(json.type === 'risuAllChats' && json.ver === 1){
                 const chats = json.data
                 if(Array.isArray(chats) && chats.length > 0){
+                    // an id already in the save gets a new one: importing the same export twice, or into a second character, made two
+                    // chats share an id, and with it their unsent input (chatDraft.ts draftKey) and their server turns (keyed by chat id)
+                    const taken = new Set(DBState.db.characters.flatMap((c) => (c?.chats ?? []).map((x) => x?.id)).filter(Boolean))
                     DBState.db.characters[selectedID].chats.unshift(...(chats.map((v) => {
-                        if(!v.id){
+                        if(!v.id || taken.has(v.id)){
                             v.id = uuidv4()
                         }
+                        taken.add(v.id)
                         if(!v.localLore){
                             v.localLore = []
                         }
@@ -492,6 +496,8 @@ export async function importChat(){
             const chat = doc.querySelector('.idat').textContent
             const json = JSON.parse(chat)
             if(json.message && json.note && json.name && json.localLore){
+                // a new id, like the other import paths: the exported one would be shared by every copy imported (chatDraft.ts draftKey)
+                json.id = v4()
                 DBState.db.characters[selectedID].chats.unshift(json)
                 alertNormal(language.successImport)
             }

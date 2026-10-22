@@ -15,7 +15,8 @@
 
     import Suggestion from './Suggestion.svelte';
     import MicButton from './MicButton.svelte';
-    import { appendText } from 'src/ts/process/dictation';
+    import { createDraftBook, draftKey, inputBoxHeight, sharedDraftBook } from 'src/ts/process/chatDraft';
+    import { onDestroy } from "svelte";
     import { CameraIcon, DatabaseIcon, DicesIcon, GlobeIcon, ImagePlusIcon, LanguagesIcon, Laugh, MenuIcon, MicOffIcon, PackageIcon, Plus, RefreshCcwIcon, ReplyIcon, Send, StepForwardIcon, XIcon, BrainIcon, ArrowDown, SparkleIcon } from "@lucide/svelte";
     import { selectedCharID, PlaygroundStore, createSimpleCharacter, hypaV3ModalOpen, ScrollToMessageStore, additionalChatMenu, additionalFloatingActionButtons, easyPanelStore, chatPanelStore } from "../../ts/stores.svelte";
     import { tick } from 'svelte';
@@ -62,6 +63,8 @@
 
     let messageInput:string = $state('')
     let messageInputTranslate:string = $state('')
+    // each chat's unsent input, in localStorage (chatDraft.ts): the box shows the open chat's draft, never another chat's
+    const drafts = isTurnWorker ? createDraftBook(null) : sharedDraftBook()
     let openMenu = $state(false)
     let loadPages = $state(getInitialChatLoadPages(DBState.db))
     let autoMode = $state(false)
@@ -77,6 +80,32 @@
     let { openModuleList = $bindable(false), openChatList = $bindable(false), customStyle = '' }: Props = $props();
     let currentCharacter = $derived(DBState.db.characters[$selectedCharID])
     let currentChat = $derived(currentCharacter?.chats[currentCharacter.chatPage]?.message ?? [])
+    let draftChat = $derived(draftKey(currentCharacter?.chaId, currentCharacter?.chats?.[currentCharacter.chatPage]?.id))
+    // another chat opened (or this screen came up): the box's text goes back under its chat, the new chat's draft comes out
+    $effect.pre(() => {
+        const key = draftChat
+        untrack(() => {
+            const next = drafts.open(key, messageInput)
+            if(next !== messageInput){
+                messageInput = next
+                messageInputTranslate = ''
+                tick().then(() => updateInputSizeAll())
+            }
+        })
+    })
+    // whatever changes the box (typing, the mic, the Vietji bar, a send clearing it) is stored under its chat
+    $effect(() => {
+        const text = messageInput
+        untrack(() => drafts.update(text))
+    })
+    // words the book puts in the box itself (a dictation that came back, maybe after this screen was made again)
+    const stopListening = drafts.listen((text) => {
+        if(text !== messageInput){
+            messageInput = text
+            tick().then(() => updateInputSizeAll())
+        }
+    })
+    onDestroy(() => { stopListening(); drafts.close(messageInput) })
 
     function scrollToBottom() {
         chatsInstance?.scrollToLatestMessage();
@@ -160,7 +189,21 @@
         return sendMain(true)
     }
 
+    // one send at a time: a second tap during the first one's awaits (before $doingChat is set) sent the same text twice
+    let sending = false
     async function sendMain(continueResponse:boolean) {
+        if(sending){
+            return
+        }
+        sending = true
+        try {
+            return await sendMainOnce(continueResponse)
+        } finally {
+            sending = false
+        }
+    }
+
+    async function sendMainOnce(continueResponse:boolean) {
         let selectedChar = $selectedCharID
         if($doingChat){
             return
@@ -172,28 +215,49 @@
 
         let cha = DBState.db.characters[selectedChar].chats[DBState.db.characters[selectedChar].chatPage].message
 
-        if(messageInput.startsWith('/')){
-            const commandProcessed = await processMultiCommand(messageInput)
+        // The text and the chat it was typed for, taken now: the awaits below (a command, the turn check, a trigger, a script) leave
+        // the player time to open another chat, and the box then holds THAT chat's draft. Reading messageInput after them sent the
+        // other chat's words; a send whose chat is no longer open stops, its text still in its own draft (drafts.open stored it).
+        const sentFrom = drafts.owner
+        const typed = messageInput
+        let text = typed
+        const stillHere = () => drafts.owner === sentFrom
+        // only the sent words leave the box: what was typed or dictated during the awaits stays (afterSend)
+        const takeBox = () => {
+            const next = drafts.took(sentFrom, typed, messageInput)
+            if(next !== messageInput){
+                messageInput = next
+                messageInputTranslate = ''
+            }
+        }
+
+        if(text.startsWith('/')){
+            const commandProcessed = await processMultiCommand(text)
             if(commandProcessed !== false){
-                messageInput = ''
+                takeBox()
                 return
             }
         }
 
+        const serverTurns = await useServerTurns()
+        if(!stillHere()){
+            return
+        }
+
         if(fileInput.length > 0){
             for(const file of fileInput){
-                messageInput += `{{inlayed::${file}}}`
+                text += `{{inlayed::${file}}}`
             }
             fileInput = []
         }
 
         // the server runs the turn (turnQueue.cjs): the page sends it and follows it, and does not write the chat meanwhile
-        if(await useServerTurns()){
-            await sendViaServer(continueResponse ? 'continue' : 'send', messageInput)
+        if(serverTurns){
+            await sendViaServer(continueResponse ? 'continue' : 'send', text, undefined, typed)
             return
         }
 
-        if(messageInput === ''){
+        if(text === ''){
             if(DBState.db.characters[selectedChar].type !== 'group'){
                 if(cha.length === 0 || cha[cha.length - 1].role !== 'user'){
                     if(DBState.db.useSayNothing){
@@ -213,10 +277,14 @@
                 if(triggerResult){
                     cha = triggerResult.chat.message
                 }
+                const data = await processScript(char,text,'editinput')
+                if(!stillHere()){
+                    return
+                }
 
                 cha.push({
                     role: 'user',
-                    data: await processScript(char,messageInput,'editinput'),
+                    data,
                     time: Date.now(),
                     name: $ConnectionOpenStore ? DBState.db.username : null,
                     ...(turnInputMessageId() ? { chatId: turnInputMessageId() } : {})
@@ -225,14 +293,13 @@
             else{
                 cha.push({
                     role: 'user',
-                    data: messageInput,
+                    data: text,
                     time: Date.now(),
                     name: $ConnectionOpenStore ? DBState.db.username : null
                 })
             }
         }
-        messageInput = ''
-        messageInputTranslate = ''
+        takeBox()
         DBState.db.characters[selectedChar].chats[DBState.db.characters[selectedChar].chatPage].message = cha
         rerolls = []
         await sleep(10)
@@ -362,7 +429,8 @@
             return
         }
         let previousLength = pendingChar.chats[pendingChar.chatPage].message.length
-        messageInput = ''
+        // the box is not cleared here: sendMain already took the text, and a retry or a reply resumed after a reload runs this while
+        // the box holds whatever the player typed since, maybe in another chat
         abortController = new AbortController()
         if(!continued && pendingChar?.type === 'character' && !isTurnWorker){
             // A refresh mid-reply loses it; this note lets the next load generate it again.
@@ -500,7 +568,9 @@
         return await asyncTurnsOn(DBState.db.asyncTurns)
     }
 
-    async function sendViaServer(kind: TurnKind, text: string, target?: string) {
+    /** `typed`: what the box held when the player pressed send (text without the attached files); only that leaves the box. A reroll
+     *  takes nothing out of it: the draft stays. */
+    async function sendViaServer(kind: TurnKind, text: string, target?: string, typed: string = kind === 'send' ? text : '') {
         const char = DBState.db.characters[$selectedCharID]
         const chat = char?.chats?.[char.chatPage]
         if(!char || !chat?.id){
@@ -511,8 +581,12 @@
             alertNormal('Server còn đang viết lượt trước của chat này; đợi nó xong rồi bấm lại.')
             return
         }
-        messageInput = ''
-        messageInputTranslate = ''
+        const sentFrom = drafts.owner
+        const left = drafts.took(sentFrom, typed, messageInput)
+        if(left !== messageInput){
+            messageInput = left
+            messageInputTranslate = ''
+        }
         updateInputSizeAll()
         // the turn goes first: a phone put away a moment after "send" must already have handed it over (measured: tests/turns/repro.mjs
         // freeze, suspended 300 ms after the click). The page's own last edits follow at once; the worker needs seconds to load the save.
@@ -523,9 +597,10 @@
             await submitTurn({ chaId: char.chaId, chatId: chat.id, kind, text, target, chat: snapshot })
             await flushing
         } catch (error) {
-            if(kind === 'send' && messageInput === ''){
-                messageInput = text
-                updateInputSizeAll()
+            if(kind === 'send'){
+                // back to the chat it was written in, which may no longer be the open one
+                messageInput = drafts.putBack(sentFrom, text, messageInput)
+                tick().then(() => updateInputSizeAll())
             }
             alertError(error)
         }
@@ -615,18 +690,24 @@
         updateInputTranslateSize()
     }
 
+    // the boxes grow with their text up to 40% of the screen, then scroll inside (inputBoxHeight): a long dictation had made the
+    // row taller than the page, pushing the buttons off it
+    function fitBox(ele: HTMLTextAreaElement): string {
+        ele.style.height = "0";
+        const fit = inputBoxHeight(ele.scrollHeight, window.visualViewport?.height ?? window.innerHeight)
+        ele.style.overflowY = fit.scrolls ? 'auto' : 'hidden'
+        const h = fit.height + "px"
+        ele.style.height = h
+        return h
+    }
     function updateInputTranslateSize() {
         if(inputTranslateEle) {
-            inputTranslateEle.style.height = "0";
-            inputTranslateHeight = (inputTranslateEle.scrollHeight) + "px";
-            inputTranslateEle.style.height = inputTranslateHeight
+            inputTranslateHeight = fitBox(inputTranslateEle)
         }
     }
     function updateInputSize() {
         if(inputEle){
-            inputEle.style.height = "0";
-            inputHeight = (inputEle.scrollHeight) + "px";
-            inputEle.style.height = inputHeight
+            inputHeight = fitBox(inputEle)
         }
     }
 
@@ -648,10 +729,12 @@
                 return
             }
             const lastMessageInputTranslate = messageInputTranslate
+            const owner = drafts.owner
             await sleep(1500)
-            if(lastMessageInputTranslate === messageInputTranslate){
+            if(lastMessageInputTranslate === messageInputTranslate && drafts.owner === owner){
                 translate(reverse ? messageInputTranslate : messageInput, reverse).then((translatedMessage) => {
-                    if(translatedMessage){
+                    // the player may have opened another chat meanwhile: its box is not this text's
+                    if(translatedMessage && drafts.owner === owner){
                         if(reverse)
                             messageInput = translatedMessage
                         else
@@ -670,8 +753,9 @@
             messageInputTranslate = ''
             return
         }
+        const owner = drafts.owner
         translate(reverse ? messageInputTranslate : messageInput, reverse).then((translatedMessage) => {
-            if(translatedMessage){
+            if(translatedMessage && drafts.owner === owner){
                 if(reverse)
                     messageInput = translatedMessage
                 else
@@ -899,7 +983,8 @@
 
                 <MicButton
                         height={inputHeight}
-                        onText={(text) => { messageInput = appendText(messageInput, text); tick().then(() => updateInputSizeAll()) }}
+                        tag={() => drafts.owner}
+                        onText={(text, said) => { drafts.deliver(said === undefined ? drafts.owner : said as string | null, text) }}
                 />
                 {#if $doingChat || doingChatInputTranslate}
                     <button

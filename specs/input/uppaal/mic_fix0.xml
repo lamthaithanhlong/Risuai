@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+<declaration>// The mic, a reply generating and a chat switch, in time (dictation.ts, chatDraft.ts, DefaultChatScreen.svelte), 2026-10-22.
+// The player records (up to 120 s), stops; the clip goes to POST /api/stt (server/node/stt.cjs: a model load up to 180 s, then up to
+// 60 s per clip); the words come back late, maybe after the player opened another chat while a reply generates; a reply may be
+// retried (an empty stream) or resumed. A phone that changes network can lose the request: no answer ever comes.
+// FIX=0: the code before (the words go into the open chat's box, the retry clears the box, the page waits for ever for /api/stt).
+// FIX=1: the code after (tagged words go to their chat, the retry leaves the box, the page gives up after STT_LIMIT s).
+// Generated: sed 's/FIX = 1;/FIX = 0;/' mic_template.xml > mic_fix0.xml, and mic_fix1.xml is a copy. Time unit: seconds.
+const int FIX = 0;
+const int REC_CAP = 120;     // dictation.ts MAX_SECONDS
+const int LOAD_MAX = 180;    // stt.cjs loadTimeoutMs
+const int STT_MAX = 60;      // stt.cjs timeoutMs
+const int STT_LIMIT = 300;   // dictation.ts CLIENT_LIMIT_MS / 1000: past the server's own worst case (load + one clip)
+const int GEN_MIN = 7;       // measured: a reply's first word after 7.5 s
+const int GEN_MAX = 120;
+clock x;                     // the mic
+clock g;                     // the reply
+clock p;                     // the player: at least a second between two taps (else a run of endless switches in no time)
+int[0,1] open = 0;           // the open chat
+int[0,1] tag = 0;            // the chat a dictation started in
+bool box = false;            // the box holds unsent words (of the open chat, after FIX)
+bool draft[2] = {false, false};   // stored drafts (FIX=1)
+bool genOn = false;
+bool leak = false;           // words landed in a chat they were not spoken for
+bool lost = false;           // unsent words were wiped
+bool late = false;           // a dictation came back after a switch (the scenario is reachable)
+
+void deliver() {
+    if (FIX == 1 &amp;&amp; tag != open) { draft[tag] = true; late = true; }
+    else { if (tag != open) { leak = true; late = true; } box = true; }
+}
+void switchChat() {
+    if (FIX == 1) { draft[open] = box; open = 1 - open; box = draft[open]; draft[open] = false; }
+    else { open = 1 - open; }
+}
+</declaration>
+<template>
+<name>Mic</name>
+<location id="m0"><name>Idle</name></location>
+<location id="m1"><name>Rec</name><label kind="invariant">x &lt;= REC_CAP</label></location>
+<location id="m2"><name>Wait</name><label kind="invariant">FIX == 0 || x &lt;= STT_LIMIT</label></location>
+<location id="m3"><name>Dropped</name><label kind="invariant">FIX == 0 || x &lt;= STT_LIMIT</label></location>
+<init ref="m0"/>
+<transition><source ref="m0"/><target ref="m1"/><label kind="assignment">tag = open, x = 0</label></transition>
+<transition><source ref="m1"/><target ref="m2"/><label kind="assignment">x = 0</label></transition>
+<transition><source ref="m2"/><target ref="m0"/><label kind="guard">x &gt;= 1 &amp;&amp; x &lt;= LOAD_MAX + STT_MAX</label><label kind="assignment">deliver()</label></transition>
+<transition><source ref="m2"/><target ref="m3"/></transition>
+<transition><source ref="m2"/><target ref="m0"/><label kind="guard">FIX == 1 &amp;&amp; x &gt;= STT_LIMIT</label></transition>
+<transition><source ref="m3"/><target ref="m0"/><label kind="guard">FIX == 1 &amp;&amp; x &gt;= STT_LIMIT</label></transition>
+</template>
+<template>
+<name>Player</name>
+<location id="u0"><name>Here</name></location>
+<init ref="u0"/>
+<transition><source ref="u0"/><target ref="u0"/><label kind="guard">p &gt;= 1</label><label kind="assignment">switchChat(), p = 0</label></transition>
+<transition><source ref="u0"/><target ref="u0"/><label kind="guard">p &gt;= 1 &amp;&amp; box &amp;&amp; !genOn</label><label kind="assignment">box = false, genOn = true, g = 0, p = 0</label></transition>
+</template>
+<template>
+<name>Gen</name>
+<location id="g0"><name>Off</name></location>
+<location id="g1"><name>Running</name><label kind="invariant">g &lt;= GEN_MAX</label></location>
+<init ref="g0"/>
+<transition><source ref="g0"/><target ref="g1"/><label kind="guard">genOn</label></transition>
+<transition><source ref="g1"/><target ref="g0"/><label kind="guard">g &gt;= GEN_MIN</label><label kind="assignment">genOn = false</label></transition>
+<transition><source ref="g1"/><target ref="g1"/><label kind="guard">g &gt;= GEN_MIN</label><label kind="assignment">lost = lost || (FIX == 0 &amp;&amp; box), box = (FIX == 1 &amp;&amp; box), g = 0</label></transition>
+</template>
+<system>mic = Mic(); player = Player(); gen = Gen();
+system mic, player, gen;</system>
+</nta>
