@@ -27,7 +27,7 @@
 #defined first_order/0. #defined side/1. #defined side_focus/1. #defined thread/2. #defined open/1. #defined arc/1. #defined focus/1.
 #defined actor/2. #defined present/1. #defined dead/1. #defined need/1. #defined hostile/1. #defined rolled_text/1. #defined stance/1.
 #defined done_before/0. #defined where/1. #defined kind_where/2. #defined no_chase/0. #defined kind/2. #defined kind_text/2.
-#defined hostile_thread/1. #defined combat/1. #defined scene/1. #defined knows_here/3. #defined knows/3.
+#defined hostile_thread/1. #defined companion/1. #defined combat/1. #defined scene/1. #defined knows_here/3. #defined knows/3.
 
 % the people a hostile thread (antagonist, threat, enemy) is about oppose the player
 hostile(P) :- actor(T, P), hostile_thread(T).
@@ -147,7 +147,9 @@ took_land :- turn(land(_)).
 % people: an enemy opposes; the others live their own lives; the newcomer fits the card's stance
 :~ intent(P, I), hostile(P), I != oppose. [1@3, P]
 :~ intent(newcomer, I), not fits(I). [1@3]
-:~ intent(P, help), P != newcomer. [1@1, P]
+% help is a cost for most people, but the player's persona's companion (npc.lp companion/1) is there to help: their own business costs instead
+:~ intent(P, help), P != newcomer, not companion(P). [1@1, P]
+:~ intent(P, own), companion(P). [1@1, P]
 :~ intent(P, ask_help), P != newcomer. [2@1, P]
 :~ intent(P, watch), not hostile(P). [1@1, P]
 :~ intent(P, offer(N)), P != newcomer. [1@1, P, N]

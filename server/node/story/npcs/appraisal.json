@@ -14,6 +14,7 @@
     "enemy": { "trust": 10, "affection": 15, "debt": 0, "grudge": 60 },
     "ally": { "trust": 60, "affection": 50, "debt": 0, "grudge": 5 }
   },
+  "companion_seed": { "about": "how a companion the player's persona names (no card profile) sees the player at the start", "trust": 85, "affection": 80, "debt": 0, "grudge": 0 },
   "tags": {
     "help":           { "vi": ["giúp", "giúp đỡ", "che chở", "bảo vệ"], "trust": 6,   "affection": 3,   "debt": 8,   "grudge": -2, "emotion": "gratitude", "intensity": 4, "mutual_trust": 2 },
     "gift":           { "vi": ["tặng", "biếu", "cho quà"],             "trust": 3,   "affection": 4,   "debt": 6,   "grudge": -1, "emotion": "gratitude", "intensity": 3, "mutual_trust": 0 },

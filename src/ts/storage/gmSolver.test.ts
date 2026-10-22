@@ -401,6 +401,28 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         expect(none.present).toEqual([])
         expect(none.npc).toBeUndefined()
     })
+    test('the persona\'s companion (input.companions) is close to the player and there to help, not a neutral stranger making small talk (Mailman 2026-10-22)', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const msgs = [{ role: 'char', text: 'Evelyn lướt sát bên Kenji, vừa chạy vừa ngoái nhìn. Con gấu vẫn đuổi theo.' }, { role: 'user', text: 'Tôi chạy lên sườn núi và nhìn xuống.' }]
+        const as = await G.decide(scene(msgs, { companions: ['Evelyn'] }), { budgetMs: 3000, npc, withFacts: true })
+        expect(as.present).toEqual(['evelyn'])
+        expect(as.facts).toContain('companion("evelyn")')
+        expect(as.decision.intents).toEqual([expect.objectContaining({ who: 'evelyn', what: 'help' })])
+        expect(as.npc.actions[0]).toMatchObject({ who: 'Evelyn', action: 'help', demeanor: 'warm' })
+        expect(lastLine(as)).toMatch(/^Subtext .*“Evelyn” wants to help/)
+        expect(lastLine(as)).not.toMatch(/small talk|keeps something back|has something unsaid/)
+        const rel = npc.stateOf('c2').find((x: any) => x.npc === 'evelyn').rel.player
+        expect(rel).toMatchObject({ trust: 85, affection: 80, grudge: 0 })
+        // the same name, not a companion: a stranger, neutral, its own business and no Subtext
+        const { npc: npc2 } = open(seedOf([45, 70, 0, 25]))
+        const st = await G.decide(scene(msgs, { people: ['Evelyn'] }), { budgetMs: 3000, npc: npc2 })
+        expect(st.decision.intents).toEqual([expect.objectContaining({ who: 'evelyn', what: 'own' })])
+        expect(st.npc.actions[0]).toMatchObject({ who: 'Evelyn', demeanor: 'neutral' })
+        expect(st.line).not.toMatch(/Subtext/)
+        // a companion is in the scene only when named, like everyone: not named in the last two messages, not there
+        const gone = await G.decide(scene([{ role: 'user', text: 'Tôi đi tiếp.' }], { companions: ['Evelyn'] }), { budgetMs: 3000, npc })
+        expect(gone.present).toEqual([])
+    })
     test('the ledger moves the numbers the solver reads: a betrayal the turn before is never answered by making peace', async () => {
         const base = seedOf([60, 55, 0, 30])
         const calm = await G.decide(withSoc(''), { budgetMs: 3000, npc: open(base).npc })

@@ -10,6 +10,7 @@
 %   rel(P, Q, trust|affection|debt|grudge, V)         how P sees Q ("player" or another person in the scene)
 %   emotion(P, E, I)      what P feels now (OCC type E, intensity I 1..10)
 %   mood(P, M)            -10..10;   si(P, Q, V)  social importance of Q to P, 0..10 (optional: only the FAtiMA engine gives it)
+%   companion(P)          P is the player's persona's companion (no card profile: npcPsych.cjs companionOf)
 %   has_secret(P), has_agenda(P)    booleans: the TEXT of a secret or an agenda never reaches clingo or the narrator
 %   recent(P, Tag, Q)     an act of the last 3 turns that touched a person in the scene
 % Answer out: social_action(P, A), demeanor(P, D), wants(P, A), may_silent(P)
@@ -18,7 +19,7 @@
 % would rather do. Every hard rule has a test that takes it out and finds the bad answer valid (gmSolver.test.ts).
 
 #defined npc/1. #defined trait/3. #defined rel/4. #defined emotion/3. #defined mood/2. #defined si/3. #defined has_secret/1. #defined has_agenda/1.
-#defined recent/3. #defined intent/2. #defined hostile/1. #defined present/1.
+#defined recent/3. #defined companion/1. #defined intent/2. #defined hostile/1. #defined present/1.
 
 act(small_talk;reconcile;refuse;keep_distance;insult;flirt;confide;threaten;help;conceal_affection;forgive).
 sopt(P, A) :- npc(P), present(P), act(A).
@@ -53,6 +54,8 @@ wants(P, threaten)     :- hostile(P).
 wants(P, threaten)     :- rel(P, "player", grudge, G), G >= 60, trait(P, agree, A), A < 30.
 wants(P, help)         :- rel(P, "player", debt, D), D >= 40, not hostile(P).
 wants(P, help)         :- emotion(P, gratitude, I), I >= 4, not hostile(P).
+% the persona's companion is at the player's side to help (Mailman 2026-10-22: as a stranger, Evelyn made small talk through a bear chase)
+wants(P, help)         :- companion(P), not hostile(P).
 wants(P, confide)      :- rel(P, "player", trust, T), T >= 60, has_agenda(P).
 wants(P, flirt)        :- rel(P, "player", affection, A), A >= 65, emotion(P, love, _).
 % caring but guarded: a person who loves the player yet does not trust them yet, or is simply reserved, hides it

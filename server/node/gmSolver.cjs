@@ -164,6 +164,9 @@ function movesIn(text, kind, keysOf) {
  * The facts of a turn for story/gm/derive.lp (the words read here: needs, names, deaths), and what they were built from.
  * The deaths are the story index's own (storyStore.cjs deathsIn over the timeline, the canon rules' death words).
  */
+/** the companions the player's persona names (input.companions, the page's decideCompanions): at most 6 names of 2..40 characters */
+const companionsOf = (input) => (Array.isArray(input?.companions) ? input.companions : []).filter((x) => typeof x === 'string').map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => [...x].length >= 2 && [...x].length <= 40).slice(0, 6)
+
 function featureFacts(input, places = [], extra = {}) {
     const v = input.vars ?? {}
     const out = []
@@ -193,6 +196,8 @@ function featureFacts(input, places = [], extra = {}) {
         persons.set(k, { name: display ?? shown, origin })
     }
     for (const l of lines(v.led_soc)) { const p = l.split('|').map((x) => x.trim()); if (p.length >= 4) { addPerson(p[1], 'chat'); addPerson(p[3], 'chat') } }
+    // the persona's companions (the page's decideCompanions) first: a person of the story like a looked-at name, and npcStep's companion
+    for (const n of companionsOf(input)) addPerson(n, 'companion')
     for (const n of (Array.isArray(input.people) ? input.people : []).slice(0, 40)) if (typeof n === 'string') addPerson(n, 'chat')
     for (const n of extra.people ?? []) addPerson(n?.alias ?? n, 'canon', n?.name)
     for (const m of player) persons.delete(m)
@@ -495,9 +500,10 @@ async function npcStep(npc, inp, ff, ms) {
     const ids = new Map(), keys = new Map()        // ledger name -> profile id, and back
     const asKey = (x) => ff.aliases?.[lower(x)] ?? x  // "martin" -> "martin vale" (featureFacts' second names)
     const strangers = []                            // a named person of this chat the card has no profile for: a stranger's (npcPsych.strangerOf)
+    const companions = new Set(companionsOf(inp).map(lower))   // of them, the persona's companions (npcPsych.companionOf)
     for (const k of ff.present) {
         let id = idOf(k)
-        if (!id && ff.origins?.[k] !== 'thread') { id = k; strangers.push({ id, name: ff.names?.[k] ?? k }) }
+        if (!id && ff.origins?.[k] !== 'thread') { id = k; strangers.push({ id, name: ff.names?.[k] ?? k, ...(companions.has(lower(k)) ? { companion: true } : {}) }) }
         if (id && id !== 'player' && !keys.has(id)) { ids.set(k, id); keys.set(id, k) }
     }
     if (!ids.size) return null

@@ -585,6 +585,32 @@ describe('NPC psychology: $led_soc and the solver flag', () => {
         expect(seen.map((i) => i.people)).toEqual([['Martin Vale', 'Evelyn'], []])
     })
 
+    it('the decide input names the persona\'s companions: the sheet\'s "Đồng hành:" line or a persona heading "**Name — role:**"; a description or "không" is none', async () => {
+        const { decideCompanions, DECIDE_COMPANIONS_MAX } = await import('./gmSolver')
+        // the live Mailman persona and creation sheet (2026-10-22), cut to the lines that matter
+        const kenji = '[{{user}} = Kenji Park, nam, 25 tuổi\n\n**Khuyết điểm:** Hơi đa nghi.\n\n**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân nhất của Kenji.\n\n- **Liên kết:** Đồng hành qua mọi thế giới; chỉ Kenji thấy.\n1. **Thôi miên:** Chi phối nhận thức.]'
+        const sheet = [{ data: 'Bắt đầu.' }, { data: 'Tên: Kenji Park  \nĐồng hành: Evelyn, Linh Hồn Dẫn Lối, bạn thân đã qua đời, tồn tại bên Kenji  \nBí mật: không' }]
+        expect(decideCompanions(kenji, sheet)).toEqual(['Evelyn'])
+        expect(decideCompanions('', sheet)).toEqual(['Evelyn'])
+        expect(decideCompanions(kenji, [])).toEqual(['Evelyn'])
+        expect(decideCompanions('**Đồng hành:** Aiko (mèo đen) và Ren; Mina', [])).toEqual(['Aiko', 'Ren', 'Mina'])
+        expect(decideCompanions('Companion: Lyra, a fox spirit', [])).toEqual(['Lyra'])
+        for (const none of ['Đồng hành: không', 'Đồng hành: bạn thân đã qua đời', 'Đồng hành: —', 'Kenji đồng hành cùng mọi người', '']) expect(decideCompanions(none, [])).toEqual([])
+        expect(decideCompanions('Đồng hành: ' + Array.from({ length: 9 }, (_, i) => `Ana${i}`).join('; '), [])).toHaveLength(DECIDE_COMPANIONS_MAX)
+        // and the page sends them (only with NPC psychology on)
+        persona.text = kenji
+        const run = () => chatOf([{ role: 'char', data: 'Evelyn lướt bên Kenji.', chatId: 'r2' }, { role: 'user', data: 'Tôi chạy lên dốc.' }], { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1' })
+        db.characters = [card]
+        const seen: { companions?: string[] }[] = []
+        const decide = async (input: any) => { seen.push(input); return null }
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        db.npcPsych = false
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        db.npcPsych = undefined
+        persona.text = ''
+        expect(seen.map((i) => i.companions)).toEqual([['Evelyn'], []])
+    })
+
     it('the social rule asks a line for every act a named person does, and says what a warning, advice, an apology or a mocking word is (measured: 0 of 4 real replies had one without it)', () => {
         const on = bookkeepPrompt({}, 'p', 'r', 'x', '', '', { social: true })
         expect(on).toContain('leave it out only when no named person did anything to anyone')

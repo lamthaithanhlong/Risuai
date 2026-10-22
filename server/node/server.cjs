@@ -2176,6 +2176,8 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
             // the chat's named people the ledger may lack (gmSolver.ts decidePeople: LOOK names, the card's portraits). Measured 2026-10-21,
             // acceptance ss: without this line "Harlan" (a portrait, named in 4 replies) was never in the scene
             people: (Array.isArray(b.people) ? b.people : []).filter((x) => typeof x === 'string').slice(0, 40).map((x) => str(x, 40)),
+            // the companions the player's persona names (gmSolver.ts decideCompanions): close to the player, not neutral strangers
+            companions: (Array.isArray(b.companions) ? b.companions : []).filter((x) => typeof x === 'string').slice(0, 6).map((x) => str(x, 40)),
         };
         // npc: false (the page's db.npcPsych off) or no module (RISU_NPC_PSYCH=0): today's note, no Subtext line
         const r = await gmSolver.decide({ ...input, npc: b.npc !== false }, { store: storyStore, graph: storyGraph, npc: b.npc === false ? null : npcPsych });

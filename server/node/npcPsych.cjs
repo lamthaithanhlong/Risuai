@@ -181,6 +181,18 @@ const STRANGER_IMPORTANCE = 20
 function strangerOf(id, name) {
     return { id, name: String(name ?? id), importance: STRANGER_IMPORTANCE, traits: Object.fromEntries(TRAIT_KEYS.map((k) => [k, 50])), speech: 'plain', wantsSay: null, wantsHide: null, hideFid: null, tags: ['stranger'], source: 'stranger', hasSecret: false, hasAgenda: false }
 }
+/** a companion of the player's persona outranks the strangers of the scene and sits with a card's minor people */
+const COMPANION_IMPORTANCE = 60
+/**
+ * The profile of a companion the player's persona names ("Evelyn — Linh Hồn Dẫn Lối", the page's decideCompanions) when the card has
+ * none: a stranger's neutral traits and no secret, but tagged 'companion', so seedPairs starts them close to the player
+ * (APPRAISAL.companion_seed) and npc.lp has them want to help. Measured 2026-10-22 (Mailman): as a stranger Evelyn was neutral and
+ * "made small talk" through a bear chase.
+ */
+function companionOf(id, name) {
+    return { ...strangerOf(id, name), importance: COMPANION_IMPORTANCE, tags: ['companion'], source: 'companion' }
+}
+const isCompanion = (p) => !!p?.tags?.includes('companion')
 
 // ---- names -----------------------------------------------------------------------------------------------------------------------------
 const HONORIFIC = /^(ông|bà|anh|chị|cô|chú|lão|mr|mrs|ms)\.?\s+(?=\S)/u
@@ -377,7 +389,8 @@ function openNpcPsych(opts = {}) {
                 if (q === p) continue
                 const k = `${p}\u0000${q}`
                 const s = c.seeds.get(k), l = led.get(k)
-                const src = s ? { v: s, from: 'seed' } : l ? { v: l, from: 'ledger' } : { v: APPRAISAL.default_seed, from: 'default' }
+                const close = q === PLAYER && !c.profiles.has(p) && isCompanion(strangers.get(p))
+                const src = s ? { v: s, from: 'seed' } : l ? { v: l, from: 'ledger' } : close ? { v: APPRAISAL.companion_seed, from: 'companion' } : { v: APPRAISAL.default_seed, from: 'default' }
                 rows.push({ p, q, trust: src.v.trust, affection: src.v.affection, debt: src.v.debt, grudge: src.v.grudge, from: src.from })
             }
         }
@@ -389,8 +402,8 @@ function openNpcPsych(opts = {}) {
     function buildPayload(input) {
         const world = input.world
         const present = [...new Set((input.present ?? []).map(lower).filter((x) => x && x !== PLAYER))]
-        // a stranger only where the card has nobody by that id (a profile always wins)
-        const strangers = new Map((input.strangers ?? []).filter((x) => x?.id && present.includes(lower(x.id)) && !profileOf(world, lower(x.id))).map((x) => [lower(x.id), strangerOf(lower(x.id), x.name)]))
+        // a stranger (or the persona's companion) only where the card has nobody by that id (a profile always wins)
+        const strangers = new Map((input.strangers ?? []).filter((x) => x?.id && present.includes(lower(x.id)) && !profileOf(world, lower(x.id))).map((x) => [lower(x.id), (x.companion ? companionOf : strangerOf)(lower(x.id), x.name)]))
         const rows = seedPairs(world, present, input.relations ?? [], { strangers })
         const ps = [...new Set(rows.map((r) => r.p))]
         const npcs = ps.map((id) => {
@@ -403,7 +416,7 @@ function openNpcPsych(opts = {}) {
         return { chatId: input.chatId ?? null, world, turn: Number(input.turn ?? 0), present, npcs, events }
     }
     /** the profile's own fields ride along on each answered person (aspFacts and subtextOf read them; the sidecar does not send them) */
-    const withProfile = (answer, payload) => answer.map((a) => { const n = payload.npcs.find((x) => x.id === a.id); return { ...a, name: n.name, importance: n.importance, speech: n.speech, traits: n.traits, hasSecret: n.hasSecret, hasAgenda: n.hasAgenda } })
+    const withProfile = (answer, payload) => answer.map((a) => { const n = payload.npcs.find((x) => x.id === a.id); return { ...a, name: n.name, importance: n.importance, speech: n.speech, traits: n.traits, tags: n.tags, hasSecret: n.hasSecret, hasAgenda: n.hasAgenda } })
 
     /**
      * The sidecar's answer, checked: every person asked for is there, every id is one the payload knows, numbers are numbers (clamped:
@@ -505,6 +518,7 @@ function openNpcPsych(opts = {}) {
             ids.add(n.id)
             const P = str(n.id)
             out.push(`npc(${P}).`)
+            if (isCompanion(prof)) out.push(`companion(${P}).`)
             for (const k of TRAIT_KEYS) out.push(`trait(${P}, ${k}, ${Math.round(clamp(num(prof.traits[k]) ?? 50))}).`)
             for (const [q, r] of Object.entries(n.rel ?? {})) {
                 if (!near.has(q) || q === n.id) continue
@@ -723,4 +737,4 @@ function seedErrors(f) {
     return out
 }
 
-module.exports = { openNpcPsych, strangerOf, seedErrors, APPRAISAL, SCHEMA, TAGS, DIMS, EMOTION_OF_TAG, EMOTIONS, TRAIT_KEYS, ENGINES, SUBTEXT_MAX, PLAYER, clamp, modOf, foldRelations, emotionsLocal, appraiseLocal, socialEvents }
+module.exports = { openNpcPsych, strangerOf, companionOf, seedErrors, APPRAISAL, SCHEMA, TAGS, DIMS, EMOTION_OF_TAG, EMOTIONS, TRAIT_KEYS, ENGINES, SUBTEXT_MAX, PLAYER, clamp, modOf, foldRelations, emotionsLocal, appraiseLocal, socialEvents }

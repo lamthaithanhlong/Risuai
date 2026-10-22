@@ -21,6 +21,8 @@ export type DecideInput = {
     turn?: number
     /** named people the ledger may not have (decidePeople): the server counts them as people of the story, present when named */
     people?: string[]
+    /** the companions the player's persona names (decideCompanions): the server starts them close to the player, there to help */
+    companions?: string[]
 }
 type Term = { name: string; args: Term[] }
 export type GmDecision = {
@@ -69,6 +71,39 @@ export function decidePeople(messages: { data: string }[] | undefined, portraits
     for (const m of [...(messages ?? [])].slice(-8).reverse()) for (const l of parseLooks(String(m.data ?? ''))) add(l.name)
     for (const e of Object.values(portraits ?? {})) add(e?.name)
     return out.slice(0, DECIDE_PEOPLE_MAX)
+}
+
+/** at most this many companions go with a decide request */
+export const DECIDE_COMPANIONS_MAX = 6
+
+/** "Đồng hành: Evelyn, Linh Hồn Dẫn Lối, ..." (the creation sheet's line, or the persona's): the label and what follows it */
+const COMPANION_LINE = /^[\s>*•-]*\**\s*(?:bạn đồng hành|người đồng hành|đồng hành|companions?)\s*\**\s*[:：]\s*(.+)$/gimu
+/** "**Evelyn — Linh Hồn Dẫn Lối:**" (a persona's heading for a companion): a capitalised name, a dash, a role */
+const COMPANION_HEAD = /^[\s>-]*\*\*\s*([^*\n:—–]{2,40}?)\s+[—–]\s+[^*\n]{1,60}\*\*/gmu
+const NO_COMPANION = /^(không|chưa|none|no|n\/a|—|-)\b/iu
+
+/**
+ * The companions the player's persona names: who walks beside the character by the player's own sheet ("Đồng hành: Evelyn, ...",
+ * or a persona heading "**Evelyn — Linh Hồn Dẫn Lối:**"), from the persona and the first replies (the creation sheet). The card has
+ * no profile for them, and as strangers they were neutral and made small talk through danger (Mailman 2026-10-22). Each name is the
+ * text before its first comma, dash or bracket; "không" is none. At most DECIDE_COMPANIONS_MAX.
+ */
+export function decideCompanions(persona: string | undefined, messages?: { data: string }[]): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const add = (raw: string) => {
+        const name = raw.replace(/\*\*|["“”]/g, '').split(/[,(（—–]|\s-\s/)[0].replace(/\s+/g, ' ').trim()
+        const k = name.normalize('NFC').toLowerCase()
+        const words = name.split(' ')
+        if ([...name].length < 2 || [...name].length > 40 || words.length > 4 || NO_COMPANION.test(name) || isUnnamed(name) || seen.has(k)) return
+        if (!words.every((w) => /^\p{Lu}/u.test(w))) return          // a name, not a description ("bạn thân đã qua đời")
+        seen.add(k)
+        out.push(name)
+    }
+    const texts = [String(persona ?? ''), ...(messages ?? []).slice(0, 4).map((m) => String(m.data ?? ''))]
+    for (const t of texts) for (const m of t.matchAll(COMPANION_LINE)) for (const part of m[1].split(/;|\s+và\s+|\s+and\s+/u)) add(part)
+    for (const m of String(persona ?? '').matchAll(COMPANION_HEAD)) add(m[1])
+    return out.slice(0, DECIDE_COMPANIONS_MAX)
 }
 
 export async function fetchGmDecision(input: DecideInput, deps: DecideDeps): Promise<GmDecision | null> {
