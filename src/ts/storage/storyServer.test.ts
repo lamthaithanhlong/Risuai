@@ -194,6 +194,16 @@ describe.skipIf(!CLINGO)('NPC psychology over HTTP', () => {
         expect(s.json.state.led_soc).toBe(talk.led_soc)               // storyStore keeps led_soc in the synced state
     }, 60000)
 
+    test('the persona\'s companion limits reach the solver: the note says nobody else sees her and she moves nothing (measured 10-23: this route dropped companionLimits)', async () => {
+        const b = body({ chatId: 'n3', vars: { st_name: 'Kenji', st_place: 'Chung cư' }, messages: [{ role: 'char', text: 'Evelyn lơ lửng bên cửa sổ.' }, { role: 'user', text: 'Evelyn, ngoài kia có gì?' }], companions: ['Evelyn'], companionLimits: { Evelyn: 'chỉ Kenji Park thấy, nghe và chạm được' } })
+        const r = await eventually(() => decide(b), (v) => v.status === 'ok')
+        expect(r.line).toContain('Companion limits:')
+        expect(r.line).toContain('chỉ Kenji Park thấy, nghe và chạm được')
+        expect(r.line).toContain('moves nothing')
+        const none = await decide({ ...b, companionLimits: undefined })
+        expect(none.line).not.toContain('Companion limits:')
+    }, 60000)
+
     test('the page\'s named people reach the solver: a portrait name the ledger never wrote is a stranger in the scene (measured: "Harlan" was dropped by this route)', async () => {
         const b = body({ chatId: 'n2', vars: { st_name: 'Kenji', st_place: 'Làng' }, messages: [{ role: 'char', text: 'Harlan hé cửa.' }, { role: 'user', text: 'Tôi đi theo Harlan.' }], people: ['Harlan', 42, 'x'.repeat(90)] })
         const r = await eventually(() => decide(b), (v) => v.status === 'ok')
