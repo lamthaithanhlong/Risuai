@@ -27,7 +27,7 @@
 #defined first_order/0. #defined side/1. #defined side_focus/1. #defined thread/2. #defined open/1. #defined arc/1. #defined focus/1.
 #defined actor/2. #defined present/1. #defined dead/1. #defined need/1. #defined hostile/1. #defined rolled_text/1. #defined stance/1.
 #defined done_before/0. #defined where/1. #defined kind_where/2. #defined no_chase/0. #defined kind/2. #defined kind_text/2.
-#defined hostile_thread/1. #defined companion/1. #defined combat/1. #defined scene/1. #defined knows_here/3. #defined knows/3.
+#defined stale/1. #defined established/1. #defined hostile_thread/1. #defined companion/1. #defined combat/1. #defined scene/1. #defined knows_here/3. #defined knows/3.
 
 % the people a hostile thread (antagonist, threat, enemy) is about oppose the player
 hostile(P) :- actor(T, P), hostile_thread(T).
@@ -137,6 +137,8 @@ took_land :- turn(land(_)).
 :~ consequence_roll, cand(land(_)), not took_land, not took_new. [1@5]
 % a side just taken drives the story
 :~ side_focus(T), turn(E), not thread_of(E, T), not took_new, not took_land. [1@4]
+% a thread both of the last two replies already said rests a turn (measured 2026-10-23: the same lid and the same knock for 20 replies)
+:~ turn(E), thread_of(E, T), stale(T). [1@5]
 % quiet only when the pace is quiet or nothing else may come
 :~ turn(quiet), pace(P), P != quiet. [1@4]
 % continuity with the GM's arc

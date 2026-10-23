@@ -19,6 +19,8 @@
 %   returned(P, I)       reply I says P came back
 %   dead(P)              the timeline says P died (storyStore.cjs DEATH, the same words as canon.pl's death_word)
 %   thread(T, Kind), actor(T, P)
+%   spent(T)             the thread is a state already established (gmSolver.cjs establishedStates): it is closed
+%   stale(T)             the last two replies both said the thread: core.lp rests it a turn;  established(S): a state already true
 % Derived:
 %   need(N)      established: on the panel, or said in the last 4 messages and not met after
 %   present(P)   in the scene: named in the player's message or the last reply, or named lately and last seen here; never dead
@@ -27,6 +29,7 @@
 %   open(T)      the thread can still move: none of its actors is dead
 #defined panel_need/1. #defined said_need/2. #defined resolved/2. #defined person/1. #defined named/2. #defined seen_here/1.
 #defined left/2. #defined returned/2.
+#defined spent/1. #defined stale/1. #defined established/1.
 #defined dead/1. #defined thread/2. #defined actor/2. #defined graph_dead/1.
 
 % the librarian's graph (story/gm/graph.lp, loaded beside this file when the chat has one) knows deaths the timeline may not
@@ -46,6 +49,8 @@ present(P) :- person(P), not dead(P), not away(P), named(P, I), I <= 1.
 present(P) :- person(P), not dead(P), not away(P), seen_here(P), named(P, I), I <= 3.
 
 closed(T) :- actor(T, P), dead(P).
+% a thread that is a state the story has already established (a threat "Mất điện" when the power is out) has nothing left to do
+closed(T) :- spent(T).
 open(T) :- thread(T, _), not closed(T).
 
 #show need/1.

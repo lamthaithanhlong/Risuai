@@ -19,3 +19,6 @@ kind(broadcast, news).     kind_text(broadcast, "a broadcast or a flare").      
 kind(cache, item).         kind_text(cache, "a cache or a part worth having").                           kind_where(cache, city).
 kind(trap, threat).        kind_text(trap, "a trap someone left").                                       kind_where(trap, city).
 kind(person_trouble, person). kind_text(person_trouble, "a person in trouble").                         kind_where(person_trouble, city).
+
+% the water or the power cannot give out when both already have (gmSolver.cjs establishedStates)
+:- turn(new(utilities)), established(power_out), established(water_out).

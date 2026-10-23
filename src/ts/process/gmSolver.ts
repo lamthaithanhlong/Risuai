@@ -23,6 +23,8 @@ export type DecideInput = {
     people?: string[]
     /** the companions the player's persona names (decideCompanions): the server starts them close to the player, there to help */
     companions?: string[]
+    /** what the persona says each companion cannot do (decideCompanionLimits), by name: the server makes them hard rules of the GM note */
+    companionLimits?: Record<string, string>
 }
 type Term = { name: string; args: Term[] }
 export type GmDecision = {
@@ -104,6 +106,46 @@ export function decideCompanions(persona: string | undefined, messages?: { data:
     for (const t of texts) for (const m of t.matchAll(COMPANION_LINE)) for (const part of m[1].split(/;|\s+và\s+|\s+and\s+/u)) add(part)
     for (const m of String(persona ?? '').matchAll(COMPANION_HEAD)) add(m[1])
     return out.slice(0, DECIDE_COMPANIONS_MAX)
+}
+
+/** a clause that limits a companion: who can perceive them, what they cannot do, how far they go ("chỉ Kenji thấy", "không thể", "phạm vi 50 mét") */
+const LIMIT_CLAUSE = /(?<!\p{L})chỉ(?!\p{L})[^;.\n]*(thấy|nghe|chạm|nhìn|cảm)|không (thể|được|ai)|(?<!\p{L})chẳng ai(?!\p{L})|phạm vi|giới hạn|trong vòng|\bonly\b[^;.\n]*(see|hear|touch)|cannot|can't|within \d/iu
+/** a clause that says what the companion is, when that is itself a limit (a spirit nobody else perceives) */
+const SPIRIT_CLAUSE = /linh hồn|hồn ma|\bma\b|vô hình|ghost|spirit|invisible/iu
+export const COMPANION_LIMITS_MAX = 300
+
+/**
+ * What the persona says a companion cannot do, by companion name: the clauses after the name on its "Đồng hành: Evelyn — linh hồn
+ * dẫn lối, ...; chỉ Kenji Park thấy, nghe và chạm được; có thể di chuyển trong phạm vi 50 mét" line (or in the paragraph under a
+ * "**Evelyn — role:**" heading) that say who perceives them, what they cannot do or how far they go. Measured 2026-10-23 (Zombie chat):
+ * the narrator let a stranger look at Evelyn and had her grip a plank, pull a curtain, though the persona says only Kenji sees,
+ * hears and touches her. A companion with no such clause has no entry.
+ */
+export function decideCompanionLimits(persona: string | undefined, messages?: { data: string }[]): Record<string, string> {
+    const out: Record<string, string> = {}
+    const known = decideCompanions(persona, messages)
+    const nameOf = (raw: string) => raw.replace(/\*\*|["“”]/g, '').split(/[,(（—–]|\s-\s/)[0].replace(/\s+/g, ' ').trim()
+    const put = (name: string, clauses: string[]) => {
+        if (!known.includes(name)) return
+        const kept = clauses.map((c) => c.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()).filter((c) => c && (LIMIT_CLAUSE.test(c) || SPIRIT_CLAUSE.test(c)))
+        if (!kept.length) return
+        const text = [...new Set([...(out[name] ? out[name].split('; ') : []), ...kept])].join('; ')
+        out[name] = text.length > COMPANION_LIMITS_MAX ? text.slice(0, COMPANION_LIMITS_MAX) : text
+    }
+    const texts = [String(persona ?? ''), ...(messages ?? []).slice(0, 4).map((m) => String(m.data ?? ''))]
+    for (const t of texts) for (const m of t.matchAll(COMPANION_LINE)) {
+        const parts = m[1].split(';')          // not at "và": "chỉ Kenji thấy, nghe và chạm được" is one clause
+        // the name's own part: what follows its dash is a clause too ("Evelyn — linh hồn dẫn lối"); the parts after it are the sheet's
+        const first = parts[0].replace(/\*\*/g, '')
+        const at = first.search(/[—–]|\s-\s/u)
+        const rest = at >= 0 ? first.slice(at + 1).split(',') : first.split(',').slice(1)
+        put(nameOf(first), [...rest, ...parts.slice(1)])
+    }
+    for (const m of String(persona ?? '').matchAll(COMPANION_HEAD)) {
+        const after = String(persona).slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 700).split(/\n\s*\n/)[0]
+        put(nameOf(m[1]), [m[0].slice(m[0].search(/[—–]/u) + 1), ...after.split(/[;.\n]/)])
+    }
+    return out
 }
 
 export async function fetchGmDecision(input: DecideInput, deps: DecideDeps): Promise<GmDecision | null> {

@@ -167,6 +167,89 @@ function movesIn(text, kind, keysOf) {
 /** the companions the player's persona names (input.companions, the page's decideCompanions): at most 6 names of 2..40 characters */
 const companionsOf = (input) => (Array.isArray(input?.companions) ? input.companions : []).filter((x) => typeof x === 'string').map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => [...x].length >= 2 && [...x].length <= 40).slice(0, 6)
 
+// ---- what is already true, and what has been said twice (measured 2026-10-23, Zombie chat: a GM threat "Mất điện" went on being
+// advanced after the panel and two replies said the building's power was out, so the lights went out again at reply 46; the threats
+// "Máng rác" and "Tiếng động cầu thang A" were built on every turn for 20 replies, the same lid "cạch" and the same knock) ------------------
+/** states of the world a text can say are so, by what it says: [key, regex over lower-case NFC text] */
+const WORLD_STATES = {
+    power_out: [/(?:mất|cúp|hết|ngắt|ngừng) (?:điện|nguồn điện)(?! thoại)/u, /(?:điện|nguồn điện)(?: của)?(?: cả)?(?: tòa nhà| toà nhà| chung cư| khu vực| lưới| toàn khu)? (?:đã )?(?:mất|cúp|tắt|ngắt|ngừng|hết)(?!\s*thoại)/u, /không (?:còn )?(?:có )?điện(?! thoại)/u, /\b(?:power (?:is |was |has gone )?(?:out|down|cut)|blackout)\b/u],
+    water_out: [/(?:mất|cúp) nước(?! uống)/u, /(?:nước máy|đường ống nước|nước)(?: của)?(?: cả)?(?: tòa nhà| khu vực)? (?:đã )?(?:mất|cúp|ngừng chảy|cạn)(?! uống)/u, /\bwater (?:is |was )?(?:out|cut)\b/u],
+}
+/** a text that says the state ended */
+const WORLD_RESTORED = {
+    power_out: /(?:có điện lại|điện (?:đã )?(?:trở lại|phục hồi|có lại|sáng lại)|power (?:is )?(?:back|restored))/u,
+    water_out: /(?:có nước lại|nước (?:đã )?(?:trở lại|chảy lại)|water (?:is )?(?:back|restored))/u,
+}
+const WORLD_STATE_TEXT = { power_out: "the building's power is already out", water_out: "the building's water is already out" }
+/** which states a text says are so */
+const statesIn = (t) => Object.keys(WORLD_STATES).filter((k) => WORLD_STATES[k].some((re) => re.test(t)))
+/** the states the story has established: said in the panel, the ledger, the past or the last messages, and not said to have ended */
+function establishedStates(v, messages) {
+    const texts = []
+    for (const [k, x] of Object.entries(v ?? {})) if (/^(st_|led_ev$|led_mem$|gm_past$)/.test(k) && !isDash(x)) texts.push(lower(x))
+    for (const m of (messages ?? []).slice(-4)) texts.push(plain(m.text, 3000))
+    const out = []
+    for (const k of Object.keys(WORLD_STATES)) if (texts.some((t) => statesIn(t).includes(k)) && !texts.some((t) => WORLD_RESTORED[k].test(t))) out.push(k)
+    return out
+}
+const WORD_STOP = new Set(['tiếng', 'của', 'và', 'là', 'có', 'không', 'một', 'những', 'các', 'này', 'đó', 'khi', 'rồi', 'nhưng', 'để', 'trong', 'ngoài', 'lên', 'xuống', 'vào', 'ra', 'với', 'cho', 'được', 'đã', 'đang', 'vẫn', 'còn', 'cũng', 'thì', 'mà', 'như', 'từ', 'đến', 'tới', 'sau', 'trước', 'bị', 'cả', 'hơn', 'lại', 'nữa', 'nên', 'thế', 'anh', 'cô', 'ông', 'nó', 'họ', 'tớ', 'cậu', 'tôi', 'mình', 'người', 'lúc', 'ngay', 'phía', 'rất', 'chỉ', 'đều', 'sẽ', 'vừa', 'nhau'])
+const wordsOf = (t) => String(t).toLowerCase().normalize('NFC').split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+/** the threads (threat, enemy, side) whose name's words are all but one in each of the last two replies: said twice running, so rested a turn */
+function staleThreads(threads, messages) {
+    const replies = (messages ?? []).filter((m) => m.role === 'char').slice(-2).map((m) => new Set(wordsOf(plain(m.text, 4000))))
+    if (replies.length < 2) return []
+    return threads.filter((t) => ['threat', 'enemy', 'side'].includes(t.kind)).filter((t) => {
+        const ws = wordsOf(t.name).filter((w) => w.length >= 3)
+        if (ws.length < 2) return false
+        return replies.every((r) => ws.filter((w) => r.has(w)).length >= Math.ceil(ws.length * 0.6))
+    }).map((t) => t.id)
+}
+/** two-word phrases of content words that both of the last two replies use (the beats said twice running), at most 4; names (capitalised) and numbers break a phrase */
+function repeatedBeats(messages) {
+    const replies = (messages ?? []).filter((m) => m.role === 'char').slice(-2).map((m) => String(m.text ?? '').replace(/\[\[[A-Z_]+[\s\S]*?(\]\]|$)/g, ' ').replace(/<[^>]+>/g, ' '))
+    if (replies.length < 2) return []
+    const grams = (t) => {
+        const m = new Map()
+        for (const sent of t.split(/[.!?;\n"“”]+/)) {
+            const toks = sent.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+            for (let i = 0; i + 1 < toks.length; i++) {
+                const a = toks[i], b = toks[i + 1]
+                if (![a, b].every((w) => /^\p{Ll}+$/u.test(w) && w.length >= 3 && !WORD_STOP.has(w))) continue
+                m.set(a + ' ' + b, (m.get(a + ' ' + b) ?? 0) + 1)
+            }
+        }
+        return m
+    }
+    const [x, y] = replies.map(grams)
+    return [...x].filter(([g]) => y.has(g)).sort((p, q) => (q[1] + y.get(q[0])) - (p[1] + y.get(p[0])) || q[0].length - p[0].length).map(([g]) => g).slice(0, 4)
+}
+
+/** the limits the persona states for each companion (input.companionLimits, the page's decideCompanionLimits): lower-cased name -> text, 300 characters at most */
+const companionLimitsOf = (input) => {
+    const out = {}
+    const src = input?.companionLimits
+    if (src && typeof src === 'object') for (const [k, v] of Object.entries(src)) if (typeof v === 'string' && v.trim()) out[lower(k)] = v.replace(/\s+/g, ' ').trim().slice(0, 300)
+    return out
+}
+/** limits that say only the character perceives the companion (a spirit, "only Kenji sees, hears and touches her") */
+const UNSEEN_LIMIT = /(?<!\p{L})chỉ(?!\p{L})[^;.\n]*(thấy|nghe|chạm|nhìn)|linh hồn|hồn ma|\bma\b|vô hình|unseen|invisible|ghost|spirit|only\b[^;.\n]*(see|hear|touch)/iu
+/**
+ * The GM note's line for the persona's companions: the limits the persona states are hard rules for the narrator (measured
+ * 2026-10-23, Zombie chat: Evelyn, "chỉ Kenji Park thấy, nghe và chạm được", was looked at by a stranger and gripped a plank, pulled a
+ * curtain). A companion only the character perceives is seen, answered and touched by nobody else and moves nothing.
+ */
+function companionNote(input) {
+    const lim = companionLimitsOf(input)
+    const parts = []
+    for (const n of companionsOf(input)) {
+        const l = lim[lower(n)]
+        if (!l) continue
+        const unseen = UNSEEN_LIMIT.test(l)
+        parts.push(`the companion ${q(n)} has limits the player's persona sets, hard rules in every sentence: ${l}${unseen ? ` — so nobody but the character sees, hears or touches ${q(n)}: no stranger looks at, answers or reacts to ${q(n)}, and ${q(n)} moves nothing (does not grip, pull, hold, carry, push or open anything, no board, curtain, door or object); only the character's own action moves things` : ''}.`)
+    }
+    return parts.length ? `Companion limits: ${parts.join(' ')}` : ''
+}
+
 function featureFacts(input, places = [], extra = {}) {
     const v = input.vars ?? {}
     const out = []
@@ -235,7 +318,12 @@ function featureFacts(input, places = [], extra = {}) {
         for (const n of Object.keys(MET)) if (metIn(t, n)) out.push(`resolved(${n}, ${i}).`)
     })
     for (const t of threads) for (const k of keys) if (wordAt(lower(t.text), k).length) out.push(`actor(${t.id}, ${str(k)}).`)
-    return { text: [...new Set(out)].join('\n') + '\n', threads, present, relations: led.relations, names: Object.fromEntries([...persons].map(([k, n]) => [k, n.name])), origins: Object.fromEntries([...persons].map(([k, n]) => [k, n.origin])), aliases, timeline: led.timeline.length }
+    // what is already true is no new event (a threat that is a state already so is spent), and a thread said twice running rests a turn
+    const established = establishedStates(v, input.messages)
+    for (const k of established) out.push(`established(${k}).`)
+    for (const t of threads) if (['threat', 'enemy', 'side'].includes(t.kind) && statesIn(lower(t.name)).some((k) => established.includes(k))) out.push(`spent(${t.id}).`)
+    for (const id of staleThreads(threads, input.messages)) out.push(`stale(${id}).`)
+    return { established, beats: repeatedBeats(input.messages), text: [...new Set(out)].join('\n') + '\n', threads, present, relations: led.relations, names: Object.fromEntries([...persons].map(([k, n]) => [k, n.name])), origins: Object.fromEntries([...persons].map(([k, n]) => [k, n.origin])), aliases, timeline: led.timeline.length }
 }
 /** a Western full name ("martin vale") is also named by its first word ("martin"), as the prose says it after the first meeting; a
  *  Vietnamese one ("tôn mai") is not: its first word is the family name, shared by strangers */
@@ -450,7 +538,9 @@ function lineOf(dec, ctx) {
         ? `The character's stated needs: ${needs.map((n) => NEED_WORD[n] ?? n).join(', ')}; an offer, bait or bargain may only target these.`
         : 'The character has stated no need (no thirst, hunger, wound, being lost): nobody offers water, food, care or a way, and nobody bargains with one.'
     const first = ev ? `This turn (decided, follow it): ${ev}` : ''
-    const second = [people.length ? `People in the scene: ${people.join('; ')}.` : '', need].filter(Boolean).join(' ')
+    const already = (ctx.established ?? []).length ? `Already true in this story, so it never newly happens again (no second blackout, no "goes dark" beat, no new sign of it): ${ctx.established.map((k) => WORLD_STATE_TEXT[k]).join('; ')}.` : ''
+    const beats = (ctx.beats ?? []).length ? `Beats both of the last two replies used (${ctx.beats.map((b) => `“${b}”`).join(', ')}): they rest this reply, and an ambient sound or sign never blocks, delays or cancels what the player wrote; the player's action is carried out first.` : ''
+    const second = [people.length ? `People in the scene: ${people.join('; ')}.` : '', need, already, beats, ctx.companionNote].filter(Boolean).join(' ')
     if (phase === 'seed') return second
     // the Subtext line (npcPsych.cjs subtextOf) goes last: the narrator reads the decision first, then what the people carry under it
     return [first, second, ctx.subtext].filter(Boolean).join('\n')
@@ -503,7 +593,7 @@ async function npcStep(npc, inp, ff, ms) {
     const companions = new Set(companionsOf(inp).map(lower))   // of them, the persona's companions (npcPsych.companionOf)
     for (const k of ff.present) {
         let id = idOf(k)
-        if (!id && ff.origins?.[k] !== 'thread') { id = k; strangers.push({ id, name: ff.names?.[k] ?? k, ...(companions.has(lower(k)) ? { companion: true } : {}) }) }
+        if (!id && ff.origins?.[k] !== 'thread') { id = k; strangers.push({ id, name: ff.names?.[k] ?? k, ...(companions.has(lower(k)) ? { companion: true, limits: companionLimitsOf(inp)[lower(k)] ?? null } : {}) }) }
         if (id && id !== 'player' && !keys.has(id)) { ids.set(k, id); keys.set(id, k) }
     }
     if (!ids.size) return null
@@ -588,7 +678,7 @@ async function decide(input, opts = {}) {
     const kindAtom = decision.turn?.name === 'new' ? decision.turn.args[0].name : null
     const kindText = kindAtom ? kindTextOf(world, kindAtom) : null
     const stance = decision.intents.some((i) => i.who === 'newcomer') && STANCE[lower(input.stance)] ? lower(input.stance) : null
-    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names, told: g?.texts ?? new Map(), subtext: outcome?.subtext ?? '' })
+    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names, told: g?.texts ?? new Map(), subtext: outcome?.subtext ?? '', companionNote: companionNote(inp), established: ff.established, beats: ff.beats })
     return { status: 'ok', world, decision, needs: decision.needs, present: decision.present, dead: decision.dead, plans, newEvent: isNewEvent(decision.turn), line, optimal: cr.optimal, ...(outcome ? { npc: outcome } : {}), ms: Date.now() - t0, facts: opts.withFacts ? facts : undefined }
 }
 
@@ -607,4 +697,4 @@ function warm() {
     return decide({ world: 'generic', phase: 'run', vars: {}, messages: [{ role: 'user', text: 'warm' }], dice: { pace: 'quiet' } }, { budgetMs: 5000 }).catch(() => null)
 }
 
-module.exports = { decide, warm, featureFacts, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }
+module.exports = { decide, warm, featureFacts, companionNote, establishedStates, staleThreads, repeatedBeats, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }

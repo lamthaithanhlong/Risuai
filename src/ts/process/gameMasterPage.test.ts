@@ -611,6 +611,32 @@ describe('NPC psychology: $led_soc and the solver flag', () => {
         expect(seen.map((i) => i.companions)).toEqual([['Evelyn'], []])
     })
 
+    it('the companion\'s limits the persona states travel with the decide input (Zombie 2026-10-23: Evelyn "chỉ Kenji Park thấy, nghe và chạm được" was seen by a stranger and gripped a plank)', async () => {
+        const { decideCompanionLimits } = await import('./gmSolver')
+        // the creation sheet line of the real chat, verbatim
+        const sheet = [{ data: 'Bắt đầu.' }, { data: '- Năng lực: Thôi miên; nhìn xuyên thấu\n- Đồng hành: Evelyn — linh hồn dẫn lối, bạn thân nhất đã qua đời; chỉ Kenji Park thấy, nghe và chạm được; có thể di chuyển trong phạm vi 50 mét quanh anh\n- Điểm bắt đầu: Đêm thứ nhất' }]
+        const lim = decideCompanionLimits('', sheet)
+        expect(Object.keys(lim)).toEqual(['Evelyn'])
+        expect(lim.Evelyn).toContain('chỉ Kenji Park thấy, nghe và chạm được')
+        expect(lim.Evelyn).toContain('phạm vi 50 mét')
+        // a companion with no limit stated has none; a persona heading's paragraph counts too
+        expect(decideCompanionLimits('Đồng hành: Aiko (mèo đen)', [])).toEqual({})
+        expect(decideCompanionLimits('**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân.\n- **Liên kết:** chỉ Kenji thấy.', []).Evelyn).toContain('chỉ Kenji thấy')
+        persona.text = ''
+        const run = () => chatOf([{ role: 'char', data: 'Evelyn lướt bên Kenji.', chatId: 'r2' }, { role: 'user', data: 'Tôi chạy lên dốc.', }], { $st_name: 'Kenji', $gm_arc: 'a | b | c | d', $gm_adv_at: '1' })
+        db.characters = [card]
+        const seen: { companionLimits?: Record<string, string> }[] = []
+        const decide = async (input: any) => { seen.push(input); return null }
+        persona.text = '[{{user}} = Kenji Park\n- Đồng hành: Evelyn — linh hồn dẫn lối; chỉ Kenji Park thấy, nghe và chạm được]'
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        db.npcPsych = false
+        await gameMasterRequestSolved(req(), card as never, run() as never, decide)
+        db.npcPsych = undefined
+        persona.text = ''
+        expect(seen[0].companionLimits?.Evelyn).toContain('chỉ Kenji Park thấy')
+        expect(seen[1].companionLimits).toEqual({})
+    })
+
     it('the social rule asks a line for every act a named person does, and says what a warning, advice, an apology or a mocking word is (measured: 0 of 4 real replies had one without it)', () => {
         const on = bookkeepPrompt({}, 'p', 'r', 'x', '', '', { social: true })
         expect(on).toContain('leave it out only when no named person did anything to anyone')

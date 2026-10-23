@@ -58,6 +58,19 @@ export function stripGmTalk(text: string): string {
     return out === t ? t : out.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n')
 }
 
+// Measured 2026-10-23 (Zombie chat, 4 of 54 replies end in a line "]]" and one opens with "【SYSTEM: HỆ THỐNG HACKER】— no, nothing."):
+// a block closer whose block is gone (the card's script cut the block, the closer was left), and the narrator's own aside to itself
+// written as a System line. Neither is story; a "]]" is taken out only when the reply has more closers than "[[" openers.
+const LEAKED_SYSTEM = /^[ \t]*【[^】\n]*】[ \t]*[—–-]+[ \t]*[A-Za-z][A-Za-z ,.'!?]{0,60}[ \t]*(?:\n|$)/gm
+export function stripStrayMarks(text: string): string {
+    let t = text ?? ''
+    const opens = (t.match(/\[\[/g) ?? []).length
+    let extra = (t.match(/\]\]/g) ?? []).length - opens
+    if (extra > 0) t = t.replace(/^[ \t]*\]\][ \t]*(?:\n|$)/gm, (all) => (extra-- > 0 ? '' : all))
+    t = t.replace(LEAKED_SYSTEM, '')
+    return t === (text ?? '') ? t : t.replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\s+$/, '')
+}
+
 /** The reply without planning paragraphs, for a story told in Vietnamese; unchanged otherwise. A thought (<Thoughts>, <think>)
  *  is cot.ts's: only the text outside it is looked at, the thought is kept as written. */
 export function dropPlanning(text: string): string {
@@ -94,12 +107,12 @@ export function closeLeadingThought(text: string): string {
 
 /** What to keep of a finished reply (stored): the thought closed, planning paragraphs and GM note lines out. */
 export function tidyReply(text: string): string {
-    return dropPlanning(stripGmTalk(closeLeadingThought(text)))
+    return stripStrayMarks(dropPlanning(stripGmTalk(closeLeadingThought(text))))
 }
 
 /** What the screen shows of any message (after cot.ts took the thought out). */
 export function tidyDisplay(text: string): string {
-    return dropPlanning(stripGmTalk(text))
+    return stripStrayMarks(dropPlanning(stripGmTalk(text)))
 }
 
 /** After a reply: the chat's last story reply is stored tidy (not a group's other messages, not the player's). */

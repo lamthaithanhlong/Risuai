@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { splitCoT } from '../parser/cot'
-import { closeLeadingThought, dropPlanning, isPlanning, stripGmTalk, tidyDisplay, tidyLastReply, tidyReply } from './replyTidy'
+import { closeLeadingThought, dropPlanning, isPlanning, stripGmTalk, stripStrayMarks, tidyDisplay, tidyLastReply, tidyReply } from './replyTidy'
+import { stripLooks } from './portraits'
 
 const STORY1 = 'Gã trẻ không đứng dậy. Gã chỉ ngồi thẳng lưng hơn, bát trong tay hạ xuống, mắt không rời cánh cổng sắt.'
 const STORY2 = '"Bà Đếm cho mày ngủ ngoài này à?" Marek hỏi, giọng khàn. Gió từ khe núi thổi qua, lạnh như lưỡi dao.'
@@ -141,5 +142,33 @@ describe('measured 2026-10-19 evening (gpt-6-luna, Mailman t10): a block of the 
         expect(fixBlockBrackets(look)).toBe(look)
         const other = 'Văn.\n\n[[NOTE\nenemy: a | b\nhắn cười\n]]'
         expect(fixBlockBrackets(other)).toBe(other)
+    })
+})
+
+// The Zombie chat export of 2026-10-23, lines as written there
+describe('format leaks of the Zombie chat (2026-10-23)', () => {
+    const body = 'Evelyn liếc cánh cửa, rồi nhìn chiếc găng tay còn lỏng ốc. “Ừm. Tiếng động này chắc chắn được chú ý rồi.” Cú nện thứ hai vang lên, nặng hơn, làm cánh cửa khẽ bật trong khung.'
+    it('a "]]" left alone at the end of a reply (4 of 54) is taken out of the stored reply and of what is shown', () => {
+        const raw = `${body}\n\n]]`
+        expect(tidyReply(raw)).toBe(body)
+        expect(tidyDisplay(raw)).toBe(body)
+        expect(stripStrayMarks(`${body}\n\n]]\n\nNgười đàn ông nhìn.`)).toBe(`${body}\n\nNgười đàn ông nhìn.`)
+    })
+    it('a block that is still whole keeps its closer: only a closer with no opener goes', () => {
+        const whole = `${body}\n\n[[STATUS\n$st_day: Ngày 4\n]]`
+        expect(stripStrayMarks(whole)).toBe(whole)
+        expect(stripStrayMarks(`${whole}\n]]`)).toBe(whole)
+    })
+    it('the narrator\'s aside to itself written as a System line is not story ("【SYSTEM: HỆ THỐNG HACKER】— no, nothing.")', () => {
+        const raw = '【SYSTEM: HỆ THỐNG HACKER】— no, nothing.\n\nEvelyn gật đầu rồi lướt xuyên qua cửa căn 704.'
+        expect(tidyReply(raw)).toBe('Evelyn gật đầu rồi lướt xuyên qua cửa căn 704.')
+        // a real System line in Vietnamese stays
+        const real = '【GHI NHẬN: Mẫu người nhiễm — đã ngừng tín hiệu. Dữ liệu điểm yếu: xác nhận.】'
+        expect(tidyReply(`${body}\n\n${real}`)).toBe(`${body}\n\n${real}`)
+    })
+    it('[[LOOK …]] is for the portraits only: the screen never shows it (the export keeps the stored text, as it does {{inlay::…}})', () => {
+        const look = '[[LOOK Người đàn ông bị thương | Short graying hair, brown eyes, weathered face, lean build, late forties, bloodstained office shirt and dark trousers]]'
+        expect(stripLooks(`${body}\n\n${look}`)).not.toContain('[[LOOK')
+        expect(stripLooks(`${body}\n\n${look}`)).toContain('chiếc găng tay')
     })
 })

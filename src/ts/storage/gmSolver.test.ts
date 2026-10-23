@@ -424,6 +424,19 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology in decide()', () => {
         const gone = await G.decide(scene([{ role: 'user', text: 'Tôi đi tiếp.' }], { companions: ['Evelyn'] }), { budgetMs: 3000, npc })
         expect(gone.present).toEqual([])
     })
+    test('a companion\'s stated limits are a hard rule of the note: only the character perceives her and she moves nothing (Zombie 2026-10-23)', async () => {
+        const { npc } = open(seedOf([45, 70, 0, 25]))
+        const limits = { Evelyn: 'linh hồn dẫn lối, bạn thân nhất đã qua đời; chỉ Kenji Park thấy, nghe và chạm được; có thể di chuyển trong phạm vi 50 mét quanh anh' }
+        const msgs = [{ role: 'char', text: 'Evelyn ghé sát khe cửa. Người đàn ông nhìn qua khe hẹp.' }, { role: 'user', text: 'Tôi bảo Evelyn giữ cái nắp.' }]
+        const r = await G.decide(scene(msgs, { companions: ['Evelyn'], companionLimits: limits }), { budgetMs: 3000, npc })
+        expect(r.line).toContain('chỉ Kenji Park thấy, nghe và chạm được')
+        expect(r.line).toMatch(/nobody but the character sees, hears or touches “Evelyn”/)
+        expect(r.line).toMatch(/“Evelyn” moves nothing/)
+        // no limit stated, no limit line; and the line still opens as the page expects
+        const none = await G.decide(scene(msgs, { companions: ['Evelyn'] }), { budgetMs: 3000, npc })
+        expect(none.line).not.toMatch(/Companion limits/)
+        expect(r.line).toMatch(/^(This turn|People in the scene|The character)/)
+    })
     test('the ledger moves the numbers the solver reads: a betrayal the turn before is never answered by making peace', async () => {
         const base = seedOf([60, 55, 0, 30])
         const calm = await G.decide(withSoc(''), { budgetMs: 3000, npc: open(base).npc })
@@ -549,5 +562,49 @@ describe.skipIf(!HAS_CLINGO)('who left the scene (left/returned in derive.lp)', 
         expect([...G.movesIn('marek came back at dawn.', 'return', keys)]).toEqual(['marek'])
         expect([...G.movesIn('marek never left.', 'leave', keys)]).toEqual([])
         expect([...G.movesIn('mặt sẹo rời khỏi nhóm, marek ở lại.', 'leave', keys)]).toEqual(['mặt sẹo'])
+    })
+})
+
+// The Zombie chat of 2026-10-23 (export "…2026-10-23T043707008Z_chat.txt", panel and threats of the live chat): the GM kept moving a
+// threat "Mất điện" after the power was out, and built "Máng rác" and "Tiếng động cầu thang A" on every turn for 20 replies.
+describe.skipIf(!HAS_CLINGO)('what is already true is not an event again, and a beat said twice running rests (Zombie 2026-10-23)', () => {
+    const zvars = {
+        st_name: 'Kenji Park', st_place: 'Chung cư Kisaragi, tầng 7', st_condition: 'Khát, kiệt sức; cổ tay nhói, đau đầu',
+        st_item3: 'Bộ định tuyến mạng | mất điện',
+        gm_arc: 'Pháo đài 704 | Nhóm sống sót muốn chiếm tầng 7 | Một ánh đèn chớp trên mái nhà đối diện',
+        gm_beat: '30 | người đàn ông khai bị cạnh kim loại cứa ở bãi xe, xin nước; tiếng va máng rác xa hơn | cần kiểm tra vết thương',
+        gm_threats: 'Mất điện | 1/4 | đèn và máy bơm ngừng hoạt động\nTiếng động cầu thang A | 1/4 | âm thanh đang chìm dần dưới tiếng mưa\nMáng rác | 1/4 | tiếng va đã xa hơn; nắp tầng bảy còn giữ',
+        gm_path: 'Trấn giữ căn 704 | kiểm soát tầng 7 | hai cầu thang chặn; thang máy chèn tạm',
+    }
+    // replies 51 and 52 of the export, cut
+    const r51 = 'Kenji nhìn xuyên qua nắp máng rác. Bên dưới, đoạn ống tối dần về phía B1; ba người nhiễm vẫn quanh thùng rác lớn bị đẩy nghiêng. Mỗi cú va truyền lên thành ống, làm mép nắp tầng bảy nảy khỏi khung. Evelyn nói nhỏ, nhưng tiếng *rầm* từ bên dưới át mất nửa câu sau. Nắp thép mở hé thêm; tiếng cào lập tức rõ hơn, sát ngay phía dưới.'
+    const r52 = 'Cái nắp máng rác vẫn rung dưới thanh gỗ. Từ cầu thang A không vọng lên tiếng gì; còn nắp thép tầng bảy chỉ hở một khe, tiếng cào phía dưới thưa dần. Ở cuối hành lang, cầu thang A vẫn khuất sau vật cản, im ắng dưới màn mưa.'
+    const msgs = [{ role: 'char', text: r51 }, { role: 'user', text: 'Ừ rồi chúng ta phải gia cố nó lại.' }, { role: 'char', text: r52 }, { role: 'user', text: 'Tôi xuống tầng B1 bây giờ, dọn tiếp từ tầng 6.' }]
+    const run = (dice: any, extra: any = {}) => G.decide({ world: 'zombie', phase: 'run', vars: zvars, messages: msgs, dice: { pace: 'escalate', ...dice }, kinds: [], stance: '', ...extra }, { budgetMs: 3000 })
+
+    test('the power is out on the panel: the threat "Mất điện" is spent and is not moved, however the dice point at it', async () => {
+        const r = await run({ surface: 'the threat "Mất điện"' })
+        expect(r.status).toBe('ok')
+        expect(r.decision.turn.args?.[0]?.name).not.toBe('threat1')
+        expect(r.line).not.toMatch(/“Mất điện”/)
+        expect(r.line).toMatch(/Already true in this story.*the building's power is already out/)
+    })
+    test('the facts are read from the panel and the replies, and a restored power is not out', () => {
+        expect(G.establishedStates(zvars, [])).toEqual(['power_out'])
+        expect(G.establishedStates({}, [{ role: 'char', text: 'Điện tòa nhà đã mất từ chiều.' }])).toEqual(['power_out'])
+        expect(G.establishedStates({ st_item2: 'Điện thoại | mất sóng' }, [{ role: 'char', text: 'Anh làm mất điện thoại ở bãi xe.' }])).toEqual([])
+        expect(G.establishedStates({ st_item3: 'Bộ định tuyến | mất điện' }, [{ role: 'char', text: 'Đèn sáng lại, điện đã trở lại.' }])).toEqual([])
+    })
+    test('"Máng rác" said in both of the last two replies rests this turn instead of being built on again', async () => {
+        const r = await run({ pace: 'build', surface: 'the threat "Máng rác"' }, {})
+        expect(r.decision.turn.args?.[0]?.name).not.toBe('threat3')
+        const fresh = await G.decide({ world: 'zombie', phase: 'run', vars: zvars, messages: [{ role: 'char', text: 'Hành lang im ắng.' }, { role: 'user', text: 'Tôi đi quanh.' }, { role: 'char', text: 'Mưa vẫn rơi ngoài cửa sổ.' }, { role: 'user', text: 'Tôi nhìn ra cửa sổ.' }], dice: { pace: 'build', surface: 'the threat "Máng rác"' }, kinds: [], stance: '' }, { budgetMs: 3000 })
+        expect(fresh.decision.turn).toMatchObject({ name: 'build', args: [{ name: 'threat3' }] })
+    })
+    test('a beat both replies used is named, and the note says it never blocks what the player wrote', async () => {
+        expect(G.repeatedBeats(msgs)).toEqual(expect.arrayContaining(['nắp máng']))
+        const r = await run({ pace: 'quiet' })
+        expect(r.line).toMatch(/Beats both of the last two replies used \(.*“nắp máng”.*never blocks, delays or cancels what the player wrote/)
+        expect(G.repeatedBeats([{ role: 'char', text: 'Mưa rơi.' }])).toEqual([])
     })
 })

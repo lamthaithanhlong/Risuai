@@ -189,8 +189,9 @@ const COMPANION_IMPORTANCE = 60
  * (APPRAISAL.companion_seed) and npc.lp has them want to help. Measured 2026-10-22 (Mailman): as a stranger Evelyn was neutral and
  * "made small talk" through a bear chase.
  */
-function companionOf(id, name) {
-    return { ...strangerOf(id, name), importance: COMPANION_IMPORTANCE, tags: ['companion'], source: 'companion' }
+function companionOf(id, name, limits) {
+    // `limits`: what the persona says the companion cannot do ("only the character sees, hears and touches her"); gmSolver's note carries it
+    return { ...strangerOf(id, name), importance: COMPANION_IMPORTANCE, tags: ['companion'], source: 'companion', limits: typeof limits === 'string' && limits ? limits.slice(0, 300) : null }
 }
 const isCompanion = (p) => !!p?.tags?.includes('companion')
 
@@ -403,7 +404,7 @@ function openNpcPsych(opts = {}) {
         const world = input.world
         const present = [...new Set((input.present ?? []).map(lower).filter((x) => x && x !== PLAYER))]
         // a stranger (or the persona's companion) only where the card has nobody by that id (a profile always wins)
-        const strangers = new Map((input.strangers ?? []).filter((x) => x?.id && present.includes(lower(x.id)) && !profileOf(world, lower(x.id))).map((x) => [lower(x.id), (x.companion ? companionOf : strangerOf)(lower(x.id), x.name)]))
+        const strangers = new Map((input.strangers ?? []).filter((x) => x?.id && present.includes(lower(x.id)) && !profileOf(world, lower(x.id))).map((x) => [lower(x.id), (x.companion ? companionOf(lower(x.id), x.name, x.limits) : strangerOf(lower(x.id), x.name))]))
         const rows = seedPairs(world, present, input.relations ?? [], { strangers })
         const ps = [...new Set(rows.map((r) => r.p))]
         const npcs = ps.map((id) => {
