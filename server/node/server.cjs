@@ -2178,6 +2178,8 @@ app.post('/api/story/decide', authenticatedRouteLimiter, async (req, res, next) 
             people: (Array.isArray(b.people) ? b.people : []).filter((x) => typeof x === 'string').slice(0, 40).map((x) => str(x, 40)),
             // the companions the player's persona names (gmSolver.ts decideCompanions): close to the player, not neutral strangers
             companions: (Array.isArray(b.companions) ? b.companions : []).filter((x) => typeof x === 'string').slice(0, 6).map((x) => str(x, 40)),
+            // what the persona states for each companion (gmSolver.cjs companionLimitsOf reads it): without this line the limits never reached the GM
+            companionLimits: gmSolver.sanitizeCompanionLimits(b.companionLimits),
         };
         // npc: false (the page's db.npcPsych off) or no module (RISU_NPC_PSYCH=0): today's note, no Subtext line
         const r = await gmSolver.decide({ ...input, npc: b.npc !== false }, { store: storyStore, graph: storyGraph, npc: b.npc === false ? null : npcPsych });

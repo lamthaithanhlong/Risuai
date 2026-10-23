@@ -231,6 +231,16 @@ const companionLimitsOf = (input) => {
     if (src && typeof src === 'object') for (const [k, v] of Object.entries(src)) if (typeof v === 'string' && v.trim()) out[lower(k)] = v.replace(/\s+/g, ' ').trim().slice(0, 300)
     return out
 }
+/** the route's cut of the page's companionLimits: a plain object, 6 entries at most, names up to 40 characters, texts up to 300 (what companionLimitsOf reads) */
+const sanitizeCompanionLimits = (v) => {
+    const out = {}
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return out
+    for (const [k, t] of Object.entries(v)) {
+        if (Object.keys(out).length >= 6) break
+        if (typeof t === 'string') out[String(k).slice(0, 40)] = t.slice(0, 300)
+    }
+    return out
+}
 /** limits that say only the character perceives the companion (a spirit, "only Kenji sees, hears and touches her") */
 const UNSEEN_LIMIT = /(?<!\p{L})chỉ(?!\p{L})[^;.\n]*(thấy|nghe|chạm|nhìn)|linh hồn|hồn ma|\bma\b|vô hình|unseen|invisible|ghost|spirit|only\b[^;.\n]*(see|hear|touch)/iu
 /**
@@ -697,4 +707,4 @@ function warm() {
     return decide({ world: 'generic', phase: 'run', vars: {}, messages: [{ role: 'user', text: 'warm' }], dice: { pace: 'quiet' } }, { budgetMs: 5000 }).catch(() => null)
 }
 
-module.exports = { decide, warm, featureFacts, companionNote, establishedStates, staleThreads, repeatedBeats, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }
+module.exports = { sanitizeCompanionLimits, decide, warm, featureFacts, companionNote, establishedStates, staleThreads, repeatedBeats, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }
