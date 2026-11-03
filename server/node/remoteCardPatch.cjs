@@ -10,6 +10,7 @@
 //        [--restart] [--backup-dir DIR] [--dry-run]
 //     --lore    replace the card's whole lorebook with the file's entries (a built risu_lorebook.json)
 //     --entry   replace (or add) ONE entry, matched by its comment; the file holds one entry object
+//     --desc    also replace the card's description (desc) with data.description of a built card json (main_description lives there, not in the lorebook)
 //     --restart stop com.risu.server (launchd) first and start it after; without it the server must already be stopped
 //     --dry-run do everything except the write and the restart
 const fs = require('fs')
@@ -43,6 +44,10 @@ function patchRemoteBytes(current, change) {
     const before = JSON.parse(Buffer.from(current).toString('utf8'))
     if (!Array.isArray(before.globalLore)) throw new Error('the remote file has no globalLore')
     const next = structuredClone(before)
+    if (typeof change.desc === 'string') {
+        if (!change.desc.trim()) throw new Error('the new description is empty')
+        next.desc = change.desc
+    }
     if (change.lore) {
         next.globalLore = change.lore.map(toRisuLore)
     } else if (change.entry) {
@@ -51,15 +56,16 @@ function patchRemoteBytes(current, change) {
         const i = next.globalLore.findIndex((x) => x.comment === e.comment)
         if (i >= 0) next.globalLore[i] = e
         else next.globalLore.push(e)
-    } else {
+    } else if (typeof change.desc !== 'string') {
         throw new Error('nothing to change')
     }
     const out = Buffer.from(JSON.stringify(next), 'utf8')
     // round trip: what a page will read
     const back = JSON.parse(out.toString('utf8'))
-    const strip = (c) => { const { globalLore, ...rest } = c; return JSON.stringify(rest) }
+    const strip = (c) => { const { globalLore, desc, ...rest } = c; return JSON.stringify(rest) }
     if (strip(back) !== strip(before)) throw new Error('round trip: something besides the lorebook changed; nothing written')
     if (JSON.stringify(back.globalLore) !== JSON.stringify(next.globalLore)) throw new Error('round trip: the lorebook did not read back as written')
+    if (typeof change.desc === 'string' && back.desc !== change.desc) throw new Error('round trip: the description did not read back as written')
     if (change.entry && !back.globalLore.some((x) => x.comment === change.entry.comment && x.content === toRisuLore(change.entry).content)) {
         throw new Error('round trip: the entry is not in the result')
     }
@@ -125,13 +131,16 @@ async function main(argv) {
     const [saveDir, prefix, ...rest] = argv
     const opt = (n) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined }
     const has = (n) => rest.includes(n)
-    if (!saveDir || !prefix || (!opt('--lore') && !opt('--entry'))) {
-        console.error('usage: remoteCardPatch.cjs <save dir> <chaId prefix> --lore <risu_lorebook.json> | --entry "<comment>=<file.json>" [--restart] [--backup-dir DIR] [--dry-run]')
+    if (!saveDir || !prefix || (!opt('--lore') && !opt('--entry') && !opt('--desc'))) {
+        console.error('usage: remoteCardPatch.cjs <save dir> <chaId prefix> --lore <risu_lorebook.json> | --entry "<comment>=<file.json>" [--desc <card.json>] [--restart] [--backup-dir DIR] [--dry-run]')
         process.exit(2)
     }
     const change = opt('--lore')
         ? { lore: JSON.parse(fs.readFileSync(opt('--lore'), 'utf8')).data }
-        : { entry: (() => { const [c, f] = opt('--entry').split('='); return { ...JSON.parse(fs.readFileSync(f, 'utf8')), comment: c } })() }
+        : opt('--entry')
+            ? { entry: (() => { const [c, f] = opt('--entry').split('='); return { ...JSON.parse(fs.readFileSync(f, 'utf8')), comment: c } })() }
+            : {}
+    if (opt('--desc')) change.desc = JSON.parse(fs.readFileSync(opt('--desc'), 'utf8')).data.description
     const port = Number(process.env.PORT) || 6001
     const restart = has('--restart')
     const dryRun = has('--dry-run')

@@ -30,6 +30,18 @@ describe('patchRemoteBytes', () => {
         expect(report.messages).toBe(2)
     })
 
+    it('replaces the description with --desc and leaves the lore and every message alone', () => {
+        const { out } = patchRemoteBytes(bytes(), { desc: 'new description' })
+        const c = JSON.parse(out.toString('utf8'))
+        expect(c.desc).toBe('new description')
+        expect(c.globalLore).toEqual(card().globalLore)
+        expect(c.chats).toEqual(card().chats)
+    })
+
+    it('refuses an empty description', () => {
+        expect(() => patchRemoteBytes(bytes(), { desc: '  ' })).toThrow(/empty/)
+    })
+
     it('adds an entry whose comment is new', () => {
         const { out } = patchRemoteBytes(bytes(), { entry: { comment: 'Haruto', key: 'h', content: 'x' } })
         expect(JSON.parse(out.toString('utf8')).globalLore).toHaveLength(3)
