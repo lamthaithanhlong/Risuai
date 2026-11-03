@@ -61,3 +61,4 @@ save.server.pid
 
 # TLC writes states/ in the working directory when no -metadir is given
 specs/**/states/
+.acceptance-out/

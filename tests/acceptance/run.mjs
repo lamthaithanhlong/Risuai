@@ -13,7 +13,7 @@
 //                        $0 real money, where main-deepseek now lands on GLM at $9.6 / M in); a router model such as main-deepseek
 //                        goes through 9Router; a failed claude judge tries claude:haiku, a failed router one the DeepSeek slot
 //     --port 6101        first port for the copies          --store files|sqlite   override the live server's store
-//     --out DIR          default ~/.backend-review/work/risu-acceptance/<YYYY-MM-DD>
+//     --out DIR          default ~/Downloads/Risuai/.acceptance-out/<YYYY-MM-DD>
 //     --narrator web     the narrator on ChatGPT web (lib/webShim.mjs, through the Codex Web GPT bridge) instead of the
 //                        COPY's 9router slot; the judge stays on 9router (default: router)
 //     --narrator-slot S  the COPY plays on the model slot named S (e.g. codex) whatever slot the live save has active
@@ -65,7 +65,7 @@ const GM_SOLVER = opt('--gm-solver') === 'off' ? { gmSolver: false } : null
 const NPC_PSYCH = opt('--npc-psych')
 if (NPC_PSYCH !== undefined && !['off', 'asp', 'fatima'].includes(NPC_PSYCH)) throw new Error('--npc-psych wants off, asp or fatima')
 const DIAG = opt('--max-context') ? { maxContext: Number(opt('--max-context')) } : null
-const OUT = opt('--out', path.join(os.homedir(), '.backend-review/work/risu-acceptance', today + (DIAG ? '-diag' : '')))
+const OUT = opt('--out', path.join(os.homedir(), 'Downloads/Risuai/.acceptance-out', today + (DIAG ? '-diag' : '')))
 
 /** RUN/_base as an APFS clone of an earlier run's _base: no new disk, and both runs start from the same save. */
 function cloneBase(fromRun, runDir) {
@@ -152,6 +152,9 @@ async function playStory(key, ctx) {
         rec.loreBudget = { percent: LORE_BUDGET, ...b }
         log(`lore token budget: ${b.before} -> ${b.after} (${LORE_BUDGET}%)`)
     }
+    // the server's turn worker runs async turns in a page the harness cannot see: its narrator/referee requests were never recorded,
+    // so gm.side and jev.referee failed for lack of data. The harness plays through the page it watches.
+    patchCopyRoot(path.join(dir, 'save'), ctx.backend, { asyncTurns: false })
     if (GM_SOLVER) {
         patchCopyRoot(path.join(dir, 'save'), ctx.backend, GM_SOLVER)
         rec.gmSolver = 'off'

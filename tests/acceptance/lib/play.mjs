@@ -54,7 +54,7 @@ export function readMainRequest(bodyText) {
         event: ev ? ev[1] : null,
         eventNew: ev ? (ev[1] === 'NEW' ? true : ev[1] === 'quiet' ? false : Number(ev[1]) <= 20) : null,
         eventKind: kindDie ? kindDie[1].trim() : null,
-        gmNote: gmAt >= 0, sideFocus: /focus: the side \(|the side's first order/.test(lu), gmSeed: /No arc yet: seed one/.test(lu), gmPace: pace ? pace[1] : null,
+        gmNote: gmAt >= 0, sideFocus: /focus: the side \(|the side's first order|\(decided, follow it\): [^|]*the side [“"(]/.test(lu), gmSeed: /No arc yet: seed one/.test(lu), gmPace: pace ? pace[1] : null,
         referee: ref ? ref[1] : null,
         // the GM note named the card's fate die (gameMaster.ts cardEvent): the app passed a NEW on to the narrator
         cardNew: /Card fate die: NEW/.test(lu),
