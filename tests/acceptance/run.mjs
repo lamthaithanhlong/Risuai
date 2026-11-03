@@ -52,7 +52,7 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
-import { narrationProblems, companionProblems, personaCompanions } from './lib/narration.mjs'
+import { narrationProblems, companionCaseProblems, sceneRepeats } from './lib/narration.mjs'
 import { createRequire } from 'module'
 
 const argv = process.argv.slice(2)
@@ -64,6 +64,9 @@ const today = new Date().toLocaleDateString('sv-SE')
 // ~/.risu-story-work/gate/<story>.json, which the asset manager's Push live reads before it restarts :6001.
 const GATE_N = Number(opt('--gate', 0))
 const CANDIDATE = opt('--candidate')
+// --persona-from SNAPSHOT_DIR: the copy plays with the persona of an earlier snapshot (e.g. the one that names Evelyn): the third case of the
+// companion rule. Its result goes to gate/<story>-persona.json, which Push live does not read.
+const PERSONA_FROM = opt('--persona-from')
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
@@ -133,9 +136,11 @@ function finishGate(key, rec, ctx, story) {
     const runs = rec.gate?.runs ?? []
     const rows = runs.map((run) => {
         const t = run.turns
-        const record = t[0]?.ok ? t[0].reply : ''
-        const replies = t.slice(1).filter((x) => x.ok).map((x) => x.shown || x.reply)
-        return { chatId: run.chatId, replied: t.length === 3 && t.every((x) => x.ok), companion: record ? companionProblems(record, companions) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 2 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 2 story replies' }] }
+        const creation = t.filter((x) => x.phase === 'creation' && x.ok)
+        const record = (creation.find((x) => asksDuocChua(x.reply)) ?? creation.at(-1))?.reply ?? ''
+        const story = t.filter((x) => x.phase !== 'creation')
+        const replies = story.filter((x) => x.ok).map((x) => x.shown || x.reply)
+        return { chatId: run.chatId, replied: story.length === 2 && t.every((x) => x.ok), companion: record ? companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' }) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 2 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 2 story replies' }] }
     })
     const a = rows.filter((r) => !r.companion.length).length
     const b = rows.filter((r) => !r.narration.length).length
@@ -146,15 +151,19 @@ function finishGate(key, rec, ctx, story) {
         mk('gate.narration', 'The first 3 turns are clean in every run', b === n && runs.length === n, `${b}/${runs.length} clean (need ${n}/${n})`, rows.flatMap((r, i) => r.narration.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
     ]
     const pass = checks.every((c) => c.status === 'PASS') && !rec.blocked.length
-    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}.json`)
+    const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
+    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}.json`)
     fs.mkdirSync(path.dirname(outFile), { recursive: true })
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
+    console.log(`[gate] report-only scene repeats: ${scene.length}`)
+    for (const e of scene) console.log(`[gate]   (report) ${e}`)
+    checks.push({ id: 'gate.scene_repeat', title: 'Scene sentences repeated between turns (report only)', status: 'INFO', summary: `${scene.length} repeated`, evidence: scene })
     return { title: story.title, checks, file: outFile, blocked: rec.blocked, gate: pass }
 }
 
@@ -173,6 +182,14 @@ async function playStory(key, ctx) {
         const built = fs.readdirSync(CANDIDATE).filter((f) => /_fate\.json$/.test(f))[0]
         const desc = JSON.parse(fs.readFileSync(path.join(CANDIDATE, built), 'utf8')).data.description
         const r = patchRemoteCard(path.join(dir, 'save'), story.cardId.slice(0, 8), { lore, desc }, { backupDir: path.join(dir, 'backup') })
+        if (PERSONA_FROM) {
+            const { modelSettings: ms2, patchCopyRoot: pr2 } = await import('./lib/save.mjs')
+            const text = ms2(path.join(PERSONA_FROM, '_base', 'save'), ctx.backend).persona
+            pr2(path.join(dir, 'save'), ctx.backend, { personaPrompt: text })
+            ctx.persona = text
+            rec.persona = text
+            log(`persona of ${PERSONA_FROM}: ${text.length} chars`)
+        }
         log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars`)
     }
     if (ctx.slot) {
@@ -250,7 +267,9 @@ async function playStory(key, ctx) {
             for (let g = 1; g <= GATE_N; g++) {
                 const run = { chatId: (await player.newChat()).chatId, turns: [] }
                 rec.gate.runs.push(run)
-                await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
+                let t = await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
+                // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
+                for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
                 await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
                 await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
             }

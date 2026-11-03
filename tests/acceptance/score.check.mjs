@@ -227,7 +227,7 @@ test('the judge on the Claude subscription (--judge-model claude:sonnet): claude
 
 // ---- L1 gates (2026-11-03): the owner's real Zombie chats are the fixtures; every scorer goes red on them and green on the fixed replay ----
 import fs from 'fs'
-import { parseExport, narrationProblems, companionProblems, personaCompanions, overlap } from './lib/narration.mjs'
+import { parseExport, narrationProblems, companionProblems, companionCaseProblems, personaCompanions, overlap } from './lib/narration.mjs'
 
 const FX = new URL('./fixtures/owner-chats/', import.meta.url)
 const owner = (n) => parseExport(fs.readFileSync(new URL(n, FX), 'utf8')).filter((t) => t.who === 'narrator').slice(1)
@@ -280,4 +280,29 @@ test('scoreStory: companion.match and narration.clean red on a bad record, green
 test('a persona with no companion: "Không" is right, an invented companion is red', () => {
     assert.deepEqual(companionProblems('- Đồng hành: Không', []), [])
     assert.deepEqual(companionProblems('- Đồng hành: Evelyn — Linh Hồn Dẫn Lối', []).map((p) => p.rule), ['invented'])
+})
+
+test('the three companion cases: green on the right behaviour, each red once when broken', () => {
+    const none = '- Đồng hành: Không', named = '- Đồng hành: Evelyn — Linh Hồn Dẫn Lối'
+    const here = 'Evelyn nghiêng đầu. “Ừ, tớ đây. Cậu gọi tớ à?”'
+    // persona has no companion and the player does not call her: "Không"
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none }), [])
+    assert.deepEqual(companionCaseProblems({ companions: [], record: named }).map((p) => p.rule), ['invented'])
+    // persona has none and the player calls her: she appears, named and speaking
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none, summoned: true, reply: here }), [])
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none, summoned: true, reply: 'Không có ai hiện ra giữa Kenji và cánh cửa.' }).map((p) => p.rule), ['not-named'])
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none, summoned: true, reply: 'Evelyn: không có ai đáp lại, cái tên tan vào căn phòng.' }).map((p) => p.rule), ['absent'])
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none, summoned: true, reply: 'Evelyn lơ lửng cạnh Kenji, im lặng.' }).map((p) => p.rule), ['silent'])
+    // persona names her: the record names her
+    assert.deepEqual(companionCaseProblems({ companions: ['Evelyn'], record: named }), [])
+    assert.deepEqual(companionCaseProblems({ companions: ['Evelyn'], record: none }).map((p) => p.rule).sort(), ['missing', 'none'])
+    // the 21:09 / 21:48 chats: persona-less owner chat where she DID appear on the call is now right, only the record lines and leaks stay red
+    assert.deepEqual(companionCaseProblems({ companions: [], record: none, summoned: true, reply: owner('zombie-evelyn-2109.txt')[2].text }), [])
+})
+
+test('sceneRepeats: report-only line goes red on a repeated scene sentence, green on a changed scene', async () => {
+    const { sceneRepeats } = await import('./lib/narration.mjs')
+    const a = 'Ngoài cửa căn 704, hành lang vẫn im như tờ và nắng đã lên cao.'
+    assert.equal(sceneRepeats([a, a + ' Kenji đứng dậy.']).length, 1)
+    assert.equal(sceneRepeats([a, 'Kenji bước tới cánh cửa và áp tai vào lớp sơn lạnh ngắt của nó.']).length, 0)
 })

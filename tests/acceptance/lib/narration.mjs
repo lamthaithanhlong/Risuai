@@ -37,12 +37,12 @@ export function narrationProblems(replies) {
     })
     const withEmoji = rs.map((r, i) => (r.split(/\n\s*\n/).some((p) => EMOJI_OPEN.test(p)) ? i : -1)).filter((i) => i >= 0)
     if (rs.length >= 2 && withEmoji.length > rs.length / 3) out.push({ rule: 'emoji', reply: withEmoji[0], text: `${withEmoji.length}/${rs.length} replies open a paragraph with an emoji` })
+    // repeated facts are what the owner flagged (her second answer repeating the first): quoted speech at 60%, any other sentence only
+    // when it is the same sentence (90%): a scene line such as "Ngoài cửa, hành lang vẫn im." recurs honestly between two replies
+    const speech = (r) => sentences([...r.matchAll(/“([^”]+)”/g)].map((m) => m[1]).join('\n'))
     for (let i = 1; i < rs.length; i++) {
-        const prev = sentences(rs[i - 1])
-        for (const s of sentences(rs[i])) {
-            const hit = prev.find((p) => overlap(p, s) >= 0.6)
-            if (hit) { out.push({ rule: 'repeat', reply: i, text: s.slice(0, 100) }); break }
-        }
+        const hit = speech(rs[i]).find((s) => speech(rs[i - 1]).some((p) => overlap(p, s) >= 0.6)) ?? sentences(rs[i]).find((s) => sentences(rs[i - 1]).some((p) => overlap(p, s) >= 0.9))
+        if (hit) out.push({ rule: 'repeat', reply: i, text: hit.slice(0, 100) })
     }
     return out
 }
@@ -62,4 +62,34 @@ export function companionProblems(record, companions) {
 /** The companion names a persona states: its bold "**Name — Title:**" lines, the way modelSettings' persona text writes them. */
 export function personaCompanions(persona) {
     return [...String(persona ?? '').matchAll(/\*\*([^*\n—-]{2,40}?)\s*[—-]\s*[^*\n]{2,60}:\*\*/g)].map((m) => m[1].trim()).filter((n) => /^[A-ZÀ-Ỹ]/.test(n))
+}
+
+const ABSENT = /không có ai (hiện|đáp|trả lời|lên tiếng)|chẳng (có )?ai (đáp|trả lời|hiện)|không ai (đáp|trả lời)|tên (cô|nó|ấy) (tan|chìm|tắt|rơi) (vào|trong)|không (có )?(hình bóng|tiếng) (nào )?(đáp|trả lời)/i
+
+/**
+ * The three cases of the companion rule (owner 2026-11-03, "gõ tên là hiện"):
+ *   persona names her                         -> the record names her
+ *   persona names none, the player did not call -> the record says "Không"
+ *   persona names none, the player called her   -> she appears in the reply to the call: named, speaking, not "no one answers"
+ * `record` is the creation record, `reply` the narrator's reply to the call (only when summoned).
+ */
+export function companionCaseProblems({ companions, record, summoned = false, reply = '', name = 'Evelyn' }) {
+    const out = companionProblems(record, companions)
+    if (summoned) {
+        const r = String(reply ?? '')
+        if (!r.toLowerCase().includes(name.toLowerCase())) out.push({ rule: 'not-named', text: `${name} is not in the reply to her call` })
+        else if (!/[“"]/.test(r)) out.push(ABSENT.test(r) ? { rule: 'absent', text: (ABSENT.exec(r) ?? [''])[0] } : { rule: 'silent', text: `${name} appears but does not speak` })
+    }
+    return out
+}
+
+/** REPORT-ONLY (L1, 2026-11-03): a non-speech sentence (>= 6 tokens) of a reply that the previous reply already had at 60% or more. */
+export function sceneRepeats(replies) {
+    const rs = replies.map((r) => String(r ?? ''))
+    const out = []
+    for (let i = 1; i < rs.length; i++) {
+        const prev = sentences(rs[i - 1].replace(/“[^”]*”/g, ' '))
+        for (const s of sentences(rs[i].replace(/“[^”]*”/g, ' '))) if (prev.some((p) => overlap(p, s) >= 0.6)) out.push({ reply: i, text: s.slice(0, 100) })
+    }
+    return out
 }
