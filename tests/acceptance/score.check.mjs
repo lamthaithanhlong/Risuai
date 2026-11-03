@@ -224,3 +224,60 @@ test('the judge on the Claude subscription (--judge-model claude:sonnet): claude
     assert.ok(peak <= 4, `peak ${peak} > 4`)
     assert.ok(peak >= 2, `peak ${peak}: they did not run in parallel`)
 })
+
+// ---- L1 gates (2026-11-03): the owner's real Zombie chats are the fixtures; every scorer goes red on them and green on the fixed replay ----
+import fs from 'fs'
+import { parseExport, narrationProblems, companionProblems, personaCompanions, overlap } from './lib/narration.mjs'
+
+const FX = new URL('./fixtures/owner-chats/', import.meta.url)
+const owner = (n) => parseExport(fs.readFileSync(new URL(n, FX), 'utf8')).filter((t) => t.who === 'narrator').slice(1)
+const good = JSON.parse(fs.readFileSync(new URL('zombie-evelyn-after-fix.json', FX), 'utf8'))
+const marks = JSON.parse(fs.readFileSync(new URL('marks.json', FX), 'utf8'))
+
+for (const n of ['zombie-evelyn-2109.txt', 'zombie-evelyn-2148.txt']) {
+    test(`${n}: the owner's bad chat goes red`, () => {
+        const nar = owner(n)
+        const rules = new Set(narrationProblems(nar.slice(1).map((t) => t.text)).map((p) => p.rule))
+        assert.ok(rules.has('emoji') && rules.has('leak'), [...rules].join())
+        assert.deepEqual(companionProblems(nar[0].text, marks[n].companions).map((p) => p.rule).sort(), ['missing', 'none'])
+        for (const bad of marks[n].bad) assert.ok(fs.readFileSync(new URL(n, FX), 'utf8').includes(bad), `mark not in the export: ${bad}`)
+    })
+}
+test('the 21:09 chat also trips the setup rule', () => {
+    assert.ok(narrationProblems(owner('zombie-evelyn-2109.txt').slice(1).map((t) => t.text)).some((p) => p.rule === 'setup'))
+})
+test('the fixed replay is green', () => {
+    assert.deepEqual(narrationProblems(good.replies), [])
+    assert.deepEqual(companionProblems(good.record, ['Evelyn']), [])
+})
+test('each rule is breakable: the green replay with one thing broken goes red on that rule only', () => {
+    const r = [...good.replies]
+    assert.deepEqual(narrationProblems([r[0], r[1] + '\n\n[💡Kế hoạch| Không ]']).map((p) => p.rule), ['leak'])
+    assert.deepEqual(narrationProblems([r[0], r[1] + '\n\nCô là người bạn thân đã mất của anh, chỉ mình anh mới thấy.']).map((p) => p.rule), ['setup'])
+    assert.deepEqual(narrationProblems([`😟 ${r[0]}`, `😢 ${r[1]}`, r[2]]).map((p) => p.rule), ['emoji'])
+    assert.deepEqual(narrationProblems([r[0], r[0]]).map((p) => p.rule), ['repeat'])
+    assert.deepEqual(companionProblems(good.record.replace(/Đồng hành: .*/, '- Đồng hành: Không'), ['Evelyn']).map((p) => p.rule).sort(), ['missing', 'none'])
+    assert.deepEqual(companionProblems(good.record.replace(/^.*Đồng hành.*$/m, ''), ['Evelyn']).map((p) => p.rule).includes('no-line'), true)
+})
+test('overlap and persona companions', () => {
+    assert.ok(overlap('Tớ thấy cậu sốt suốt đêm rồi', 'tớ thấy cậu sốt suốt đêm') >= 0.8)
+    assert.ok(overlap('Gió thổi qua con hẻm vắng', 'Một chiếc xe dừng trước cổng nhà') < 0.3)
+    assert.deepEqual(personaCompanions('**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân\n**Quy tắc:** x'), ['Evelyn'])
+})
+test('scoreStory: companion.match and narration.clean red on a bad record, green on a good one', () => {
+    const rec = goodRecord()
+    rec.persona = '**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân nhất\n1. **Thôi miên:** a\n2. **Trinh thám:** b\n3. **Boxing:** c'
+    const rr = rec.play.turns[0].reply
+    rec.play.turns[0].reply = rr + '\n- Đồng hành: Không'
+    const bad = scoreStory(rec)
+    assert.equal(byId(bad, 'companion.match').status, 'FAIL')
+    rec.play.turns[0].reply = rr + '\n- Đồng hành: Evelyn — Linh Hồn Dẫn Lối'
+    assert.equal(byId(scoreStory(rec), 'companion.match').status, 'PASS')
+    rec.play.turns[3].shown = '😢 ' + VI + '\n\n[💡Kế hoạch| Không ]'
+    assert.equal(byId(scoreStory(rec), 'narration.clean').status, 'FAIL')
+})
+
+test('a persona with no companion: "Không" is right, an invented companion is red', () => {
+    assert.deepEqual(companionProblems('- Đồng hành: Không', []), [])
+    assert.deepEqual(companionProblems('- Đồng hành: Evelyn — Linh Hồn Dẫn Lối', []).map((p) => p.rule), ['invented'])
+})

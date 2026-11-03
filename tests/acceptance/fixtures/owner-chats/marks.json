@@ -1,0 +1,22 @@
+{
+ "zombie-evelyn-2109.txt": {
+  "companions": ["Evelyn"],
+  "bad": [
+   "- Đồng hành: Không",
+   "Cô là người bạn thân đã mất của anh, chỉ mình anh mới thấy và nghe được",
+   "😢 “Cậu tỉnh rồi…”",
+   "[[LOOK Evelyn",
+   "[💡Kế hoạch| Không ]"
+  ]
+ },
+ "zombie-evelyn-2148.txt": {
+  "companions": ["Evelyn"],
+  "bad": [
+   "- Đồng hành: Không",
+   "😢 “Cậu tỉnh rồi…”",
+   "[[LOOK Evelyn",
+   "😟 “Từ từ thôi, Kenji. Cậu vừa sốt cả đêm mà.” Giọng cô nhỏ đi. “Tớ ở đây, nhưng không đỡ cậu được đâu.”"
+  ],
+  "note": "last line: owner 2026-11-03 'bug nè': she should choke up (the line breaks off), not state that she cannot help"
+ }
+}

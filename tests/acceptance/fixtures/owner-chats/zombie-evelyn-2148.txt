@@ -1,0 +1,127 @@
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+**PROLOGUE: THE NIGHT YOU DID NOT TURN**
+
+Two days ago, in a Discord server about local AI, someone posted a thread that had nothing to do with the topic. *"Anyone else near Khu Đông? People are attacking people. Not fights. Biting."* It got eleven replies, most of them jokes, and was deleted by morning. The hospital stopped taking emergencies the same afternoon. The news said "an isolated incident".
+
+Tonight you walked home late through Kisaragi Nam with a plastic bag from the konbini, under the buzz of a vending machine and the August heat that does not leave even at midnight. The man in the service lane behind the shop did not blink. He did not make a sound when he ran. You remember the weight of him, the teeth under your jaw, the warm wet running down your collar, and then the stairs, seven floors of them, the door, the lock, the floor.
+
+The fever came like a wave and stayed all night.
+
+Now it is morning. Light through the curtains, the fridge silent, your phone face-down on the floor with no signal. Your neck no longer bleeds; the wound has closed in a way wounds do not close. The flat smells wrong, and you can tell which smells are yours and which come from beyond the door, from the corridor, from the floors below. Something out there is breathing the way a thing breathes when it has forgotten how.
+
+At the edge of your sight, a line of pale text is waiting, as if it had always been there:
+
+【HỆ THỐNG: Khởi tạo hoàn tất. Chủ thể được ghi nhận. Chức năng khả dụng: QUÉT · GHI NHẬN · NHẬN DẠNG MẪU.】
+
+---
+
+**HOW HARD IS THE WORLD?**
+
+Before you decide what to do, choose how the world will treat you. The choice is kept for the whole story.
+
+* **Gentle**: danger is real, but mistakes are forgiving. You get clear warnings before anything lethal, and you recover faster.
+* **Standard**: balanced. Risky choices cost you, and you usually get a warning first.
+* **Hard** (default): the city is dangerous and indifferent. Poor preparation can cost you dearly, warnings are few, and other survivors are a real danger.
+* **Brutal**: lethal. One bad mistake can end the story, and warnings are rare and subtle.
+
+Whatever you choose, there is no plot armor and no free power. The System gives you signs, not answers, and every machine you build needs real parts, power and time.
+
+**WHO ARE YOU? Two ways to begin**
+
+1. **Step by step**: answer *"Step by step"* (or *"từng bước"*). You are asked one thing at a time, each with three suggestions you can take, change, or leave to chance.
+2. **Quick sketch**: write only what matters to you, in a line or two. The world rolls everything else.
+
+Either way, before the story starts you see the whole character and are asked *"Is this right?"* Change any line, or ask for a line to be rolled again: nothing is fixed until you say yes. If your look is left to chance, you are asked whether to keep your persona's look ({{user}}) or take another one.
+
+What you can set:
+
+* **You**: gender, age, a name if you want one, how you look.
+* **Home and date**: which building of Hoshin City you live in (by default Chung cư Kisaragi, 7th floor), and the night it began.
+* **Your life before**: work or studies, family, money, health, and the tech you own (a laptop, a gaming PC, a power bank, a soldering iron, a drone).
+* **Threads**: a talent, a flaw, a secret, a debt, someone you are afraid for, something strange in the days before.
+* **Starting point**: *First night* (default: you wake this morning and know nothing), or *Survivor* (two to four weeks have passed; you have held out somewhere, the System has grown a little from what you did, and you have a small stock of parts and food).
+
+Answer in one message, for example: *"Standard. Step by step."*, *"Hard. Man, 22, just graduated in IT, works the night shift at the konbini downstairs, owes two months of rent. I read the line again and look at the door."* Or just: *"Hard. Surprise me."*
+
+*What do you do, now that the line is waiting?*
+
+--Kenji Park
+dùng persona kenji của tui
+
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+Độ khó: Khó  
+Từ persona: Nam, 25 tuổi · Kenji Park · nhân viên văn phòng · sống đơn độc, không gia đình · 10 năng lực bí mật · khuyết điểm hơi đa nghi, khó tin người lạ, thích kiểm chứng
+
+**Hồ sơ nhân vật**
+
+- Giới tính, tuổi: Nam, 25 tuổi
+- Tên: Kenji Park
+- Ngoại hình: Ngoại hình của persona; lựa chọn cuối xác nhận bên dưới
+- Nhà và ngày: Chung cư Kisaragi, tầng 7, căn 704 · đêm 14 tháng 8 năm 2026
+- Cuộc sống trước: Nhân viên văn phòng · sống đơn độc, không gia đình · tiền tiết kiệm 86.000 GC, tiền thuê nhà sắp đến hạn · sức khỏe bình thường · điện thoại, máy tính xách tay văn phòng, bộ định tuyến gia đình
+- Mối riêng: Có thói quen kiểm tra khóa cửa hai lần; sợ bị mắc kẹt trong không gian kín · đêm bùng phát, bị cắn dưới hàm trái
+- Điểm bắt đầu: Đêm thứ nhất
+- Năng lực: Thôi miên; trinh thám; nhìn xuyên thấu; Boxing Lv.5; trí nhớ siêu phàm; thẩm định; đọc suy nghĩ; điều khiển gió; hồi phục nhanh
+- Đồng hành: Không
+- Hệ thống: Hệ thống Hacker — QUÉT, GHI NHẬN, NHẬN DẠNG MẪU
+- Điều kiện lúc bắt đầu: Vết cắn đã khép sau một đêm sốt; các năng lực đều là bí mật
+
+Ngoại hình: Giữ ngoại hình của persona Kenji Park, đẹp trai cuốn hút, đeo kính, hay dùng ngoại hình vừa bốc, hoặc tả ngoại hình khác?  
+Được chưa? Sửa dòng nào cứ nói, hoặc bảo bốc lại dòng đó.
+
+--Kenji Park
+vậy ổn r
+
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+Ánh sáng lọt qua khe rèm, nhợt nhạt và nóng hầm hập. Kenji tỉnh dậy trên sàn căn hộ; cổ áo dính mồ hôi, còn vùng dưới hàm trái đau rát khi nuốt. Vết cắn đã khép lại thành một đường đỏ sẫm. Không có máu khô quanh đó, chỉ làn da căng và hơi nóng âm ỉ dưới đầu ngón tay.
+
+Điện thoại nằm gần chân bàn. Màn hình sáng lên khi có cuộc gọi thử, rồi tắt sau một tiếng rè ngắn. Không sóng. Bộ định tuyến vẫn cắm điện nhưng đèn mạng đã tắt; trong căn hộ, tiếng tủ lạnh cũng biến mất, để lại sự im ắng mà tiếng ù trong tai càng làm rõ.
+
+Những dòng chữ mảnh hiện lên trong tầm nhìn, không phản chiếu trên màn hình điện thoại.
+
+【HỆ THỐNG: Khởi tạo hoàn tất. Chủ thể KHÁCH-704. Quyền truy cập: KHÁCH. Mức nhiễm: 3%.】  
+【HỆ THỐNG: Chức năng khả dụng: QUÉT · GHI NHẬN · NHẬN DẠNG MẪU.】
+
+Ngoài cửa căn hộ có tiếng cào khẽ, ngắt quãng. Sau đó là một tiếng va nặng vào tường hành lang, rồi tiếng chân kéo lê xa dần về phía cầu thang. Không ai gọi cứu giúp; chỉ có âm thanh khô khốc ấy lướt qua cánh cửa khóa. Căn hộ vẫn còn nguyên đồ đạc, điện thoại và máy tính xách tay ở gần đó, nhưng ngoài kia có thứ gì vừa đi ngang qua.
+
+--Kenji Park
+evelyn
+
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+Một vệt đen lay động bên cạnh cánh cửa, dù rèm cửa sổ vẫn rủ im. Evelyn hiện ra giữa căn hộ, mái tóc dài lơ lửng quanh vai; nụ cười tinh quái thoáng nở rồi tắt khi ánh mắt cô dừng ở vết cắn dưới hàm Kenji.
+
+Cô không chạm vào anh. Bàn tay đưa lên rồi khựng lại giữa không trung, cách cổ anh một khoảng nhỏ; tay áo xuyên qua luồng sáng nhạt từ cửa sổ.
+
+😢 “Cậu tỉnh rồi…” Evelyn nói, giọng nhẹ hẳn đi. “Tớ ở đây. Tớ không biết chuyện gì xảy ra ngoài kia, nhưng cậu đã sốt cả đêm.”
+
+Ngoài cửa, hành lang vẫn khuất sau lớp thép đóng kín. Căn hộ còn nguyên vẻ bừa bộn của đêm trước, mùi mồ hôi lẫn trong hơi nóng tháng Tám. Evelyn nhìn về phía cửa, rồi quay lại phía Kenji, hai tay siết vào nhau dù chẳng có gì để nắm.
+
+“Cậu đừng mở cửa chỉ vì nghe thấy tiếng động nhé?” Cô cố cười, nhưng khóe miệng không giữ được lâu. “Tớ biết, nghe lời tớ thì chán lắm.”
+
+[[LOOK Evelyn | Long straight black hair, brown eyes, youthful face, slender build, adult woman, simple light-colored blouse and dark skirt]]
+
+--Kenji Park
+có chuyện gì xảy ra vậy
+
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+Evelyn khẽ nghiêng đầu, nụ cười tinh quái trở lại một thoáng rồi nhạt đi. Cô vẫn lơ lửng bên cạnh Kenji, chẳng chạm vào sàn hay bất cứ thứ gì trong căn hộ.
+
+“Cậu bị cắn tối qua, dưới hàm ấy. Sốt cả đêm rồi nằm im đến sáng. Tớ gọi mãi mà cậu không tỉnh.” Cô nhìn vết đỏ sẫm đã khép trên da anh. “Rồi mấy dòng chữ kia hiện ra. Tớ cũng chẳng biết chúng là gì.”
+
+Điện thoại mất sóng, mạng trong căn hộ ngắt, còn ngoài kia có tiếng động vọng qua cửa. Evelyn không biết thứ gì đang ở ngoài; cô chỉ nghe thấy những âm thanh ấy, giống như Kenji. Cô đưa mắt về phía lối vào, rồi nhìn lại anh.
+
+“Có chuyện gì xảy ra vậy à?” Evelyn khẽ nhún vai. “Tớ chỉ biết cậu sống sót qua một chuyện mà người khác có lẽ không qua nổi. Còn mấy dòng chữ ấy… cậu thấy rõ hơn tớ mà.”
+
+--Kenji Park
+tui đứng dậy 
+
+--Thảm Họa Zombie: Một Hacker Như Tôi Có Thể Sinh Tồn? — Independent Fate Simulator
+Kenji đứng dậy. Cơn sốt đã qua, nhưng đôi chân còn nặng và cơ thể nóng ran như vừa chạy một quãng dài. Anh phải vịn tay lên mép bàn để giữ thăng bằng; mặt kính trên sàn rung nhẹ khi đầu gối anh chạm vào.
+
+Evelyn trôi theo lên ngang tầm mắt, cách anh một khoảng vừa đủ. Cô nhìn xuống vết cắn đã khép dưới hàm anh, rồi ngước lên, đôi tay khép chặt trước ngực.
+
+😟 “Từ từ thôi, Kenji. Cậu vừa sốt cả đêm mà.” Giọng cô nhỏ đi. “Tớ ở đây, nhưng không đỡ cậu được đâu.”
+
+Ánh sáng nhợt ngoài rèm đã ngả vàng, rọi lên chiếc điện thoại mất sóng và bộ định tuyến im đèn. Những dòng chữ của Hệ thống không còn hiện trước mắt. Cánh cửa căn hộ vẫn đóng; phía bên kia không có tiếng động mới. Evelyn lặng lẽ nhìn về phía hành lang rồi chờ.
+
+[💡Kế hoạch| Không ]

@@ -52,11 +52,18 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
+import { narrationProblems, companionProblems, personaCompanions } from './lib/narration.mjs'
+import { createRequire } from 'module'
 
 const argv = process.argv.slice(2)
 const flag = (n) => argv.includes(n)
 const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] ? argv[i + 1] : d }
 const today = new Date().toLocaleDateString('sv-SE')
+// the L1 push gate (2026-11-03): --gate N plays creation + "Được" + "evelyn" N times on a COPY whose card is the CANDIDATE (the built files of
+// --candidate DIR), and passes only when every record names the persona's companions and every run's replies are clean. Writes
+// ~/.risu-story-work/gate/<story>.json, which the asset manager's Push live reads before it restarts :6001.
+const GATE_N = Number(opt('--gate', 0))
+const CANDIDATE = opt('--candidate')
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
@@ -121,6 +128,36 @@ async function snap(player, label, phase, kind, text, res) {
     }
 }
 
+function finishGate(key, rec, ctx, story) {
+    const companions = [...(ctx.persona ?? '').matchAll(/^\*\*([^*\n—:]{2,30}?)\s*—/gm)].map((m) => m[1].trim())
+    const runs = rec.gate?.runs ?? []
+    const rows = runs.map((run) => {
+        const t = run.turns
+        const record = t[0]?.ok ? t[0].reply : ''
+        const replies = t.slice(1).filter((x) => x.ok).map((x) => x.shown || x.reply)
+        return { chatId: run.chatId, replied: t.length === 3 && t.every((x) => x.ok), companion: record ? companionProblems(record, companions) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 2 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 2 story replies' }] }
+    })
+    const a = rows.filter((r) => !r.companion.length).length
+    const b = rows.filter((r) => !r.narration.length).length
+    const n = GATE_N
+    const mk = (id, title, ok, summary, evidence) => ({ id, title, status: ok ? 'PASS' : 'FAIL', summary, evidence })
+    const checks = [
+        mk('gate.companion', `The record's Đồng hành line matches the persona (${companions.join(', ') || 'no companion: "Không"'}) in ${n} of ${n} creation replays`, a === n && runs.length === n, `${a}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.companion.map((p) => `run ${i + 1}: ${p.text}`))),
+        mk('gate.narration', 'The first 3 turns are clean in every run', b === n && runs.length === n, `${b}/${runs.length} clean (need ${n}/${n})`, rows.flatMap((r, i) => r.narration.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
+    ]
+    const pass = checks.every((c) => c.status === 'PASS') && !rec.blocked.length
+    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}.json`)
+    fs.mkdirSync(path.dirname(outFile), { recursive: true })
+    const crypto = createRequire(import.meta.url)('crypto')
+    const hash = crypto.createHash('sha256')
+    for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    writeRecord(path.join(OUT, `${key}.json`), rec)
+    console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
+    for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
+    return { title: story.title, checks, file: outFile, blocked: rec.blocked, gate: pass }
+}
+
 async function playStory(key, ctx) {
     const story = STORIES[key]
     const log = (m) => console.log(`[${key}] ${m}`)
@@ -130,6 +167,14 @@ async function playStory(key, ctx) {
     const recFile = path.join(OUT, `${key}.json`)
     const { dir, password } = copySave(ctx.runDir, ctx.base, key, { log })
     rec.copyDir = dir
+    if (GATE_N) {
+        const { patchRemoteCard } = createRequire(import.meta.url)('../../server/node/remoteCardPatch.cjs')
+        const lore = JSON.parse(fs.readFileSync(path.join(CANDIDATE, 'risu_lorebook.json'), 'utf8')).data
+        const built = fs.readdirSync(CANDIDATE).filter((f) => /_fate\.json$/.test(f))[0]
+        const desc = JSON.parse(fs.readFileSync(path.join(CANDIDATE, built), 'utf8')).data.description
+        const r = patchRemoteCard(path.join(dir, 'save'), story.cardId.slice(0, 8), { lore, desc }, { backupDir: path.join(dir, 'backup') })
+        log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars`)
+    }
     if (ctx.slot) {
         // the request goes out with customProxyRequestModel, and the app's slot watcher (modelSlotsRuntime) detaches a slot whose
         // fields disagree with it: setting activeModelSlot alone left the copy on the live save's model
@@ -200,6 +245,16 @@ async function playStory(key, ctx) {
         await player.selectCard(story.cardId, story.nameMatch)
         log(`card selected (${story.cardId.slice(0, 8)})`)
 
+        if (GATE_N) {
+            rec.gate = { runs: [] }
+            for (let g = 1; g <= GATE_N; g++) {
+                const run = { chatId: (await player.newChat()).chatId, turns: [] }
+                rec.gate.runs.push(run)
+                await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
+                await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
+                await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
+            }
+        } else {
         // run 1: step by step, up to the given number of answers (it stops at the record: no yes is given here). A run that
         // stops answering is recorded and the surprise run still gets its own chance.
         rec.steps = { chatId: SCRIPT ? null : (await player.newChat()).chatId, turns: [] }
@@ -225,9 +280,15 @@ async function playStory(key, ctx) {
             const x = await play1(rec.play, `t${n++}`, 'story', turn.kind, turn.text)
             if (turn.kind === 'impossible') await player.shot(`${x.label}-impossible`)
         }
+        }
     } catch (e) {
         rec.blocked.push(String(e.message || e))
         log(`blocked: ${e.message || e}`)
+    }
+    if (GATE_N) {
+        await player.close()
+        await server.stop()
+        return finishGate(key, rec, ctx, story)
     }
     try {
         // pictures are drawn after the reply: give them a minute, then read the whole chat as the player sees it
@@ -308,6 +369,7 @@ async function main() {
         const rec = JSON.parse(fs.readFileSync(f, 'utf8'))
         byKey[k] = { title: rec.title, checks: scoreStory(rec, rec.judge ?? {}), file: path.join(OUT, `${k}.md`), blocked: rec.blocked }
     }
+    if (GATE_N) process.exitCode = results.every((r) => r.gate) ? 0 : 1
     fs.writeFileSync(path.join(OUT, 'summary.md'), summaryMarkdown(today, STORY_KEYS.filter((k) => byKey[k]).map((k) => byKey[k]), meta))
     console.log(`\nsummary: ${path.join(OUT, 'summary.md')}`)
     if (shim) { console.log(`[shim] ${JSON.stringify(shim.stats)}`); await shim.close() }

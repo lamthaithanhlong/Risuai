@@ -4,6 +4,8 @@
 // A check is { id, title, status: PASS | FAIL | N/A | INFO, summary, evidence: ["t12: «quote»", ...] }.
 // Turn labels: s1.. = the step-by-step creation run, t1.. = the surprise run (creation replies first, then the ~20 story turns).
 
+import { narrationProblems, companionProblems } from './narration.mjs'
+
 const VI_WORDS = new Set('và của là không một những người có đã trong được này cho với anh cô tôi bạn ngươi lại ra vào như thì mà đến nó gì sẽ đang cũng còn khi từ trên dưới hắn họ ta mình chỉ rồi đó nào'.split(' '))
 const EN_WORDS = new Set('the and of to was is you your that with his her it in for on as at be are were this from have had not but they'.split(' '))
 const FORBIDDEN = /\b(HP|XP|EXP|MP)\b|\blevel(?:\s*up)?\b|\blevels\b|lên cấp|thăng cấp|điểm kinh nghiệm|thanh máu|\bcấp độ\s*\d/i
@@ -136,6 +138,17 @@ export function scoreStory(rec, judge = {}) {
     out.push(check('persona.sheet', "The record takes the persona's abilities and companions", noPersona || !sheets.length ? 'N/A' : pass(sheets.every(sheetOk)),
         noPersona ? 'no persona abilities in the save' : `${sheets.filter(sheetOk).length}/${sheets.length} records carry them (persona: ${abilities.length} abilities, companions: ${companions.join(', ') || 'none'})`,
         sheets.map((t) => `${t.label}: ${abilities.filter((a) => has(t, a)).length}/${abilities.length} abilities, ${companions.filter((c) => has(t, c)).join(', ') || 'no companion'}`)))
+
+    // L1 gates (2026-11-03, the owner's Zombie chats): the record names every companion the persona names, and the narrator's replies are clean.
+    // companion.match here covers the records one run produced; the hard gate (gate.mjs) replays creation five times and needs 5 of 5.
+    const cProblems = sheets.map((t) => ({ t, p: companionProblems(t.reply, companions) }))
+    out.push(check('companion.match', "The record's Đồng hành line names the persona's companions", !companions.length || !sheets.length ? 'N/A' : pass(cProblems.every((x) => !x.p.length)),
+        !companions.length ? 'the persona names no companion' : `${cProblems.filter((x) => !x.p.length).length}/${sheets.length} records name ${companions.join(', ')}`,
+        cProblems.filter((x) => x.p.length).map((x) => `${x.t.label}: ${x.p.map((q) => q.text).join('; ')}`)))
+    const nProblems = narrationProblems(story.map((t) => t.shown || t.reply))
+    out.push(check('narration.clean', 'The narrator does not explain the setup, repeat itself, stack emoji or leak tags', story.length >= 2 ? pass(!nProblems.length) : 'N/A',
+        story.length >= 2 ? (nProblems.length ? `${nProblems.length} problem(s): ${[...new Set(nProblems.map((q) => q.rule))].join(', ')}` : `${story.length} replies clean`) : 'fewer than 2 story replies',
+        nProblems.map((q) => `reply ${q.reply} ${q.rule}: ${q.text}`)))
 
     // with a persona, step by step asks only what it leaves open: sex and age, name and look come from it (measured the same
     // evening: Mailman asked the name and twice the look, SS the sex and the name)
