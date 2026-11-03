@@ -24,6 +24,9 @@
     import HotkeySettings from "./Pages/HotkeySettings.svelte";
     import LearningSettings from "./Pages/LearningSettings.svelte";
     import PluginDefinedIcon from "../Others/PluginDefinedIcon.svelte";
+    import AssetManagerSettings from "./Pages/AssetManagerSettings.svelte";
+    import { LibraryBigIcon } from "@lucide/svelte";
+    import { isNodeServer } from "src/ts/platform";
 
     let openLoreList = $state(false)
     if(window.innerWidth >= 900 && $SettingsMenuIndex === -1 && !$MobileGUI){
@@ -162,6 +165,17 @@
                         <BoxIcon />
                         <span>{language.supporterThanks}</span>
                     </button>
+                    {#if isNodeServer}
+                        <button class="flex gap-2 items-center hover:text-textcolor"
+                            class:text-textcolor={$SettingsMenuIndex === 40}
+                            class:text-textcolor2={$SettingsMenuIndex !== 40}
+                            onclick={() => {
+                            $SettingsMenuIndex = 40
+                        }}>
+                            <LibraryBigIcon />
+                            <span>Asset Manager</span>
+                        </button>
+                    {/if}
                     {#each additionalSettingsMenu as menu}
                         <button class="flex gap-2 items-center hover:text-textcolor text-textcolor2"
                             onclick={() => {
@@ -243,6 +257,8 @@
                         <HotkeySettings/>
                     {:else if $SettingsMenuIndex === 77}
                         <ThanksPage/>
+                    {:else if $SettingsMenuIndex === 40 && isNodeServer}
+                        <AssetManagerSettings/>
                     {/if}
             </div>
             {/key}

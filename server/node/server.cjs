@@ -1484,6 +1484,9 @@ const { createStt, mountStt } = require('./stt.cjs');
 const stt = createStt({ args: [process.env.RISU_STT_MODEL || 'turbo', process.env.RISU_STT_FAST_MODEL || 'small', process.env.RISU_STT_LONG_AFTER || '60'] });
 mountStt(app, { express, stt, auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter });
 
+// the card asset manager (Settings > Asset Manager): its page and, behind risu-auth, its API on 127.0.0.1:6110
+require('./assetsProxy.cjs').mountAssets(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
+
 app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
     if (!imageJobs) { res.status(503).send({ error: 'image jobs unavailable' }); return; }
