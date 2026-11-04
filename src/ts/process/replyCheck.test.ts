@@ -53,7 +53,7 @@ describe('regenerate once', () => {
         expect(n).toContain('unchanged System line "【HỆ THỐNG')
         expect(regenerationNote([])).toBe('')
     })
-    it('redoes once, uses the second, never loops, keeps first when redo fails', async () => {
+    it('redoes a repeat at most twice (see replyRegen.test.ts), never loops, keeps first when redo fails', async () => {
         const dirty = 'Tiếng cào ngoài hành lang ngừng hẳn.'
         let calls = 0
         const warns: string[] = []
@@ -61,7 +61,7 @@ describe('regenerate once', () => {
         expect(calls).toBe(1); expect(warns).toEqual([])
         calls = 0
         expect(await settleReply(dirty, [prev1], async () => { calls++; return dirty }, (m) => warns.push(m))).toBe(dirty)
-        expect(calls).toBe(1); expect(warns[0]).toContain('still has')
+        expect(calls).toBe(2); expect(warns[0]).toContain('still has')
         expect(await settleReply(dirty, [prev1], async () => null)).toBe(dirty)
         expect(await settleReply(clean, [prev1], async () => { throw new Error('no') })).toBe(clean)
     })
@@ -94,7 +94,7 @@ describe('settleReply records what fired', () => {
         const rec: any[] = []
         const out = await settleReply('Tiếng cào ngoài hành lang ngừng hẳn rồi.', prev, async () => 'Kenji áp tai vào cửa lạnh ngắt.', () => {}, (r) => rec.push(r))
         expect(out).toBe('Kenji áp tai vào cửa lạnh ngắt.')
-        expect(rec).toEqual([{ fired: ['repeat'], left: [], redoFailed: false }])
+        expect(rec).toEqual([{ fired: ['repeat'], left: [], redoFailed: false, redos: 1 }])
     })
     it('records nothing for a clean reply and a failed redo as such', async () => {
         const { settleReply } = await import('./replyRegen')
@@ -190,7 +190,7 @@ describe('language drift (a real gate: the narrator answered a story turn in Fre
         expect(out).toBe(vi)
         expect(notes).toHaveLength(1)
         expect(notes[0]).toContain('trả lời bằng tiếng Việt')
-        expect(recs).toEqual([{ fired: ['lang', 'tag'], left: [], redoFailed: false }])   // the real French reply also had a malformed [[ACT…]] (a fifth field)
+        expect(recs).toEqual([{ fired: ['lang', 'tag'], left: [], redoFailed: false, redos: 1 }])   // the real French reply also had a malformed [[ACT…]] (a fifth field)
     })
     it('the gate scorer flags it through the same function (narration.clean)', () => {
         const vi = 'Kenji nắm chặt cán dao và đếm nhịp thở của mình. Ngoài hành lang, tiếng mưa che khuất mọi âm thanh nhỏ.'

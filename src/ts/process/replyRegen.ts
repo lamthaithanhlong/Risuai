@@ -21,19 +21,44 @@ export function regenerationNote(hits: ReplyHit[]): string {
     return `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. Rewrite the reply without them.]`
 }
 
+/** Rules that mean "said it again": only these earn a second redo (setup/system/lang/tag keep exactly one). */
+export const REPEAT_RULES: ReplyHit['rule'][] = ['repeat', 'dialogue', 'scene']
+export const MAX_REDOS = 2
+
+/** The stronger hidden line for the second redo: names the exact lines still repeated and asks for a different direction. */
+export function strongRegenerationNote(hits: ReplyHit[]): string {
+    if (!hits.length) return ''
+    const lines = hits.map((h) => `"${h.text.slice(0, 160)}"`).join(' / ')
+    return `\n\n[Rewrite (hidden, never named): the last two drafts still repeated what was already said. đừng lặp câu đã nói: ${lines}; viết hướng khác hẳn (đổi lời thoại, đổi hành động, không nói lại ý đó dưới dạng khác).]`
+}
+
 /**
- * Check `first`; when it has hits, ask `redo` once with the note and use its draft. A second draft that still has hits is kept and
- * reported through `warn`. `redo` returning null (request failed) keeps the first draft.
+ * Check `first`; when it has hits, ask `redo` with the note and use its draft. When what is left is only repeat-type hits, ask once more
+ * with the stronger note (at most MAX_REDOS redos in all, never a loop); of the redo drafts the one with fewer hits is kept (a tie keeps the
+ * later). `redo` returning null (request failed) keeps the best draft so far, or the first one when the first redo failed.
+ * `redos` and `afterFirst` are additions to the record; `fired`/`left`/`redoFailed` keep their meaning (`left` = after the last redo kept).
  */
-export type RegenRecord = { fired: string[]; left: string[]; redoFailed: boolean }
+export type RegenRecord = { fired: string[]; left: string[]; redoFailed: boolean; redos?: number; afterFirst?: string[] }
 
 export async function settleReply(first: string, previous: string[], redo: (note: string) => Promise<string | null>, warn: (m: string) => void = () => {}, record: (r: RegenRecord) => void = () => {}): Promise<string> {
     const hits = replyHits(first, previous)
     if (!shouldRegenerate(hits, 0)) return first
+    const fired = hits.map((h) => h.rule)
     const second = await redo(regenerationNote(hits))
-    if (second === null || !second.trim()) { warn('reply check: redo failed, first draft kept'); record({ fired: hits.map((h) => h.rule), left: hits.map((h) => h.rule), redoFailed: true }); return first }
+    if (second === null || !second.trim()) { warn('reply check: redo failed, first draft kept'); record({ fired, left: fired, redoFailed: true, redos: 1 }); return first }
     const left = replyHits(second, previous)
-    record({ fired: hits.map((h) => h.rule), left: left.map((h) => h.rule), redoFailed: false })
+    if (left.length && left.every((h) => REPEAT_RULES.includes(h.rule))) {
+        const third = await redo(strongRegenerationNote(left))
+        const usable = third !== null && third.trim() !== ''
+        const left3 = usable ? replyHits(third as string, previous) : left
+        const keepThird = usable && left3.length <= left.length
+        const kept = keepThird ? (third as string) : second
+        const keptLeft = keepThird ? left3 : left
+        record({ fired, left: keptLeft.map((h) => h.rule), redoFailed: !usable, redos: 2, afterFirst: left.map((h) => h.rule) })
+        if (keptLeft.length) warn(`reply check: after 2 redos still has ${keptLeft.map((h) => `${h.rule} "${h.text.slice(0, 60)}"`).join(', ')}`)
+        return kept
+    }
+    record({ fired, left: left.map((h) => h.rule), redoFailed: false, redos: 1 })
     if (left.length) warn(`reply check: second draft still has ${left.map((h) => `${h.rule} "${h.text.slice(0, 60)}"`).join(', ')}`)
     return second
 }
