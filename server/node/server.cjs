@@ -1486,6 +1486,8 @@ mountStt(app, { express, stt, auth: (req, res) => checkAuth(req, res), limiter: 
 
 // the card asset manager (Settings > Asset Manager): its page and, behind risu-auth, its API on 127.0.0.1:6110
 require('./assetsProxy.cjs').mountAssets(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
+// a find the narrator wrote ([[FIND|...]]) goes to the asset manager's shared store (findsBridge.cjs): POST /api/finds, risu-auth required
+require('./findsBridge.cjs').mountFinds(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
 
 app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;
