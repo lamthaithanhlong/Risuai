@@ -9,6 +9,8 @@ import { getPersonaPrompt } from '../util'
 import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
 import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
 import { decideCompanionLimits, decideCompanions, decideMessages, decidePeople, decideVars, type DecideInput, type GmDecision } from './gmSolver'
+import { guideNote } from './guideDirective'
+import { sinceAdvance } from './gameMaster'
 import { modeAfterDecision, modeBefore, modeFromTurn, modeVar } from './gmMachine'
 
 type Room = character | groupChat
@@ -46,7 +48,9 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
-    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card)) + (held ? CARD_HELD : ''))
+    const note = gmNote(phase, state, dice, worldFlavour(card))
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
+    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) : '') + (held ? CARD_HELD : ''))
 }
 
 /**
@@ -93,7 +97,8 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
         }
     }
     vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
-    return gmRequest(formated, gmNote(phase, state, dice, worldFlavour(card), decision.line))
+    const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line)
+    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) : ''))
 }
 
 const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'
