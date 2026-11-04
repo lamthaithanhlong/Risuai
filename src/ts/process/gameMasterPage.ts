@@ -10,6 +10,7 @@ import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } fr
 import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
 import { decideCompanionLimits, decideCompanions, decideMessages, decidePeople, decideVars, type DecideInput, type GmDecision } from './gmSolver'
 import { guideNameOf, guideNote } from './guideDirective'
+import { findRequest, noteFind } from './findDrop'
 import { sinceAdvance } from './gameMaster'
 import { modeAfterDecision, modeBefore, modeFromTurn, modeVar } from './gmMachine'
 
@@ -140,8 +141,10 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
     const ours = hasPersonaRule(card)
     const yes = yesAt(messages)
     const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
-    return gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
+    const out = gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
         + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : '') + (initializing ? '' : paid))
+    // a find (a skill or an item by chance) when one is due: seeded, capped, never while the character is made or in a fight (findDrop.ts)
+    return initializing ? out : findRequest(out, card, chat)
 }
 
 /** The card's panel as the request leaves (per chat id), so the reply's own writes can be told apart (statusBook.ts); and as the
@@ -243,6 +246,8 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     const card = getDatabase().characters[charIndex] as Room | undefined
     if (!chat || !card || card.type === 'group') return
     const at = chat.message.length - 1
+    // the hidden [[FIND|…]] line leaves the stored text first; the record goes to the hook (findDrop.ts)
+    noteFind(charIndex, card, chat)
     const reply = chat.message[at]
     if (!reply || reply.role !== 'char') return
     const replies = chat.message.filter((m) => m.role === 'char').length
