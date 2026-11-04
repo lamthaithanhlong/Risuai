@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { actCounts, actLeaks, actChecks } from './lib/act.mjs'
 import { fixLatin1Utf8 } from './lib/play.mjs'
 import { parseFinds, fingerprint, slug, dropProblems, noRepeatProblems, naturalProblems, savedProblems, findsChecks, forCard, earlyFinds, DEFAULT_TOOLS } from './lib/finds.mjs'
 
@@ -163,4 +164,17 @@ test('finds.noRepeat: two finds with the same head noun under different names ar
     assert.equal(bad.length, 1)
     assert.equal(bad[0].rule, 'similar')
     assert.deepEqual(noRepeatProblems([{ turns: [turn('Sound Rhythm')] }, { turns: [turn('Rusty Key')] }]), [])
+})
+
+test('act tags: counted per run from the raw reply; a tag left in the shown or stored text (finished or half-streamed) is red, a clean run is green', () => {
+    const tag = '[[ACT|bẻ-khóa-cửa-kho|nhanh_nhen+cam_nhan|normal|giữ-im-lặng]]'
+    const clean = [{ turns: [{ raw: 'a ' + tag, shown: 'a', reply: 'a' }, { raw: 'b', shown: 'b', reply: 'b' }] }, { turns: [{ raw: tag + tag, shown: 'x', reply: 'x' }] }]
+    assert.deepEqual(actCounts(clean), [{ turns: 2, tags: 1 }, { turns: 1, tags: 2 }])
+    assert.deepEqual(actLeaks(clean), [])
+    assert.equal(actChecks(clean)[0].status, 'PASS')
+    for (const bad of [{ raw: 'a ' + tag, shown: 'a ' + tag, reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a ' + tag }, { raw: 'a', shown: 'a [[ACT|bẻ-khó', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[BREAK|cam_nhan]]' }]) {
+        const r = actChecks([{ turns: [bad] }])
+        assert.equal(r[0].status, 'FAIL', JSON.stringify(bad))
+    }
+    assert.equal(actChecks([])[0].status, 'FAIL')
 })

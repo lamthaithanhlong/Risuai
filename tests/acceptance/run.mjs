@@ -52,6 +52,7 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
+import { actChecks } from './lib/act.mjs'
 import { findsChecks, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
@@ -183,6 +184,11 @@ function finishGate(key, rec, ctx, story) {
         const storyTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply }))
         checks.push(...findsChecks(runs.map((run) => ({ turns: storyTurns(run) })), { storeDir: process.env.RISU_SHARED_DIR, otherCard: process.env.FINDS_OTHER_CARD || 'fate', card: process.env.FINDS_CARD || key, toolsDir: process.env.FINDS_TOOLS || undefined }))
     }
+    // the growth tags: how many per run, and none left in the text (always on in a gate)
+    const actRuns = runs.map((run) => ({ turns: run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? '', shown: x.shown || '', reply: x.reply || '' })) }))
+    const act = actChecks(actRuns)
+    checks.push(...act)
+    console.log(`[gate] ACT tags per run: ${act[1].summary}; hidden: ${act[0].status}`)
     const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
     const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}.json`)
