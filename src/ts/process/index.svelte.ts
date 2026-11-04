@@ -19,6 +19,7 @@ import { agencyRequest } from "./playerAgency";
 import { settleReply } from "./replyRegen";
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
+import { statsAfterReplyPage, statsBeforeRequestPage } from "./statsGlue";
 import { creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -1601,6 +1602,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(isNodeServer){
         findsBeforeRequest(currentChat)
     }
+    // stats and skill mastery belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts; gives up after 1.5 s)
+    if(isNodeServer){
+        await statsBeforeRequestPage(currentChar, currentChat)
+    }
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
     // on the Node server (unless Settings turns it off) the solver decides this turn's event and NPC intents (gmSolver.ts)
@@ -2014,6 +2019,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         notePortraits(sel.char, currentChat)
         tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
+        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
         noteScenePicture(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
         const outputMessage = currentChat.message[inlayMessageIndex]
@@ -2129,6 +2135,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         notePortraits(sel.char, currentChat)
         tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
+        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
         noteScenePicture(sel.char, currentChat)
         if(outputMessageId){
             outputMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)

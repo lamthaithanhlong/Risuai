@@ -8,6 +8,7 @@ import { learningDisplay } from '../process/learning';
 import { castStrip, stripLooks, stripPictureAsks } from '../process/portraits';
 import { stripGm } from '../process/gameMaster';
 import { stripFind } from '../process/findDrop';
+import { stripStatTags } from '../process/statsTags';
 import { closeLeadingThought, tidyDisplay } from '../process/replyTidy';
 import { aiWatermarkingLawApplies, getFileSrc } from '../globalApi.svelte';
 import { isTauri, isNodeServer } from "src/ts/platform"
@@ -756,7 +757,7 @@ export async function ParseMarkdown(
     // the chat passes a slim character (simpleCharacterArgument: no extentions), so the card itself is looked up by its id
     const castCard = char && char.type !== 'group' ? getDatabase().characters.find((c) => c?.chaId === char.chaId) : undefined
     const cast = castCard && castCard.type !== 'group' && mode !== 'pretranslate' ? castStrip(castCard as character, data) : ''
-    data = learningDisplay(tidyDisplay(stripFind(stripGm(stripPictureAsks(stripLooks(data)))))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]], the [[GM]] block, GM notes and planning are hidden (replyTidy.ts)
+    data = learningDisplay(tidyDisplay(stripStatTags(stripFind(stripGm(stripPictureAsks(stripLooks(data))))))) + cast    // [[LOOK]] lines are for the portraits only; an undrawn [[img:]], the [[GM]] block, GM notes and planning are hidden (replyTidy.ts)
 
     if(firstParsed !== data && char && char.type !== 'group'){
         data = await parseAdditionalAssets(data, char, additionalAssetMode, {
