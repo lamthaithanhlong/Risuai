@@ -39,6 +39,7 @@
 // Setup once: (cd tests/acceptance && npm install && npx playwright install chromium).
 // Never touches the live server (:6001) or the real save: the save is snapshotted read-only into ~/.risu-story-work/acceptance/<stamp>
 // (only the newest run is kept: --rejudge needs that run's copy) and the owner's settings are used from the copy as they are. Outputs are not committed.
+import { patchGateCopy, luaHashCheck } from './lib/luaGate.mjs'
 import fs from 'fs'
 import { execFileSync } from 'child_process'
 import os from 'os'
@@ -66,6 +67,8 @@ const today = new Date().toLocaleDateString('sv-SE')
 // --candidate DIR), and passes only when every record names the persona's companions and every run's replies are clean. Writes
 // ~/.risu-story-work/gate/<story>.json, which the asset manager's Push live reads before it restarts :6001.
 const GATE_N = Number(opt('--gate', 0))
+// --lua-drop "<comment>" (repeatable): a script the live card still holds under an old name; the live push passes the same flag (remoteCardPatch --lua-drop)
+const LUA_DROP = argv.flatMap((a, i) => (a === '--lua-drop' && argv[i + 1] ? [argv[i + 1]] : []))
 const CANDIDATE = opt('--candidate')
 // --persona-from SNAPSHOT_DIR: the copy plays with the persona of an earlier snapshot (e.g. the one that names Evelyn): the third case of the
 // companion rule. Its result goes to gate/<story>-persona.json, which Push live does not read.
@@ -212,6 +215,7 @@ function finishGate(key, rec, ctx, story) {
         const startOf = (run) => { const c = run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1); return { stats: c?.vars?.stats ?? undefined, skills: c?.vars?.skills ?? undefined } }
         checks.push(...statsChecks(runs.map((run) => ({ start: startOf(run), turns: storyTurns(run) }))))
     }
+    if (GATE_N) { checks.push(luaHashCheck({ ...(rec.luaHash ?? {}), drop: LUA_DROP })) }
     const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
     const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}${STATS ? '-stats' : ''}.json`)
@@ -219,7 +223,7 @@ function finishGate(key, rec, ctx, story) {
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), luaHash: rec.luaHash?.candidate ?? null, luaScripts: rec.luaScripts ?? null, at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -258,11 +262,13 @@ async function playStory(key, ctx) {
     const { dir, password } = copySave(ctx.runDir, ctx.base, key, { log })
     rec.copyDir = dir
     if (GATE_N) {
-        const { patchRemoteCard } = createRequire(import.meta.url)('../../server/node/remoteCardPatch.cjs')
         const lore = JSON.parse(fs.readFileSync(path.join(CANDIDATE, 'risu_lorebook.json'), 'utf8')).data
         const built = fs.readdirSync(CANDIDATE).filter((f) => /_fate\.json$/.test(f))[0]
         const desc = JSON.parse(fs.readFileSync(path.join(CANDIDATE, built), 'utf8')).data.description
-        const r = patchRemoteCard(path.join(dir, 'save'), story.cardId.slice(0, 8), { lore, desc }, { backupDir: path.join(dir, 'backup') })
+        // lore + description + the candidate's built Lua; the copy's Lua hash must equal the candidate's or this throws (never plays old Lua)
+        const r = patchGateCopy({ saveDir: path.join(dir, 'save'), prefix: story.cardId.slice(0, 8), candidateDir: CANDIDATE, lore, desc, drop: LUA_DROP, backupDir: path.join(dir, 'backup'), log })
+        rec.luaHash = r.luaHash
+        rec.luaScripts = r.scripts
         if (PERSONA_FROM) {
             const { modelSettings: ms2, patchCopyRoot: pr2 } = await import('./lib/save.mjs')
             const text = ms2(path.join(PERSONA_FROM, '_base', 'save'), ctx.backend).persona
@@ -271,7 +277,7 @@ async function playStory(key, ctx) {
             rec.persona = text
             log(`persona of ${PERSONA_FROM}: ${text.length} chars`)
         }
-        log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars`)
+        log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars, Lua hash ${r.luaHash.copy.slice(0, 12)} (${r.luaHash.found} script(s) from ${r.file})`)
     }
     if (ctx.slot) {
         // the request goes out with customProxyRequestModel, and the app's slot watcher (modelSlotsRuntime) detaches a slot whose
