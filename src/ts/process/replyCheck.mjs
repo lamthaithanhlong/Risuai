@@ -90,6 +90,42 @@ export function dialogueRepeats(text, previousReplies, n = 8) {
     return out
 }
 
+// ---- language drift ----------------------------------------------------------------------------------------------------------------
+// A gate run had the narrator answer a whole turn in French (g4.15, 2026-11-04). Only whole-narration drift is the target: a short foreign
+// phrase inside Vietnamese prose must not trigger. Deterministic, no model: over the narration (tags, panel lines and quoted speech
+// removed) take the share of words that show Vietnamese (a letter only Vietnamese uses, or a common Vietnamese word that has none) and
+// the share of French/English/Spanish function words. Measured on 1100 distinct real replies (tests/acceptance runs): Vietnamese narration
+// has viet >= 0.46 and foreign <= 0.04; the drifted ones have viet <= 0.06 and foreign >= 0.22. Thresholds sit in the middle of that gap.
+
+export const LANG_MIN_WORDS = 12
+export const LANG_MAX_VIET = 0.25
+export const LANG_MIN_FOREIGN = 0.08
+
+const VIET_ONLY = /[ăơưđảạẩậẳặẻẹểệỉịỏọổộởợủụửựỷỵẫẵẽễĩỗỡũữỹầấắằếềốồớờứừỳ]/i
+const VIET_PLAIN = new Set('và là các mà cô tôi anh em cho con nhưng này đó khi rồi một những không được trong của với như thì nó ta họ ai gì sao đây kia nên bị tay chân mặt mắt cửa nhà tiếng lại ra vào lên xuống tới qua'.split(' '))
+const FOREIGN_FN = new Set('le la les des du un une et est en que qui dans pour pas sur au aux se sa son ses il elle ils elles nous vous je tu ce cette ne mais ou avec sans plus comme the and of to is in that it for with was he she they his her you on as at be this had not but by from are or an which one all would there their what so if we i el los las del y es por con para pero su sus lo al más'.split(' '))
+
+/** The narration of a reply: [[...]] and [💡...] tags, 【HỆ THỐNG】 lines and quoted speech taken out. */
+export function narrationOf(text) {
+    return String(text ?? '').normalize('NFC').replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\[💡[^\]]*\]/g, ' ')
+        .split('\n').filter((l) => !SYSTEM_START.test(l)).join('\n').replace(/[“"][^”"]*[”"]/g, ' ')
+}
+
+/** { n, viet, foreign, drift }: words in the narration, share showing Vietnamese, share of foreign function words, and the verdict. */
+export function languageDrift(text) {
+    const words = narrationOf(text).match(/\p{L}+/gu) ?? []
+    const n = words.length
+    if (!n) return { n, viet: 0, foreign: 0, drift: false }
+    const viet = words.filter((w) => VIET_ONLY.test(w) || VIET_PLAIN.has(w.toLowerCase())).length / n
+    const foreign = words.filter((w) => FOREIGN_FN.has(w.toLowerCase())).length / n
+    return { n, viet, foreign, drift: n >= LANG_MIN_WORDS && viet < LANG_MAX_VIET && foreign >= LANG_MIN_FOREIGN }
+}
+
+/** The narration's opening when it is not Vietnamese, as a list (empty when it is). */
+export function languageHits(text) {
+    return languageDrift(text).drift ? [narrationOf(text).trim().replace(/\s+/g, ' ').slice(0, 100)] : []
+}
+
 /** Everything wrong with a reply, for the scorer and for the regenerate-once step. */
 export function replyHits(text, previousReplies) {
     const prev = previousReplies ?? []
@@ -102,5 +138,6 @@ export function replyHits(text, previousReplies) {
         ...(near && !exact.some((e) => normalize(e) === normalize(near)) ? [{ rule: 'repeat', text: near }] : []),
         ...said.map((t) => ({ rule: 'dialogue', text: t })),
         ...systemLineRepeats(text, prev).map((t) => ({ rule: 'system', text: t })),
+        ...languageHits(text).map((t) => ({ rule: 'lang', text: t })),
     ]
 }

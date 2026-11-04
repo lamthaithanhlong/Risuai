@@ -7,7 +7,7 @@ export function shouldRegenerate(hits: ReplyHit[], attempt: number): boolean {
     return hits.length > 0 && attempt === 0
 }
 
-const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', dialogue: 'repeated line of dialogue', system: 'unchanged System line' }
+const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', dialogue: 'repeated line of dialogue', system: 'unchanged System line', lang: 'narration not in Vietnamese (trả lời bằng tiếng Việt)' }
 
 /** The hidden line added to the player's message for the second draft; '' when there is nothing to name. */
 export function regenerationNote(hits: ReplyHit[]): string {

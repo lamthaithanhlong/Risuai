@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { consecutiveRepeat, dialogueRepeats, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
+import viReplies from './replyLang.fixture.json'
+import { consecutiveRepeat, dialogueRepeats, languageDrift, languageHits, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
 import { narrationProblems } from '../../../tests/acceptance/lib/narration.mjs'
 import { regenerationNote, settleReply, shouldRegenerate } from './replyRegen'
 import { alreadyTold, guideDirective, guideNote, verbatimAvoid } from './guideDirective'
@@ -142,5 +143,58 @@ describe('repeated dialogue (a real gate: the companion said the same line again
         expect(consecutiveRepeat(other, prev)).toBeNull()
         expect(narrationProblems([prev, other]).filter((p: { rule: string }) => p.rule === 'repeat')).toEqual([])
         expect(replyHits(other, [prev])).toEqual([])
+    })
+})
+
+describe('language drift (a real gate: the narrator answered a story turn in French, g4.15)', () => {
+    // the real reply: French narration around Vietnamese speech, with the tags the app strips
+    const FRENCH = 'Kenji se repose sans quitter la pièce des oreilles. La pluie couvre les petits bruits du bâtiment, mais pas tous : quelque part dans les tuyaux, une vibration sourde revient par à-coups, puis s’interrompt. Derrière la porte, rien ne gratte. Le silence n’est pas rassurant ; il laisse juste moins de choses à compter.\n\nÀ côté du téléphone, un écouteur filaire noir s’est coincé sous le bord de la table. Le câble est emmêlé, mais la prise semble intacte. Un vieux modèle, sans batterie ni magie : s’il reste assez de charge au téléphone, il pourrait aider à écouter sans tenir l’appareil contre l’oreille.\n\nEvelyn incline la tête vers la cloison mitoyenne. “Có tiếng rung trong ống nước… hình như ở dưới tầng. Tớ không biết nó từ đâu tới.” Cô nhìn cánh cửa căn hộ rồi khẽ nhíu mày. “Chỗ này yên quá.”\n\n[💡Kế hoạch| Không ]\n\n[[FIND|item|Tai nghe có dây|Wired Earbuds|Có thể nối với điện thoại còn pin.|common|Chỉ dùng được khi điện thoại còn pin.|yes]]\n\n[[ACT|lang-nghe-trong-luc-nghi|cam_nhan|normal||giữ-im-lặng]]'
+    const EN_SHORT = 'Kenji pushes the door shut with his shoulder and waits in the dark. The stairwell is quiet, and the rain on the window is the only sound he can hear in the room.'
+    const EN_NAMES = 'Hoshin Park crosses the lobby of the Kisaragi building and stops at the mailboxes, where Evelyn is already reading a letter that is not hers. Neither of them says anything about it.'
+    const FR_SHORT = 'Evelyn ne répond pas. Kenji entend la pluie contre la vitre et attend, la main sur la poignée, que le couloir se taise enfin.'
+    const ES = 'Kenji se acerca a la ventana y mira la calle vacía. La lluvia golpea el cristal y, detrás de la puerta, el pasillo sigue en silencio como si nadie hubiera pasado por allí.'
+    const ES_NAMES = 'Evelyn cruza la habitación sin hacer ruido y se sienta junto a Kenji, que no deja de mirar el teléfono mientras espera una señal que no llega.'
+    const MIXED = 'Kenji hít một hơi rồi khẽ nói: “C’est bon, on y va.” Evelyn nghiêng đầu nhìn anh, hỏi bằng giọng rất nhỏ rằng anh vừa nói gì. Anh lắc đầu, bảo đó chỉ là một câu tiếng Pháp mà bà chủ nhà hay nói mỗi khi trời mưa, và bước ra hành lang, tay vẫn giữ chặt cán dao.'
+
+    it('French, English and Spanish narration is flagged; the French turn from the gate most of all', () => {
+        for (const t of [FRENCH, EN_SHORT, EN_NAMES, FR_SHORT, ES, ES_NAMES]) {
+            expect(languageHits(t), t.slice(0, 40)).toHaveLength(1)
+            expect(replyHits(t, []).map((h) => h.rule)).toEqual(['lang'])
+        }
+        const d = languageDrift(FRENCH)
+        expect(d.viet).toBeLessThan(0.1)
+        expect(d.foreign).toBeGreaterThan(0.2)
+    })
+    it('Vietnamese narration is not flagged, even with a short foreign phrase inside', () => {
+        expect(replyHits(MIXED, [])).toEqual([])
+        expect(replyHits('Kenji mở tin nhắn trên Messenger, đọc dòng “OK, see you tonight” rồi cất điện thoại vào túi. Evelyn hỏi anh định đi đâu vào giờ này.', [])).toEqual([])
+        expect(languageHits('Evelyn nghiêng đầu.')).toEqual([])
+        expect(languageHits('Kenji.')).toEqual([])
+    })
+    it('a sample of the real Vietnamese corpus (48 replies, 991 distinct measured): none flagged', () => {
+        expect(viReplies.length).toBeGreaterThan(40)
+        const flagged = (viReplies as string[]).filter((t) => languageDrift(t).drift)
+        expect(flagged).toEqual([])
+        expect((viReplies as string[]).filter((t) => replyHits(t, []).some((h) => h.rule === 'lang'))).toEqual([])
+    })
+    it('the regeneration note asks, hidden, for Vietnamese', () => {
+        const hits = replyHits(FRENCH, [])
+        expect(regenerationNote(hits)).toContain('trả lời bằng tiếng Việt')
+        expect(shouldRegenerate(hits, 0)).toBe(true)
+    })
+    it('settleReply redoes a French draft once and records the lang rule', async () => {
+        const notes: string[] = []
+        const recs: { fired: string[]; left: string[]; redoFailed: boolean }[] = []
+        const vi = 'Kenji nằm yên, lắng nghe tiếng mưa rơi ngoài cửa sổ. Hành lang vẫn im lặng, không có tiếng cào nào nữa.'
+        const out = await settleReply(FRENCH, [], async (n) => { notes.push(n); return vi }, () => {}, (r) => recs.push(r))
+        expect(out).toBe(vi)
+        expect(notes).toHaveLength(1)
+        expect(notes[0]).toContain('trả lời bằng tiếng Việt')
+        expect(recs).toEqual([{ fired: ['lang'], left: [], redoFailed: false }])
+    })
+    it('the gate scorer flags it through the same function (narration.clean)', () => {
+        const vi = 'Kenji nắm chặt cán dao và đếm nhịp thở của mình. Ngoài hành lang, tiếng mưa che khuất mọi âm thanh nhỏ.'
+        expect(narrationProblems([vi, FRENCH.split('[💡')[0]]).map((p: { rule: string }) => p.rule)).toEqual(['lang'])
+        expect(narrationProblems([vi, MIXED])).toEqual([])
     })
 })

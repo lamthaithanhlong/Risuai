@@ -9,7 +9,7 @@ export function parseExport(text) {
 }
 
 const EMOJI_OPEN = /^[\s*_>]*\p{Extended_Pictographic}/u
-import { SETUP, tokens, overlap, scoredSentences, speechSentences, consecutiveRepeat } from '../../../src/ts/process/replyCheck.mjs'
+import { SETUP, languageHits, tokens, overlap, scoredSentences, speechSentences, consecutiveRepeat } from '../../../src/ts/process/replyCheck.mjs'
 export { SETUP }
 const LEAK = [/\[💡/, /\[\[LOOK\b/]
 
@@ -20,13 +20,14 @@ export { overlap }
  * Problems in the narrator's replies (strings, in order): the setup explained to the player, an emoji opening a paragraph in more than a
  * third of the replies (the owner's chats had it in 2 of 2 and 2 of 3; counted per reply because per paragraph a reply of five
  * paragraphs with one emoji never reads as too many), two consecutive replies sharing a sentence (>= 60% of its tokens), and
- * [💡…] / [[LOOK text left in the prose.
+ * [💡…] / [[LOOK text left in the prose, and a reply whose narration is not Vietnamese (rule 'lang', the same detector the app uses).
  */
 export function narrationProblems(replies) {
     const out = []
     const rs = replies.map((r) => String(r ?? ''))
     rs.forEach((r, i) => {
         for (const re of SETUP) { const m = re.exec(r); if (m) { out.push({ rule: 'setup', reply: i, text: m[0] }); break } }
+        for (const t of languageHits(r)) out.push({ rule: 'lang', reply: i, text: t })
         for (const re of LEAK) { const m = re.exec(r); if (m) out.push({ rule: 'leak', reply: i, text: m[0] }) }
     })
     const withEmoji = rs.map((r, i) => (r.split(/\n\s*\n/).some((p) => EMOJI_OPEN.test(p)) ? i : -1)).filter((i) => i >= 0)
