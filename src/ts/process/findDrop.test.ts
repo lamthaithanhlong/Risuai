@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest'
 vi.mock('../storage/database.svelte', () => ({ getDatabase: vi.fn(() => ({})) }))
 
 import {
-    FIND_DROUGHT, FIND_FIRST_TURN, FIND_MIN_GAP, findDue, findFingerprint, findId, findRequest, hasFindRule, lastFindTurnOf, noteFind,
+    FIND_DROUGHT, FIND_FIRST_TURN, FIND_MIN_GAP, findDue, findNote, findFingerprint, findId, findRequest, hasFindRule, lastFindTurnOf, noteFind,
     onFindParsed, parseFind, sceneKindOf, setFindKnownProvider, setFindParsedHandler, stripFind, type FindRecord, type SceneKind,
 } from './findDrop'
 
@@ -276,5 +276,17 @@ describe('the chat wiring', () => {
         expect(sceneKindOf(undefined, 'tôi lục lọi trong tủ')).toBe('scavenge')
         expect(sceneKindOf(undefined, 'quan sát phố')).toBe('explore')
         expect(sceneKindOf(undefined, 'xin chào')).toBe('other')
+    })
+})
+
+describe('findNote wording (a real run: the narrator found the item in prose and filled a STATUS line, but left the block out)', () => {
+    test('says the line is required and that a STATUS line does not replace it, with the rarity, kind and the names to avoid', () => {
+        const n = findNote('item', 'rare', ['Muffled Footsteps'])
+        expect(n).toMatch(/MUST end with exactly one line/)
+        expect(n).toMatch(/STATUS item or skill line or a GM line does NOT replace it/)
+        expect(n).toContain('[[FIND|item|')
+        expect(n).toContain('rare item')
+        expect(n).toContain('Muffled Footsteps')
+        expect(n).toMatch(/Only if this scene truly cannot carry a find/)
     })
 })

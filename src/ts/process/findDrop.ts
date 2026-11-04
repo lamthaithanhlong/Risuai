@@ -85,9 +85,10 @@ const KNOWN_MAX = 80
 /** The hidden note for the request (like PLAN_STORY): a find is due, how to weave it, what it must not repeat. */
 export function findNote(kind: FindKind, rarity: FindRarity, known: string[]): string {
     const names = [...new Set(known.map((k) => k.trim()).filter(Boolean))].slice(-KNOWN_MAX)
-    return `\n\n[Find (hidden, never named): this scene may carry a ${rarity} ${kind} the character stumbles on or realises by chance, inside the scene's own events and in prose, never as a popup, a menu, a system line or "Bạn nhận được". `
-        + `Name it naturally in the narration. It must be a new one${names.length ? `, none of these: ${names.join('; ')}` : ''}. Only if the scene can carry it, end the reply with one line `
-        + `"[[FIND|${kind}|Tên VI|Name EN|effect in this world's terms with its limit or cost|${rarity}|when it works and what it costs|yes or no (usable outside this world)]]" after the Future Plan line and before any STATUS, LEDGER or GM block; no pipe inside a field. If the scene cannot carry it, write nothing.]`
+    return `\n\n[Find (hidden, never named): a ${rarity} ${kind} is due in this reply. Let the character stumble on or realise it by chance, inside the scene's own events and in prose, never as a popup, a menu, a system line or "Bạn nhận được", and name it naturally in the narration. It must be a new one${names.length ? `, none of these: ${names.join('; ')}` : ''}. `
+        + `The find is not complete without its line: the reply MUST end with exactly one line "[[FIND|${kind}|Tên VI|Name EN|effect in this world's terms with its limit or cost|${rarity}|when it works and what it costs|yes or no (usable outside this world)]]" `
+        + `after the Future Plan line and before any STATUS, LEDGER or GM block; no pipe inside a field. A STATUS item or skill line or a GM line does NOT replace it: if the reply gives the character something found, learned or realised, that line is required. `
+        + `Only if this scene truly cannot carry a find (a fight, a loss, a creation reply) write nothing.]`
 }
 
 // ---- the hidden block ----------------------------------------------------------------------------------------------------------
