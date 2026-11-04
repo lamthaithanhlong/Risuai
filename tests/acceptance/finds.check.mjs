@@ -156,3 +156,11 @@ test('fixLatin1Utf8: the browser\'s Latin-1 view of a streamed reply is turned b
     assert.equal(parseFinds(fixLatin1Utf8(mangled)).filter((b) => b.ok)[0].find.name.vi, 'Nghe tiếng bước chân')
     assert.notEqual(parseFinds(mangled).filter((b) => b.ok)[0]?.find.name.vi, 'Nghe tiếng bước chân') // without the fix the name is mangled
 })
+
+test('finds.noRepeat: two finds with the same head noun under different names are a problem (a real run saved Sound Rhythm and Stairwell Rhythm)', () => {
+    const turn = (en) => ({ raw: `x [[FIND|skill|Tên|${en}|effect here.|rare|cond|yes]]`, shown: 'x' })
+    const bad = noRepeatProblems([{ turns: [turn('Sound Rhythm')] }, { turns: [turn('Stairwell Rhythm')] }])
+    assert.equal(bad.length, 1)
+    assert.equal(bad[0].rule, 'similar')
+    assert.deepEqual(noRepeatProblems([{ turns: [turn('Sound Rhythm')] }, { turns: [turn('Rusty Key')] }]), [])
+})

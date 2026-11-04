@@ -279,6 +279,26 @@ describe('the chat wiring', () => {
     })
 })
 
+describe('a find that is the same kind as a known one (another English name for it)', () => {
+    test('is stripped and not counted, with the chat\'s own names and the store\'s', () => {
+        const near = 'Lại tiếng đó.\n[[FIND|skill|Nhịp cầu thang|Stairwell Rhythm|Nghe nhịp bước chân ở cầu thang.|rare|Cần yên tĩnh|yes]]'
+        const c = chatWith(9, { last: near, scriptstate: { $find_known: JSON.stringify(['Nghe nhịp âm', 'Sound Rhythm']) } })
+        expect(noteFind(0, card(), c as never)).toBeNull()
+        expect(c.scriptstate.$find_turn).toBeUndefined()
+        expect(c.message.at(-1)!.data).toBe('Lại tiếng đó.')
+        setFindKnownProvider(() => ['Sound Rhythm'])
+        try {
+            const d = chatWith(9, { last: near })
+            expect(noteFind(0, card(), d as never)).toBeNull()
+            expect(d.scriptstate.$find_turn).toBeUndefined()
+        } finally { setFindKnownProvider(null) }
+        expect(noteFind(0, card(), chatWith(9, { last: near }) as never)?.id).toBe('stairwell-rhythm')
+    })
+    test('the note tells the narrator that the same kind of thing under another name counts as the same', () => {
+        expect(findNote('skill', 'rare', ['Sound Rhythm'])).toMatch(/nothing close to them/)
+    })
+})
+
 describe('findNote wording (a real run: the narrator found the item in prose and filled a STATUS line, but left the block out)', () => {
     test('says the line is required and that a STATUS line does not replace it, with the rarity, kind and the names to avoid', () => {
         const n = findNote('item', 'rare', ['Muffled Footsteps'])

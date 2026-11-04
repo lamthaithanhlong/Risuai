@@ -7,6 +7,7 @@
 
 import type { Chat, character, groupChat } from '../storage/database.svelte'
 import { gmRequest, hasCreationStep, yesAt } from './gameMaster'
+import { similar } from './findSimilar.mjs'
 
 // ---- the drop schedule --------------------------------------------------------------------------------------------------------
 
@@ -85,7 +86,7 @@ const KNOWN_MAX = 80
 /** The hidden note for the request (like PLAN_STORY): a find is due, how to weave it, what it must not repeat. */
 export function findNote(kind: FindKind, rarity: FindRarity, known: string[]): string {
     const names = [...new Set(known.map((k) => k.trim()).filter(Boolean))].slice(-KNOWN_MAX)
-    return `\n\n[Find (hidden, never named): a ${rarity} ${kind} is due in this reply. Let the character stumble on or realise it by chance, inside the scene's own events and in prose, never as a popup, a menu, a system line or "Bạn nhận được", and name it naturally in the narration. It must be a new one${names.length ? `, none of these: ${names.join('; ')}` : ''}. `
+    return `\n\n[Find (hidden, never named): a ${rarity} ${kind} is due in this reply. Let the character stumble on or realise it by chance, inside the scene's own events and in prose, never as a popup, a menu, a system line or "Bạn nhận được", and name it naturally in the narration. It must be a new one${names.length ? `, none of these and nothing close to them (the same kind of thing under another name counts as the same): ${names.join('; ')}` : ''}. `
         + `The find is not complete without its line: the reply MUST end with exactly one line "[[FIND|${kind}|Tên VI|Name EN|effect in this world's terms with its limit or cost|${rarity}|when it works and what it costs|yes or no (usable outside this world)]]" `
         + `after the Future Plan line and before any STATUS, LEDGER or GM block; no pipe inside a field. A STATUS item or skill line or a GM line does NOT replace it: if the reply gives the character something found, learned or realised, that line is required. `
         + `Only if this scene truly cannot carry a find (a fight, a loss, a creation reply) write nothing.]`
@@ -262,6 +263,7 @@ export function noteFind(charIndex: number, card: Room | undefined, chat: Chat |
     if (!rec || turn < 1) return null
     const known = [...knownOf(vars), ...knownProvider()].map(findFingerprint)
     if (known.includes(findFingerprint(rec.name.en)) || known.includes(findFingerprint(rec.name.vi))) return null
+    if ([...knownOf(vars), ...knownProvider()].some((k) => similar(k, rec.name.en))) return null
     const was = num(vars.$find_turn)
     vars.$find_prev = was !== null && was < turn ? String(was) : String(vars.$find_prev ?? '')
     vars.$find_turn = String(turn)

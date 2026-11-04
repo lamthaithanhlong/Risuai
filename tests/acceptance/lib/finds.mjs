@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { narrationProblems } from './narration.mjs'
+import { similar } from '../../../src/ts/process/findSimilar.mjs'
 
 export const MIN_GAP = 8          // at most one find in any window of 8 story turns
 export const MIN_TURNS = 20       // fresh story turns per run before the gate counts
@@ -86,7 +87,9 @@ export function noRepeatProblems(runs) {
         for (const { turn, find } of findsOfRun(run)) {
             const fp = fingerprint(find.name.en)
             const here = `run ${r + 1} turn ${turn}`
+            const near = seen.has(fp) ? null : [...seen.values()].find((v) => similar(v.en, find.name.en))
             if (seen.has(fp)) out.push({ rule: 'repeat', text: `${here}: "${find.name.en}" repeats ${seen.get(fp).at} ("${seen.get(fp).en}")` })
+            else if (near) out.push({ rule: 'similar', text: `${here}: "${find.name.en}" is the same kind of find as ${near.at} ("${near.en}")` })
             else seen.set(fp, { at: here, en: find.name.en })
         }
     })
@@ -176,7 +179,7 @@ export function findsChecks(runs, { storeDir = process.env.RISU_SHARED_DIR, tool
     const mk = (id, title, probs, ok) => ({ id, title, status: n && !probs.length && ok !== false ? 'PASS' : 'FAIL', summary: probs.length ? `${probs.length} problem(s) over ${n} runs / ${total} story turns` : `${n} runs, ${total} story turns, ${found} finds`, evidence: probs.map((p) => `${p.rule}: ${p.text}`) })
     const checks = [
         mk('finds.drop', `A find drops in each of ${n} fresh runs (>= ${MIN_TURNS} story turns), never two within ${MIN_GAP} turns`, dropProblems(runs)),
-        mk('finds.noRepeat', 'No two finds share a fingerprint', noRepeatProblems(runs)),
+        mk('finds.noRepeat', 'No two finds share a fingerprint or the same head noun (findSimilar)', noRepeatProblems(runs)),
         mk('finds.natural', 'One well-formed block or none, stripped from the prose, no popup phrasing, narration clean', naturalProblems(runs)),
         mk('finds.saved', 'Every find is in the store with all fields and another card loads it with the translation rule', savedProblems(runs, { storeDir, toolsDir, otherCard, card })),
     ]
