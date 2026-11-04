@@ -18,6 +18,7 @@ import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
 import { settleReply } from "./replyRegen";
 import { gmRequest } from "./gameMaster";
+import { findsBeforeRequest } from "./findGlue";
 import { creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -1595,6 +1596,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // the shape the story's replies keep (its panels at either end), after the opening (replyFormat.ts)
     if(!isOpening(currentChat?.message)){
         formated = shapeRequest(formated, currentChat?.message)
+    }
+    // finds (skills / items by chance): the save hook is wired once and finds waiting from an earlier turn are sent again; never waited for
+    if(isNodeServer){
+        findsBeforeRequest(currentChat)
     }
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
