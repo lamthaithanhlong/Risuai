@@ -138,6 +138,13 @@ test('mutations: a scorer with its rule removed lets the broken fixture through 
     assert.ok(m.parseFinds('[[FIND|gadget|a|b|c|common|d|yes]]')[0].ok); assert.ok(!parseFinds('[[FIND|gadget|a|b|c|common|d|yes]]')[0].ok)
 })
 
+test('fixLatin1Utf8: windows-1252 view (curly quotes, euro, dashes in the bytes) too', () => {
+    const want = 'Persona ghi “10 năng lực” — ngoại hình… “ổ” ‘x’ €'
+    const dec = new TextDecoder('windows-1252').decode(Buffer.from(want, 'utf8'))
+    assert.notEqual(dec, want)
+    assert.equal(fixLatin1Utf8(dec), want)
+})
+
 test('fixLatin1Utf8: the browser\'s Latin-1 view of a streamed reply is turned back; right text is left alone', () => {
     const want = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe qua tường.|uncommon|Cần yên tĩnh|yes]]'
     const mangled = Buffer.from(want, 'utf8').toString('latin1')

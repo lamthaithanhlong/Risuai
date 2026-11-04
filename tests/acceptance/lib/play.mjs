@@ -31,15 +31,25 @@ export function completionText(body) {
     try { const j = JSON.parse(t); return j.choices?.[0]?.message?.content ?? '' } catch { return '' }
 }
 
+/** windows-1252 code points for bytes 0x80-0x9F (the other bytes are the same in Latin-1) */
+const CP1252 = { 0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F }
+
 /**
- * The browser hands the body of a streamed (text/event-stream, no charset) response over as Latin-1 text: every UTF-8 byte a character of
- * its own ("CÃ¡nh tá»§"). Turn that back when the whole text is such bytes; any text that is already right (or has a character above U+00FF)
- * is returned as it is. Without it the block's Vietnamese names reach the scorers mangled.
+ * The browser hands the body of a streamed (text/event-stream, no charset) response over decoded as windows-1252: every UTF-8 byte a
+ * character of its own ("CÃ¡nh tá»§"). Turn that back when the whole text is such bytes; text that is already right (it has a character
+ * that no single byte could give) is returned as it is. Without it the block's Vietnamese names reach the scorers mangled.
  */
 export function fixLatin1Utf8(t) {
     const s = String(t ?? '')
-    if (!/[\u00C2-\u00F4][\u0080-\u00BF]/.test(s) || /[^\u0000-\u00FF]/.test(s)) return s
-    const back = Buffer.from(s, 'latin1').toString('utf8')
+    if (!/[\u00C2-\u00F4][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]/.test(s)) return s
+    const bytes = []
+    for (const ch of s) {
+        const c = ch.codePointAt(0)
+        if (c <= 0xFF) bytes.push(c)
+        else if (CP1252[c] !== undefined) bytes.push(CP1252[c])
+        else return s
+    }
+    const back = Buffer.from(bytes).toString('utf8')
     return back.includes('\uFFFD') ? s : back
 }
 
