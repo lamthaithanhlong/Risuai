@@ -33,3 +33,24 @@ describe('stripStatTags', () => {
         expect(stripStatTags(once)).toBe(once)
     })
 })
+
+describe('stripStatTags: the forms the narrator really wrote (gate runs, 2026-11-04)', () => {
+    const FORMS = [
+        '[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]',
+        '[[ACT dọn-chỗ-nấp|suc_manh+cam_nhan|trivial|]]',
+        '[[act|nghe|cam_nhan|normal|]]',
+        '[[ ACT | nghe | cam_nhan | normal | ]]',
+        '[[ACT|nghe|cam_nhan|normal|]',
+        '[[Break y_chi]]',
+        '[[ACT|nghe|cam_nhan|normal|',
+    ]
+    for (const tag of FORMS) {
+        it(`takes out ${tag}`, () => {
+            expect(stripStatTags(`Anh nghe.\n[💡Kế hoạch| Không ] ${tag}`)).toBe('Anh nghe.\n[💡Kế hoạch| Không ]')
+            expect(stripStatTags(`Anh nghe. ${tag}\n[[STATUS\nday: 2\n]]`)).toBe('Anh nghe.\n[[STATUS\nday: 2\n]]')
+        })
+    }
+    it('leaves a word that only starts like a tag alone', () => {
+        expect(stripStatTags('[[ACTION|x]] và [[BREAKFAST]]')).toBe('[[ACTION|x]] và [[BREAKFAST]]')
+    })
+})

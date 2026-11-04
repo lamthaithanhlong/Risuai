@@ -63,6 +63,13 @@ describe('a thought opened and never closed at the start of a finished reply', (
 })
 
 describe('stored and shown', () => {
+    it('the stored reply never keeps a growth tag, the card having a script or not (gate runs 2026-11-04)', () => {
+        for (const tag of ['[[ACT|kiểm-tra-cửa|cam_nhan|normal|]]', '[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]', '[[ACT|nghe|cam_nhan|normal|']) {
+            const chat = { message: [{ role: 'user', data: 'đi' }, { role: 'char', data: `${STORY1}\n[💡Kế hoạch| Không ] ${tag}` }] }
+            expect(tidyLastReply(chat)).toBe(true)
+            expect(chat.message[1].data).toBe(`${STORY1}\n[💡Kế hoạch| Không ]`)
+        }
+    })
     it('the last reply is stored tidy, other messages are not touched', () => {
         const chat = { message: [{ role: 'user', data: PLAN1 }, { role: 'char', data: `${PLAN1}\n\n${STORY1}\n[GM: x]` }] }
         expect(tidyLastReply(chat)).toBe(true)

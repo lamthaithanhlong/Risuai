@@ -9,6 +9,7 @@
 //     closing tag is put back where the story starts, so the reasoning stays stored and the story shows.
 
 import { splitCoT } from '../parser/cot'
+import { stripStatTags } from './statsTags'
 
 const VI = /[ăâđêôơưàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]/gi
 const viRatio = (p: string) => (p.match(VI)?.length ?? 0) / Math.max(1, p.length)
@@ -105,9 +106,11 @@ export function closeLeadingThought(text: string): string {
     return t
 }
 
-/** What to keep of a finished reply (stored): the thought closed, planning paragraphs and GM note lines out. */
+/** What to keep of a finished reply (stored): the thought closed, planning paragraphs, GM note lines and growth tags out. */
 export function tidyReply(text: string): string {
-    return stripStrayMarks(dropPlanning(stripGmTalk(closeLeadingThought(text))))
+    // the growth tags go first: the card's script (stats.lua) has read them in the output trigger that ran before this; a card without that script
+    // (the acceptance copy keeps the snapshot's) must not keep them in the stored text either
+    return stripStrayMarks(dropPlanning(stripGmTalk(closeLeadingThought(stripStatTags(text)))))
 }
 
 /** What the screen shows of any message (after cot.ts took the thought out). */
