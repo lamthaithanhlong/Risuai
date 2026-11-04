@@ -1,0 +1,18 @@
+{
+ "id": "guard-whistle",
+ "kind": "item",
+ "name": {
+  "vi": "Còi nhựa của bảo vệ",
+  "en": "Guard Whistle"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "effect": "Tiếng còi the thé thu hút nhiễm thể trong hai mươi mét, dùng để dụ chúng đi hướng khác.",
+ "rarity": "common",
+ "conditions": "Mỗi lần thổi là báo vị trí cho cả người sống quanh đó.",
+ "portable": true,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "guard whistle"
+}

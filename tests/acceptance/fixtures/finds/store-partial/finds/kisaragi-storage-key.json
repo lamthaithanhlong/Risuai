@@ -1,0 +1,18 @@
+{
+ "id": "kisaragi-storage-key",
+ "kind": "item",
+ "name": {
+  "vi": "Chìa khóa kho Kisaragi",
+  "en": "Kisaragi Storage Key"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "effect": "Mở kho tầng hầm của chung cư Kisaragi, nơi còn nước đóng chai.",
+ "rarity": "rare",
+ "conditions": "Chỉ có tác dụng trong chung cư này.",
+ "portable": false,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "key kisaragi storage"
+}

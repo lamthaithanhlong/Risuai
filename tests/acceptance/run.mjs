@@ -52,6 +52,7 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
+import { findsChecks, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 
@@ -67,6 +68,14 @@ const CANDIDATE = opt('--candidate')
 // --persona-from SNAPSHOT_DIR: the copy plays with the persona of an earlier snapshot (e.g. the one that names Evelyn): the third case of the
 // companion rule. Its result goes to gate/<story>-persona.json, which Push live does not read.
 const PERSONA_FROM = opt('--persona-from')
+// --finds (gate mode only): after the creation turns and the 3 companion/scout turns, every run keeps playing canned neutral actions until it has
+// --finds-turns story turns (default 24, never under 20), then finds.drop / finds.noRepeat / finds.natural / finds.saved are scored over the fresh
+// runs (lib/finds.mjs). finds.saved reads the store dir from env RISU_SHARED_DIR (the test asset manager's store the COPY's server posts to).
+// Result goes to gate/<story>-finds.json (Push live reads only gate/<story>.json). The four older gate checks still read the first 3 story turns.
+const FINDS = flag('--finds')
+const FINDS_TURNS = Math.max(FINDS_MIN_TURNS, Number(opt('--finds-turns', 24)))
+const FINDS_ACTIONS = ['Tôi nhìn quanh nơi mình đang đứng, xem có gì đáng chú ý.', 'Tôi kiểm tra lại đồ trong túi rồi đi tiếp.', 'Tôi nghỉ một lát và nghe ngóng xung quanh.', 'Tôi lục tìm trong chỗ gần nhất xem còn gì dùng được.', 'Tôi đi dọc hành lang, bước chậm và để ý từng cánh cửa.', 'Tôi ngồi xuống uống chút nước và nghĩ xem nên làm gì tiếp.', 'Tôi trò chuyện với người gần nhất, hỏi xem họ cần gì.', 'Tôi leo lên tầng trên xem tình hình.', 'Tôi dọn lại chỗ nấp cho gọn và chờ.', 'Tôi mở tủ đồ ở góc phòng ra xem.', 'Tôi đi ra ngoài một đoạn ngắn rồi quay lại.', 'Tôi xem lại bản đồ và chọn hướng đi tiếp theo.']
+const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds'
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
@@ -138,12 +147,12 @@ function finishGate(key, rec, ctx, story) {
         const t = run.turns
         const creation = t.filter((x) => x.phase === 'creation' && x.ok)
         const record = (creation.find((x) => asksDuocChua(x.reply)) ?? creation.at(-1))?.reply ?? ''
-        const story = t.filter((x) => x.phase !== 'creation')
+        const story = t.filter((x) => isCore(x))
         const replies = story.filter((x) => x.ok).map((x) => x.shown || x.reply)
         return { chatId: run.chatId, replied: story.length === 3 && t.every((x) => x.ok), companion: record ? companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' }) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 3 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 3 story replies' }] }
     })
     for (const [i, run] of runs.entries()) {
-        const st = run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply)
+        const st = run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)
         rows[i].scout = st.length === 3 ? guideScoutProblems(st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
         rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems([...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
     }
@@ -154,8 +163,8 @@ function finishGate(key, rec, ctx, story) {
         try { log = JSON.parse(last?.vars?.reply_regen ?? '[]') } catch { log = [] }
         return log.map((r) => ({ run: i + 1, ...r }))
     })
-    const storyReplies = runs.reduce((n, run) => n + run.turns.filter((x) => x.phase !== 'creation' && x.ok).length, 0)
-    const worry = runs.filter((run) => { const st = run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply); return st.length === 3 && scoutWorry(st[2]) }).length
+    const storyReplies = runs.reduce((n, run) => n + run.turns.filter((x) => isCore(x) && x.ok).length, 0)
+    const worry = runs.filter((run) => { const st = run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply); return st.length === 3 && scoutWorry(st[2]) }).length
     const sc = rows.filter((r) => !r.scout.length).length
     const sp = rows.filter((r) => !r.spoiler.length).length
     const a = rows.filter((r) => !r.companion.length).length
@@ -168,14 +177,19 @@ function finishGate(key, rec, ctx, story) {
         mk('guide.scout', 'Asked to check the corridor she reports a concrete detail inside ~10 m', sc === n && runs.length === n, `${sc}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.scout.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
         mk('guide.noSpoiler', 'She states no future event, no System text, nothing beyond her range', sp === n && runs.length === n, `${sp}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.spoiler.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
     ]
-    const pass = checks.every((c) => c.status === 'PASS') && !rec.blocked.length
-    const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
-    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}.json`)
+    // finds (--finds): the fresh runs' story turns: the model's raw reply (block still in it) and the prose the player saw
+    if (FINDS) {
+        const storyTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply }))
+        checks.push(...findsChecks(runs.map((run) => ({ turns: storyTurns(run) })), { storeDir: process.env.RISU_SHARED_DIR, otherCard: process.env.FINDS_OTHER_CARD || 'fate', card: process.env.FINDS_CARD || key, toolsDir: process.env.FINDS_TOOLS || undefined }))
+    }
+    const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
+    const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
+    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}.json`)
     fs.mkdirSync(path.dirname(outFile), { recursive: true })
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -296,6 +310,7 @@ async function playStory(key, ctx) {
                   await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
                   await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
                   await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                  if (FINDS) for (let k = 4; k < FINDS_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'finds', 'finds', FINDS_ACTIONS[(k - 4 + g) % FINDS_ACTIONS.length])
                 } catch (e) { log(`gate run ${g}: ${e.message || e}`); failsInRow = 0 }
                 if (run.turns.every((x) => x.ok)) break
                 if (attempt === 1) { log(`gate run ${g}: a turn got no reply; rerunning it once`); rec.gate.runs.pop() }

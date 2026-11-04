@@ -1,0 +1,18 @@
+{
+ "id": "counted-breath",
+ "kind": "skill",
+ "name": {
+  "vi": "Thở theo nhịp đếm",
+  "en": "Counted Breath"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "effect": "Giữ nhịp tim ổn định khi nấp, giảm tiếng thở lọt ra ngoài.",
+ "rarity": "uncommon",
+ "conditions": "Cần đứng im; vô dụng khi chạy.",
+ "portable": true,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "breath counted"
+}

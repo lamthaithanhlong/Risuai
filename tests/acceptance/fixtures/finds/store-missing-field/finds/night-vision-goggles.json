@@ -1,0 +1,18 @@
+{
+ "id": "night-vision-goggles",
+ "kind": "item",
+ "name": {
+  "vi": "Kính nhìn đêm cũ",
+  "en": "Night Vision Goggles"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "effect": "Thấy rõ trong bóng tối hoàn toàn ở tầm hai mươi mét, màu xanh nhạt; pin chỉ đủ một giờ.",
+ "rarity": "uncommon",
+ "conditions": "Cần hai viên pin AA; nặng, che mất tầm nhìn bên.",
+ "portable": true,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "goggles night vision"
+}

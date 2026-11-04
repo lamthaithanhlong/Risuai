@@ -1,0 +1,18 @@
+{
+ "id": "hairpin-picking",
+ "kind": "skill",
+ "name": {
+  "vi": "Mở khóa bằng kẹp tóc",
+  "en": "Hairpin Picking"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "effect": "Mở được ổ khóa cơ đơn giản trong chừng một phút nếu không bị ai nhìn.",
+ "rarity": "common",
+ "conditions": "Chỉ khóa cơ; gãy kẹp sau vài lần.",
+ "portable": true,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "hairpin picking"
+}

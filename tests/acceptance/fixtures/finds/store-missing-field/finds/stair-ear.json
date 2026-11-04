@@ -1,0 +1,17 @@
+{
+ "id": "stair-ear",
+ "kind": "skill",
+ "name": {
+  "vi": "Nghe nhịp bước",
+  "en": "Stair Ear"
+ },
+ "source": {
+  "card": "zombie",
+  "chapter": "Ngày 2, Chung cư Kisaragi"
+ },
+ "rarity": "common",
+ "conditions": "Cần yên lặng; mỏi tai sau ba lần dùng liên tiếp.",
+ "portable": true,
+ "found_at": "2026-11-04T10:00:00Z",
+ "fingerprint": "ear stair"
+}
