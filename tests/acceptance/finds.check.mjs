@@ -193,3 +193,15 @@ test('act tags: counted per run from the raw reply; a tag left in the shown or s
     }
     assert.equal(actChecks([])[0].status, 'FAIL')
 })
+
+import { launchProblem } from './lib/launchGuard.mjs'
+test('launcher: --finds in a gate without RISU_SHARED_DIR stops at once; with it, or without --finds, the launch goes on; run.mjs calls the guard before pruneRuns', () => {
+    assert.match(launchProblem({ finds: true, gate: 5, env: {} }), /RISU_SHARED_DIR/)
+    assert.match(launchProblem({ finds: true, gate: 5, env: { RISU_SHARED_DIR: '  ' } }), /RISU_SHARED_DIR/)
+    assert.equal(launchProblem({ finds: true, gate: 5, env: { RISU_SHARED_DIR: '/x/store' } }), '')
+    assert.equal(launchProblem({ finds: false, gate: 5, env: {} }), '')
+    assert.equal(launchProblem({ finds: true, gate: 0, env: {} }), '')
+    const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'run.mjs'), 'utf8')
+    const g = src.indexOf('launchProblem({'), prune = src.indexOf('pruneRuns()', src.indexOf('function pruneRuns') + 20)
+    assert.ok(g > 0 && prune > g, 'run.mjs must call launchProblem before it prunes runs or copies the save')
+})

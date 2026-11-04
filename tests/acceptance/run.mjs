@@ -58,6 +58,7 @@ import { findsChecks, findsOfRun, MIN_TURNS as FINDS_MIN_TURNS } from './lib/fin
 import { statsChecks, MIN_TURNS as STATS_MIN_TURNS } from './lib/stats.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
+import { launchProblem } from './lib/launchGuard.mjs'
 
 const argv = process.argv.slice(2)
 const flag = (n) => argv.includes(n)
@@ -81,6 +82,7 @@ const PERSONA_FROM = opt('--persona-from')
 // runs (lib/finds.mjs). finds.saved reads the store dir from env RISU_SHARED_DIR (the test asset manager's store the COPY's server posts to).
 // Result goes to gate/<story>-finds.json (Push live reads only gate/<story>.json). The four older gate checks still read the first 3 story turns.
 const FINDS = flag('--finds')
+{ const bad = launchProblem({ finds: FINDS, gate: GATE_N, env: process.env }); if (bad) { console.error(bad); process.exit(1) } }   // fail fast: before pruneRuns / the save copy
 const FINDS_TURNS = Math.max(FINDS_MIN_TURNS, Number(opt('--finds-turns', 24)))
 const FINDS_ACTIONS = ['Tôi nhìn quanh nơi mình đang đứng, xem có gì đáng chú ý.', 'Tôi kiểm tra lại đồ trong túi rồi đi tiếp.', 'Tôi nghỉ một lát và nghe ngóng xung quanh.', 'Tôi lục tìm trong chỗ gần nhất xem còn gì dùng được.', 'Tôi đi dọc hành lang, bước chậm và để ý từng cánh cửa.', 'Tôi ngồi xuống uống chút nước và nghĩ xem nên làm gì tiếp.', 'Tôi trò chuyện với người gần nhất, hỏi xem họ cần gì.', 'Tôi leo lên tầng trên xem tình hình.', 'Tôi dọn lại chỗ nấp cho gọn và chờ.', 'Tôi mở tủ đồ ở góc phòng ra xem.', 'Tôi đi ra ngoài một đoạn ngắn rồi quay lại.', 'Tôi xem lại bản đồ và chọn hướng đi tiếp theo.']
 // --stats (gate mode only, not with --finds): the growth system. After creation + yes + the 2 companion turns, canned neutral Vietnamese actions that
