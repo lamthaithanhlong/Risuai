@@ -305,7 +305,8 @@ async function playStory(key, ctx) {
                 const run = { chatId: (await player.newChat()).chatId, turns: [], attempt }
                 rec.gate.runs.push(run)
                 try {
-                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
+                  // the default persona (the live one) may describe no look: the answer set is complete so creation never waits on the look question
+                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', PERSONA_FROM ? 'Hard. dùng persona kenji của tui' : 'Hard. dùng persona kenji của tui, ngoại hình để thế giới chọn')
                   // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
                   for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
                   await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
