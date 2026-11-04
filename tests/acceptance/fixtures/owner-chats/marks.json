@@ -1,6 +1,8 @@
 {
  "zombie-evelyn-2109.txt": {
-  "companions": ["Evelyn"],
+  "companions": [
+   "Evelyn"
+  ],
   "bad": [
    "- Đồng hành: Không",
    "Cô là người bạn thân đã mất của anh, chỉ mình anh mới thấy và nghe được",
@@ -10,7 +12,9 @@
   ]
  },
  "zombie-evelyn-2148.txt": {
-  "companions": ["Evelyn"],
+  "companions": [
+   "Evelyn"
+  ],
   "bad": [
    "- Đồng hành: Không",
    "😢 “Cậu tỉnh rồi…”",
@@ -18,5 +22,11 @@
    "😟 “Từ từ thôi, Kenji. Cậu vừa sốt cả đêm mà.” Giọng cô nhỏ đi. “Tớ ở đây, nhưng không đỡ cậu được đâu.”"
   ],
   "note": "last line: owner 2026-11-03 'bug nè': she should choke up (the line breaks off), not state that she cannot help"
+ },
+ "zombie-loa-rung-0204.json": {
+  "bad": [
+   "Một tiếng cạ nhẹ ngoài cửa khiến loa điện thoại khẽ rung trong tay."
+  ],
+  "note": "owner 2026-11-04: a faint scratch outside the door cannot make the phone speaker vibrate in his hand (causeless effect); the prose also reads machine-made"
  }
 }
