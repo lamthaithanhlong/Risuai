@@ -53,7 +53,8 @@ import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
 import { actChecks } from './lib/act.mjs'
-import { findsChecks, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
+import { findsChecks, findsOfRun, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
+import { statsChecks, MIN_TURNS as STATS_MIN_TURNS } from './lib/stats.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 
@@ -76,7 +77,22 @@ const PERSONA_FROM = opt('--persona-from')
 const FINDS = flag('--finds')
 const FINDS_TURNS = Math.max(FINDS_MIN_TURNS, Number(opt('--finds-turns', 24)))
 const FINDS_ACTIONS = ['Tôi nhìn quanh nơi mình đang đứng, xem có gì đáng chú ý.', 'Tôi kiểm tra lại đồ trong túi rồi đi tiếp.', 'Tôi nghỉ một lát và nghe ngóng xung quanh.', 'Tôi lục tìm trong chỗ gần nhất xem còn gì dùng được.', 'Tôi đi dọc hành lang, bước chậm và để ý từng cánh cửa.', 'Tôi ngồi xuống uống chút nước và nghĩ xem nên làm gì tiếp.', 'Tôi trò chuyện với người gần nhất, hỏi xem họ cần gì.', 'Tôi leo lên tầng trên xem tình hình.', 'Tôi dọn lại chỗ nấp cho gọn và chờ.', 'Tôi mở tủ đồ ở góc phòng ra xem.', 'Tôi đi ra ngoài một đoạn ngắn rồi quay lại.', 'Tôi xem lại bản đồ và chọn hướng đi tiếp theo.']
-const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds'
+// --stats (gate mode only, not with --finds): the growth system. After creation + yes + the 2 companion turns, canned neutral Vietnamese actions that
+// use the body and the mind (stairs, carrying, listening at doors, forcing a door, a map, running) until the run has --stats-turns story turns (default 36,
+// never under 30). The run also needs a skill, which only a find gives: it keeps playing until a find with kind "skill" exists in this run (not before
+// turn 12, never past --stats-max-turns, default 60), then plays a REST turn, the player commands "kỹ năng" and "trang bị <the skill's Vietnamese name>"
+// (loadout.lua answers them; equip is allowed only at rest), then --stats-after (default 16) more actions so the equipped skill can gain mastery.
+// No skill found by the max: the run records stats.noSkill and carries on to the end, and stats.ticks goes red (no skill-mastery tick). Each turn's
+// chat variables (stats, skills, slots, stat_ticks, stat_rank, stat_break) are kept on the turn. Scored by lib/stats.mjs; result gate/<story>-stats.json.
+const STATS = flag('--stats')
+if (STATS && flag('--finds')) throw new Error('--stats and --finds are separate gates: run them one after the other')
+const STATS_TURNS = Math.max(STATS_MIN_TURNS, Number(opt('--stats-turns', 36)))
+const STATS_MAX_TURNS = Math.max(STATS_TURNS, Number(opt('--stats-max-turns', 60)))
+const STATS_AFTER = Math.max(1, Number(opt('--stats-after', 16)))
+const STATS_FIRST_SKILL_TURN = 12
+const STATS_ACTIONS = ['Tôi leo cầu thang bộ lên tầng trên, bám lan can từng bậc một.', 'Tôi vác mấy thùng đồ nặng ra góc hành lang cho gọn.', 'Tôi áp tai vào cánh cửa, nghe xem phía sau có tiếng động gì không.', 'Tôi dồn vai đẩy mạnh cánh cửa đang bị kẹt.', 'Tôi trải tấm bản đồ ra và nghiên cứu kỹ các lối đi.', 'Tôi chạy hết tốc lực dọc hành lang cho tới cuối dãy.', 'Tôi kéo lê chiếc tủ nặng chắn ngang lối đi.', 'Tôi đứng yên lắng nghe tiếng bước chân ở tầng dưới.', 'Tôi nghĩ cách nhớ lại đường đã đi và vạch lộ trình mới trên bản đồ.', 'Tôi trèo qua bức tường thấp rồi nhảy xuống bên kia.']
+const STATS_REST = 'Tôi ngồi xuống nghỉ một lát, uống nước và chờ hơi thở đều lại.'
+const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds' && x.phase !== 'stats'
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
@@ -189,14 +205,21 @@ function finishGate(key, rec, ctx, story) {
     const act = actChecks(actRuns)
     checks.push(...act)
     console.log(`[gate] ACT tags per run: ${act[1].summary}; hidden: ${act[0].status}`)
+    // growth (--stats): the fresh runs' story turns with the chat variables each turn left; start = the values after the creation turns (default 10.00% each)
+    if (STATS) {
+        const pick = (v) => ({ stats: v?.stats, skills: v?.skills, slots: v?.slots, rank: v?.stat_rank, brk: v?.stat_break })
+        const storyTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply, reply: x.reply, ticks: x.vars?.stat_ticks ?? '', panel: x.panel ?? '', ...pick(x.vars) }))
+        const startOf = (run) => { const c = run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1); return { stats: c?.vars?.stats ?? undefined, skills: c?.vars?.skills ?? undefined } }
+        checks.push(...statsChecks(runs.map((run) => ({ start: startOf(run), turns: storyTurns(run) }))))
+    }
     const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
-    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}.json`)
+    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}${STATS ? '-stats' : ''}.json`)
     fs.mkdirSync(path.dirname(outFile), { recursive: true })
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -206,6 +229,23 @@ function finishGate(key, rec, ctx, story) {
     console.log(`[gate] report-only: ${regenRows.length}/${storyReplies} story replies regenerated (fired: ${[...new Set(regenRows.flatMap((r) => r.fired))].join(', ') || 'none'}; still hit: ${regenRows.filter((r) => r.left.length).length})`)
     checks.push({ id: 'gate.scene_repeat', title: 'Scene sentences repeated between turns (report only)', status: 'INFO', summary: `${scene.length} repeated`, evidence: scene })
     return { title: story.title, checks, file: outFile, blocked: rec.blocked, gate: pass }
+}
+
+/** the story turns of a run that follow the first 4 (see --stats above); run.noSkill / run.equipped record what happened */
+async function playStats(run, g, play1) {
+    let n = 4                                     // label counter: g<g>.1 creation, .2 yes, .3 and .4 the companion turns
+    const act = (k) => STATS_ACTIONS[(k + g) % STATS_ACTIONS.length]
+    const turn = (kind, text) => play1(run, `g${g}.${++n}`, 'stats', kind, text)
+    const firstSkill = () => run.turns.flatMap((x) => findsOfRun({ turns: [{ raw: x.raw ?? x.reply }] })).map((f) => f.find).find((f) => f.kind === 'skill')
+    let storyTurns = 3                           // yes + 2 companion turns are story turns of this run
+    while (storyTurns < STATS_MAX_TURNS && !(storyTurns >= STATS_FIRST_SKILL_TURN && firstSkill())) { await turn('action', act(storyTurns)); storyTurns++ }
+    const skill = firstSkill()
+    if (!skill) { run.noSkill = true; while (storyTurns < STATS_TURNS) { await turn('action', act(storyTurns)); storyTurns++ } return }
+    await turn('rest', STATS_REST); storyTurns++
+    await turn('command', 'kỹ năng'); storyTurns++
+    await turn('command', `trang bị ${skill.name.vi}`); storyTurns++
+    run.equipped = skill.name.vi
+    for (let i = 0; i < STATS_AFTER || storyTurns < STATS_TURNS; i++) { await turn('action', act(storyTurns)); storyTurns++ }
 }
 
 async function playStory(key, ctx) {
@@ -318,6 +358,7 @@ async function playStory(key, ctx) {
                   await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
                   await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
                   await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                  if (STATS) await playStats(run, g, play1)
                   if (FINDS) for (let k = 4; k < FINDS_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'finds', 'finds', FINDS_ACTIONS[(k - 4 + g) % FINDS_ACTIONS.length])
                 } catch (e) { log(`gate run ${g}: ${e.message || e}`); failsInRow = 0 }
                 if (run.turns.every((x) => x.ok)) break

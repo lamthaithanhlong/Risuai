@@ -1,0 +1,675 @@
+{
+ "note": "run 1: Sức mạnh passes the rank-1 soft cap 40.00 at turn 6 (3999 + 2 ticks) with no BREAK; run 2: a BREAK allows the soft cap but 100.01 is over the hard cap",
+ "runs": [
+  {
+   "start": {
+    "stats": {
+     "suc_manh": 3999,
+     "nhanh_nhen": 1000,
+     "the_luc": 1000,
+     "tinh_than": 1000,
+     "cam_nhan": 1000,
+     "y_chi": 1000
+    },
+    "skills": {}
+   },
+   "turns": [
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":3999,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":3999,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\n[[ACT|a3|suc_manh|1|]]",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nSức mạnh 40.00% (+0.01)",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nSức mạnh 40.00% (+0.01)",
+     "ticks": "Sức mạnh 40.00% (+0.01)",
+     "stats": "{\"suc_manh\":4000,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4000,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4000,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\n[[ACT|a6|suc_manh|1|]]",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nSức mạnh 40.01% (+0.01)",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nSức mạnh 40.01% (+0.01)",
+     "ticks": "Sức mạnh 40.01% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\n[[FIND|skill|Nghe nhịp bước|Stair Ear|Phân biệt bước chân.|common|Cần yên lặng.|yes]]",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\n[[ACT|a17|suc_manh|1|stair-ear]]",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\nThành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\nThành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":1,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":1,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\n[[ACT|a19|suc_manh|1|stair-ear]]",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":2,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":2,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\n[[ACT|a21|suc_manh|1|stair-ear]]",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nThành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nThành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\n[[ACT|a24|suc_manh|1|stair-ear]]",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nThành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nThành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\n[[ACT|a28|suc_manh|1|stair-ear]]",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\nThành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\nThành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\n[[ACT|a31|suc_manh|1|stair-ear]]",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":6,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":4001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":6,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    }
+   ]
+  },
+  {
+   "start": {
+    "stats": {
+     "suc_manh": 10000,
+     "nhanh_nhen": 1000,
+     "the_luc": 1000,
+     "tinh_than": 1000,
+     "cam_nhan": 1000,
+     "y_chi": 1000
+    },
+    "skills": {}
+   },
+   "turns": [
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\n[[BREAK|suc_manh]]",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10000,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10000,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\n[[ACT|a3|suc_manh|1|]]",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nSức mạnh 100.01% (+0.01)",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nSức mạnh 100.01% (+0.01)",
+     "ticks": "Sức mạnh 100.01% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\n[[FIND|skill|Nghe nhịp bước|Stair Ear|Phân biệt bước chân.|common|Cần yên lặng.|yes]]",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":0,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":0,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\n[[ACT|a17|suc_manh|1|stair-ear]]",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\nThành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.\nThành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.01% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":1,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":1,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\n[[ACT|a19|suc_manh|1|stair-ear]]",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.02% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":2,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":2,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\n[[ACT|a21|suc_manh|1|stair-ear]]",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nThành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.\nThành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.03% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":3,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\n[[ACT|a24|suc_manh|1|stair-ear]]",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nThành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.\nThành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.04% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "shown": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "reply": "Anh dồn vai đẩy cánh cửa kẹt, bản lề rít lên.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":4,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\n[[ACT|a28|suc_manh|1|stair-ear]]",
+     "shown": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\nThành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "reply": "Anh trải bản đồ ra sàn và lần theo con đường cũ.\nThành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.05% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "shown": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "reply": "Anh chạy dọc dãy nhà, hơi thở dồn dập.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "shown": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "reply": "Kenji leo từng bậc cầu thang, tay bám lan can lạnh.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":5,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\n[[ACT|a31|suc_manh|1|stair-ear]]",
+     "shown": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "reply": "Anh vác thùng đồ nặng qua hành lang, vai ê ẩm.\nThành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "ticks": "Thành thạo Nghe nhịp bước 0.06% (+0.01)",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":6,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    },
+    {
+     "raw": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "shown": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "reply": "Anh áp tai vào cánh cửa, nghe tiếng kéo lê phía sau.",
+     "ticks": "",
+     "stats": "{\"suc_manh\":10001,\"nhanh_nhen\":1000,\"the_luc\":1000,\"tinh_than\":1000,\"cam_nhan\":1000,\"y_chi\":1000}",
+     "skills": "{\"stair-ear\":{\"m\":6,\"eq\":1,\"name\":\"Nghe nhịp bước\",\"link\":[\"cam_nhan\"]}}",
+     "slots": "1",
+     "rank": "1"
+    }
+   ]
+  }
+ ]
+}
