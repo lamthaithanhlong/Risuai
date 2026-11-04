@@ -2,6 +2,8 @@
 // without progress, never repeat a sentence, scout ~10 m") were not followed 5 times of 5, so the GM decides them here and the
 // narrator only gets one short directive line. Nothing of this is shown to the player.
 
+import { sentencesOf } from './replyCheck.mjs'
+
 type Msg = { role: string; data: string; chatId?: string }
 
 /** The guide's name from the card's lore: the built lore entry is titled "Story guide: <Name>". */
@@ -99,6 +101,28 @@ export function alreadyTold(messages: Msg[], name: string, max = 12): string[] {
     return out
 }
 
+/**
+ * Sentences the narrator must not reuse word for word (measured 2026-11-03: the guide said "Cậu muốn tớ nhìn qua bên kia không?" twice,
+ * and a scene line came back in the next reply). guide: her full quoted sentences; scene: non-quoted sentences of the last 3 replies.
+ * Newest first, no duplicates. The same >= 5-word sentences replyCheck.mjs flags after generation.
+ */
+export function verbatimAvoid(messages: Msg[], name: string, maxGuide = 12, maxScene = 8): { guide: string[]; scene: string[] } {
+    const guide: string[] = []
+    const scene: string[] = []
+    const replies = messages.filter((m) => m.role === 'char')
+    for (const r of [...replies].reverse()) {
+        if (name && (r.data ?? '').includes(name)) {
+            for (const q of [...r.data.matchAll(/“([^”]+)”/g)].reverse()) {
+                for (const s of [...sentencesOf(q[1])].reverse()) if (guide.length < maxGuide && !guide.includes(s)) guide.push(s)
+            }
+        }
+    }
+    for (const r of [...replies].slice(-3).reverse()) {
+        for (const s of [...sentencesOf((r.data ?? '').replace(/“[^”]*”/g, '\n'))].reverse()) if (scene.length < maxScene && !scene.includes(s)) scene.push(s)
+    }
+    return { guide, scene }
+}
+
 export type GuideInput = {
     present: boolean
     name: string
@@ -109,6 +133,8 @@ export type GuideInput = {
     asked: boolean
     /** alreadyTold(): concrete details she already said, in any words */
     told?: string[]
+    /** verbatimAvoid(): sentences not to reuse word for word */
+    avoid?: string[]
 }
 
 /** One to three short English lines for the narrator; '' when the guide is not in the story. */
@@ -122,6 +148,8 @@ export function guideDirective(i: GuideInput): string {
     if (i.asked) out.push(`If asked to look: ${i.name} reports one concrete detail within ~10 m; beyond that she knows nothing and says so.`)
     if (i.recentLines.length) out.push(`Do not restate: ${i.recentLines.map((l) => `"${l}"`).join(' ')}`)
     if (i.told?.length) out.push(`đã kể rồi, không nhắc lại: ${i.told.join('; ')}`)
+    if (i.avoid?.length) out.push(`do not reuse these sentences verbatim: ${i.avoid.map((l) => `"${l}"`).join(' ')}`)
+    out.push('a 【HỆ THỐNG…】 line may repeat only when a value changed.')
     return out.join(' ')
 }
 
@@ -129,7 +157,8 @@ export function guideDirective(i: GuideInput): string {
 export function guideNote(card: { globalLore?: { comment?: string }[] } | undefined, messages: Msg[], player: string, turnsWithoutProgress: number): string {
     const name = guideNameOf(card)
     if (!name) return ''
-    const d = guideDirective({ present: true, name, playerText: player, turnsWithoutProgress,
+    const v = verbatimAvoid(messages, name)
+    const d = guideDirective({ avoid: [...v.guide, ...v.scene], present: true, name, playerText: player, turnsWithoutProgress,
         recentLines: guideRecentLines(messages, name), told: alreadyTold(messages, name), asked: playerAsks(player, name) })
     return d ? `\n[Guide (hidden, never named): ${d}]` : ''
 }

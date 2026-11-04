@@ -9,7 +9,8 @@ export function parseExport(text) {
 }
 
 const EMOJI_OPEN = /^[\s*_>]*\p{Extended_Pictographic}/u
-const SETUP = [/chỉ mình (anh|cậu|Kenji) (mới )?(thấy|nghe)/i, /(là )?người bạn thân đã (mất|qua đời) của/i, /chỉ (anh|cậu|Kenji) (mới )?(thấy|nghe) (và nghe )?được (cô|Evelyn)/i]
+import { SETUP } from '../../../src/ts/process/replyCheck.mjs'
+export { SETUP }
 const LEAK = [/\[💡/, /\[\[LOOK\b/]
 
 const tokens = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean)

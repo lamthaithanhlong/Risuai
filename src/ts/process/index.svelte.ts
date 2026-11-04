@@ -16,7 +16,9 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { creationRequest, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
+import { settleReply } from "./replyRegen";
+import { gmRequest } from "./gameMaster";
+import { creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
@@ -1606,7 +1608,11 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // the persona is the character sheet and the card's Future Plan line is asked for, with the GM on or off (gameMasterPage.ts)
     formated = storyNotesRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // while the character is being made (the card's "Được chưa?" step): only the creation step is answered, no story yet
+    const beforeCreation = formated
     formated = creationRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+    // a story turn (not the creation step, not the opening, not a continue) gets its finished reply checked once (replyRegen.ts)
+    const checkReply = formated === beforeCreation && !arg.continue && !arg.previewPrompt && nowChatroom.type === 'character' && gameMasterOn(DBState.db.characters[sel.char] ?? currentChar) && !isOpening(currentChat?.message)
+    const previousReplies = (currentChat?.message ?? []).filter((m) => m.role === 'char').map((m) => m.data)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1937,6 +1943,42 @@ export async function sendChat(chatProcessIndex = -1,arg:{
 
         if(streamAborted || abortSignal.aborted){
             return false
+        }
+
+        // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【HỆ THỐNG】 line gets ONE
+        // more draft (replyCheck.mjs / replyRegen.ts). The second draft replaces the first and is kept even if it still has hits.
+        const firstChunkKey0 = Object.keys(lastResponseChunk)[0]
+        if(checkReply && receivedStreamingResult && firstChunkKey0 !== undefined){
+            const settled = await settleReply(result, previousReplies, async (note) => {
+                formated = gmRequest(formated, note)
+                const req2 = await requestModelOnce()
+                if(req2.type === 'success'){
+                    return String(req2.result)
+                }
+                if(req2.type !== 'streaming'){
+                    return null
+                }
+                const r2 = req2.result.getReader()
+                let text = ''
+                while(!abortSignal.aborted){
+                    const got = await r2.read()
+                    if(got.value){
+                        text = got.value[Object.keys(got.value)[0]] ?? text
+                    }
+                    if(got.done){
+                        break
+                    }
+                }
+                return abortSignal.aborted ? null : text
+            }, (m) => brLog(m))
+            if(settled !== result){
+                result = settled
+                lastResponseChunk = { ...lastResponseChunk, [firstChunkKey0]: settled }
+                const redone = await processScriptFull(nowChatroom, reformatContent(prefix + result), 'editoutput', msgIndex)
+                DBState.db.characters[sel.char].chats[sel.chat].message[msgIndex].data = redone.data
+                emoChanged = redone.emoChanged
+                DBState.db.characters[sel.char].reloadKeys += 1
+            }
         }
 
         addRerolls(generationId, Object.values(lastResponseChunk))
