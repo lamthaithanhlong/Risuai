@@ -9,19 +9,12 @@ export function parseExport(text) {
 }
 
 const EMOJI_OPEN = /^[\s*_>]*\p{Extended_Pictographic}/u
-import { SETUP } from '../../../src/ts/process/replyCheck.mjs'
+import { SETUP, tokens, overlap, scoredSentences, speechSentences, consecutiveRepeat } from '../../../src/ts/process/replyCheck.mjs'
 export { SETUP }
 const LEAK = [/\[💡/, /\[\[LOOK\b/]
 
-const tokens = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean)
-const sentences = (s) => String(s).split(/(?<=[.!?…”"])\s+|\n+/).map((x) => x.trim()).filter((x) => tokens(x).length >= 6)
-/** Tokens in common over the shorter sentence. */
-export function overlap(a, b) {
-    const A = tokens(a), B = tokens(b)
-    const set = new Set(B)
-    const common = A.filter((t) => set.has(t)).length
-    return common / Math.min(A.length, B.length)
-}
+const sentences = scoredSentences
+export { overlap }
 
 /**
  * Problems in the narrator's replies (strings, in order): the setup explained to the player, an emoji opening a paragraph in more than a
@@ -40,9 +33,8 @@ export function narrationProblems(replies) {
     if (rs.length >= 2 && withEmoji.length > rs.length / 3) out.push({ rule: 'emoji', reply: withEmoji[0], text: `${withEmoji.length}/${rs.length} replies open a paragraph with an emoji` })
     // repeated facts are what the owner flagged (her second answer repeating the first): quoted speech at 60%, any other sentence only
     // when it is the same sentence (90%): a scene line such as "Ngoài cửa, hành lang vẫn im." recurs honestly between two replies
-    const speech = (r) => sentences([...r.matchAll(/“([^”]+)”/g)].map((m) => m[1]).join('\n'))
     for (let i = 1; i < rs.length; i++) {
-        const hit = speech(rs[i]).find((s) => speech(rs[i - 1]).some((p) => overlap(p, s) >= 0.6)) ?? sentences(rs[i]).find((s) => sentences(rs[i - 1]).some((p) => overlap(p, s) >= 0.9))
+        const hit = consecutiveRepeat(rs[i], rs[i - 1])
         if (hit) out.push({ rule: 'repeat', reply: i, text: hit.slice(0, 100) })
     }
     return out

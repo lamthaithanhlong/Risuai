@@ -163,7 +163,8 @@ function finishGate(key, rec, ctx, story) {
         try { log = JSON.parse(last?.vars?.reply_regen ?? '[]') } catch { log = [] }
         return log.map((r) => ({ run: i + 1, ...r }))
     })
-    const storyReplies = runs.reduce((n, run) => n + run.turns.filter((x) => isCore(x) && x.ok).length, 0)
+    // every story turn the run played (the 3 gate turns and the --finds turns): the regenerations are counted over all of them
+    const storyReplies = runs.reduce((n, run) => n + run.turns.filter((x) => x.phase !== 'creation' && x.ok).length, 0)
     const worry = runs.filter((run) => { const st = run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply); return st.length === 3 && scoutWorry(st[2]) }).length
     const sc = rows.filter((r) => !r.scout.length).length
     const sp = rows.filter((r) => !r.spoiler.length).length

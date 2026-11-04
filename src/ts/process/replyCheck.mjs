@@ -40,11 +40,67 @@ export function systemLineRepeats(text, previousReplies, n = 3) {
     return systemLines(text).filter((l) => prev.has(l.replace(/\s+/g, ' ')))
 }
 
+// ---- repeated speech ---------------------------------------------------------------------------------------------------------------
+// The acceptance scorer (narration.mjs) flags a reply whose quoted speech shares >= 60% of its tokens with the previous reply's speech (or
+// any sentence at >= 90%). These helpers ARE that definition, so the app regenerates exactly what the gate would flag; and a line of
+// dialogue said word for word in any of the last 8 replies is a repeat too (a companion's "Tớ không thấy dấu chân rõ hơn đâu." three
+// turns later).
+
+export const tokens = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean)
+/** Sentences of at least 6 tokens, as the scorer cuts them. */
+export const scoredSentences = (s) => String(s ?? '').split(/(?<=[.!?…”"])\s+|\n+/).map((x) => x.trim()).filter((x) => tokens(x).length >= 6)
+/** Tokens in common over the shorter sentence. */
+export function overlap(a, b) {
+    const A = tokens(a), B = tokens(b)
+    const set = new Set(B)
+    return A.filter((t) => set.has(t)).length / Math.min(A.length, B.length)
+}
+/** The quoted speech of a reply, sentences of at least 6 tokens. */
+export const speechSentences = (r) => scoredSentences([...String(r ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1]).join('\n'))
+
+/** What the scorer calls a repeat between two consecutive replies: a spoken sentence at >= 60%, else any sentence at >= 90%. Shown form or null. */
+export function consecutiveRepeat(text, previous) {
+    const prevSpeech = speechSentences(previous)
+    return speechSentences(text).find((s) => prevSpeech.some((p) => overlap(p, s) >= 0.6)) ?? scoredSentences(text).find((s) => scoredSentences(previous).some((p) => overlap(p, s) >= 0.9)) ?? null
+}
+
+/** The speech half of that rule: a spoken sentence of `text` at >= 60% of a spoken sentence of the previous reply (the app regenerates on this one; scene sentences and System lines stay the scorer's own report). */
+export function consecutiveSpeechRepeat(text, previous) {
+    const prevSpeech = speechSentences(previous)
+    return speechSentences(text).find((s) => prevSpeech.some((p) => overlap(p, s) >= 0.6)) ?? null
+}
+
+/** Every sentence of the quoted speech (>= 4 words), whole quotes included, normalised for comparison. */
+function speechLines(text) {
+    const out = []
+    for (const m of String(text ?? '').matchAll(/[“"]([^”"]+)[”"]/g)) {
+        const whole = m[1].trim()
+        if (normalize(whole).split(' ').filter(Boolean).length >= 4) out.push(whole)
+        for (const part of whole.split(/(?<=[.!?…])\s+|\n+/).map((x) => x.trim())) if (part !== whole && normalize(part).split(' ').filter(Boolean).length >= 4) out.push(part)
+    }
+    return out
+}
+
+/** Lines of dialogue of `text` (shown form) that one of the last n replies already said word for word (case, quotes, punctuation and spacing folded). */
+export function dialogueRepeats(text, previousReplies, n = 8) {
+    const seen = new Set()
+    for (const p of (previousReplies ?? []).slice(-n)) for (const l of speechLines(p)) seen.add(normalize(l))
+    const out = []
+    for (const l of speechLines(text)) if (seen.has(normalize(l)) && !out.includes(l)) out.push(l)
+    return out
+}
+
 /** Everything wrong with a reply, for the scorer and for the regenerate-once step. */
 export function replyHits(text, previousReplies) {
+    const prev = previousReplies ?? []
+    const near = prev.length ? consecutiveSpeechRepeat(text, prev[prev.length - 1]) : null
+    const exact = verbatimRepeats(text, prev)
+    const said = dialogueRepeats(text, prev).filter((l) => !exact.includes(l))
     return [
         ...setupHits(text).map((t) => ({ rule: 'setup', text: t })),
-        ...verbatimRepeats(text, previousReplies).map((t) => ({ rule: 'repeat', text: t })),
-        ...systemLineRepeats(text, previousReplies).map((t) => ({ rule: 'system', text: t })),
+        ...exact.map((t) => ({ rule: 'repeat', text: t })),
+        ...(near && !exact.some((e) => normalize(e) === normalize(near)) ? [{ rule: 'repeat', text: near }] : []),
+        ...said.map((t) => ({ rule: 'dialogue', text: t })),
+        ...systemLineRepeats(text, prev).map((t) => ({ rule: 'system', text: t })),
     ]
 }

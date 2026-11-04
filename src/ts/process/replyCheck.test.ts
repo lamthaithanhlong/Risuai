@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
+import { consecutiveRepeat, dialogueRepeats, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
+import { narrationProblems } from '../../../tests/acceptance/lib/narration.mjs'
 import { regenerationNote, settleReply, shouldRegenerate } from './replyRegen'
 import { alreadyTold, guideDirective, guideNote, verbatimAvoid } from './guideDirective'
 
@@ -101,5 +102,45 @@ describe('settleReply records what fired', () => {
         expect(rec).toEqual([])
         await settleReply('Tiếng cào ngoài hành lang ngừng hẳn rồi.', ['Tiếng cào ngoài hành lang ngừng hẳn rồi.'], async () => null, () => {}, (r) => rec.push(r))
         expect(rec[0].redoFailed).toBe(true)
+    })
+})
+
+describe('repeated dialogue (a real gate: the companion said the same line again 3 to 8 turns later)', () => {
+    const said = 'Evelyn nghiêng đầu. “Tớ không thấy dấu chân rõ hơn đâu.” Cô lùi nửa bước.'
+    const filler = (i: number) => `Kenji đi thêm ${i} bước dọc hành lang và nghe mưa gõ lên mái.`
+    const history = [said, filler(1), filler(2), filler(3), filler(4)]
+    const again = 'Cô khẽ cười. “tớ KHÔNG thấy dấu chân rõ hơn đâu!” Rồi cô quay đi.'
+
+    it('a line said word for word 4 replies ago (case, quotes, punctuation folded) is a dialogue hit', () => {
+        expect(dialogueRepeats(again, history)).toEqual(['tớ KHÔNG thấy dấu chân rõ hơn đâu!'])
+        expect(replyHits(again, history).map((h) => h.rule)).toEqual(['dialogue'])
+    })
+    it('older than 8 replies, or different words, or a short line: no hit', () => {
+        const old = [said, ...Array.from({ length: 8 }, (_, i) => filler(i))]
+        expect(dialogueRepeats(again, old)).toEqual([])
+        expect(replyHits('Cô nói. “Tớ thấy một vết giày rõ hơn nhiều.”', history)).toEqual([])
+        expect(dialogueRepeats('“Im đi nào.”', ['“Im đi nào.”'])).toEqual([])
+    })
+    it('the redo note names the line: đừng lặp câu đã nói', () => {
+        expect(regenerationNote(replyHits(again, history))).toContain('đừng lặp câu đã nói: "tớ KHÔNG thấy dấu chân rõ hơn đâu!"')
+    })
+    it('settleReply redoes once for it and records which check fired', async () => {
+        const rec: { fired: string[] }[] = []
+        const notes: string[] = []
+        const out = await settleReply(again, history, async (n) => { notes.push(n); return 'Kenji im lặng. “Nghe kìa, có tiếng gì dưới thang máy.”' }, () => {}, (r) => rec.push(r))
+        expect(out).toContain('thang máy')
+        expect(notes).toHaveLength(1)
+        expect(rec[0].fired).toEqual(['dialogue'])
+    })
+    it('what the acceptance scorer calls a repeat between consecutive replies is a hit in the app (same definition)', () => {
+        const prev = 'Cô nói. “Tớ nghe thấy tiếng cào ở ngoài cánh cửa này rồi.”'
+        const cur = 'Cô nhắc lại. “Tớ nghe thấy tiếng cào ngoài cánh cửa này đấy.”'
+        expect(consecutiveRepeat(cur, prev)).not.toBeNull()
+        expect(narrationProblems([prev, cur]).map((p: { rule: string }) => p.rule)).toContain('repeat')
+        expect(replyHits(cur, [prev]).map((h) => h.rule)).toContain('repeat')
+        const other = 'Cô nói. “Mưa đã nhẹ đi, mình đi tiếp thôi chứ.”'
+        expect(consecutiveRepeat(other, prev)).toBeNull()
+        expect(narrationProblems([prev, other]).filter((p: { rule: string }) => p.rule === 'repeat')).toEqual([])
+        expect(replyHits(other, [prev])).toEqual([])
     })
 })

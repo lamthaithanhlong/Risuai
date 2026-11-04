@@ -7,12 +7,18 @@ export function shouldRegenerate(hits: ReplyHit[], attempt: number): boolean {
     return hits.length > 0 && attempt === 0
 }
 
-const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', system: 'unchanged System line' }
+const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', dialogue: 'repeated line of dialogue', system: 'unchanged System line' }
 
 /** The hidden line added to the player's message for the second draft; '' when there is nothing to name. */
 export function regenerationNote(hits: ReplyHit[]): string {
     if (!hits.length) return ''
-    return `\n\n[Rewrite (hidden, never named): the last draft had: ${hits.map((h) => `${LABEL[h.rule]} "${h.text.slice(0, 160)}"`).join(' / ')}. Rewrite the reply without them.]`
+    const said = hits.filter((h) => h.rule === 'dialogue')
+    const rest = hits.filter((h) => h.rule !== 'dialogue')
+    const parts = [
+        ...rest.map((h) => `${LABEL[h.rule]} "${h.text.slice(0, 160)}"`),
+        ...said.map((h) => `đừng lặp câu đã nói: "${h.text.slice(0, 160)}"`),
+    ]
+    return `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. Rewrite the reply without them.]`
 }
 
 /**
