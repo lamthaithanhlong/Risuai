@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { fixLatin1Utf8 } from './lib/play.mjs'
 import { parseFinds, fingerprint, slug, dropProblems, noRepeatProblems, naturalProblems, savedProblems, findsChecks, forCard, earlyFinds, DEFAULT_TOOLS } from './lib/finds.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -135,4 +136,16 @@ test('mutations: a scorer with its rule removed lets the broken fixture through 
     assert.deepEqual(m.naturalProblems(fx('block-visible')), []); assert.notDeepEqual(naturalProblems(fx('block-visible')), [])
     m = await mutant("if (!KINDS.includes(kind)) why.push", "if (false) why.push")
     assert.ok(m.parseFinds('[[FIND|gadget|a|b|c|common|d|yes]]')[0].ok); assert.ok(!parseFinds('[[FIND|gadget|a|b|c|common|d|yes]]')[0].ok)
+})
+
+test('fixLatin1Utf8: the browser\'s Latin-1 view of a streamed reply is turned back; right text is left alone', () => {
+    const want = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe qua tường.|uncommon|Cần yên tĩnh|yes]]'
+    const mangled = Buffer.from(want, 'utf8').toString('latin1')
+    assert.notEqual(mangled, want)
+    assert.equal(fixLatin1Utf8(mangled), want)
+    assert.equal(fixLatin1Utf8(want), want)
+    assert.equal(fixLatin1Utf8('plain ascii'), 'plain ascii')
+    assert.equal(fixLatin1Utf8('Café'), 'Café')
+    assert.equal(parseFinds(fixLatin1Utf8(mangled)).filter((b) => b.ok)[0].find.name.vi, 'Nghe tiếng bước chân')
+    assert.notEqual(parseFinds(mangled).filter((b) => b.ok)[0]?.find.name.vi, 'Nghe tiếng bước chân') // without the fix the name is mangled
 })

@@ -31,6 +31,18 @@ export function completionText(body) {
     try { const j = JSON.parse(t); return j.choices?.[0]?.message?.content ?? '' } catch { return '' }
 }
 
+/**
+ * The browser hands the body of a streamed (text/event-stream, no charset) response over as Latin-1 text: every UTF-8 byte a character of
+ * its own ("CÃ¡nh tá»§"). Turn that back when the whole text is such bytes; any text that is already right (or has a character above U+00FF)
+ * is returned as it is. Without it the block's Vietnamese names reach the scorers mangled.
+ */
+export function fixLatin1Utf8(t) {
+    const s = String(t ?? '')
+    if (!/[\u00C2-\u00F4][\u0080-\u00BF]/.test(s) || /[^\u0000-\u00FF]/.test(s)) return s
+    const back = Buffer.from(s, 'latin1').toString('utf8')
+    return back.includes('\uFFFD') ? s : back
+}
+
 /** what the acceptance needs out of one model request body (never the headers: they carry the key) */
 export function readMainRequest(bodyText) {
     let body
@@ -114,7 +126,7 @@ export class Player {
             const info = readMainRequest(req.postData() || '')
             if (!info) return
             let text = null
-            if (info.kind === 'main' || /pick$/.test(info.kind)) { try { text = completionText(await (await req.response())?.text()) } catch { text = null } }
+            if (info.kind === 'main' || /pick$/.test(info.kind)) { try { text = fixLatin1Utf8(completionText(await (await req.response())?.text())) } catch { text = null } }
             if (this.dumpDir && (info.kind === 'main' || /pick$/.test(info.kind))) {
                 const fs = await import('fs')
                 fs.mkdirSync(this.dumpDir, { recursive: true })
