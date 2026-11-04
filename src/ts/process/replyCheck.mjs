@@ -64,10 +64,18 @@ export function consecutiveRepeat(text, previous) {
     return speechSentences(text).find((s) => prevSpeech.some((p) => overlap(p, s) >= 0.6)) ?? scoredSentences(text).find((s) => scoredSentences(previous).some((p) => overlap(p, s) >= 0.9)) ?? null
 }
 
-/** The speech half of that rule: a spoken sentence of `text` at >= 60% of a spoken sentence of the previous reply (the app regenerates on this one; scene sentences and System lines stay the scorer's own report). */
+/** The speech half of that rule: a spoken sentence of `text` at >= 60% of a spoken sentence of the previous reply (scene sentences are consecutiveSceneRepeat's). */
 export function consecutiveSpeechRepeat(text, previous) {
     const prevSpeech = speechSentences(previous)
     return speechSentences(text).find((s) => prevSpeech.some((p) => overlap(p, s) >= 0.6)) ?? null
+}
+
+/** The scene half of that rule, the one the scorer reports for narration: any sentence of `text` (>= 6 tokens) at >= 90% of a sentence of the
+ *  previous reply. 【HỆ THỐNG…】 lines are left out (the 'system' rule has its own meaning for them: they may repeat when a value changed).
+ *  A short sentence whose words all occur in a longer previous one counts, as it does for the scorer. Shown form or null. */
+export function consecutiveSceneRepeat(text, previous) {
+    const prevScene = scoredSentences(previous).filter((x) => !SYSTEM_START.test(x))
+    return scoredSentences(text).filter((x) => !SYSTEM_START.test(x)).find((s) => prevScene.some((p) => overlap(p, s) >= 0.9)) ?? null
 }
 
 /** Every sentence of the quoted speech (>= 4 words), whole quotes included, normalised for comparison. */
@@ -88,6 +96,31 @@ export function dialogueRepeats(text, previousReplies, n = 8) {
     const out = []
     for (const l of speechLines(text)) if (seen.has(normalize(l)) && !out.includes(l)) out.push(l)
     return out
+}
+
+// ---- malformed growth tags --------------------------------------------------------------------------------------------------------
+// The narrator writes the hidden tag [[ACT|id|stat+stat|difficulty|skill]] (and rarely [[BREAK|stat]]). Real gate lines (2026-11-04) lacked the
+// first pipe ("[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]"), named a stat that does not exist ("cảm_nhận"), had a fifth field, or were
+// left unclosed. Whatever the script cannot read is growth lost and, without the strip, text on the screen: one regeneration asks for the right form.
+
+export const STAT_KEYS = ['suc_manh', 'nhanh_nhen', 'the_luc', 'tinh_than', 'cam_nhan', 'y_chi']
+const STAT_NAMES = { 'sức mạnh': 'suc_manh', 'nhanh nhẹn': 'nhanh_nhen', 'thể lực': 'the_luc', 'tinh thần': 'tinh_than', 'cảm nhận': 'cam_nhan', 'ý chí': 'y_chi' }
+const statOk = (tok) => { const t = tok.trim().toLowerCase(); return STAT_KEYS.includes(t.replace(/-/g, '_')) || t in STAT_NAMES }
+const statsOk = (field) => { const toks = field.split(/[+,]/).map((x) => x.trim()).filter(Boolean); return toks.length > 0 && toks.every(statOk) }
+const TAG_ANY = /\[\[\s*(ACT|BREAK)(?![\p{L}\p{N}_])[^\]\n]*(?:\]\]?|$|(?=\n))/giu
+
+/** Whether one tag as written is the form the card's rule gives: [[ACT|id|stats|difficulty|skills]] with 4 fields, [[BREAK|stat]]. */
+export function tagWellFormed(tag) {
+    const t = String(tag).trim()
+    let m = /^\[\[ACT\|([^|\]]+)\|([^|\]]+)\|([^|\]]+)\|([^|\]]*)\]\]$/.exec(t)
+    if (m) return statsOk(m[2])
+    m = /^\[\[BREAK\|([^|\]]+)\]\]$/.exec(t)
+    return !!m && statsOk(m[1])
+}
+
+/** The growth tags of a reply that are not in the right form (text as written), a list (empty when clean or without tags). */
+export function malformedTags(text) {
+    return [...String(text ?? '').matchAll(TAG_ANY)].map((m) => m[0].trim()).filter((t) => !tagWellFormed(t))
 }
 
 // ---- language drift ----------------------------------------------------------------------------------------------------------------
@@ -132,12 +165,15 @@ export function replyHits(text, previousReplies) {
     const near = prev.length ? consecutiveSpeechRepeat(text, prev[prev.length - 1]) : null
     const exact = verbatimRepeats(text, prev)
     const said = dialogueRepeats(text, prev).filter((l) => !exact.includes(l))
+    const scene = prev.length ? consecutiveSceneRepeat(text, prev[prev.length - 1]) : null
     return [
         ...setupHits(text).map((t) => ({ rule: 'setup', text: t })),
         ...exact.map((t) => ({ rule: 'repeat', text: t })),
         ...(near && !exact.some((e) => normalize(e) === normalize(near)) ? [{ rule: 'repeat', text: near }] : []),
         ...said.map((t) => ({ rule: 'dialogue', text: t })),
+        ...(scene && !exact.length && !near && !said.length ? [{ rule: 'scene', text: scene }] : []),
         ...systemLineRepeats(text, prev).map((t) => ({ rule: 'system', text: t })),
         ...languageHits(text).map((t) => ({ rule: 'lang', text: t })),
+        ...malformedTags(text).slice(0, 2).map((t) => ({ rule: 'tag', text: t })),
     ]
 }

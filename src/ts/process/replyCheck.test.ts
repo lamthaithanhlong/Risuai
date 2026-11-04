@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import viReplies from './replyLang.fixture.json'
-import { consecutiveRepeat, dialogueRepeats, languageDrift, languageHits, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
+import { consecutiveRepeat, consecutiveSceneRepeat, malformedTags, tagWellFormed, dialogueRepeats, languageDrift, languageHits, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
 import { narrationProblems } from '../../../tests/acceptance/lib/narration.mjs'
 import { regenerationNote, settleReply, shouldRegenerate } from './replyRegen'
 import { alreadyTold, guideDirective, guideNote, verbatimAvoid } from './guideDirective'
@@ -159,7 +159,7 @@ describe('language drift (a real gate: the narrator answered a story turn in Fre
     it('French, English and Spanish narration is flagged; the French turn from the gate most of all', () => {
         for (const t of [FRENCH, EN_SHORT, EN_NAMES, FR_SHORT, ES, ES_NAMES]) {
             expect(languageHits(t), t.slice(0, 40)).toHaveLength(1)
-            expect(replyHits(t, []).map((h) => h.rule)).toEqual(['lang'])
+            expect(replyHits(t, []).map((h) => h.rule)).toContain('lang')
         }
         const d = languageDrift(FRENCH)
         expect(d.viet).toBeLessThan(0.1)
@@ -190,11 +190,66 @@ describe('language drift (a real gate: the narrator answered a story turn in Fre
         expect(out).toBe(vi)
         expect(notes).toHaveLength(1)
         expect(notes[0]).toContain('trả lời bằng tiếng Việt')
-        expect(recs).toEqual([{ fired: ['lang'], left: [], redoFailed: false }])
+        expect(recs).toEqual([{ fired: ['lang', 'tag'], left: [], redoFailed: false }])   // the real French reply also had a malformed [[ACT…]] (a fifth field)
     })
     it('the gate scorer flags it through the same function (narration.clean)', () => {
         const vi = 'Kenji nắm chặt cán dao và đếm nhịp thở của mình. Ngoài hành lang, tiếng mưa che khuất mọi âm thanh nhỏ.'
         expect(narrationProblems([vi, FRENCH.split('[💡')[0]]).map((p: { rule: string }) => p.rule)).toEqual(['lang'])
         expect(narrationProblems([vi, MIXED])).toEqual([])
+    })
+})
+
+
+// Real scene-sentence repeats from the w5c gate runs (2026-11-04): the scorer flagged each (a sentence of the reply at >= 90% of one in the
+// previous reply) and the app never fixed them, because it only looked at exact repeats and at spoken lines.
+describe('scene sentence repeats the scorer reports', () => {
+    const REAL: [string, string, string][] = [
+        ['evelyn run 3 turn 2', 'Tớ không biết ngoài kia có chuyện gì, nhưng vừa rồi có tiếng kéo lê ngay ngoài cửa.”', 'Kenji áp tai vào cửa. Ngoài cửa không có thêm tiếng động. Anh thở ra.'],
+        ['evelyn run 3 turn 16', 'Tiếng mưa bên ngoài đã thưa đi, còn trong tòa nhà chỉ còn những âm thanh nhỏ truyền qua bê tông: tiếng ống nước co lại, một tiếng cộc trầm phía dưới, rồi im.', 'Có tiếng rền dưới sàn. Sau tiếng rền, tòa nhà lại im. Kenji đếm đến mười.'],
+        ['evelyn run 4 turn 2', 'Ngoài cửa, hành lang im lặng, nhưng dưới khe cửa vẫn luồn vào một vệt mùi tanh lẫn với mùi thuốc tẩy cũ.', 'Mùi tanh vẫn len dưới khe cửa. Kenji lùi một bước.'],
+        ['default run 5 turn 2', 'Đường ra ngoài nằm ngay bên kia cánh cửa; căn hộ vẫn còn những thứ có thể dùng, nhưng tiếng cọ ngoài kia lại vang lên lần nữa, gần hơn một chút.', 'Cô hạ giọng. “Ngoài cửa với bên kia tường.” Rồi im.'],
+    ]
+    for (const [name, prev, cur] of REAL) {
+        it(`${name}: the scorer flags it and the app check now does too`, () => {
+            expect(narrationProblems([prev, cur]).map((p) => p.rule)).toContain('repeat')
+            expect(consecutiveSceneRepeat(cur, prev)).not.toBeNull()
+            expect(replyHits(cur, [prev]).map((h) => h.rule)).toEqual(['scene'])
+        })
+    }
+    it('the note for it is "đừng lặp câu đã nói", and a regeneration clears it', async () => {
+        const [, prev, cur] = REAL[0]
+        const hits = replyHits(cur, [prev])
+        expect(regenerationNote(hits)).toContain('đừng lặp câu đã nói: "Ngoài cửa không có thêm tiếng động."')
+        expect(await settleReply(cur, [prev], async () => 'Kenji nghe nhịp thở của chính mình, rồi nhìn xuống đôi giày.')).toBe('Kenji nghe nhịp thở của chính mình, rồi nhìn xuống đôi giày.')
+    })
+    it('System lines stay out of it, an unrelated sentence does not hit', () => {
+        const sys = '【HỆ THỐNG: Điểm sinh tồn 12/20 | Thức ăn 3 | Nước 2 | Ngày 1】'
+        expect(consecutiveSceneRepeat(`Kenji thở ra.\n${sys}`, `Anh đứng im.\n${sys}`)).toBeNull()
+        expect(consecutiveSceneRepeat(REAL[0][2], 'Một con quạ đen đậu trên lan can và nhìn xuống sân.')).toBeNull()
+    })
+})
+
+describe('malformed growth tags (rule "tag")', () => {
+    const body = 'Kenji leo lên bậc thang cuối, hơi thở dồn lại ở cổ họng.'
+    it('the two real lines without the first pipe are hits, the right form is not', () => {
+        for (const t of ['[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]', '[[ACT dọn-chỗ-nấp|suc_manh+cam_nhan|trivial|]]']) {
+            expect(replyHits(`${body}\n${t}`, []).map((h) => h.rule)).toEqual(['tag'])
+        }
+        for (const t of ['[[ACT|leo-cầu-thang|the_luc+cam_nhan|normal|]]', '[[ACT|x|Sức mạnh + Ý chí|hard|giữ-im-lặng]]', '[[BREAK|y_chi]]']) {
+            expect(replyHits(`${body}\n${t}`, [])).toEqual([])
+        }
+    })
+    it('unknown stat, wrong field count, unclosed, mixed case', () => {
+        for (const t of ['[[ACT|nghe-ngóng|cảm_nhận|normal|]]', '[[ACT|nghe|cam_nhan|normal||giữ-im-lặng]]', '[[ACT|nghe|cam_nhan|normal]]', '[[ACT|nghe|cam_nhan|normal|', '[[act|nghe|cam_nhan|normal|]]', '[[BREAK y_chi]]', '[[BREAK|magic]]']) {
+            expect(tagWellFormed(t)).toBe(false)
+            expect(malformedTags(`${body} ${t}`)).toHaveLength(1)
+        }
+    })
+    it('the note asks for the right form; the regeneration is recorded as rule tag', async () => {
+        const dirty = `${body}\n[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]`
+        expect(regenerationNote(replyHits(dirty, []))).toContain('[[ACT|id|stat|độ khó|skill]] hoặc bỏ thẻ')
+        const rec: { fired: string[] }[] = []
+        await settleReply(dirty, [], async () => `${body}\n[[ACT|leo-cầu-thang|the_luc|normal|]]`, () => {}, (r) => rec.push(r))
+        expect(rec[0].fired).toEqual(['tag'])
     })
 })

@@ -7,13 +7,13 @@ export function shouldRegenerate(hits: ReplyHit[], attempt: number): boolean {
     return hits.length > 0 && attempt === 0
 }
 
-const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', dialogue: 'repeated line of dialogue', system: 'unchanged System line', lang: 'narration not in Vietnamese (trả lời bằng tiếng Việt)' }
+const LABEL: Record<ReplyHit['rule'], string> = { setup: 'setup exposition', repeat: 'repeated sentence', dialogue: 'repeated line of dialogue', system: 'unchanged System line', lang: 'narration not in Vietnamese (trả lời bằng tiếng Việt)', scene: 'repeated scene sentence', tag: 'malformed hidden tag (viết thẻ đúng dạng [[ACT|id|stat|độ khó|skill]] hoặc bỏ thẻ)' }
 
 /** The hidden line added to the player's message for the second draft; '' when there is nothing to name. */
 export function regenerationNote(hits: ReplyHit[]): string {
     if (!hits.length) return ''
-    const said = hits.filter((h) => h.rule === 'dialogue')
-    const rest = hits.filter((h) => h.rule !== 'dialogue')
+    const said = hits.filter((h) => h.rule === 'dialogue' || h.rule === 'scene')
+    const rest = hits.filter((h) => h.rule !== 'dialogue' && h.rule !== 'scene')
     const parts = [
         ...rest.map((h) => `${LABEL[h.rule]} "${h.text.slice(0, 160)}"`),
         ...said.map((h) => `đừng lặp câu đã nói: "${h.text.slice(0, 160)}"`),
