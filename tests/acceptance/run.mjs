@@ -52,7 +52,7 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
-import { narrationProblems, companionCaseProblems, sceneRepeats } from './lib/narration.mjs'
+import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems } from './lib/narration.mjs'
 import { createRequire } from 'module'
 
 const argv = process.argv.slice(2)
@@ -140,8 +140,15 @@ function finishGate(key, rec, ctx, story) {
         const record = (creation.find((x) => asksDuocChua(x.reply)) ?? creation.at(-1))?.reply ?? ''
         const story = t.filter((x) => x.phase !== 'creation')
         const replies = story.filter((x) => x.ok).map((x) => x.shown || x.reply)
-        return { chatId: run.chatId, replied: story.length === 2 && t.every((x) => x.ok), companion: record ? companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' }) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 2 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 2 story replies' }] }
+        return { chatId: run.chatId, replied: story.length === 3 && t.every((x) => x.ok), companion: record ? companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' }) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 3 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 3 story replies' }] }
     })
+    for (const [i, run] of runs.entries()) {
+        const st = run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply)
+        rows[i].scout = st.length === 3 ? guideScoutProblems(st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
+        rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems([...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
+    }
+    const sc = rows.filter((r) => !r.scout.length).length
+    const sp = rows.filter((r) => !r.spoiler.length).length
     const a = rows.filter((r) => !r.companion.length).length
     const b = rows.filter((r) => !r.narration.length).length
     const n = GATE_N
@@ -149,6 +156,8 @@ function finishGate(key, rec, ctx, story) {
     const checks = [
         mk('gate.companion', `The record's Đồng hành line matches the persona (${companions.join(', ') || 'no companion: "Không"'}) in ${n} of ${n} creation replays`, a === n && runs.length === n, `${a}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.companion.map((p) => `run ${i + 1}: ${p.text}`))),
         mk('gate.narration', 'The first 3 turns are clean in every run', b === n && runs.length === n, `${b}/${runs.length} clean (need ${n}/${n})`, rows.flatMap((r, i) => r.narration.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
+        mk('guide.scout', 'Asked to check the corridor she reports a concrete detail inside ~10 m', sc === n && runs.length === n, `${sc}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.scout.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
+        mk('guide.noSpoiler', 'She states no future event, no System text, nothing beyond her range', sp === n && runs.length === n, `${sp}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.spoiler.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
     ]
     const pass = checks.every((c) => c.status === 'PASS') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
@@ -157,7 +166,7 @@ function finishGate(key, rec, ctx, story) {
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -272,6 +281,7 @@ async function playStory(key, ctx) {
                 for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
                 await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
                 await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
+                await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
             }
         } else {
         // run 1: step by step, up to the given number of answers (it stops at the record: no yes is given here). A run that

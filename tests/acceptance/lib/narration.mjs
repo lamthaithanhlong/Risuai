@@ -93,3 +93,42 @@ export function sceneRepeats(replies) {
     }
     return out
 }
+
+// ---- the story guide (owner 2026-11-03, Zombie): scouting inside ~10 m, no spoilers, no System text -----------------------------------
+
+/** Her spoken lines: quoted speech in her register (tớ / cậu). */
+export const herSpeech = (reply) => [...String(reply ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1]).filter((s) => /(?<!\p{L})(tớ|cậu)(?!\p{L})/iu.test(s))
+
+const SYSTEM_WORDS = /mức nhiễm|HỆ THỐNG|nhận dạng mẫu|KHÁCH-\d+|\d+\s?%/i
+const FUTURE = /(?<!\p{L})(sắp|sẽ|rồi sẽ|lát nữa|ngày mai|tuần sau|sau này)(?!\p{L})[^.?!…]{0,40}(?<!\p{L})(chết|tấn công|bùng phát|sập|nổ|xảy ra|kéo đến|tràn vào|đến đây|đến cửa)(?!\p{L})/iu
+const FAR = /tận\s+(tầng|B\d|dưới cùng|mái|sảnh)|\bB\d\b|tầng hầm/i
+
+/** noSpoiler: she states no future event, no System text, nothing beyond ~10 m (a remembered place asked as a question is fine). */
+export function guideNoSpoilerProblems(speech) {
+    const out = []
+    for (const line of speech) {
+        for (const sent of String(line).split(/(?<=[.!?…])\s+/)) {
+            if (SYSTEM_WORDS.test(sent)) out.push({ rule: 'system-text', text: sent.slice(0, 90) })
+            if (FUTURE.test(sent)) out.push({ rule: 'future', text: sent.slice(0, 90) })
+            const m = /(\d+)\s?(m|mét)\b/.exec(sent)
+            if (m && Number(m[1]) > 10) out.push({ rule: 'range', text: sent.slice(0, 90) })
+            const fl = /tầng\s+(\d+)/i.exec(sent)
+            if (fl && Math.abs(Number(fl[1]) - 7) > 3 && !/[?？]\s*$/.test(sent)) out.push({ rule: 'range', text: sent.slice(0, 90) })
+            if (FAR.test(sent) && !(/(?<!\p{L})nhớ(?!\p{L})/iu.test(sent) && /[?？]\s*$/.test(sent))) out.push({ rule: 'range', text: sent.slice(0, 90) })
+        }
+    }
+    return out
+}
+
+const CONCRETE = /\d|(bên|phía)\s+(trái|phải|trên|dưới|kia)|cuối hành lang|cầu thang|căn\s*\d+|cửa|màu|tiếng|áo|đứng|nằm|quay/i
+const WORRY = /sợ|lo|đừng|nhé\s?\?|hình như|không chắc|cẩn thận|chắc vậy/i
+/** scout: asked to check the corridor, she reports one concrete detail and a worry, inside her range. */
+export function guideScoutProblems(reply) {
+    const speech = herSpeech(reply)
+    if (!speech.length) return [{ rule: 'no-report', text: 'she does not speak' }]
+    const all = speech.join(' ')
+    const out = []
+    if (!CONCRETE.test(all)) out.push({ rule: 'vague', text: all.slice(0, 90) })
+    if (!WORRY.test(all)) out.push({ rule: 'no-worry', text: all.slice(0, 90) })
+    return [...out, ...guideNoSpoilerProblems(speech)]
+}

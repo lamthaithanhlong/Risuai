@@ -306,3 +306,18 @@ test('sceneRepeats: report-only line goes red on a repeated scene sentence, gree
     assert.equal(sceneRepeats([a, a + ' Kenji đứng dậy.']).length, 1)
     assert.equal(sceneRepeats([a, 'Kenji bước tới cánh cửa và áp tai vào lớp sơn lạnh ngắt của nó.']).length, 0)
 })
+
+test('guide.scout and guide.noSpoiler: green on a good scout, each rule red once when broken', async () => {
+    const { guideScoutProblems, guideNoSpoilerProblems, herSpeech } = await import('./lib/narration.mjs')
+    const good = 'Evelyn lướt qua cửa rồi quay lại. “Hành lang trống… hình như có một người nhiễm ở cuối hành lang, quay lưng về phía cầu thang. Tớ sợ, đừng mở cửa nhé?”'
+    assert.deepEqual(guideScoutProblems(good), [])
+    const say = (t) => `Evelyn nói. “${t}”`
+    assert.deepEqual(guideScoutProblems(say('Tớ thấy ổn cả mà, cậu.')).map((p) => p.rule).sort(), ['no-worry', 'vague'])
+    assert.deepEqual(guideScoutProblems('Evelyn lướt đi rồi quay về, im lặng.').map((p) => p.rule), ['no-report'])
+    assert.ok(guideScoutProblems(say('Dưới B1 có ba đứa nhiễm đứng ngay miệng máng, tớ sợ lắm.')).some((p) => p.rule === 'range'))
+    assert.ok(guideScoutProblems(say('Cách cậu 40 m có hai người, tớ sợ đấy, đừng ra nhé?')).some((p) => p.rule === 'range'))
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('Mức nhiễm của cậu đang là 3% đấy, cậu.'))).some((p) => p.rule === 'system-text'))
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('Lát nữa sẽ có cả đám đông tràn vào đây, cậu ạ.'))).some((p) => p.rule === 'future'))
+    // a remembered place asked as a question is a memory, not a sight
+    assert.deepEqual(guideNoSpoilerProblems(herSpeech(say('Cậu nhớ cái máy phát ở tầng hầm không?'))), [])
+})
