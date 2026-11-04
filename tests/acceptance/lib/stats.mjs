@@ -124,7 +124,7 @@ const TAG = /\[\[\s*(?:A(?:C(?:T)?)?|B(?:R(?:E(?:A(?:K)?)?)?)?)(?![A-Za-z])|\bAC
 // The card's own System reports the infection as a percentage in a bracket line (【HỆ THỐNG: … Mức nhiễm: 3%.】): the card spec says "the only
 // percentages are infection and a build's progress" (modules/07_status_panel.md) and the panel shows "nhiễm 3%". That one figure, inside a 【…】
 // line, is game text and not a persona stat; any other percent in a bracket line (a stat, a skill) and any percent outside one still count.
-const INFECTION = /(?:mức\s+)?nhiễm\s*:?\s*\d+(?:[.,]\d+)?\s*%/gi
+const INFECTION = /mức\s+nhiễm\s*:?\s*\d+(?:[.,]\d+)?\s*%/gi
 const stripInfection = (line) => (/^\s*【/.test(line) ? line.replace(INFECTION, '') : line)
 const PROSE = [/\+\s*0[.,]0\d\b/, /\d+(?:[.,]\d+)?\s*%/, /bạn nhận được/i]
 

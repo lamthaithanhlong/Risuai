@@ -104,6 +104,9 @@ test('stats.noLeak: the System bracket line may report the infection percent (ca
     assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: Sức mạnh 23.47%.】'))), ['number-in-prose'], 'a stat percent in a System line is still a leak')
     assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: Mức nhiễm: 3%. Sức mạnh +0.01】'))), ['number-in-prose'], 'a tick in a System line is still a leak')
     assert.deepEqual(rules(leakProblems(run('Mức nhiễm của anh đã lên 3%.'))), ['number-in-prose'], 'the same words in plain prose are still a leak')
+    assert.deepEqual(rules(leakProblems(run('Kenji thở dốc. Sức mạnh 12.34% sau cú đẩy.'))), ['number-in-prose'], 'a stat percent in the narration is red')
+    assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: nhiễm 3%.】'))), ['number-in-prose'], 'only "Mức nhiễm N%" is exempt')
+    assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: Thành thạo Nghe nhịp bước 12.34%.】'))), ['number-in-prose'], 'a mastery percent in a System line is red')
 })
 
 test('mutations: a scorer with its rule removed lets the broken fixture through (so the rule is what turns it red)', async () => {
