@@ -97,6 +97,15 @@ test('statsChecks: shape, and each broken fixture turns exactly its own check FA
     assert.equal(st('unequipped-gain')['stats.equipped'], 'FAIL')
 })
 
+test('stats.noLeak: the System bracket line may report the infection percent (card spec), nothing else', () => {
+    const run = (shown) => [{ turns: [{ shown, reply: shown, raw: shown, ticks: '' }] }]
+    const sys = '【HỆ THỐNG: KHÁCH-704 · Quyền truy cập: KHÁCH · Mức nhiễm: 3%.】'
+    assert.deepEqual(leakProblems(run(`Một vệt chữ nhạt.\n${sys}\n【HỆ THỐNG: Chức năng khả dụng — QUÉT.】`)), [], 'the infection line of the card is fine')
+    assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: Sức mạnh 23.47%.】'))), ['number-in-prose'], 'a stat percent in a System line is still a leak')
+    assert.deepEqual(rules(leakProblems(run('【HỆ THỐNG: Mức nhiễm: 3%. Sức mạnh +0.01】'))), ['number-in-prose'], 'a tick in a System line is still a leak')
+    assert.deepEqual(rules(leakProblems(run('Mức nhiễm của anh đã lên 3%.'))), ['number-in-prose'], 'the same words in plain prose are still a leak')
+})
+
 test('mutations: a scorer with its rule removed lets the broken fixture through (so the rule is what turns it red)', async () => {
     const slip = async (from, to, fn, fixture, rule) => {
         const runs = typeof fixture === 'string' ? fx(fixture) : fixture
@@ -108,6 +117,11 @@ test('mutations: a scorer with its rule removed lets the broken fixture through 
     await slip("if (!all.some((t) => t.kind === 'stat')) out.push", 'if (false) out.push', 'ticksProblems', fx('good').map((r) => ({ ...r, turns: r.turns.map((t) => ({ ...t, ticks: t.ticks.split('\n').filter((l) => /Thành thạo/.test(l)).join('\n') })) })), 'no-stat-tick')
     await slip('if (got !== want) out.push({ rule: got > want ?', 'if (false) out.push({ rule: got > want ?', 'consistentProblems', 'inconsistent-value', 'gain-without-tick')
     await slip("if (m) out.push({ rule: 'tag-visible'", "if (false) out.push({ rule: 'tag-visible'", 'leakProblems', 'leaked-tag', 'tag-visible')
+    {   // the infection allowance is what lets the card's System line through: without it the same text is red
+        const sys = [{ turns: [{ shown: '【HỆ THỐNG: Mức nhiễm: 3%.】', reply: '', raw: '', ticks: '' }] }]
+        const m = await mutant('const stripInfection = (line) => (/^\\s*【/.test(line) ? line.replace(INFECTION, \'\') : line)', 'const stripInfection = (line) => line')
+        assert.deepEqual(leakProblems(sys), []); assert.ok(m.leakProblems(sys).some((p) => p.rule === 'number-in-prose'))
+    }
     await slip('for (const re of PROSE) {', 'for (const re of []) {', 'leakProblems', 'leaked-tag', 'number-in-prose')
     await slip('&& !broken.has(k)) out.push', '&& false) out.push', 'capProblems', 'over-cap', 'over-soft-cap')
     await slip('if (v > HARD_CAP * 100) out.push', 'if (false) out.push', 'capProblems', 'over-cap', 'over-hard-cap')

@@ -121,6 +121,11 @@ export function consistentProblems(runs) {
 // ---- stats.noLeak ----------------------------------------------------------------------------------------------------------------------
 
 const TAG = /\[\[\s*(?:A(?:C(?:T)?)?|B(?:R(?:E(?:A(?:K)?)?)?)?)(?![A-Za-z])|\bACT\|[a-z_]+\|/i
+// The card's own System reports the infection as a percentage in a bracket line (【HỆ THỐNG: … Mức nhiễm: 3%.】): the card spec says "the only
+// percentages are infection and a build's progress" (modules/07_status_panel.md) and the panel shows "nhiễm 3%". That one figure, inside a 【…】
+// line, is game text and not a persona stat; any other percent in a bracket line (a stat, a skill) and any percent outside one still count.
+const INFECTION = /(?:mức\s+)?nhiễm\s*:?\s*\d+(?:[.,]\d+)?\s*%/gi
+const stripInfection = (line) => (/^\s*【/.test(line) ? line.replace(INFECTION, '') : line)
 const PROSE = [/\+\s*0[.,]0\d\b/, /\d+(?:[.,]\d+)?\s*%/, /bạn nhận được/i]
 
 /** neither the displayed reply nor the stored message has a tag (whole or partial); the prose, outside the panel tick lines, has no +0.01, percent or "Bạn nhận được" */
@@ -135,7 +140,7 @@ export function leakProblems(runs) {
                 const m = TAG.exec(s)
                 if (m) out.push({ rule: 'tag-visible', text: `${at} (${field}): «${clip(s, m.index)}»` })
             }
-            const prose = String(t.shown ?? '').split(/\r?\n/).filter((l) => !isTickLine(l)).join('\n')
+            const prose = String(t.shown ?? '').split(/\r?\n/).filter((l) => !isTickLine(l)).map(stripInfection).join('\n')
             for (const re of PROSE) { const m = re.exec(prose); if (m) { out.push({ rule: 'number-in-prose', text: `${at}: «${clip(prose, m.index)}»` }); break } }
         })
     })
