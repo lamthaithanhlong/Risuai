@@ -125,11 +125,16 @@ const WORRY = /sợ|lo|đừng|nhé\s?\?|hình như|không chắc|cẩn thận|c
 /** scout (gate): asked to check the corridor, she reports a concrete detail inside her range. A worry word is report-only (scoutWorry). */
 export function guideScoutProblems(reply) {
     // her register (tớ / cậu) marks her lines; a reply to a request aimed at her with no such line falls back to every quoted line
-    const speech = herSpeech(reply).length ? herSpeech(reply) : [...String(reply ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1])
+    // every quoted line of a reply to a request aimed at her: filtering by tớ/cậu dropped plain observations ("Có một người đứng ngay gần cửa…") and scored them vague
+    const speech = [...String(reply ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1])
     if (!speech.length) return [{ rule: 'no-report', text: 'she does not speak' }]
     const all = speech.join(' ')
     const out = []
-    if (!CONCRETE.test(all)) out.push({ rule: 'vague', text: all.slice(0, 90) })
+    // concrete = a keyword hit, or at least 8 words of observation once the stock hedges ("Tớ thấy ổn", "không thấy gì", "không có gì") are dropped:
+    // a keyword list alone scored "Dép của nó lệch một chiếc. Chân trần cứ quệt trên sàn…" vague
+    const HEDGE = /^(tớ|cậu)?\s*(thấy ổn|không thấy|không có gì|chẳng thấy|không nhìn thấy)/i
+    const observed = all.split(/(?<=[.!?…])\s+/).filter((t) => !HEDGE.test(t.trim())).join(' ')
+    if (!CONCRETE.test(all) && observed.split(/\s+/).filter(Boolean).length < 8) out.push({ rule: 'vague', text: all.slice(0, 90) })
     return [...out, ...guideNoSpoilerProblems(speech)]
 }
 
