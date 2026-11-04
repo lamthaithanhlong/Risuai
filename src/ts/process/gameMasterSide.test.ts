@@ -162,3 +162,17 @@ describe('companionLine', () => {
         expect(companionNote(MIN, ['xin chào'], known)).toBe('')
     })
 })
+
+describe('the owner\'s current persona (head-line descriptors)', () => {
+    const KENJI = '[{{user}} = Kenji Park, nam, 25 tuổi, đẹp trai cuốn hút, thông minh, điềm đạm, đeo kính; siêu giỏi vật lý,nhân viên văn phòng, sống đơn độc, không gia đình.\n\n**10 năng lực bí mật:**\n1. **Thôi miên:** Chi phối.\n2. **Đọc tâm:** Nghe.\n\n**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân nhất.]'
+    it('look and life come from the head line; nothing is open; the skip fires', () => {
+        const f = personaSheetFields(KENJI)
+        expect(f.look).toContain('đẹp trai cuốn hút')
+        expect(f.look).toContain('đeo kính')
+        expect(f.life).toContain('nhân viên văn phòng')
+        expect(f.life).toContain('không gia đình')
+        expect(f).toMatchObject({ name: 'Kenji Park', sex: 'nam', age: '25' })
+        expect(personaOpenItems(f)).toEqual([])
+        expect(creationNote(SHEET_CARD, STEP, {}, {}, KENJI)).toContain('CREATION SKIP')
+    })
+})

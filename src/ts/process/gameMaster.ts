@@ -304,6 +304,10 @@ const labelOf = (text: string, labels: string): string => {
     return m ? m[1].replace(/\*+/g, '').trim() : ''
 }
 
+const wordsRe = (w: string) => new RegExp(`(?<![\\p{L}])(?:${w})(?![\\p{L}])`, 'iu')
+const LOOK_WORDS = wordsRe('đẹp|xinh|đeo kính|tóc|mắt|cao|thấp|gầy|béo|dáng|ngoại hình|nước da|trẻ|già')
+const LIFE_WORDS = wordsRe('nhân viên|sinh viên|học sinh|giáo viên|bác sĩ|công việc|làm việc|nghề|sống một mình|sống đơn độc|đơn độc|gia đình|độc thân|vợ|chồng|con')
+
 /** What the player's persona text fixes on the character sheet; '' / [] for what it leaves out. */
 export function personaSheetFields(personaText: string): PersonaSheet {
     const t = String(personaText ?? '').normalize('NFC')
@@ -319,10 +323,15 @@ export function personaSheetFields(personaText: string): PersonaSheet {
     for (const m of t.matchAll(/^\s*\d+[.)]\s*\*\*\s*(.+?)\s*:?\s*\*\*/gmu)) abilities.push(m[1].replace(/:\s*$/, '').trim())
     const companions: string[] = []
     for (const m of t.matchAll(/^\s*\*\*\s*([^*\n]+?\s[—–-]\s[^*\n]+?)\s*:?\s*\*\*/gmu)) companions.push(m[1].replace(/:\s*$/, '').trim())
+    // the head line's descriptors after "<age> tuổi,": split on commas and semicolons, sorted by keyword into look and life
+    const ageAt = parts.findIndex((x) => /\d{1,3}\s*(?:tuổi|years? old|y\/?o)/i.test(x))
+    const desc = (ageAt >= 0 ? parts.slice(ageAt + 1) : []).map((x) => x.replace(/[\]\[]/g, '').trim()).filter(Boolean)
+    const headLook = desc.filter((x) => LOOK_WORDS.test(x))
+    const headLife = desc.filter((x) => !LOOK_WORDS.test(x) && LIFE_WORDS.test(x))
     return {
         name, sex, age,
-        look: labelOf(t, 'Ngoại hình|Diện mạo|Look|Appearance'),
-        life: labelOf(t, 'Công việc|Nghề nghiệp|Nghề|Cuộc sống|Quá khứ|Xuất thân|Job|Life|Background|Occupation'),
+        look: labelOf(t, 'Ngoại hình|Diện mạo|Look|Appearance') || headLook.join(', '),
+        life: labelOf(t, 'Công việc|Nghề nghiệp|Nghề|Cuộc sống|Quá khứ|Xuất thân|Job|Life|Background|Occupation') || headLife.join(', '),
         money: labelOf(t, 'Tiền|Tài chính|Money|Cash'),
         health: labelOf(t, 'Sức khỏe|Health'),
         home: labelOf(t, 'Nhà|Nơi ở|Chỗ ở|Home'),
