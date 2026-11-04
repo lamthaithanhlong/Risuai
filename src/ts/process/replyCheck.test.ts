@@ -83,3 +83,23 @@ describe('directive avoids verbatim sentences', () => {
         expect(alreadyTold(ms, 'Hana').length).toBeGreaterThan(0)
     })
 })
+
+
+describe('settleReply records what fired', () => {
+    it('records the rules that fired and what is left after the one redo', async () => {
+        const { settleReply } = await import('./replyRegen')
+        const prev = ['Tiếng cào ngoài hành lang ngừng hẳn rồi.']
+        const rec: any[] = []
+        const out = await settleReply('Tiếng cào ngoài hành lang ngừng hẳn rồi.', prev, async () => 'Kenji áp tai vào cửa lạnh ngắt.', () => {}, (r) => rec.push(r))
+        expect(out).toBe('Kenji áp tai vào cửa lạnh ngắt.')
+        expect(rec).toEqual([{ fired: ['repeat'], left: [], redoFailed: false }])
+    })
+    it('records nothing for a clean reply and a failed redo as such', async () => {
+        const { settleReply } = await import('./replyRegen')
+        const rec: any[] = []
+        await settleReply('Kenji áp tai vào cửa lạnh ngắt.', ['Gió thổi qua khe cửa sổ mở hé.'], async () => 'x', () => {}, (r) => rec.push(r))
+        expect(rec).toEqual([])
+        await settleReply('Tiếng cào ngoài hành lang ngừng hẳn rồi.', ['Tiếng cào ngoài hành lang ngừng hẳn rồi.'], async () => null, () => {}, (r) => rec.push(r))
+        expect(rec[0].redoFailed).toBe(true)
+    })
+})

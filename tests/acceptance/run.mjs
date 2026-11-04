@@ -147,6 +147,14 @@ function finishGate(key, rec, ctx, story) {
         rows[i].scout = st.length === 3 ? guideScoutProblems(st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
         rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems([...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
     }
+    // replies that got the one regeneration (the page writes them to the chat's script state as reply_regen): which check fired, what was left
+    const regenRows = runs.flatMap((run, i) => {
+        const last = [...run.turns].reverse().find((x) => x.vars && x.vars.reply_regen)
+        let log = []
+        try { log = JSON.parse(last?.vars?.reply_regen ?? '[]') } catch { log = [] }
+        return log.map((r) => ({ run: i + 1, ...r }))
+    })
+    const storyReplies = runs.reduce((n, run) => n + run.turns.filter((x) => x.phase !== 'creation' && x.ok).length, 0)
     const worry = runs.filter((run) => { const st = run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply); return st.length === 3 && scoutWorry(st[2]) }).length
     const sc = rows.filter((r) => !r.scout.length).length
     const sp = rows.filter((r) => !r.spoiler.length).length
@@ -167,12 +175,14 @@ function finishGate(key, rec, ctx, story) {
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
     console.log(`[gate] report-only: scout reports with a worry signal ${worry}/${runs.length}; scene repeats ${scene.length}`)
     for (const e of scene) console.log(`[gate]   (report) ${e}`)
+    checks.push({ id: 'gate.regen', title: 'Replies that got the one regeneration (report only)', status: 'INFO', summary: `${regenRows.length} of ${storyReplies} story replies regenerated; fired: ${[...new Set(regenRows.flatMap((r) => r.fired))].join(', ') || 'none'}; still hit after the redo: ${regenRows.filter((r) => r.left.length).length}`, evidence: regenRows.map((r) => `run ${r.run}: fired ${r.fired.join('+')}, left ${r.left.join('+') || 'none'}${r.redoFailed ? ', redo failed' : ''}`) })
+    console.log(`[gate] report-only: ${regenRows.length}/${storyReplies} story replies regenerated (fired: ${[...new Set(regenRows.flatMap((r) => r.fired))].join(', ') || 'none'}; still hit: ${regenRows.filter((r) => r.left.length).length})`)
     checks.push({ id: 'gate.scene_repeat', title: 'Scene sentences repeated between turns (report only)', status: 'INFO', summary: `${scene.length} repeated`, evidence: scene })
     return { title: story.title, checks, file: outFile, blocked: rec.blocked, gate: pass }
 }

@@ -19,12 +19,15 @@ export function regenerationNote(hits: ReplyHit[]): string {
  * Check `first`; when it has hits, ask `redo` once with the note and use its draft. A second draft that still has hits is kept and
  * reported through `warn`. `redo` returning null (request failed) keeps the first draft.
  */
-export async function settleReply(first: string, previous: string[], redo: (note: string) => Promise<string | null>, warn: (m: string) => void = () => {}): Promise<string> {
+export type RegenRecord = { fired: string[]; left: string[]; redoFailed: boolean }
+
+export async function settleReply(first: string, previous: string[], redo: (note: string) => Promise<string | null>, warn: (m: string) => void = () => {}, record: (r: RegenRecord) => void = () => {}): Promise<string> {
     const hits = replyHits(first, previous)
     if (!shouldRegenerate(hits, 0)) return first
     const second = await redo(regenerationNote(hits))
-    if (second === null || !second.trim()) { warn('reply check: redo failed, first draft kept'); return first }
+    if (second === null || !second.trim()) { warn('reply check: redo failed, first draft kept'); record({ fired: hits.map((h) => h.rule), left: hits.map((h) => h.rule), redoFailed: true }); return first }
     const left = replyHits(second, previous)
+    record({ fired: hits.map((h) => h.rule), left: left.map((h) => h.rule), redoFailed: false })
     if (left.length) warn(`reply check: second draft still has ${left.map((h) => `${h.rule} "${h.text.slice(0, 60)}"`).join(', ')}`)
     return second
 }

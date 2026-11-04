@@ -1970,7 +1970,15 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     }
                 }
                 return abortSignal.aborted ? null : text
-            }, (m) => brLog(m))
+            }, (m) => brLog(m), (rec) => {
+                // one record per regenerated reply, kept in the chat's script state so the acceptance run can count them (summary.md)
+                const chat = DBState.db.characters[sel.char].chats[sel.chat]
+                chat.scriptstate = chat.scriptstate ?? {}
+                let log: unknown[] = []
+                try { log = JSON.parse(chat.scriptstate['$reply_regen'] ?? '[]') } catch { log = [] }
+                log.push({ at: msgIndex, ...rec })
+                chat.scriptstate['$reply_regen'] = JSON.stringify(log)
+            })
             if(settled !== result){
                 result = settled
                 lastResponseChunk = { ...lastResponseChunk, [firstChunkKey0]: settled }
