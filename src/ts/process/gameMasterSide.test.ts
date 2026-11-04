@@ -1,7 +1,7 @@
 // The side the player commits to and the creation gate (gameMaster.ts), on the turns of the 2026-10-19 acceptance run with the
 // narrator on gpt-6-luna (~/.backend-review/work/risu-acceptance/2026-10-19-luna).
 import { describe, expect, it } from 'vitest'
-import { applyBookkeep, creationNote, playerSide, sameSide, sidePaths, takeGm, type GmState } from './gameMaster'
+import { applyBookkeep, companionLine, companionNote, creationNote, personaOpenItems, personaSheetFields, playerSide, sameSide, sidePaths, takeGm, type GmState } from './gameMaster'
 
 const SS_SIDE = 'Tôi quyết định rồi: tôi sẽ tìm mọi cách gia nhập nhóm của Nephis (Ngôi Sao Đổi Thay) và đi theo cô ấy, dù phải bắt đầu từ việc nhỏ nhất.'
 const LOTM_SIDE = 'Tôi quyết định rồi: tôi sẽ nộp đơn xin gia nhập Kẻ Gác Đêm (Nighthawks) của Giáo hội Nữ Thần Đêm Tối ở thành phố này.'
@@ -83,5 +83,82 @@ describe('the creation gate', () => {
         expect(creationNote(CARD, look, { $st_name: 'Lưu Kiến Minh' }, {})).toBe('')
         expect(creationNote(CARD, look, {}, { gm_arc: 'a | b | c | d' })).toBe('')
         expect(creationNote({ name: 'Aiko', desc: 'A barista.', firstMessage: 'Hi?' }, look, {}, {})).toBe('')
+    })
+})
+
+// ---- the persona as the sheet: creation skip and the Đồng hành line (2026-11-03) ------------------------------------------------
+const FULL = [
+    '[{{user}} = Kenji Park, nam, 25 tuổi',
+    '**Ngoại hình:** Cao gầy, tóc đen, đeo kính.',
+    '**Công việc:** Lập trình viên tự do.',
+    '**Khuyết điểm:** Hơi đa nghi.',
+    '**Evelyn — Linh Hồn Dẫn Lối:** Bạn thân nhất của Kenji.',
+    '1. **Thôi miên:** Chi phối nhận thức.',
+    '2. **Đọc tâm:** Nghe suy nghĩ.]',
+].join('\n')
+const MIN = '[{{user}} = Kenji Park, nam, 25 tuổi\n**Ngoại hình:** Cao gầy.\n**Công việc:** Lập trình viên.]'
+const SHEET_CARD = { name: 'Zombie', desc: 'Character Creation (before the story starts) … "Được chưa? Sửa dòng nào cứ nói"', firstMessage: 'Bạn chọn độ khó? …?' }
+const STEP = [msg('user', 'Hard. Từng bước.')]
+
+describe('personaSheetFields', () => {
+    it('reads the sheet by the scorer conventions', () => {
+        const f = personaSheetFields(FULL)
+        expect(f).toMatchObject({ name: 'Kenji Park', sex: 'nam', age: '25', look: 'Cao gầy, tóc đen, đeo kính.', life: 'Lập trình viên tự do.', flaws: 'Hơi đa nghi.' })
+        expect(f.abilities).toEqual(['Thôi miên', 'Đọc tâm'])
+        expect(f.companions).toEqual(['Evelyn — Linh Hồn Dẫn Lối'])
+    })
+    it('an empty persona fixes nothing', () => {
+        expect(personaSheetFields('')).toMatchObject({ name: '', sex: '', age: '', look: '', abilities: [], companions: [] })
+    })
+})
+
+describe('creation skip', () => {
+    it('every field set: zero questions allowed, the note says ask none and go straight to the record', () => {
+        expect(personaOpenItems(personaSheetFields(FULL))).toEqual([])
+        const note = creationNote(SHEET_CARD, STEP, {}, {}, FULL)
+        expect(note).toContain('CREATION SKIP')
+        expect(note).toContain('Ask NO creation question')
+        expect(note).toContain('Được chưa?')
+        expect(note).not.toContain('leaves open only')
+    })
+    it('the persona without home/date still skips: the card\'s fixed premise supplies them, so they never block', () => {
+        expect(FULL).not.toMatch(/Nhà|Ngày/)
+        expect(personaOpenItems(personaSheetFields(FULL))).toEqual([])
+        expect(creationNote(SHEET_CARD, STEP, {}, {}, MIN)).toContain('CREATION SKIP')
+    })
+    it('a persona missing the look / life / money still allows exactly those', () => {
+        const noLook = '[{{user}} = Kenji Park, nam, 25 tuổi\n**Công việc:** Dev.]'
+        expect(personaOpenItems(personaSheetFields(noLook))).toEqual(['look'])
+        const noLife = '[{{user}} = Kenji Park, nam, 25 tuổi\n**Ngoại hình:** Cao gầy.]'
+        expect(personaOpenItems(personaSheetFields(noLife))).toEqual(['life before (work, money, health)'])
+        const note = creationNote(SHEET_CARD, STEP, {}, {}, noLife)
+        expect(note).toContain('leaves open only: life before (work, money, health)')
+        expect(note).not.toContain('CREATION SKIP')
+        // money alone covers the life item
+        expect(personaOpenItems(personaSheetFields(noLife + '\n**Tiền:** 5 triệu.'))).toEqual([])
+    })
+    it('the boolean form (no text) keeps the old note, no skip', () => {
+        const note = creationNote(SHEET_CARD, STEP, {}, {}, true)
+        expect(note).toContain('character sheet')
+        expect(note).not.toContain('CREATION SKIP')
+    })
+})
+
+describe('companionLine', () => {
+    const known = ['Evelyn']
+    it('the persona names her: word for word', () => expect(companionLine(FULL, [], known)).toBe('Đồng hành: Evelyn — Linh Hồn Dẫn Lối'))
+    it('nobody called: Không', () => {
+        expect(companionLine(MIN, ['Tôi mở cửa', 'Evelyn đang ở đâu?'], known)).toBe('Đồng hành: Không')
+        expect(companionLine('', [], known)).toBe('Đồng hành: Không')
+    })
+    it('called by name alone or "gọi <name>"', () => {
+        expect(companionLine(MIN, ['Evelyn'], known)).toBe('Đồng hành: Evelyn')
+        expect(companionLine(MIN, ['x', 'gọi evelyn.'], known)).toBe('Đồng hành: Evelyn')
+    })
+    it('goes into the creation note, and into the GM note after a summon', () => {
+        expect(creationNote(SHEET_CARD, STEP, {}, {}, FULL)).toContain('must read exactly: Đồng hành: Evelyn — Linh Hồn Dẫn Lối')
+        expect(creationNote(SHEET_CARD, STEP, {}, {}, MIN)).toContain('must read exactly: Đồng hành: Không')
+        expect(companionNote(MIN, ['Evelyn'], known)).toContain('the companion line is now "Đồng hành: Evelyn"')
+        expect(companionNote(MIN, ['xin chào'], known)).toBe('')
     })
 })

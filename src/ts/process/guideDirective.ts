@@ -47,6 +47,58 @@ export function guideRecentLines(messages: Msg[], name: string, n = 3): string[]
     return out
 }
 
+// ---- what she already told ---------------------------------------------------------------------------------------------------
+// Measured 2026-11-03: "Do not restate" held only the last 3 replies' sentences word for word; the scout then said the same
+// observation again in other words ("người mặc đồ ngủ đứng sát cửa đối diện" -> "... cửa căn bên cạnh", "không thấy gì khác trong
+// hành lang" -> "... trong đoạn đó"). So the app keeps a list of clauses (all her earlier speech) and compares by token overlap.
+
+const FILLER = new Set(['tớ', 'cậu', 'mình', 'tui', 'ừ', 'ừm', 'à', 'ạ', 'ơi', 'nhé', 'nha', 'nè', 'hả', 'này', 'đó', 'kia', 'ấy', 'thì', 'là', 'và', 'mà', 'có', 'một', 'những', 'các', 'cái', 'của', 'ở', 'với', 'rồi', 'đang', 'đã', 'sẽ', 'quá', 'lắm', 'thật', 'cũng', 'vẫn', 'còn', 'hình', 'như', 'chắc', 'thôi', 'đây', 'nó', 'ta', 'bạn', 'anh', 'em', 'chị'])
+
+const tokensOf = (s: string): string[] => (s.toLowerCase().normalize('NFC').match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !FILLER.has(w))
+
+/** A clause worth remembering: at least 3 content words once fillers and pronouns are dropped (an exclamation or "Tớ sợ." is not a detail). */
+const concrete = (clause: string): boolean => tokensOf(clause).length >= 3
+
+const clausesOf = (speech: string): string[] =>
+    speech.split(/[.!?…;,\n]+/).map((c) => c.trim()).filter((c) => c.length > 0)
+
+const overlap = (a: string[], b: string[]): number => {
+    if (!a.length || !b.length) return 0
+    const sb = new Set(b)
+    let n = 0
+    for (const w of new Set(a)) if (sb.has(w)) n++
+    return n / Math.min(new Set(a).size, sb.size)
+}
+
+/** Whether a line says again something already told: some concrete clause of it shares >= 60% of its content words with a told item. */
+export function restates(line: string, told: string[]): boolean {
+    const toks = told.map(tokensOf)
+    for (const c of clausesOf(line ?? '')) {
+        if (!concrete(c)) continue
+        const t = tokensOf(c)
+        if (toks.some((o) => o.length >= 3 && overlap(t, o) >= 0.6)) return true
+    }
+    return false
+}
+
+/** The concrete details of the guide's earlier speech (quotes of replies that name her), newest first, without repeats, at most max. */
+export function alreadyTold(messages: Msg[], name: string, max = 12): string[] {
+    if (!name) return []
+    const out: string[] = []
+    const replies = messages.filter((m) => m.role === 'char' && (m.data ?? '').includes(name))
+    for (let i = replies.length - 1; i >= 0 && out.length < max; i--) {
+        const quotes = [...replies[i].data.matchAll(/“([^”]+)”/g)].map((q) => q[1])
+        for (let j = quotes.length - 1; j >= 0 && out.length < max; j--) {
+            const cl = clausesOf(quotes[j])
+            for (let k = cl.length - 1; k >= 0 && out.length < max; k--) {
+                if (!concrete(cl[k]) || restates(cl[k], out)) continue
+                out.push(cl[k])
+            }
+        }
+    }
+    return out
+}
+
 export type GuideInput = {
     present: boolean
     name: string
@@ -55,6 +107,8 @@ export type GuideInput = {
     turnsWithoutProgress: number
     recentLines: string[]
     asked: boolean
+    /** alreadyTold(): concrete details she already said, in any words */
+    told?: string[]
 }
 
 /** One to three short English lines for the narrator; '' when the guide is not in the story. */
@@ -67,6 +121,7 @@ export function guideDirective(i: GuideInput): string {
         : `${i.name}: no hint this turn.`)
     if (i.asked) out.push(`If asked to look: ${i.name} reports one concrete detail within ~10 m; beyond that she knows nothing and says so.`)
     if (i.recentLines.length) out.push(`Do not restate: ${i.recentLines.map((l) => `"${l}"`).join(' ')}`)
+    if (i.told?.length) out.push(`đã kể rồi, không nhắc lại: ${i.told.join('; ')}`)
     return out.join(' ')
 }
 
@@ -75,6 +130,6 @@ export function guideNote(card: { globalLore?: { comment?: string }[] } | undefi
     const name = guideNameOf(card)
     if (!name) return ''
     const d = guideDirective({ present: true, name, playerText: player, turnsWithoutProgress,
-        recentLines: guideRecentLines(messages, name), asked: playerAsks(player, name) })
+        recentLines: guideRecentLines(messages, name), told: alreadyTold(messages, name), asked: playerAsks(player, name) })
     return d ? `\n[Guide (hidden, never named): ${d}]` : ''
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { guideDirective, guideNameOf, guideNote, guideRecentLines, playerAsks } from './guideDirective'
+import { alreadyTold, guideDirective, guideNameOf, guideNote, guideRecentLines, playerAsks, restates } from './guideDirective'
 
 const m = (role: 'user' | 'char', data: string) => ({ role, data })
 
@@ -37,4 +37,39 @@ describe('guideNote wiring', () => {
     it('named in the lore', () => expect(guideNameOf(card)).toBe('Hana'))
     it('no guide, no note', () => expect(guideNote({ globalLore: [{ comment: 'Rules' }] }, [], 'x', 9)).toBe(''))
     it('builds the note', () => expect(guideNote(card, [m('char', 'Hana: “Im quá.”')], 'gợi ý đi', 0)).toContain('Do not restate: "Im quá."'))
+})
+
+describe('alreadyTold / restates', () => {
+    const ms = [
+        m('char', 'Hana nhìn ra: “Tớ thấy một người mặc đồ ngủ đứng sát cửa đối diện mình. Tớ sợ.”'),
+        m('user', 'ừ'),
+        m('char', 'Hana quay lại: “Tớ không thấy gì khác trong hành lang.” Im lặng.'),
+    ]
+    const told = alreadyTold(ms, 'Hana')
+    it('keeps concrete clauses, newest first, drops pronoun/filler clauses', () => {
+        expect(told[0]).toContain('hành lang')
+        expect(told.some((t) => t.includes('đồ ngủ'))).toBe(true)
+        expect(told.some((t) => /^Tớ sợ/.test(t))).toBe(false)
+    })
+    it('real red case 1: the same person at another door is a restatement', () => {
+        expect(restates('Có một người mặc đồ ngủ đứng sát cửa căn bên cạnh.', told)).toBe(true)
+    })
+    it('real red case 2: the same empty look in other words is a restatement', () => {
+        expect(restates('Tớ không thấy gì khác trong đoạn đó.', told)).toBe(true)
+    })
+    it('a new detail is not flagged', () => {
+        expect(restates('Dưới cầu thang có tiếng nước chảy và mùi xăng.', told)).toBe(false)
+        expect(restates('Ừ, tớ sợ.', told)).toBe(false)
+    })
+    it('capped, deduplicated, no name no list', () => {
+        const w = ['bếp gas', 'tủ lạnh', 'xe đạp', 'cầu thang', 'giếng trời', 'bình nước', 'máy phát', 'hộp thuốc']
+        const many = [m('char', 'Hana: “' + w.map((x, i) => `Tớ thấy ${x} số${i} bị vỡ nát.`).join(' ') + '”')]
+        expect(alreadyTold(many, 'Hana', 5)).toHaveLength(5)
+        expect(alreadyTold([...ms, ...ms], 'Hana').length).toBe(told.length)
+        expect(alreadyTold(ms, '')).toEqual([])
+    })
+    it('feeds the directive and the note', () => {
+        expect(guideDirective({ present: true, name: 'Hana', playerText: '', turnsWithoutProgress: 0, recentLines: [], asked: false, told })).toContain('đã kể rồi, không nhắc lại:')
+        expect(guideNote({ globalLore: [{ comment: 'Story guide: Hana' }] }, ms, 'x', 0)).toContain('đã kể rồi, không nhắc lại:')
+    })
 })

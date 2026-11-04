@@ -291,7 +291,93 @@ export const PLAN_STORY = '\n\n[Future Plan (hidden, never named): end the reply
 /** After the yes: the persona's abilities and companions are the character's own, every turn. */
 export const PERSONA_STORY = '\n\n[Persona (hidden, never named): the character is the player\'s persona. Its abilities and companions are real, with the limits it sets; they work whenever the player uses them, and secret ones stay unknown to NPCs without evidence. Do not use them for the player.]'
 
-export function creationNote(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState, persona = false): string {
+// ---- the persona as the character sheet, read by code --------------------------------------------------------------------------
+// Measured 2026-11-03 (Zombie card, persona set): the card kept asking "Nhà và ngày bùng phát…" and "Bạn có bao nhiêu tiền, sức khỏe…"
+// and never reached the story; its "ask only what the persona leaves open" is a prompt rule. So code reads what the persona fixes
+// and tells the narrator how many questions are left (usually none). Conventions are the acceptance scorer's: numbered bold
+// abilities "1. **Thôi miên:**", a companion as a line "**Name — Title:**", other items as "**Label:** value" or "Label: value".
+
+export type PersonaSheet = { name: string; sex: string; age: string; look: string; life: string; money: string; health: string; home: string; date: string; abilities: string[]; flaws: string; companions: string[] }
+
+const labelOf = (text: string, labels: string): string => {
+    const m = new RegExp(`^[\\s>*_-]*\\**\\s*(?:${labels})\\s*\\**\\s*:\\s*\\**\\s*(.+)$`, 'imu').exec(text)
+    return m ? m[1].replace(/\*+/g, '').trim() : ''
+}
+
+/** What the player's persona text fixes on the character sheet; '' / [] for what it leaves out. */
+export function personaSheetFields(personaText: string): PersonaSheet {
+    const t = String(personaText ?? '').normalize('NFC')
+    const head = /\{\{user\}\}\s*[=:]\s*([^\n]+)/i.exec(t)?.[1] ?? ''
+    const parts = head.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
+    let name = labelOf(t, 'Tên|Name|Họ tên')
+    if (!name && parts[0] && !/^(nam|nữ|male|female|\d+)/i.test(parts[0])) name = parts[0].replace(/[\]\[]/g, '').trim()
+    let sex = labelOf(t, 'Giới tính|Gender|Sex')
+    if (!sex) sex = /(?<![\p{L}])(nam|nữ|male|female)(?![\p{L}])/iu.exec(head)?.[1] ?? ''
+    let age = labelOf(t, 'Tuổi|Age')
+    if (!age) age = /(\d{1,3})\s*(?:tuổi|years? old|y\/?o)/i.exec(head || t)?.[1] ?? ''
+    const abilities: string[] = []
+    for (const m of t.matchAll(/^\s*\d+[.)]\s*\*\*\s*(.+?)\s*:?\s*\*\*/gmu)) abilities.push(m[1].replace(/:\s*$/, '').trim())
+    const companions: string[] = []
+    for (const m of t.matchAll(/^\s*\*\*\s*([^*\n]+?\s[—–-]\s[^*\n]+?)\s*:?\s*\*\*/gmu)) companions.push(m[1].replace(/:\s*$/, '').trim())
+    return {
+        name, sex, age,
+        look: labelOf(t, 'Ngoại hình|Diện mạo|Look|Appearance'),
+        life: labelOf(t, 'Công việc|Nghề nghiệp|Nghề|Cuộc sống|Quá khứ|Xuất thân|Job|Life|Background|Occupation'),
+        money: labelOf(t, 'Tiền|Tài chính|Money|Cash'),
+        health: labelOf(t, 'Sức khỏe|Health'),
+        home: labelOf(t, 'Nhà|Nơi ở|Chỗ ở|Home'),
+        date: labelOf(t, 'Ngày bùng phát|Ngày|Date'),
+        abilities, flaws: labelOf(t, 'Khuyết điểm|Điểm yếu|Flaws?|Weakness(?:es)?'), companions,
+    }
+}
+
+/** The creation questions a persona leaves open, in the card's order. Home and date are never open: the card's fixed premise
+ *  (Hoshin City, Kisaragi block, the night of the outbreak) supplies them. Abilities, flaws and companions are not asked either
+ *  (the record lists the persona's, or "Không"). Life before (work, family, money, health) is open only when the persona has neither a
+ *  life line nor money/health. */
+export function personaOpenItems(f: PersonaSheet): string[] {
+    const open: string[] = []
+    if (!f.sex && !f.age) open.push('gender and age')
+    if (!f.name) open.push('name')
+    if (!f.look) open.push('look')
+    if (!f.life && !f.money && !f.health) open.push('life before (work, money, health)')
+    return open
+}
+
+const SKIP_NOTE = ' CREATION SKIP: the persona already gives the name, sex, age, look, life, abilities and companions, and the home and date are the card\'s fixed premise. Ask NO creation question this reply, none of them: not the home or date, not money or health, not the look, nothing with a "?" except the record\'s "Được chưa?". This overrides the step-by-step rule: go straight to the record, built from the persona word for word, and end with "Được chưa?" in this very reply.'
+
+const normName = (s: string) => s.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim()
+
+/** The record's exact companion line: the persona's companions word for word, else the companion the player called by name
+ *  (their message is the name alone, or "gọi <name>"), else "Đồng hành: Không". */
+export function companionLine(personaText: string, playerTexts: string[], knownCompanions: string[] = []): string {
+    const fromPersona = personaSheetFields(personaText).companions
+    if (fromPersona.length) return `Đồng hành: ${fromPersona.join('; ')}`
+    for (const raw of playerTexts) {
+        const said = normName(raw)
+        for (const name of knownCompanions) {
+            const n = normName(name)
+            if (n && (said === n || said === `gọi ${n}` || said === `goi ${n}`)) return `Đồng hành: ${name}`
+        }
+    }
+    return 'Đồng hành: Không'
+}
+
+/** After the yes (or any turn): the companion line as it stands, when a companion is in the story. '' when nobody is. */
+export function companionNote(personaText: string, playerTexts: string[], knownCompanions: string[] = []): string {
+    const line = companionLine(personaText, playerTexts, knownCompanions)
+    if (line === 'Đồng hành: Không') return ''
+    return `\n[Companion (hidden, never named): the companion line is now "${line}": she is in the story, appears in the reply that calls her, and keeps the limits the persona sets.]`
+}
+
+function personaCreationExtra(personaText: string, messages: Msg[], known: string[]): string {
+    const open = personaOpenItems(personaSheetFields(personaText))
+    const line = companionLine(personaText, messages.filter((m) => m.role === 'user').map((m) => m.data ?? ''), known)
+    return (open.length ? ` The persona leaves open only: ${open.join('; ')} (ask just those, nothing else; the home and date are the fixed premise).` : SKIP_NOTE)
+        + ` The record's Đồng hành line must read exactly: ${line}`
+}
+
+export function creationNote(card: Card, messages: Msg[], vars: Record<string, unknown> | undefined, state: GmState, persona: boolean | string = false, knownCompanions: string[] = []): string {
     if (!hasCreationStep(card) || hasPanel(vars) || state.gm_arc || state.gm_past) return ''
     const last = messages.map((m) => m.role).lastIndexOf('user')
     if (last < 0 || yesAt(messages) >= 0) return ''
@@ -303,6 +389,7 @@ export function creationNote(card: Card, messages: Msg[], vars: Record<string, u
         + (first ? '; the reply opens with one line naming the difficulty the player chose, e.g. "Độ khó: Khó" (Hard when none was named)' : '')
         + '. Step by step: ask the next item only, as one question line ending in "?", then exactly three suggestions as a list (đúng ba gợi ý) and "để thế giới chọn" as a fourth line (an item with only two possible values offers both).'
         + (persona ? PERSONA_CREATION : '')
+        + (typeof persona === 'string' && persona.trim() ? personaCreationExtra(persona, messages, knownCompanions) : '')
         + ' A record: show it again with what changed and end with "Được chưa?". Only the player\'s yes ("được", "ok", "bắt đầu") starts the story: until then no story prose, no [[STATUS]], [[LEDGER]] or [[GM]] block.]'
 }
 

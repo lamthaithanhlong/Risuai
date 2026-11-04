@@ -2,14 +2,14 @@
 // Works on every platform: no server, the state lives in the chat's variables (scriptstate "$gm_*").
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
-import { appendSocial, applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, socialOf, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+import { appendSocial, applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, companionNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, socialOf, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
 import { forwardAsk, prefetchBooks, trackForward } from './loreIndexPage'
 import { decideCompanionLimits, decideCompanions, decideMessages, decidePeople, decideVars, type DecideInput, type GmDecision } from './gmSolver'
-import { guideNote } from './guideDirective'
+import { guideNameOf, guideNote } from './guideDirective'
 import { sinceAdvance } from './gameMaster'
 import { modeAfterDecision, modeBefore, modeFromTurn, modeVar } from './gmMachine'
 
@@ -50,7 +50,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
     const note = gmNote(phase, state, dice, worldFlavour(card))
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
-    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) : '') + (held ? CARD_HELD : ''))
+    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) : '') + (held ? CARD_HELD : ''))
 }
 
 /**
@@ -98,7 +98,7 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
     }
     vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
     const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line)
-    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) : ''))
+    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) : ''))
 }
 
 const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'
@@ -209,6 +209,18 @@ export function settlePanel(chat: Chat | undefined): void {
     vars.$panel_log = JSON.stringify(log.slice(0, k))
 }
 
+/** Names a player can call as a companion: the card's story guide (lore "Story guide: <Name>"). */
+function knownCompanionsOf(card: Room | undefined): string[] {
+    const n = guideNameOf(card as never)
+    return n ? [n] : []
+}
+
+/** The companion line as it stands (persona's, or the one the player called), as a note; '' without the persona rule or companion. */
+function companionNoteOf(card: Room | undefined, messages: Chat['message']): string {
+    if (!hasPersonaRule(card as never)) return ''
+    return companionNote(hasPersona() ? String(getPersonaPrompt() ?? '') : '', (messages ?? []).filter((m) => m.role === 'user').map((m) => m.data ?? ''), knownCompanionsOf(card))
+}
+
 /** The player wrote a persona (the prompt carries it as its own block, index.svelte.ts getPersonaPrompt). */
 function hasPersona(): boolean {
     return !!String(getPersonaPrompt() ?? '').trim()
@@ -217,7 +229,7 @@ function hasPersona(): boolean {
 /** The note at the end of the player's message while the character is being made (gameMaster.ts creationNote); none after. */
 export function creationRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
     if (!card || card.type === 'group' || !chat) return formated
-    return gmRequest(formated, creationNote(card, chat.message ?? [], chat.scriptstate, gmStateOf(chat.scriptstate), hasPersona() && hasPersonaRule(card)))
+    return gmRequest(formated, creationNote(card, chat.message ?? [], chat.scriptstate, gmStateOf(chat.scriptstate), hasPersona() && hasPersonaRule(card) ? String(getPersonaPrompt() ?? '') : false, knownCompanionsOf(card)))
 }
 
 /** The status panel's keys are kept once the character is confirmed: the yes was given, or the GM already runs (statusBook.ts). */
