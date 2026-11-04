@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { candidateLua, luaHashCheck, patchGateCopy } from './lib/luaGate.mjs'
+import { candidateLua, candidateFile, gateHashFiles, luaHashCheck, patchGateCopy } from './lib/luaGate.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -92,5 +92,46 @@ test('a candidate whose built card ships no Lua is refused (nothing is wiped)', 
     try {
         assert.throws(() => run(fx), /ships no triggerscript/)
         assert.deepEqual(JSON.parse(fx.st.read(hexKey(CHA)).toString()).triggerscript, OLD)
+    } finally { fx.st.close() }
+})
+
+test('--candidate-json: the gate reads Lua, desc and default variables from the named (illustrated) build, not the first *_fate.json', () => {
+    const fx = fixture({ oldLua: OLD, newLua: NEW })
+    try {
+        const ill = [lua('Illustration generator', '-- ILLUSTRATED chain')]
+        fs.writeFileSync(path.join(fx.cand, 'x_fate_illustrated.json'), JSON.stringify({ data: { description: 'ill desc', extensions: { risuai: { defaultVariables: 'finds_by_lua=0', triggerscript: ill } } } }))
+        assert.equal(candidateFile(fx.cand), 'x_fate.json')
+        assert.equal(candidateFile(fx.cand, 'x_fate_illustrated.json'), 'x_fate_illustrated.json')
+        assert.throws(() => candidateFile(fx.cand, 'nope.json'), /not in/)
+        assert.throws(() => candidateFile(fx.cand, '../x_fate.json'), /not a path/)
+        assert.deepEqual(gateHashFiles(fx.cand, 'x_fate_illustrated.json'), ['x_fate.json'].concat(['x_fate_illustrated.json']).sort())
+        const r = patchGateCopy({ saveDir: fx.saveDir, prefix: 'fc27', candidateDir: fx.cand, candidateJson: 'x_fate_illustrated.json', defaultVars: true, lore: [{ comment: 'L', key: 'l', content: 'c' }], backupDir: path.join(fx.dir, 'bk'), store: fx.st, id: CHA })
+        const c = JSON.parse(fx.st.read(hexKey(CHA)).toString())
+        assert.equal(r.luaHash.candidate, candidateLua(fx.cand, 'x_fate_illustrated.json').hash)
+        assert.notEqual(r.luaHash.candidate, candidateLua(fx.cand).hash)
+        assert.equal(c.desc, 'ill desc')
+        assert.equal(c.defaultVariables, 'finds_by_lua=0')
+        assert.equal(c.triggerscript.find((s) => s.comment === 'Illustration generator').effect[0].code, '-- ILLUSTRATED chain')
+        assert.ok(c.triggerscript.some((s) => s.comment === 'Owner'))
+    } finally { fx.st.close() }
+})
+
+test('without defaultVars the copy\'s defaultVariables stay as they were', () => {
+    const fx = fixture({ oldLua: OLD, newLua: NEW })
+    try {
+        run(fx)
+        assert.equal(JSON.parse(fx.st.read(hexKey(CHA)).toString()).defaultVariables, undefined)
+    } finally { fx.st.close() }
+})
+
+test('RED: a gate that ignores --candidate-json would run the plain build\'s Lua (mutant differs)', async () => {
+    const m = await mutant('const cand = candidateLua(candidateDir, candidateJson)', 'const cand = candidateLua(candidateDir)')
+    const fx = fixture({ oldLua: OLD, newLua: NEW })
+    try {
+        fs.writeFileSync(path.join(fx.cand, 'x_fate_illustrated.json'), JSON.stringify({ data: { description: 'ill', extensions: { risuai: { triggerscript: [lua('Illustration generator', '-- ILL')] } } } }))
+        const args = { saveDir: fx.saveDir, prefix: 'fc27', candidateDir: fx.cand, candidateJson: 'x_fate_illustrated.json', lore: [{ comment: 'L', key: 'l', content: 'c' }], backupDir: path.join(fx.dir, 'bk'), store: fx.st, id: CHA }
+        const real = patchGateCopy(args).luaHash.candidate
+        const wrong = m.patchGateCopy({ ...args, backupDir: path.join(fx.dir, 'bk2') }).luaHash.candidate
+        assert.notEqual(real, wrong)
     } finally { fx.st.close() }
 })

@@ -8,13 +8,32 @@ import { createRequire } from 'node:module'
 
 const rcp = () => createRequire(import.meta.url)('../../../server/node/remoteCardPatch.cjs')
 
-/** The scripts the candidate's built card json (first *_fate.json in the dir) ships: { file, scripts, hash }. */
-export function candidateLua(candidateDir) {
-    const { luaScriptsOf, luaHash } = rcp()
+/** The built card json of a candidate dir: the named file (--candidate-json, e.g. the illustrated build) or the first *_fate.json. */
+export function candidateFile(candidateDir, name = null) {
+    if (name) {
+        if (path.basename(name) !== name) throw new Error(`--candidate-json is a file name inside the candidate dir, not a path: ${name}`)
+        if (!fs.existsSync(path.join(candidateDir, name))) throw new Error(`${name} is not in ${candidateDir}`)
+        return name
+    }
     const file = fs.readdirSync(candidateDir).filter((f) => /_fate\.json$/.test(f)).sort()[0]
     if (!file) throw new Error(`no *_fate.json (built card) in ${candidateDir}`)
-    const scripts = luaScriptsOf(JSON.parse(fs.readFileSync(path.join(candidateDir, file), 'utf8')))
-    return { file, scripts, hash: luaHash(scripts) }
+    return file
+}
+
+/** The files a gate record's `hash` covers: the lorebook, every *_fate.json, and the named built card (assetlib.push_gate does the same). */
+export function gateHashFiles(candidateDir, name = null) {
+    const all = fs.readdirSync(candidateDir).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f))
+    if (name && !all.includes(name)) all.push(name)
+    return all.sort()
+}
+
+/** The scripts the candidate's built card json ships: { file, scripts, hash, defaultVars, description }. */
+export function candidateLua(candidateDir, name = null) {
+    const { luaScriptsOf, luaHash } = rcp()
+    const file = candidateFile(candidateDir, name)
+    const card = JSON.parse(fs.readFileSync(path.join(candidateDir, file), 'utf8'))
+    const scripts = luaScriptsOf(card)
+    return { file, scripts, hash: luaHash(scripts), defaultVars: card.data.extensions.risuai.defaultVariables ?? '', description: card.data.description }
 }
 
 /** The gate.lua check: the copy's hash of the shipped scripts must equal the candidate's. */
@@ -37,11 +56,11 @@ export function luaHashCheck({ candidate, copy, found, of, drop = [] }) {
  * throw if it is not the candidate's. Returns { report, luaHash: {candidate, copy, found, of, drop}, scripts: [{name, action, before, after}] }.
  * `ctx` = { patchRemoteCard?, readCardLuaHash? } for tests; default the real ones.
  */
-export function patchGateCopy({ saveDir, prefix, candidateDir, lore, desc, drop = [], backupDir, store = null, id = null, log = () => {} }) {
+export function patchGateCopy({ saveDir, prefix, candidateDir, candidateJson = null, defaultVars = false, lore, desc = undefined, drop = [], backupDir, store = null, id = null, log = () => {} }) {
     const real = rcp()
-    const cand = candidateLua(candidateDir)
+    const cand = candidateLua(candidateDir, candidateJson)
     const opts = { backupDir, ...(store ? { store } : {}), ...(id ? { id } : {}) }
-    const r = real.patchRemoteCard(saveDir, prefix, { lore, desc, lua: { scripts: cand.scripts, drop } }, opts)
+    const r = real.patchRemoteCard(saveDir, prefix, { lore, desc: desc ?? cand.description, lua: { scripts: cand.scripts, drop }, ...(defaultVars ? { defaultVars: cand.defaultVars } : {}) }, opts)
     const back = real.readCardLuaHash(saveDir, prefix, cand.scripts, { ...(store ? { store } : {}), ...(id ? { id } : {}) })
     for (const x of r.report.lua ?? []) log(`lua ${x.action}: ${x.name} (${x.before ? `${x.before.bytes} B ${x.before.sha}` : '-'} -> ${x.after ? `${x.after.bytes} B ${x.after.sha}` : '-'})`)
     const check = luaHashCheck({ candidate: cand.hash, copy: back.hash, found: back.found, of: back.of, drop })

@@ -39,7 +39,7 @@
 // Setup once: (cd tests/acceptance && npm install && npx playwright install chromium).
 // Never touches the live server (:6001) or the real save: the save is snapshotted read-only into ~/.risu-story-work/acceptance/<stamp>
 // (only the newest run is kept: --rejudge needs that run's copy) and the owner's settings are used from the copy as they are. Outputs are not committed.
-import { patchGateCopy, luaHashCheck } from './lib/luaGate.mjs'
+import { patchGateCopy, luaHashCheck, gateHashFiles, candidateFile } from './lib/luaGate.mjs'
 import fs from 'fs'
 import { execFileSync } from 'child_process'
 import os from 'os'
@@ -70,6 +70,9 @@ const GATE_N = Number(opt('--gate', 0))
 // --lua-drop "<comment>" (repeatable): a script the live card still holds under an old name; the live push passes the same flag (remoteCardPatch --lua-drop)
 const LUA_DROP = argv.flatMap((a, i) => (a === '--lua-drop' && argv[i + 1] ? [argv[i + 1]] : []))
 const CANDIDATE = opt('--candidate')
+// --candidate-json <file in the candidate dir>: the built card the Lua, description and default variables come from (the live push's --lua file, e.g. tham_hoa_zombie_fate_illustrated.json); default the first *_fate.json
+const CANDIDATE_JSON = opt('--candidate-json', null)
+const DEFAULT_VARS = flag('--default-vars')      // the push passes --default-vars: the gate's copy gets the built card's defaultVariables too
 // --persona-from SNAPSHOT_DIR: the copy plays with the persona of an earlier snapshot (e.g. the one that names Evelyn): the third case of the
 // companion rule. Its result goes to gate/<story>-persona.json, which Push live does not read.
 const PERSONA_FROM = opt('--persona-from')
@@ -222,8 +225,8 @@ function finishGate(key, rec, ctx, story) {
     fs.mkdirSync(path.dirname(outFile), { recursive: true })
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
-    for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), luaHash: rec.luaHash?.candidate ?? null, luaScripts: rec.luaScripts ?? null, at: new Date().toISOString(), out: OUT }, null, 1))
+    for (const f of gateHashFiles(CANDIDATE, CANDIDATE_JSON)) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), luaHash: rec.luaHash?.candidate ?? null, candidateJson: CANDIDATE_JSON, defaultVars: DEFAULT_VARS, luaScripts: rec.luaScripts ?? null, at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -263,10 +266,10 @@ async function playStory(key, ctx) {
     rec.copyDir = dir
     if (GATE_N) {
         const lore = JSON.parse(fs.readFileSync(path.join(CANDIDATE, 'risu_lorebook.json'), 'utf8')).data
-        const built = fs.readdirSync(CANDIDATE).filter((f) => /_fate\.json$/.test(f))[0]
+        const built = candidateFile(CANDIDATE, CANDIDATE_JSON)
         const desc = JSON.parse(fs.readFileSync(path.join(CANDIDATE, built), 'utf8')).data.description
         // lore + description + the candidate's built Lua; the copy's Lua hash must equal the candidate's or this throws (never plays old Lua)
-        const r = patchGateCopy({ saveDir: path.join(dir, 'save'), prefix: story.cardId.slice(0, 8), candidateDir: CANDIDATE, lore, desc, drop: LUA_DROP, backupDir: path.join(dir, 'backup'), log })
+        const r = patchGateCopy({ saveDir: path.join(dir, 'save'), prefix: story.cardId.slice(0, 8), candidateDir: CANDIDATE, candidateJson: CANDIDATE_JSON, defaultVars: DEFAULT_VARS, lore, desc, drop: LUA_DROP, backupDir: path.join(dir, 'backup'), log })
         rec.luaHash = r.luaHash
         rec.luaScripts = r.scripts
         if (PERSONA_FROM) {

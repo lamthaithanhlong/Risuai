@@ -17,6 +17,8 @@
 //               the lorebook, so a push without it left the old Lua running.
 //     --lua-drop "<comment>"  with --lua: also remove the script with that comment (a script the build renamed or no longer ships; kept
 //               scripts would otherwise run next to the new one). Repeat the flag for several.
+//     --default-vars  with --lua: also set the card's defaultVariables (top level of the remote file) to the built card's
+//               data.extensions.risuai.defaultVariables, so a variable the Lua reads (finds_by_lua=0) is explicit instead of absent. Opt-in.
 //     --restart stop com.risu.server (launchd) first and start it after; without it the server must already be stopped
 //     --dry-run do everything except the write and the restart
 const fs = require('fs')
@@ -81,7 +83,8 @@ function patchRemoteBytes(current, change) {
     const before = JSON.parse(Buffer.from(current).toString('utf8'))
     if (!Array.isArray(before.globalLore)) throw new Error('the remote file has no globalLore')
     const next = structuredClone(before)
-    const strip = (c) => { const { globalLore, desc, triggerscript, ...rest } = c; return JSON.stringify(rest) }
+    const strip = (c) => { const { globalLore, desc, triggerscript, defaultVariables, ...rest } = c; return JSON.stringify(rest) }
+    if (typeof change.defaultVars === 'string') next.defaultVariables = change.defaultVars
     if (typeof change.desc === 'string') {
         if (!change.desc.trim()) throw new Error('the new description is empty')
         next.desc = change.desc
@@ -94,7 +97,7 @@ function patchRemoteBytes(current, change) {
         const i = next.globalLore.findIndex((x) => x.comment === e.comment)
         if (i >= 0) next.globalLore[i] = e
         else next.globalLore.push(e)
-    } else if (typeof change.desc !== 'string' && !change.lua) {
+    } else if (typeof change.desc !== 'string' && !change.lua && typeof change.defaultVars !== 'string') {
         throw new Error('nothing to change')
     }
     let lua = null
@@ -127,6 +130,8 @@ function patchRemoteBytes(current, change) {
     const back = JSON.parse(out.toString('utf8'))
     if (strip(back) !== strip(before)) throw new Error('round trip: something besides the lorebook changed; nothing written')
     if (JSON.stringify(back.globalLore) !== JSON.stringify(next.globalLore)) throw new Error('round trip: the lorebook did not read back as written')
+    if (typeof change.defaultVars === 'string' && back.defaultVariables !== change.defaultVars) throw new Error('round trip: the default variables did not read back as written')
+    if (typeof change.defaultVars !== 'string' && back.defaultVariables !== before.defaultVariables) throw new Error('round trip: the default variables changed without --default-vars; nothing written')
     if (typeof change.desc === 'string' && back.desc !== change.desc) throw new Error('round trip: the description did not read back as written')
     if (change.entry && !back.globalLore.some((x) => x.comment === change.entry.comment && x.content === toRisuLore(change.entry).content)) {
         throw new Error('round trip: the entry is not in the result')
@@ -142,7 +147,7 @@ function patchRemoteBytes(current, change) {
     const chats = (c) => (c.chats ?? []).reduce((n, ch) => n + (ch.message ?? []).length, 0)
     return {
         out,
-        report: { lua, luaHash: change.lua ? luaHash(shippedPart(back.triggerscript, change.lua.scripts)) : null, lore: [before.globalLore.length, back.globalLore.length], messages: chats(before), bytes: [current.length, out.length] },
+        report: { defaultVars: typeof change.defaultVars === 'string' ? [before.defaultVariables ?? null, back.defaultVariables] : null, lua, luaHash: change.lua ? luaHash(shippedPart(back.triggerscript, change.lua.scripts)) : null, lore: [before.globalLore.length, back.globalLore.length], messages: chats(before), bytes: [current.length, out.length] },
     }
 }
 
@@ -216,7 +221,7 @@ async function main(argv) {
     const opt = (n) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined }
     const has = (n) => rest.includes(n)
     if (!saveDir || !prefix || (!opt('--lore') && !opt('--entry') && !opt('--desc') && !opt('--lua'))) {
-        console.error('usage: remoteCardPatch.cjs <save dir> <chaId prefix> --lore <risu_lorebook.json> | --entry "<comment>=<file.json>" [--desc <card.json>] [--lua <built card.json> [--lua-drop "<comment>"]...] [--restart] [--backup-dir DIR] [--dry-run]')
+        console.error('usage: remoteCardPatch.cjs <save dir> <chaId prefix> --lore <risu_lorebook.json> | --entry "<comment>=<file.json>" [--desc <card.json>] [--lua <built card.json> [--default-vars] [--lua-drop "<comment>"]...] [--restart] [--backup-dir DIR] [--dry-run]')
         process.exit(2)
     }
     const change = opt('--lore')
@@ -225,6 +230,12 @@ async function main(argv) {
             ? { entry: (() => { const [c, f] = opt('--entry').split('='); return { ...JSON.parse(fs.readFileSync(f, 'utf8')), comment: c } })() }
             : {}
     if (opt('--desc')) change.desc = JSON.parse(fs.readFileSync(opt('--desc'), 'utf8')).data.description
+    if (has('--default-vars')) {
+        if (!opt('--lua')) throw new Error('--default-vars reads the built card of --lua')
+        const dv = JSON.parse(fs.readFileSync(opt('--lua'), 'utf8')).data?.extensions?.risuai?.defaultVariables
+        if (typeof dv !== 'string') throw new Error('the built card has no defaultVariables')
+        change.defaultVars = dv
+    }
     if (opt('--lua')) {
         const drop = rest.flatMap((a, i) => (a === '--lua-drop' && rest[i + 1] ? [rest[i + 1]] : []))
         change.lua = { scripts: luaScriptsOf(JSON.parse(fs.readFileSync(opt('--lua'), 'utf8'))), drop }
@@ -247,6 +258,7 @@ async function main(argv) {
         console.log(`${r.written ? 'patched' : 'dry run, nothing written'}: card ${r.chaId}`)
         console.log(`  backup:   ${r.backup}`)
         console.log(`  lore:     ${r.report.lore[0]} -> ${r.report.lore[1]} entries; chats untouched (${r.report.messages} messages)`)
+        if (r.report.defaultVars) console.log(`  defaultVariables: ${JSON.stringify(r.report.defaultVars[0])} -> ${JSON.stringify(r.report.defaultVars[1])}`)
         if (r.report.lua) {
             console.log(`  lua:      ${r.report.lua.filter((x) => x.action !== 'keep' && x.action !== 'same').length} script(s) change, hash ${r.report.luaHash.slice(0, 12)}`)
             for (const x of r.report.lua) console.log(`    ${x.action.padEnd(8)} ${x.name}: ${x.before ? `${x.before.bytes} B ${x.before.sha}` : '-'} -> ${x.after ? `${x.after.bytes} B ${x.after.sha}` : '-'}`)

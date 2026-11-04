@@ -182,3 +182,36 @@ describe('--lua: Lua trigger scripts of the card', () => {
         } finally { st.close() }
     })
 })
+
+describe('--default-vars: the card\'s defaultVariables from the built card', () => {
+    const shipped = luaScriptsOf(built([lua('Status panel', '-- NEW')]))
+    it('sets defaultVariables and reports before -> after; everything else stays', () => {
+        const withVars = Buffer.from(JSON.stringify({ ...card(), defaultVariables: 'a=1' }), 'utf8')
+        const { out, report } = patchRemoteBytes(withVars, { lua: { scripts: shipped }, defaultVars: 'finds_by_lua=0' })
+        const c = JSON.parse(out.toString('utf8'))
+        expect(c.defaultVariables).toBe('finds_by_lua=0')
+        expect(report.defaultVars).toEqual(['a=1', 'finds_by_lua=0'])
+        expect(c.chats).toEqual(card().chats)
+        expect(c.globalLore).toEqual(card().globalLore)
+    })
+    it('without the option the card\'s defaultVariables are never touched', () => {
+        const withVars = Buffer.from(JSON.stringify({ ...card(), defaultVariables: 'a=1' }), 'utf8')
+        const { out, report } = patchRemoteBytes(withVars, { lua: { scripts: shipped } })
+        expect(JSON.parse(out.toString('utf8')).defaultVariables).toBe('a=1')
+        expect(report.defaultVars).toBeNull()
+    })
+    it('a dry run writes nothing but shows the diff', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'remote-patch-dv-'))
+        const saveDir = join(dir, 'save'); mkdirSync(saveDir, { recursive: true })
+        const st = openSaveStore({ saveDir, backend: 'files' })
+        st.write(hexKey('fc27f53b-0000'), bytes())
+        try {
+            const r = patchRemoteCard(saveDir, 'fc27', { defaultVars: 'finds_by_lua=0' }, { id: 'fc27f53b-0000', store: st, backupDir: join(dir, 'bk'), dryRun: true })
+            expect(r.written).toBe(false)
+            expect(r.report.defaultVars).toEqual([null, 'finds_by_lua=0'])
+            expect(st.read(hexKey('fc27f53b-0000'))).toEqual(bytes())
+            patchRemoteCard(saveDir, 'fc27', { defaultVars: 'finds_by_lua=0' }, { id: 'fc27f53b-0000', store: st, backupDir: join(dir, 'bk') })
+            expect(JSON.parse(st.read(hexKey('fc27f53b-0000')).toString('utf8')).defaultVariables).toBe('finds_by_lua=0')
+        } finally { st.close() }
+    })
+})
