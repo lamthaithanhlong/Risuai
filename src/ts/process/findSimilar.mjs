@@ -8,7 +8,9 @@
 // Plain JS on purpose: the acceptance scorer (tests/acceptance/lib/finds.mjs) imports it under node without a build.
 
 export const STOPWORDS = new Set(['a', 'an', 'the', 'of', 'and', 'or', 'to', 'in', 'on', 'for', 'with'])
-export const GENERIC = new Set(['reading', 'sense', 'skill', 'technique', 'trick', 'awareness', 'detection', 'control', 'sight', 'vision'])
+export const GENERIC = new Set(['reading', 'sense', 'skill', 'technique', 'trick', 'awareness', 'detection', 'control', 'sight', 'vision',
+    // generic head nouns (2026-11-04, w5c gate): "Stairwell Blind-Corner Check" was dropped as a twin of "Reflection Check" on the head "check" alone
+    'check', 'test', 'listening', 'handling', 'work', 'practice', 'method', 'approach', 'routine', 'habit'])
 
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/'/g, '')
 

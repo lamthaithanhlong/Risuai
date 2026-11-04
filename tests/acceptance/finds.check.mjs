@@ -166,6 +166,21 @@ test('finds.noRepeat: two finds with the same head noun under different names ar
     assert.deepEqual(noRepeatProblems([{ turns: [turn('Sound Rhythm')] }, { turns: [turn('Rusty Key')] }]), [])
 })
 
+test('finds.saved agrees with the client: a block dropped as similar (never posted) is not "not saved"; one unsaved for another reason still is (scorer-consistency change, 2026-11-04)', async () => {
+    const o = { toolsDir: STUB, storeDir: store('store-good') }
+    const blk = (en) => (en === 'Counted Breath'
+        ? { raw: 'x [[FIND|skill|Thở theo nhịp đếm|Counted Breath|Giữ nhịp tim ổn định khi nấp, giảm tiếng thở lọt ra ngoài.|uncommon|Cần đứng im; vô dụng khi chạy.|yes]]', shown: 'x' }
+        : { raw: `x [[FIND|skill|Tên|${en}|effect here.|rare|cond|yes]]`, shown: 'x' })
+    // Counted Breath is in the store; "Counted Breath Technique" is its twin (generic last word) that the client drops: nothing to save
+    assert.deepEqual(rules(savedProblems([{ turns: [blk('Counted Breath')] }, { turns: [blk('Counted Breath Technique')] }], o)), [])
+    // a find that is not similar to anything and is not in the store is red as before
+    assert.deepEqual(rules(savedProblems([{ turns: [blk('Counted Breath')] }, { turns: [blk('Rusty Pocket Gadget')] }], o)), ['not-saved'])
+    // and the first of two twins is the one that has to be saved: not in the store, still red
+    assert.deepEqual(rules(savedProblems([{ turns: [blk('Rusty Pocket Gadget')] }, { turns: [blk('Rusty Pocket Gadget Trick')] }], o)), ['not-saved'])
+    const m = await mutant('if ([...wanted.values()].some((w) => similar(w.name.en, find.name.en))) continue', '')
+    assert.deepEqual(rules(m.savedProblems([{ turns: [blk('Counted Breath')] }, { turns: [blk('Counted Breath Technique')] }], o)), ['not-saved'], 'without the rule the twin is red')
+})
+
 test('act tags: counted per run from the raw reply; a tag left in the shown or stored text (finished or half-streamed) is red, a clean run is green', () => {
     const tag = '[[ACT|bẻ-khóa-cửa-kho|nhanh_nhen+cam_nhan|normal|giữ-im-lặng]]'
     const clean = [{ turns: [{ raw: 'a ' + tag, shown: 'a', reply: 'a' }, { raw: 'b', shown: 'b', reply: 'b' }] }, { turns: [{ raw: tag + tag, shown: 'x', reply: 'x' }] }]

@@ -143,7 +143,13 @@ export function savedProblems(runs, { storeDir, toolsDir = DEFAULT_TOOLS, otherC
     const out = []
     if (!storeDir) return [{ rule: 'no-store', text: 'RISU_SHARED_DIR is not set' }]
     const wanted = new Map()
-    for (const run of runs) for (const { find } of findsOfRun(run)) if (!wanted.has(slug(find.name.en))) wanted.set(slug(find.name.en), find)
+    // what the client keeps: a block that is the same kind of find as one already kept (findSimilar, the rule the client applies in noteFind) is
+    // dropped there and never posted, so it is not "not saved" (scorer consistency, 2026-11-04: 'Stairwell Blind-Corner Check' vs 'Reflection Check')
+    for (const run of runs) for (const { find } of findsOfRun(run)) {
+        if (wanted.has(slug(find.name.en))) continue
+        if ([...wanted.values()].some((w) => similar(w.name.en, find.name.en))) continue
+        wanted.set(slug(find.name.en), find)
+    }
     if (!wanted.size) return [{ rule: 'no-find', text: 'no find in the runs, nothing to be saved' }]
     let other = null
     try { other = forCard(otherCard, storeDir, toolsDir) } catch (e) { out.push({ rule: 'for-card', text: `for_card('${otherCard}') failed: ${String(e.stderr || e.message).trim().split('\n').at(-1).slice(0, 160)}` }) }

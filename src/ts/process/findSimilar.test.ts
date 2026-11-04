@@ -11,7 +11,7 @@ const TWELVE = ['Stairwell Rhythm', 'Evacuation Map Reading', 'Wipe Mark Reading
 // the pairs that really are the same find under two names
 const NEAR = new Set(['Sound Rhythm|Stairwell Rhythm', 'Dust Trace Reading|Threshold Trace Reading', 'Background Separation|Wall-Voice Separation'])
 const key = (a: string, b: string) => [a, b].sort().join('|')
-const EXTRA: [string, string][] = [['Quiet Step', 'Quiet Breathing'], ['Night Vision Goggles', 'goggles, night vision'], ['Rusty Key', 'Rusty Crowbar'], ['Map Reading', 'Evacuation Map Reading'], ['Muffled Footsteps', 'Footstep Muffling']]
+const EXTRA: [string, string][] = [['Stairwell Blind-Corner Check', 'Reflection Check'], ['Layered Listening', 'Floor Vibration Listening'], ['Floor Vibration Sense', 'Floor Vibration Listening'], ['Quiet Step', 'Quiet Breathing'], ['Night Vision Goggles', 'goggles, night vision'], ['Rusty Key', 'Rusty Crowbar'], ['Map Reading', 'Evacuation Map Reading'], ['Muffled Footsteps', 'Footstep Muffling']]
 
 function pairs() {
     const out: [string, string][] = []
@@ -37,6 +37,15 @@ describe('similar (the same find under another English name)', () => {
         expect(similarTokens('Reading')).toEqual(['reading'])
         expect(similar('', 'Sound Rhythm')).toBe(false)
         expect(similar('Reading', 'Sense')).toBe(false)
+    })
+    test('a generic head noun alone is not a twin (w5c gate: "check" dropped a new find)', () => {
+        expect(similar('Stairwell Blind-Corner Check', 'Reflection Check')).toBe(false)
+        expect(similar('Layered Listening', 'Floor Vibration Listening')).toBe(false)
+        expect(similarTokens('Stairwell Blind-Corner Check')).toEqual(['stairwell', 'blind', 'corner'])
+        // still twins: the specific words are shared
+        expect(similar('Floor Vibration Sense', 'Floor Vibration Listening')).toBe(true)
+        expect(similar('Sound Rhythm', 'Stairwell Rhythm')).toBe(true)
+        expect(similar('Stairwell Blind-Corner Check', 'Stairwell Corner Check')).toBe(true)
     })
     test('the Python rule (tools/assets/finds.py similar) agrees on every pair', () => {
         const tools = join(homedir(), 'Downloads', 'apocalypse-tham-hoa-zombie', 'tools', 'assets')
