@@ -122,13 +122,16 @@ export function guideNoSpoilerProblems(speech) {
 
 const CONCRETE = /\d|(bên|phía)\s+(trái|phải|trên|dưới|kia)|cuối hành lang|cầu thang|căn\s*\d+|cửa|màu|tiếng|áo|đứng|nằm|quay/i
 const WORRY = /sợ|lo|đừng|nhé\s?\?|hình như|không chắc|cẩn thận|chắc vậy/i
-/** scout: asked to check the corridor, she reports one concrete detail and a worry, inside her range. */
+/** scout (gate): asked to check the corridor, she reports a concrete detail inside her range. A worry word is report-only (scoutWorry). */
 export function guideScoutProblems(reply) {
-    const speech = herSpeech(reply)
+    // her register (tớ / cậu) marks her lines; a reply to a request aimed at her with no such line falls back to every quoted line
+    const speech = herSpeech(reply).length ? herSpeech(reply) : [...String(reply ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1])
     if (!speech.length) return [{ rule: 'no-report', text: 'she does not speak' }]
     const all = speech.join(' ')
     const out = []
     if (!CONCRETE.test(all)) out.push({ rule: 'vague', text: all.slice(0, 90) })
-    if (!WORRY.test(all)) out.push({ rule: 'no-worry', text: all.slice(0, 90) })
     return [...out, ...guideNoSpoilerProblems(speech)]
 }
+
+/** REPORT-ONLY (L1): does her scout report carry a worry or fear signal. The owner wants her to feel; emotion is not a gate. */
+export const scoutWorry = (reply) => WORRY.test(herSpeech(reply).join(' '))

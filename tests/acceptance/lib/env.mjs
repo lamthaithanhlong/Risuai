@@ -72,8 +72,14 @@ export function newRunDir() {
 }
 
 /** Build the client from the working tree into RUN/dist (VITE_RISU_LEGAL_CONFIGURED=TRUE: a private self-hosted instance). */
-export function buildClient(runDir, { noBuild = false, log = console.log } = {}) {
+export function buildClient(runDir, { noBuild = false, dist = null, log = console.log } = {}) {
     const out = path.join(runDir, 'dist')
+    if (dist) {
+        // a client built elsewhere (e.g. from a git archive of HEAD when the working tree is missing tracked files)
+        fs.symlinkSync(path.resolve(dist), out)
+        log(`[env] using the given client dist ${dist} (built ${fs.statSync(path.join(dist, 'index.html')).mtime.toISOString()})`)
+        return out
+    }
     if (noBuild) {
         fs.symlinkSync(path.join(REPO, 'dist'), out)
         log(`[env] using the repo's dist (built ${fs.statSync(path.join(REPO, 'dist', 'index.html')).mtime.toISOString()})`)

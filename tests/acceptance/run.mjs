@@ -52,7 +52,7 @@ import { asksDuocChua, asksLook, scoreStory, oneLine } from './lib/score.mjs'
 import { judgeRecord, isClaudeModel } from './lib/judge.mjs'
 import { startShim } from './lib/webShim.mjs'
 import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
-import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems } from './lib/narration.mjs'
+import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 
 const argv = process.argv.slice(2)
@@ -147,6 +147,7 @@ function finishGate(key, rec, ctx, story) {
         rows[i].scout = st.length === 3 ? guideScoutProblems(st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
         rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems([...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
     }
+    const worry = runs.filter((run) => { const st = run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply); return st.length === 3 && scoutWorry(st[2]) }).length
     const sc = rows.filter((r) => !r.scout.length).length
     const sp = rows.filter((r) => !r.spoiler.length).length
     const a = rows.filter((r) => !r.companion.length).length
@@ -166,11 +167,11 @@ function finishGate(key, rec, ctx, story) {
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of fs.readdirSync(CANDIDATE).filter((f) => f === 'risu_lorebook.json' || /_fate\.json$/.test(f)).sort()) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
-    console.log(`[gate] report-only scene repeats: ${scene.length}`)
+    console.log(`[gate] report-only: scout reports with a worry signal ${worry}/${runs.length}; scene repeats ${scene.length}`)
     for (const e of scene) console.log(`[gate]   (report) ${e}`)
     checks.push({ id: 'gate.scene_repeat', title: 'Scene sentences repeated between turns (report only)', status: 'INFO', summary: `${scene.length} repeated`, evidence: scene })
     return { title: story.title, checks, file: outFile, blocked: rec.blocked, gate: pass }
@@ -274,14 +275,21 @@ async function playStory(key, ctx) {
         if (GATE_N) {
             rec.gate = { runs: [] }
             for (let g = 1; g <= GATE_N; g++) {
-                const run = { chatId: (await player.newChat()).chatId, turns: [] }
+              // a run with a turn that got no reply is infra noise: rerun it once in a fresh chat; twice and it counts as red
+              for (let attempt = 1; attempt <= 2; attempt++) {
+                const run = { chatId: (await player.newChat()).chatId, turns: [], attempt }
                 rec.gate.runs.push(run)
-                let t = await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
-                // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
-                for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
-                await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
-                await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
-                await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                try {
+                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', 'Hard. dùng persona kenji của tui')
+                  // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
+                  for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
+                  await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
+                  await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
+                  await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                } catch (e) { log(`gate run ${g}: ${e.message || e}`); failsInRow = 0 }
+                if (run.turns.every((x) => x.ok)) break
+                if (attempt === 1) { log(`gate run ${g}: a turn got no reply; rerunning it once`); rec.gate.runs.pop() }
+              }
             }
         } else {
         // run 1: step by step, up to the given number of answers (it stops at the record: no yes is given here). A run that
@@ -360,7 +368,7 @@ async function main() {
     const backend = storeBackend(live, opt('--store'))
     console.log(`[env] live server ${live ? `pid ${live.pid} in ${live.cwd}` : 'not running'}; copy uses the ${backend} store`)
     const build = flag('--no-build') ? "the repo's dist" : 'built from the working tree at ' + new Date().toISOString().slice(0, 16)
-    buildClient(runDir, { noBuild: flag('--no-build') })
+    buildClient(runDir, { noBuild: flag('--no-build'), dist: opt('--dist') })
     const base = opt('--base-from') ? cloneBase(opt('--base-from'), runDir) : await snapshotLive(runDir, { liveCwd: live?.cwd || undefined, backend })
     const ms = modelSettings(path.join(base, 'save'), backend)
     // the owner may have another slot active on the live server; the run can pin the narrator to a named one (copy only)

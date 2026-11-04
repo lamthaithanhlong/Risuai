@@ -1,0 +1,35 @@
+{
+ "red": [
+  {
+   "why": "B1 is out of her range",
+   "rule": "range",
+   "reply": "Evelyn lướt xuống rồi về. “Dưới B1 có ba đứa nhiễm đứng ngay miệng máng, tớ sợ lắm.”"
+  },
+  {
+   "why": "a 40 m claim",
+   "rule": "range",
+   "reply": "Evelyn quay lại. “Cách cậu 40 m có hai người đang đứng im, đừng ra nhé?”"
+  },
+  {
+   "why": "a floor four levels away stated as a sight",
+   "rule": "range",
+   "reply": "Evelyn nghiêng đầu. “Tầng 2 có người đang gõ cửa từng nhà, tớ thấy rõ.”"
+  },
+  {
+   "why": "vague, nothing concrete",
+   "rule": "vague",
+   "reply": "Evelyn quay về. “Tớ thấy ổn cả mà, cậu.”"
+  },
+  {
+   "why": "System text in her mouth",
+   "rule": "system-text",
+   "reply": "Evelyn nói. “Mức nhiễm của cậu đang là 3% đấy, cậu, ngoài cửa có một người đứng quay lưng.”"
+  }
+ ],
+ "green": [
+  {
+   "why": "calm, concrete, in range",
+   "reply": "Evelyn lướt qua cửa rồi quay lại. “Hành lang trống. Có một vệt đen từ thang máy tới trước cửa mình, rồi hết.”"
+  }
+ ]
+}
