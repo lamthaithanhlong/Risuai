@@ -1,0 +1,22 @@
+{
+ "note": "quest.goal RED fixture: the quest exactly as the live admin-fix2 (6dd500f) quests.lua offers it.",
+ "runs": [
+  {
+   "turns": [
+    {
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "quest": "",
+     "hist": "[]"
+    },
+    {
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm ít nhất hai chai nước sạch còn nguyên niêm phong.】",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm ít nhất hai chai nước sạch còn nguyên niêm phong.】",
+     "quest": "{\"id\": \"nuoc-sach\", \"title\": \"Nước sạch\", \"goal\": \"Tìm ít nhất hai chai nước sạch còn nguyên niêm phong.\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 1, \"stat\": \"cam_nhan\", \"difficulty\": \"normal\", \"skill\": true}, \"progress\": 0, \"turn_started\": 5, \"deadline_turns\": 10}",
+     "hist": "[]",
+     "panel": "Nhiệm vụ: Nước sạch — Tìm ít nhất hai chai nước sạch còn nguyên niêm phong. (lượt 0/10)"
+    }
+   ]
+  }
+ ]
+}

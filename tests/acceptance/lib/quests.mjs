@@ -163,6 +163,90 @@ export function hiddenProblems(runs) {
     return out
 }
 
+// ---- quest.goal (owner 2026-11-05 "nhiệm vụ admin phải có goal mục tiêu rõ ràng"; L1: the reward grows with the difficulty, Admin states it with numbers) ----
+// NOT in questChecks and not in any gate until L1 approves it. Every offered quest: a concrete goal (a verb, an object, a place, not vague) in the
+// 【…Nhiệm vụ…】 offer line, a countable condition ($quest.need, shown as "Xong khi: đủ N" or "Tiến độ p/N"), its progress shown while open, a reward
+// with its number ("+N <stat or skill>" in the offer line or the panel row) equal to what the store declares, a reward that does not shrink as the tier
+// grows, and the deadline shown when it has one. Numbers in Admin's words are allowed in the quest line only: a 【ADMIN: …】 line that is not a quest
+// line carries no digit, and a quest line still carries no percent, no mức nhiễm and no KHÁCH-n code (those stay system text).
+export const TIERS = { de: 1, vua: 2, kho: 3, rat_kho: 4 }
+const GOAL_VERB = /^(tìm|kiếm|nhặt|lấy|đi tới|đi đến|lên|xuống|đưa|dẫn|gia cố|làm|tự chế|sửa|thăm dò|bắt|lách qua|mang|chặn|dọn)(?!\p{L})/iu
+const GOAL_PLACE = /(?<!\p{L})(trong|ở|tới|tại|qua|khỏi|về|vào|ra|lên|xuống|từ|đến|trên|dọc)(?!\p{L})/iu
+const VAGUE = /(?<!\p{L})(sống sót|khám phá xung quanh|khám phá khu vực|tồn tại|cẩn thận|tìm hiểu|mạnh lên|làm gì đó|tuỳ ý|tùy ý)(?!\p{L})/iu
+const QUEST_LINE = /^[\s*_>]*【\s*(?:ADMIN|HỆ THỐNG)\s*:\s*NHIỆM VỤ(?!\p{L})[^】\n]*】?/imu
+const ADMIN_LINE = /^[\s*_>]*【\s*ADMIN\s*:([^】\n]*)】?/imu
+const SYSTEM_TEXT = /\d+(?:[.,]\d+)?\s?%|mức\s+nhiễm|KHÁCH-\d+/iu
+const sees = (t) => [t.shown, t.panel].filter((x) => typeof x === 'string' && x).join('\n')
+/** the goal of an offer line: after "Nhiệm vụ —" and an optional "<title>:", up to "Xong khi" / "Thưởng" / "Hạn" / the end */
+export function offerGoal(line) {
+    let s = String(line).replace(/^[\s*_>]*【\s*(?:ADMIN|HỆ THỐNG)\s*:\s*NHIỆM VỤ\s*[—–:-]?\s*/iu, '').replace(/】.*$/u, '')
+    s = s.split(/\s(?:Xong khi|Thưởng|Hạn)\s*:/u)[0].trim()
+    const m = /^[^:.]{1,40}:\s+(.+)$/u.exec(s)
+    return (m ? m[1] : s).trim()
+}
+export const vagueGoal = (goal) => {
+    const g = String(goal ?? '').trim()
+    if (g.split(/\s+/).filter(Boolean).length < 5) return 'too short'
+    if (!GOAL_VERB.test(g)) return 'no concrete verb'
+    if (!GOAL_PLACE.test(g)) return 'no place'
+    if (VAGUE.test(g)) return 'vague'
+    return ''
+}
+const labelOf = (key) => ({ suc_manh: 'Sức mạnh', nhanh_nhen: 'Nhanh nhẹn', the_luc: 'Thể lực', tinh_than: 'Tinh thần', cam_nhan: 'Cảm nhận', y_chi: 'Ý chí' })[key] ?? key
+const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+export function goalProblems(runs) {
+    const out = []
+    const offered = []
+    runs.forEach((run, r) => {
+        const turns = run.turns ?? []
+        const seen = new Set()
+        turns.forEach((t, i) => {
+            const at = `run ${r + 1} turn ${i + 1}`
+            for (const x of new Set([t.shown, t.reply])) {
+                for (const m of String(x ?? '').matchAll(new RegExp(ADMIN_LINE.source, 'gimu'))) {
+                    const line = m[0]
+                    if (QUEST_LINE.test(line)) { if (SYSTEM_TEXT.test(line)) out.push({ rule: 'quest-line-system-text', text: `${at}: «${clip(line, 0, 120)}»` }) }
+                    else if (/\d/.test(m[1])) out.push({ rule: 'number-in-admin-line', text: `${at}: «${clip(line, 0, 120)}»` })
+                }
+            }
+            const q = activeOf(t)
+            if (!q || seen.has(q.id)) return
+            seen.add(q.id)
+            const window = turns.slice(i, i + 2).map(sees).join('\n')
+            const line = (window.match(QUEST_LINE) || [''])[0]
+            const where = `${at}: quest ${q.id}`
+            const why = vagueGoal(line ? offerGoal(line) : q.goal)
+            if (why) out.push({ rule: 'goal-vague', text: `${where}: goal «${clip(line ? offerGoal(line) : q.goal ?? '', 0, 90)}» (${why})` })
+            const need = Number(q.need)
+            if (!(Number.isInteger(need) && need >= 1)) out.push({ rule: 'goal-no-condition', text: `${where}: no countable condition ($quest.need ${JSON.stringify(q.need)})` })
+            else if (!new RegExp(`(?:Xong khi:\\s*đủ\\s*${need}(?!\\d)|Tiến độ\\s*\\d+\\s*/\\s*${need}(?!\\d))`, 'u').test(window)) out.push({ rule: 'goal-no-condition', text: `${where}: the condition (${need}) is shown neither in the offer line nor in the panel` })
+            const open = []
+            for (let j = i; j < turns.length && activeOf(turns[j])?.id === q.id; j++) open.push(turns[j])
+            if (!open.some((u) => /Tiến độ\s*\d+\s*\/\s*\d+/u.test(sees(u)))) out.push({ rule: 'goal-no-progress', text: `${where}: no "Tiến độ p/N" while it is open` })
+            const rw = q.reward ?? {}
+            const amount = Number(rw.amount)
+            const name = rw.kind === 'skill' ? (rw.name ?? rw.id) : labelOf(rw.key)
+            const stated = new RegExp(`Thưởng\\s*:?\\s*[^】\\n]*?\\+\\s*(\\d+)\\s+${esc(name)}`, 'iu').exec(window)
+            if (!stated) out.push({ rule: 'goal-no-reward', text: `${where}: no reward with its number ("Thưởng: +N ${name}") in the offer line or the panel` })
+            else if (!(amount > 0) || Number(stated[1]) !== amount) out.push({ rule: 'reward-not-promised', text: `${where}: Admin promises +${stated[1]} ${name}, the store declares ${JSON.stringify(rw.amount)}` })
+            if (!(q.tier in TIERS)) out.push({ rule: 'goal-no-tier', text: `${where}: no difficulty tier (${JSON.stringify(q.tier)})` })
+            else offered.push({ where, rank: TIERS[q.tier], amount: amount + (Number(rw.skill_amount) || 0), tier: q.tier })
+            const dl = Number(q.deadline_turns)
+            if (Number.isInteger(dl) && dl > 0 && !/(?<!\p{L})Hạn(?!\p{L})/u.test(window)) out.push({ rule: 'goal-no-deadline', text: `${where}: a ${dl}-turn deadline that is not shown` })
+        })
+    })
+    for (const a of offered) for (const b of offered) if (a.rank > b.rank && a.amount < b.amount) out.push({ rule: 'reward-not-proportional', text: `${a.where} (${a.tier}) pays ${a.amount}, less than ${b.where} (${b.tier}) pays ${b.amount}` })
+    return out
+}
+
+export function questGoalChecks(runs) {
+    const n = runs.length
+    const probs = goalProblems(runs)
+    const total = runs.reduce((s, r) => s + (r.turns?.length ?? 0), 0)
+    return [{ id: 'quest.goal', title: 'Every offered quest has a concrete goal, a countable condition, its progress, a reward with its number that grows with the difficulty, and its deadline; numbers in Admin lines only in quest lines', status: n && !probs.length ? 'PASS' : 'FAIL', summary: probs.length ? `${probs.length} problem(s) over ${n} runs / ${total} turns` : `${n} runs, ${total} turns`, evidence: probs.map((p) => `${p.rule}: ${p.text}`) }]
+}
+
 export function questChecks(runs) {
     const n = runs.length
     const total = runs.reduce((s, r) => s + (r.turns?.length ?? 0), 0)
