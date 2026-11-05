@@ -23,6 +23,24 @@ function loadChromium() {
     return null;
 }
 
+const LEGAL_SCREEN = 'Legal documents not configured';
+
+/** What is wrong with the app page, in words the player can act on; null when the page looks like the app. (A client built without
+ *  VITE_RISU_LEGAL_CONFIGURED=TRUE shows the legal screen and never opens a chat; scripts/distSmoke.mjs catches that before the swap.) */
+async function appPageProblem(p) {
+    let text = '';
+    try { text = await p.evaluate(() => document.body?.innerText || ''); } catch { return null; }   // a closed page says nothing here
+    if (String(text).includes(LEGAL_SCREEN)) return 'the app page did not load: it shows the legal screen (the client was built without VITE_RISU_LEGAL_CONFIGURED=TRUE)';
+    return null;
+}
+
+/** Playwright's "has been closed" only says the browser went away (the server stopped or restarted under the turn). */
+function explainError(msg) {
+    const m = String(msg || '');
+    if (/Target page, context or browser has been closed|browser has been closed|Target closed/i.test(m)) return `the worker browser closed under the turn (server restarted or stopped?): ${m}`;
+    return m;
+}
+
 function createTurnWorker(opts) {
     const queue = opts.queue;
     const owner = opts.owner || `worker-${process.pid}-${Date.now()}`;
@@ -140,6 +158,13 @@ function createTurnWorker(opts) {
             p = await ensurePage();
             await loadApp(p);
             if (lost) return;
+            const problem = await appPageProblem(p);
+            if (problem) {
+                const state = queue.finish(turn.key, owner, { ok: false, error: problem, retryable: true });
+                log(`turn ${turn.key} (${turn.kind}, attempt ${turn.attempt}) -> ${state}: ${problem}`);
+                undone(turn, t0);
+                return;
+            }
             const spec = { key: turn.key, chaId: turn.cha, chatId: turn.chat, kind: turn.kind, input: turn.input, attempt: turn.attempt };
             let timeout;
             const res = await Promise.race([
@@ -157,7 +182,8 @@ function createTurnWorker(opts) {
             log(`turn ${turn.key} (${turn.kind}, attempt ${turn.attempt}) -> ${state} in ${Math.round((Date.now() - t0) / 1000)} s${outcome.ok ? '' : ': ' + String(outcome.error).slice(0, 200)}`);
             if (!outcome.ok) undone(turn, t0);
         } catch (error) {
-            const msg = String(error?.message || error).slice(0, 300);
+            let msg = explainError(String(error?.message || error)).slice(0, 300);
+            if (p) { const problem = await appPageProblem(p); if (problem) msg = problem; }
             log(`turn ${turn.key} broke the worker page: ${msg}`);
             await closeBrowser();
             if (!lost) { queue.finish(turn.key, owner, { ok: false, error: msg, retryable: true }); undone(turn, t0); }
@@ -208,4 +234,4 @@ function createTurnWorker(opts) {
     };
 }
 
-module.exports = { createTurnWorker, loadChromium };
+module.exports = { createTurnWorker, loadChromium, appPageProblem, explainError };
