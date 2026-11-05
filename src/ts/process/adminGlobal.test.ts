@@ -171,3 +171,91 @@ describe('adminBridge.cjs (server)', () => {
         fs.rmSync(dir, { recursive: true, force: true })
     })
 })
+
+// ---- the persona record (owner 2026-11-05: Admin manages the persona's stats in every story; a card with no engine has no panel) ----
+import { fetchRecord, hasOwnEngine, personaRecordText, resetRecordCache, RECORD_TITLE } from './adminGlobal'
+import { buildView } from './personaStats'
+
+const KENJI = { stats: { the_luc: 1015, nhanh_nhen: 1001, suc_manh: 1002, cam_nhan: 1001, tinh_than: 1002 }, skills: { 'wall-vibration-listening': 4 } }
+const FINDS = { finds: [{ id: 'wall-vibration-listening', name: { vi: 'Nghe rung vách', en: 'Wall listening' } }] }
+const storeFetch = (stats: unknown, opts: { down?: boolean; calls?: string[] } = {}) => async (url: string) => {
+    opts.calls?.push(url)
+    if (opts.down) throw new Error('down')
+    if (url.startsWith('/api/admin')) return jsonRes(200, payload('cha-0a1b2c3d'))
+    if (url.startsWith('/api/assets/stats')) return jsonRes(200, stats)
+    if (url.startsWith('/api/assets/finds')) return jsonRes(200, FINDS)
+    return jsonRes(404, {})
+}
+const plain = { chaId: '0a1b2c3d-1111' }
+
+describe('persona record', () => {
+    beforeEach(() => resetRecordCache())
+    it('the text carries the persona page numbers (2 decimals), slots, skills with mastery and tier, items', () => {
+        const t = personaRecordText(buildView(KENJI, undefined, { 'wall-vibration-listening': { vi: 'Nghe rung vách' } }), 'Kenji Park')
+        expect(t.startsWith(RECORD_TITLE)).toBe(true)
+        expect(t).toContain('Thể lực 10.15%')
+        expect(t).toContain('Ý chí 10.00%')
+        expect(t).toContain('Ô kỹ năng mở: 1')
+        expect(t).toContain('Nghe rung vách (thành thạo 0.04%, Sơ nhập)')
+        expect(t).toContain('Vật phẩm:')
+    })
+    it('an empty store is said plainly, with no number', () => {
+        const t = personaRecordText(buildView({ stats: {}, skills: {} }, undefined), 'Kenji Park')
+        expect(t).toContain('Kho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của Kenji Park.')
+        expect(t).not.toMatch(/%/)
+    })
+    it('a card with its own engine gets no record: story cards, the [[ACT| rule, $stats in the chat', () => {
+        expect(hasOwnEngine({ chaId: 'fc27f53b-773d' })).toBe(true)
+        expect(hasOwnEngine({ chaId: 'x', extentions: { risu_story_card: 'lotm' } })).toBe(true)
+        expect(hasOwnEngine({ chaId: 'x', desc: 'tag [[ACT|...]]' } as never)).toBe(true)
+        expect(hasOwnEngine(plain, { scriptstate: { $stats: '{"suc_manh":1000}' } })).toBe(true)
+        expect(hasOwnEngine(plain, { scriptstate: {} })).toBe(false)
+    })
+    it('merged into the one Admin system message for a card with no engine', async () => {
+        const out = await adminBeforeRequest(prompt(), plain, [], 'Kenji Park', { fetch: storeFetch(KENJI) as never, auth: () => 't' }, { id: 'kenji', chat: { scriptstate: {} } })
+        const sys = out.filter((m) => String(m.content).includes('[Admin (global'))
+        expect(sys).toHaveLength(1)
+        expect(String(sys[0].content)).toContain(RECORD_TITLE)
+        expect(String(sys[0].content)).toContain('Thể lực 10.15%')
+        expect(String(sys[0].content)).toContain('Nghe rung vách')
+    })
+    it('the Zombie path is unchanged: no record, not even a store call', async () => {
+        const calls: string[] = []
+        const out = await adminBeforeRequest(prompt(), { chaId: 'fc27f53b-773d' }, [], 'Kenji Park', { fetch: storeFetch(KENJI, { calls }) as never, auth: () => 't' }, { id: 'kenji', chat: { scriptstate: {} } })
+        expect(out.some((m) => String(m.content).includes(RECORD_TITLE))).toBe(false)
+        expect(calls.some((u) => u.includes('/api/assets/'))).toBe(false)
+    })
+    it('offline: no store and no copy = no record block, one log line, the reply still gets Admin from its cache', async () => {
+        const logs: string[] = []
+        await adminBeforeRequest(prompt(), plain, [], 'K', { fetch: storeFetch(KENJI) as never, auth: () => 't' })   // Admin cached, no persona
+        const down = async (url: string) => { if (url.startsWith('/api/assets/')) throw new Error('down'); return jsonRes(200, payload('cha-0a1b2c3d')) }
+        const out = await adminBeforeRequest(prompt(), plain, [], 'K', { fetch: down as never, auth: () => 't', log: (m) => logs.push(m) }, { id: 'kenji' })
+        expect(out.some((m) => String(m.content).includes('[Admin (global'))).toBe(true)
+        expect(out.some((m) => String(m.content).includes(RECORD_TITLE))).toBe(false)
+        expect(logs.filter((l) => l.includes('persona kenji'))).toHaveLength(1)
+    })
+    it('a store that answered once is reused when it goes down', async () => {
+        let t = 0
+        await fetchRecord('kenji', { fetch: storeFetch(KENJI) as never, auth: () => 't', now: () => t })
+        t = 120_000
+        const v = await fetchRecord('kenji', { fetch: storeFetch(KENJI, { down: true }) as never, auth: () => 't', now: () => t, log: () => {} })
+        expect(v?.stats.find((s) => s.key === 'the_luc')?.pct).toBe('10.15%')
+    })
+    it('cut order: sections first, then the record, never intro, Connecting or the Story guide', () => {
+        const assets = payload().assets
+        const rec = `${RECORD_TITLE}\n` + 'x'.repeat(200)
+        const full = fitBudget(assets, 100000, rec).text
+        const noRec = fitBudget(assets, 100000).text
+        // budget fits everything but the last section: the section goes, the record stays
+        const a = fitBudget(assets, full.length - 10, rec)
+        expect(a.cut).toEqual(['Scouting'])
+        expect(a.text).toContain(RECORD_TITLE)
+        // budget too small for the record even with all sections gone: the record goes, protected parts stay
+        const b = fitBudget(assets, noRec.length - 1, rec)
+        expect(b.cut).toEqual(['Scouting', 'Admin lines', 'Persona record'])
+        expect(b.text).not.toContain(RECORD_TITLE)
+        expect(b.text).toContain('Connecting and standing duties')
+        expect(b.text).toContain('Story guide: Admin')
+        expect(b.text).toContain('Admin is the interface')
+    })
+})

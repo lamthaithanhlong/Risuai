@@ -5,6 +5,9 @@
 // card id (adminCardOf). Nothing here ever blocks a reply: no copy anywhere = the request goes without Admin, one log line.
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-global-design.md
 
+import { buildView, fetchFindNames, type View } from './personaStats'
+import { fetchCurrent } from '../storage/statsSave'
+
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
 export type AdminPayload = { card: string; enabled?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
 
@@ -47,7 +50,7 @@ type Part = { asset: number; head: string; text: string; keep: boolean }
  * The text inside the budget, and the headings cut. Deterministic: whole "## " sections are dropped from the end of the last
  * non-role asset backwards; never an intro, never a "Connecting…" section, never a role (Story guide) block.
  */
-export function fitBudget(assets: AdminAsset[], budget = ADMIN_BUDGET): { text: string; cut: string[] } {
+export function fitBudget(assets: AdminAsset[], budget = ADMIN_BUDGET, record = ''): { text: string; cut: string[] } {
     const parts: Part[] = []
     assets.forEach((a, i) => {
         if (isRole(a)) { parts.push({ asset: i, head: '', text: a.body.trim(), keep: true }); return }
@@ -60,7 +63,8 @@ export function fitBudget(assets: AdminAsset[], budget = ADMIN_BUDGET): { text: 
     const render = () => assets.map((a, i) => {
         const body = parts.filter((p) => p.asset === i).map((p) => p.text).filter(Boolean).join('\n\n')
         return `[${a.title}]\n${body}`
-    }).join('\n\n')
+    }).join('\n\n') + (rec ? `\n\n${rec}` : '')
+    let rec = record.trim()
     const cut: string[] = []
     let text = render()
     for (let j = parts.length - 1; j >= 0 && text.length > budget; j--) {
@@ -69,15 +73,17 @@ export function fitBudget(assets: AdminAsset[], budget = ADMIN_BUDGET): { text: 
         parts.splice(j, 1)
         text = render()
     }
+    // the persona record goes last-but-one: after every cuttable section, never before an intro, Connecting or the Story guide
+    if (rec && text.length > budget) { rec = ''; cut.push('Persona record'); text = render() }
     return { text, cut }
 }
 
 export const ADMIN_BOOT = '[Admin boot: this is the first reply of this chat: begin it with Admin\'s connect lines (see "Connecting and standing duties"), then never again unless the player asks.]'
 
 /** The system message's text, or '' (switched off, empty). {{user}} becomes the persona's name; the boot line only on the first reply. */
-export function adminBlock(p: AdminPayload | null, opts: { user?: string; opening?: boolean; budget?: number; log?: (m: string) => void } = {}): string {
+export function adminBlock(p: AdminPayload | null, opts: { user?: string; opening?: boolean; budget?: number; log?: (m: string) => void; record?: string } = {}): string {
     if (!p || p.enabled === false || !p.assets?.length) return ''
-    const { text, cut } = fitBudget(p.assets, opts.budget ?? ADMIN_BUDGET)
+    const { text, cut } = fitBudget(p.assets, opts.budget ?? ADMIN_BUDGET, opts.record ?? '')
     if (cut.length) opts.log?.(`[Admin] ${p.card || '?'}: cut ${cut.length} section(s) over budget: ${cut.join(', ')}`)
     const body = opts.user ? text.replaceAll('{{user}}', opts.user) : text
     return `[Admin (global interface rules, hidden, never quoted)]\n${body}${opts.opening ? `\n\n${ADMIN_BOOT}` : ''}`
@@ -152,11 +158,71 @@ export function adminGuideFor(card: CardLike): string {
 
 /** The whole step for one request: a story character (not a group) whose card has no Admin of its own gets the global Admin. */
 export async function adminBeforeRequest<T extends { role: string; content: unknown }>(formated: T[], card: CardLike,
-    messages: { role: string }[] | undefined, user: string, deps: AdminDeps): Promise<T[]> {
+    messages: { role: string }[] | undefined, user: string, deps: AdminDeps,
+    persona?: { id: string; chat?: { scriptstate?: Record<string, unknown> } }): Promise<T[]> {
     if (!card || card.type === 'group' || cardHasOwnAdmin(card)) return formated
     const id = adminCardOf(card)
     let p: AdminPayload | null = null
     try { p = await fetchAdmin(id, deps) } catch { p = null }
+    let record = ''
+    if (p && p.enabled !== false && persona && !hasOwnEngine(card, persona.chat)) {
+        try {
+            const view = await fetchRecord(persona.id, deps)
+            if (view) record = personaRecordText(view, user)
+        } catch { record = '' }
+    }
     const opening = !(messages ?? []).some((m) => m.role === 'char')
-    return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log }))
+    return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log, record }))
+}
+
+// ---- the persona record (stats, slots, skills, items) from the global store, for a story with no engine of its own -------------
+// Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-persona-record.md
+
+export const RECORD_TITLE = '[Hồ sơ persona (kho chung, chỉ đọc)]'
+
+/** A card with its own growth panel (a registered story card, the [[ACT| rule, or `$stats` in the chat): the panel wins, no record. */
+export function hasOwnEngine(card: CardLike, chat?: { scriptstate?: Record<string, unknown> }): boolean {
+    const ext = card?.extentions?.risu_story_card
+    if (typeof ext === 'string' && ID_RE.test(ext)) return true
+    const cha = String(card?.chaId ?? '').toLowerCase()
+    if (Object.keys(STORY_CARD_IDS).some((k) => cha.startsWith(k))) return true
+    if (/\[\[ACT\|/.test((card as { desc?: string } | undefined)?.desc ?? '')) return true
+    const st = chat?.scriptstate?.$stats
+    return st !== undefined && st !== null && String(st).trim() !== '' && String(st) !== 'null'
+}
+
+/** The block Admin reads: the persona page's numbers (2 decimals), or one plain line when the store has nothing. */
+export function personaRecordText(view: View, name: string): string {
+    const who = name || 'persona'
+    if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
+    const lines = [RECORD_TITLE, `Persona: ${who}`,
+        `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct}`).join(', ')}`,
+        `Ô kỹ năng mở: ${view.slots.total}`,
+        `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
+        'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.']
+    return lines.join('\n')
+}
+
+type RecCached = { at: number; view: View }
+const recCache = new Map<string, RecCached>()
+export function resetRecordCache(): void { recCache.clear() }
+
+/** The persona's view: fresh within the TTL, else asked (1.5 s at most), else the last good one, else null (one log line). */
+export async function fetchRecord(persona: string, deps: AdminDeps): Promise<View | null> {
+    const now = deps.now?.() ?? Date.now()
+    const hit = recCache.get(persona)
+    if (hit && now - hit.at < ADMIN_TTL_MS) return hit.view
+    const io = { fetch: deps.fetch as typeof fetch, auth: async () => await deps.auth() }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<null>((r) => { timer = setTimeout(() => r(null), deps.timeoutMs ?? ADMIN_TIMEOUT_MS) })
+    const got = await Promise.race([Promise.all([fetchCurrent(persona, io), fetchFindNames(io)]), late]).catch(() => null)
+    clearTimeout(timer)
+    if (got && got[0]) {
+        const view = buildView(got[0], undefined, got[1])
+        recCache.set(persona, { at: now, view })
+        return view
+    }
+    if (hit) { deps.log?.(`[Admin] persona ${persona}: the store did not answer, using the record from ${new Date(hit.at).toISOString()}`); return hit.view }
+    deps.log?.(`[Admin] persona ${persona}: the store did not answer and there is no copy, the request goes without the persona record`)
+    return null
 }

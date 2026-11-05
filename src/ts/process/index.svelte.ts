@@ -22,7 +22,7 @@ import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
 import { adminBeforeRequest } from "./adminGlobal";
-import { statsAfterReplyPage, statsBeforeRequestPage } from "./statsGlue";
+import { personaIdOf, statsAfterReplyPage, statsBeforeRequestPage } from "./statsGlue";
 import { askSubmodel, creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -38,7 +38,7 @@ import { fetchSceneFacts } from "./loreFacts";
 import { viProseRequest, wantsVietnameseProse } from "./proseVi";
 import { parseChatML } from "../parser/chatML";
 import { getLastLoreStats, loadLoreBookV3Prompt } from "./lorebook.svelte";
-import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
+import { checkPersonaBinded, findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
 import { requestChatData } from "./request/request";
 import { stableDiff } from "./stableDiff";
 import { processScript, processScriptFull, risuChatParser } from "./scripts";
@@ -1609,7 +1609,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // in as one system message after the leading system block (adminGlobal.ts); no copy anywhere = no Admin, never a wait over 1.5 s
     if(isNodeServer){
         const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
-        formated = await brTimed('admin', () => adminBeforeRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }), 0)
+        formated = await brTimed('admin', () => adminBeforeRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }, { id: personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]), chat: currentChat }), 0)
     }
     // stats and skill mastery belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts; gives up after 1.5 s)
     if(isNodeServer){
