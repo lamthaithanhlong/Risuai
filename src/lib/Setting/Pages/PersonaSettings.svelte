@@ -14,6 +14,7 @@
     import { sleep, sortableOptions } from "src/ts/util";
     import { DBState } from 'src/ts/stores.svelte';
     import { v4 } from "uuid"
+    import PersonaStats from "./PersonaStats.svelte";
 
     let stb: Sortable = null
     let ele: HTMLDivElement = $state()
@@ -165,3 +166,5 @@
         </div>
     </div>
 </div>
+
+<PersonaStats />
