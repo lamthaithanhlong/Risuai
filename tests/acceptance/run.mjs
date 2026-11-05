@@ -56,6 +56,8 @@ import { storyMarkdown, summaryMarkdown } from './lib/report.mjs'
 import { actChecks } from './lib/act.mjs'
 import { findsChecks, findsOfRun, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
 import { statsChecks, MIN_TURNS as STATS_MIN_TURNS } from './lib/stats.mjs'
+import { systemChecks, noCompanionProblems, parsePersonaFixture, systemSpeech, asSpeech } from './lib/system.mjs'
+import { questChecks } from './lib/quests.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 import { launchProblem } from './lib/launchGuard.mjs'
@@ -100,7 +102,23 @@ const STATS_AFTER = Math.max(1, Number(opt('--stats-after', 16)))
 const STATS_FIRST_SKILL_TURN = 12
 const STATS_ACTIONS = ['Tôi leo cầu thang bộ lên tầng trên, bám lan can từng bậc một.', 'Tôi vác mấy thùng đồ nặng ra góc hành lang cho gọn.', 'Tôi áp tai vào cánh cửa, nghe xem phía sau có tiếng động gì không.', 'Tôi dồn vai đẩy mạnh cánh cửa đang bị kẹt.', 'Tôi trải tấm bản đồ ra và nghiên cứu kỹ các lối đi.', 'Tôi chạy hết tốc lực dọc hành lang cho tới cuối dãy.', 'Tôi kéo lê chiếc tủ nặng chắn ngang lối đi.', 'Tôi đứng yên lắng nghe tiếng bước chân ở tầng dưới.', 'Tôi nghĩ cách nhớ lại đường đã đi và vạch lộ trình mới trên bản đồ.', 'Tôi trèo qua bức tường thấp rồi nhảy xuống bên kia.']
 const STATS_REST = 'Tôi ngồi xuống nghỉ một lát, uống nước và chờ hơi thở đều lại.'
-const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds' && x.phase !== 'stats'
+// --persona-file FILE (gate mode): the copy plays with the persona text in FILE (fixtures/personas/*.md; a first line `companion: none` DECLARES that the persona has
+// no companion: companion.match is then N/A, never inferred from a missing name, and goes red if a companion still shows up).
+// --system (needs a persona file that declares companion: none): the Hệ thống voice replaces Evelyn: the 2 call turns talk to the System, the System checks
+// run (lib/system.mjs) and guide.scout / guide.noSpoiler read the System's 【…】 lines. --quests (needs --system): the run keeps playing canned actions until
+// --quest-turns story turns (default 20, never under 14) and the quest checks run (lib/quests.mjs, grammar in fixtures/quests/GRAMMAR.md). Results go to
+// gate/<story>-system.json / -quests.json, which Push live does not read.
+const PERSONA_FILE = opt('--persona-file')
+const PERSONA_FIX = PERSONA_FILE ? parsePersonaFixture(fs.readFileSync(PERSONA_FILE, 'utf8')) : null
+const SYSTEM = flag('--system')
+const QUESTS = flag('--quests')
+const QUEST_TURNS = Math.max(14, Number(opt('--quest-turns', 20)))
+const QUEST_ACTIONS = ['Tôi làm theo nhiệm vụ Hệ thống vừa giao, từng bước một.', 'Tôi nghe ngóng quanh đây xem còn manh mối nào cho nhiệm vụ.', 'Tôi tiếp tục nhiệm vụ và kiểm tra tiến độ của nó.', 'Tôi hoàn thành nhiệm vụ rồi báo lại cho Hệ thống.', 'Tôi nghỉ một lát, uống nước và xem Hệ thống nói gì tiếp.']
+if (PERSONA_FILE && PERSONA_FROM) throw new Error('--persona-file and --persona-from both set the persona')
+if (SYSTEM && (!GATE_N || PERSONA_FIX?.companion !== 'none')) throw new Error('--system needs --gate and a --persona-file whose first line declares `companion: none`')
+if (QUESTS && !SYSTEM) throw new Error('--quests needs --system')
+if ((SYSTEM || QUESTS) && (flag('--finds') || flag('--stats'))) throw new Error('--system/--quests, --finds and --stats are separate gates: run them one after the other')
+const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds' && x.phase !== 'stats' && x.phase !== 'quest'
 const SCRIPT = opt('--script') ? JSON.parse(fs.readFileSync(opt('--script'), 'utf8')) : null
 const LORE_FORWARD = opt('--lore-forward') ? { loreForward: opt('--lore-forward') !== 'off', loreForwardShadow: opt('--lore-forward') === 'shadow' } : null
 const LORE_BUDGET = opt('--lore-budget') ? Number(opt('--lore-budget')) : null
@@ -174,12 +192,12 @@ function finishGate(key, rec, ctx, story) {
         const record = (creation.find((x) => asksDuocChua(x.reply)) ?? creation.at(-1))?.reply ?? ''
         const story = t.filter((x) => isCore(x))
         const replies = story.filter((x) => x.ok).map((x) => x.shown || x.reply)
-        return { chatId: run.chatId, replied: story.length === 3 && t.every((x) => x.ok), companion: record ? companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' }) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 3 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 3 story replies' }] }
+        return { chatId: run.chatId, replied: story.length === 3 && t.every((x) => x.ok), companion: record ? (SYSTEM ? noCompanionProblems({ record, replies: t.filter((x) => x.phase !== 'creation' && x.ok).map((x) => x.shown || x.reply) }) : companionCaseProblems({ companions, record, summoned: true, reply: story[1]?.ok ? (story[1].shown || story[1].reply) : '' })) : [{ rule: 'no-reply', text: 'no creation reply' }], narration: replies.length === 3 ? narrationProblems(replies) : [{ rule: 'no-reply', text: 'fewer than 3 story replies' }] }
     })
     for (const [i, run] of runs.entries()) {
         const st = run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)
-        rows[i].scout = st.length === 3 ? guideScoutProblems(st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
-        rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems([...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
+        rows[i].scout = st.length === 3 ? guideScoutProblems(SYSTEM ? asSpeech(st[2]) : st[2]) : [{ rule: 'no-reply', text: 'no scout reply' }]
+        rows[i].spoiler = st.length === 3 ? guideNoSpoilerProblems(SYSTEM ? [...systemSpeech(st[1]), ...systemSpeech(st[2])] : [...herSpeech(st[1]), ...herSpeech(st[2])]) : [{ rule: 'no-reply', text: 'no replies' }]
     }
     // replies that got the one regeneration (the page writes them to the chat's script state as reply_regen): which check fired, what was left
     const regenRows = runs.flatMap((run, i) => {
@@ -198,11 +216,22 @@ function finishGate(key, rec, ctx, story) {
     const n = GATE_N
     const mk = (id, title, ok, summary, evidence) => ({ id, title, status: ok ? 'PASS' : 'FAIL', summary, evidence })
     const checks = [
-        mk('gate.companion', `The record's Đồng hành line matches the persona (${companions.join(', ') || 'no companion: "Không"'}) in ${n} of ${n} creation replays`, a === n && runs.length === n, `${a}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.companion.map((p) => `run ${i + 1}: ${p.text}`))),
+        SYSTEM ? { id: 'gate.companion', title: 'companion.match: the persona declares companion: none', status: 'INFO', summary: 'N/A (no companion)', evidence: [] } : mk('gate.companion', `The record's Đồng hành line matches the persona (${companions.join(', ') || 'no companion: "Không"'}) in ${n} of ${n} creation replays`, a === n && runs.length === n, `${a}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.companion.map((p) => `run ${i + 1}: ${p.text}`))),
         mk('gate.narration', 'The first 3 turns are clean in every run', b === n && runs.length === n, `${b}/${runs.length} clean (need ${n}/${n})`, rows.flatMap((r, i) => r.narration.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
         mk('guide.scout', 'Asked to check the corridor she reports a concrete detail inside ~10 m', sc === n && runs.length === n, `${sc}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.scout.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
         mk('guide.noSpoiler', 'She states no future event, no System text, nothing beyond her range', sp === n && runs.length === n, `${sp}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.spoiler.map((p) => `run ${i + 1} ${p.rule}: ${p.text}`))),
     ]
+    if (SYSTEM) {
+        checks.push(mk('system.noCompanion', 'The persona declares companion: none: the record says "Đồng hành: Không" and no reply has a companion', a === n && runs.length === n, `${a}/${runs.length} (need ${n}/${n})`, rows.flatMap((r, i) => r.companion.map((p) => `run ${i + 1}: ${p.text}`))))
+        const sturns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ shown: x.shown || '', reply: x.reply || '', raw: x.raw ?? '' }))
+        checks.push(...systemChecks(runs.map((run) => ({ turns: sturns(run) })), { all: runs.map((run) => ({ turns: run.turns.filter((x) => x.ok).map((x) => ({ shown: x.shown || '', reply: x.reply || '' })) })) }))
+        console.log('[gate] gate.companion: N/A (no companion)')
+    }
+    if (QUESTS) {
+        const qturns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply, reply: x.reply, ticks: x.vars?.stat_ticks ?? '', panel: x.panel ?? '', stats: x.vars?.stats, skills: x.vars?.skills, rank: x.vars?.stat_rank, brk: x.vars?.stat_break, quest: x.vars?.quest, hist: x.vars?.quest_hist }))
+        const c0 = (run) => run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1)
+        checks.push(...questChecks(runs.map((run) => ({ start: { stats: c0(run)?.vars?.stats, skills: c0(run)?.vars?.skills }, turns: qturns(run) }))))
+    }
     // finds (--finds): the fresh runs' story turns: the model's raw reply (block still in it) and the prose the player saw
     if (FINDS) {
         const storyTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply }))
@@ -223,12 +252,12 @@ function finishGate(key, rec, ctx, story) {
     if (GATE_N) { checks.push(luaHashCheck({ ...(rec.luaHash ?? {}), drop: LUA_DROP })) }
     const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
-    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${FINDS ? '-finds' : ''}${STATS ? '-stats' : ''}.json`)
+    const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${SYSTEM ? '-system' : ''}${QUESTS ? '-quests' : ''}${FINDS ? '-finds' : ''}${STATS ? '-stats' : ''}.json`)
     fs.mkdirSync(path.dirname(outFile), { recursive: true })
     const crypto = createRequire(import.meta.url)('crypto')
     const hash = crypto.createHash('sha256')
     for (const f of gateHashFiles(CANDIDATE, CANDIDATE_JSON)) hash.update(fs.readFileSync(path.join(CANDIDATE, f)))
-    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), luaHash: rec.luaHash?.candidate ?? null, candidateJson: CANDIDATE_JSON, defaultVars: DEFAULT_VARS, luaScripts: rec.luaScripts ?? null, at: new Date().toISOString(), out: OUT }, null, 1))
+    fs.writeFileSync(outFile, JSON.stringify({ pass, story: key, runs: n, finds: FINDS ? checks.filter((c) => c.id.startsWith('finds.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, system: SYSTEM ? checks.filter((c) => /^(system|quest)\./.test(c.id)).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, stats: STATS ? checks.filter((c) => c.id.startsWith('stats.')).map((c) => ({ id: c.id, status: c.status, summary: c.summary, evidence: c.evidence })) : undefined, statsRuns: STATS ? runs.map((r) => ({ noSkill: !!r.noSkill, equipped: r.equipped ?? null, turns: r.turns.filter((x) => x.phase === 'stats' || x.phase === 'story' || x.phase === 'yes').length })) : undefined, companions, a, b, scout: sc, spoiler: sp, scoutWorryReport: worry, regen: { replies: regenRows.length, of: storyReplies, rows: regenRows }, sceneRepeat: scene, blocked: rec.blocked, candidate: CANDIDATE, hash: hash.digest('hex'), luaHash: rec.luaHash?.candidate ?? null, candidateJson: CANDIDATE_JSON, defaultVars: DEFAULT_VARS, luaScripts: rec.luaScripts ?? null, at: new Date().toISOString(), out: OUT }, null, 1))
     writeRecord(path.join(OUT, `${key}.json`), rec)
     console.log(`[gate] ${key}: ${pass ? 'PASS' : 'FAIL'} — companion ${a}/${n}, narration ${b}/${n}; ${outFile}`)
     for (const c of checks) for (const e of c.evidence) console.log(`[gate]   ${e}`)
@@ -281,6 +310,13 @@ async function playStory(key, ctx) {
             ctx.persona = text
             rec.persona = text
             log(`persona of ${PERSONA_FROM}: ${text.length} chars`)
+        }
+        if (PERSONA_FIX) {
+            patchCopyRoot(path.join(dir, 'save'), ctx.backend, { personaPrompt: PERSONA_FIX.text })
+            ctx.persona = PERSONA_FIX.text
+            rec.persona = PERSONA_FIX.text
+            rec.companionDeclared = PERSONA_FIX.companion
+            log(`persona file ${PERSONA_FILE}: ${PERSONA_FIX.text.length} chars, companion ${PERSONA_FIX.companion ?? 'not declared'}`)
         }
         log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars, Lua hash ${r.luaHash.copy.slice(0, 12)} (${r.luaHash.found} script(s) from ${r.file})`)
     }
@@ -363,12 +399,13 @@ async function playStory(key, ctx) {
                 rec.gate.runs.push(run)
                 try {
                   // the default persona (the live one) may describe no look: the answer set is complete so creation never waits on the look question
-                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', PERSONA_FROM ? 'Hard. dùng persona kenji của tui' : 'Hard. dùng persona kenji của tui, ngoại hình để thế giới chọn')
+                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', (PERSONA_FROM || PERSONA_FIX) ? 'Hard. dùng persona kenji của tui' : 'Hard. dùng persona kenji của tui, ngoại hình để thế giới chọn')
                   // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
                   for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
                   await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
-                  await play1(run, `g${g}.3`, 'story', 'npc', 'evelyn')
-                  await play1(run, `g${g}.4`, 'story', 'npc', 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                  await play1(run, `g${g}.3`, 'story', 'npc', SYSTEM ? 'Hệ thống, cho tôi xem tình trạng của tôi và việc cần làm.' : 'evelyn')
+                  await play1(run, `g${g}.4`, 'story', 'npc', SYSTEM ? 'Hệ thống, quét thử ngoài hành lang giúp tôi xem có gì không.' : 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                  if (QUESTS) for (let k = 4; k < QUEST_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'quest', 'quest', QUEST_ACTIONS[(k - 4 + g) % QUEST_ACTIONS.length])
                   if (STATS) await playStats(run, g, play1)
                   if (FINDS) for (let k = 4; k < FINDS_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'finds', 'finds', FINDS_ACTIONS[(k - 4 + g) % FINDS_ACTIONS.length])
                 } catch (e) { log(`gate run ${g}: ${e.message || e}`); failsInRow = 0 }
