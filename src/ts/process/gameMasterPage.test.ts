@@ -509,6 +509,17 @@ describe('NPC psychology: $led_soc and the solver flag', () => {
         expect(c.scriptstate.$led_soc).toBe('2 | player | help | Marek\n2 | Marek | save | player')
     })
 
+    it('NPC state (2026-11-05): the bookkeeper asks for npc: lines and writes them to $led_npc under the reply count, once', async () => {
+        const c = chatOf([{ role: 'char', data: 'a', chatId: 'r1' }, { role: 'user', data: 'Tui buộc thuốc giảm đau vào dây.' }, { role: 'char', data: 'Cô kéo gói thuốc về.', chatId: 'r2' }], { $st_name: 'Mai' })
+        let asked = ''
+        const answer = '[[GM\nbeat: 1 | x | y\nnpc: ban-cong-704 | meet Người phụ nữ ban công 704;tôi;anh;30s\nnpc: ban-cong-704 | recv thuốc giảm đau\nnpc: ban-cong-704 | fly away\n]]'
+        expect(await bookkeep(() => c as never, c.message[2], 2, 'x', async (p) => { asked = p; return answer })).toBe(true)
+        expect(asked).toContain('npc: <id> | <op> <value>')
+        expect(c.scriptstate.$led_npc).toBe('2 | ban-cong-704 | meet Người phụ nữ ban công 704;tôi;anh;30s\n2 | ban-cong-704 | recv thuốc giảm đau')
+        await bookkeep(() => c as never, c.message[2], 2, 'x', async () => answer)
+        expect(c.scriptstate.$led_npc.split('\n')).toHaveLength(2)
+    })
+
     it('social lines are kept when the same call also answers the STATUS panel (the call the page makes once the character is confirmed)', async () => {
         const spec = statusSpec(ssCard as never)!
         expect(spec).toBeTruthy()

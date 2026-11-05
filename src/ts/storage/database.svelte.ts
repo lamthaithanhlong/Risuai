@@ -931,6 +931,8 @@ export interface Database{
     /** NPC psychology: the bookkeeper also writes `social:` acts into the ledger ($led_soc) and the solver adds a Subtext line (hidden drives, relations)
      *  to the GM note (server/node/story/npcs, gameMaster.ts socialOf); on unless false. */
     npcPsych?: boolean
+    /** the model judge of NPC lines in the reply check (npcCheck.mjs judgePrompt): off unless set true (2026-11-05, L1) */
+    npcJudge?: boolean
     /** The bookkeeper names the shelves the next reply needs and the books are asked then, so the librarian waits in the chat instead of
      *  asking before the narrator (loreIndex.ts "the GM asks the librarian"); on unless false. */
     loreForward?: boolean

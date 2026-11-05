@@ -27,3 +27,5 @@ export function grammarHits(line: string): { rule: string; why?: string; soft?: 
 export function npcHits(reply: string, ctx?: { ledger?: string; n?: number; player?: string; playerText?: string }): NpcHit[]
 export function npcRewriteNote(hits: NpcHit[], ledger?: string, n?: number): string
 export function cutViolations(reply: string, hits: NpcHit[]): { text: string; cut: string[] }
+export function judgePrompt(reply: string, ctx?: { ledger?: string; n?: number; player?: string }): { items: { line: string; para: string; at: number }[]; prompt: string } | null
+export function parseJudge(text: string, items: { line: string }[]): NpcHit[]

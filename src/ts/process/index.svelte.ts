@@ -16,11 +16,13 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { settleReply } from "./replyRegen";
+import { settleReply, type NpcCheckOpts } from "./replyRegen";
+// @ts-ignore plain JS module (npcCheck.d.mts)
+import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs";
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
 import { statsAfterReplyPage, statsBeforeRequestPage } from "./statsGlue";
-import { creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
+import { askSubmodel, creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
@@ -1623,6 +1625,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // a story turn (not the creation step, not the opening, not a continue) gets its finished reply checked once (replyRegen.ts)
     const checkReply = formated === beforeCreation && !arg.continue && !arg.previewPrompt && nowChatroom.type === 'character' && gameMasterOn(DBState.db.characters[sel.char] ?? currentChar) && !isOpening(currentChat?.message)
     const previousReplies = (currentChat?.message ?? []).filter((m) => m.role === 'char').map((m) => m.data)
+    const lastUserText = [...(currentChat?.message ?? [])].reverse().find((m) => m.role === 'user')?.data ?? ''
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
@@ -1988,7 +1991,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 try { log = JSON.parse(chat.scriptstate['$reply_regen'] ?? '[]') } catch { log = [] }
                 log.push({ at: msgIndex, ...rec })
                 chat.scriptstate['$reply_regen'] = JSON.stringify(log)
-            })
+            }, npcCheckOpts(DBState.db.characters[sel.char].chats[sel.chat], previousReplies.length + 1, getUserName(), lastUserText))
             if(settled !== result){
                 result = settled
                 lastResponseChunk = { ...lastResponseChunk, [firstChunkKey0]: settled }
@@ -2488,4 +2491,23 @@ function systemizeChat(chat:OpenAIChat[]){
         }
     }
     return chat
+}
+
+/**
+ * The NPC check of a story reply (npcCheck.mjs, 2026-11-05): the NPC cards are the fold of $led_npc before reply n (the bookkeeper's
+ * ledger), so a redo is judged against the same state. The model judge runs only when Settings npcJudge is true (off by default).
+ */
+function npcCheckOpts(chat: { scriptstate?: Record<string, unknown> } | undefined, n: number, player: string, playerText: string): NpcCheckOpts {
+    const ledger = String(chat?.scriptstate?.['$led_npc'] ?? '')
+    const ctx = { ledger, n, player, playerText }
+    return {
+        hits: (text) => npcHits(text, ctx),
+        note: (hits) => npcRewriteNote(hits, ledger, n),
+        judge: DBState.db.npcJudge === true ? async (text) => {
+            const j = judgePrompt(text, ctx)
+            if (!j) return []
+            return parseJudge(await askSubmodel(j.prompt), j.items)
+        } : undefined,
+        judgeMs: 1500,
+    }
 }

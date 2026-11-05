@@ -58,7 +58,7 @@ type Case = { name: string; accept: boolean; npc: { isAdmin: boolean; needs: str
 const CASES: Case[] = ${JSON.stringify(cases, null, 4)}
 
 const card = (n: Case['npc']) => ({ ...n, needs: new Set(n.needs), has: new Map(n.has), knows: new Set(n.knows), promises: new Set(n.promises), received: new Set(n.received) })
-const fx = (f: Record<string, unknown>) => ({ ...f, requests: new Set(f.requests as string[]), offers: new Set(f.offers as string[]), refusals: new Set(f.refusals as string[]), handed: new Set(f.handed as string[]) })
+const fx = (f: Record<string, unknown>): any => ({ ...f, requests: new Set(f.requests as string[]), offers: new Set(f.offers as string[]), refusals: new Set(f.refusals as string[]), handed: new Set(f.handed as string[]) })
 
 describe('npcCheck accept() agrees with the verified Dafny Accept on every Witness lemma', () => {
     for (const c of CASES) {

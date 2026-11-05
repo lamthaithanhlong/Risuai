@@ -670,7 +670,9 @@ const SEED_PROSE = 'In the prose the hook is at most a quiet sign (something see
 
 // measured 2026-10-21 (Shadow Slave chat ee04f566): after the player only walked on, a stranger offered "I'll show you where the water is"
 // for help with a knot, though nobody had shown the character thirsty. The offer must hook a need that is already established.
-export const NEED_RULE = 'An NPC\'s offer, bait or bargain may only target a need the player character already has (shown in the scene, said by the player or written in the status panel\'s condition): never invent a need (thirst, hunger, a wound, being lost) to hook a scene; with none, the NPC wants something for themselves or just acts.'
+// 2026-11-05 (owner, Zombie 704 balcony: “nếu anh tìm được thuốc ở đó, tôi sẽ tin lời anh hơn”): no bait or bargain wording at all;
+// an NPC asks or offers, never sets a condition or an errand.
+export const NEED_RULE = 'An NPC may only offer something for a need the player character already has (shown in the scene, said by the player or written in the status panel\'s condition): never invent a need (thirst, hunger, a wound, being lost) to hook a scene; no NPC sets a condition, an errand or a place to go (tasks come only from Admin\'s script); with none, the NPC wants something for themselves or just acts.'
 
 /**
  * The note for this turn, or '' when the GM is silent. `decided`: the solver's decision for this turn (server/node/gmSolver.cjs),
@@ -791,7 +793,7 @@ export function stateLines(state: GmState): string {
  * own panel part (statusBook.ts), asked in the same call so a turn costs one helper call; `state` null leaves the GM part out.
  * `lore`: the librarian's shelf question (loreIndex.ts shelvesAsk), asked in the same call too.
  */
-export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = '', lore = '', opts: { social?: boolean } = {}): string {
+export function bookkeepPrompt(state: GmState | null, player: string, reply: string, flavour: string, status = '', lore = '', opts: { social?: boolean; npc?: boolean } = {}): string {
     const cut = (s: string, n: number) => { const t = (s ?? '').trim(); return t.length > n ? '…' + t.slice(-n) : t }
     const turn = `THE PLAYER'S LAST ACTION:
 ${cut(player, 800)}
@@ -819,8 +821,8 @@ gained: <what a side or deed gave>
 reward: <what> | <when it is paid>   (paid in this reply: reward: <what> | done)
 consequence: <what> | <when it lands>   (landed in this reply: consequence: <what> | done)
 canon: <in-world date> | <what canon people are doing off-screen>
-${opts.social ? SOCIAL_TEMPLATE : ''}]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${opts.social ? SOCIAL_RULE : ''}${status ? `\n\n${status}` : ''}${shelves}`
+${opts.social ? SOCIAL_TEMPLATE : ''}${opts.npc ? NPC_TEMPLATE : ''}]]
+Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${opts.social ? SOCIAL_RULE : ''}${opts.npc ? NPC_RULE : ''}${status ? `\n\n${status}` : ''}${shelves}`
 }
 
 // ---- NPC psychology: who did what to whom (2026-10-21) ------------------------------------------------------------------------
@@ -855,6 +857,11 @@ const SOCIAL_TEMPLATE = `social: <who> | <tag> | <whom>   (one line per social a
 // a warning is no tag it could see. The line is now asked whenever a named person does something to someone, and what counts is said.
 const SOCIAL_RULE = ' social: write one for every act the reply SHOWS between the player\'s character and a named person, or between two named people (who = the one who acts; whom = the one it is done to; use "player" for the player\'s character), and leave it out only when no named person did anything to anyone: a warning, advice, a guide, shared news or what they know is help; telling a secret or their own trouble is confide; an apology is reconcile; a mocking or contemptuous word is insult; turning down a request or holding back an answer is refuse; never for the narrator\'s mood words, never for a person without a name.'
 const SOCIAL_LINE = /^\s*[-*•]?\s*social\s*:\s*(.*)$/i
+// NPC state (2026-11-05, design .pm-risu-5h/npc-dialogue-algorithm.md §1): the bookkeeper also writes what each NPC the reply SHOWS
+// needs, holds, received, knows and how far she trusts the player, as ops for the ledger $led_npc (npcCheck.mjs appendNpcLines / foldNpc).
+// The checker and the GM note read the same fold, so what the narrator is told and what is checked never disagree.
+const NPC_TEMPLATE = `npc: <id> | <op> <value>   (one line per change this reply SHOWS for a person who is not the player and not Admin, at most 8; ops: meet <name>;<self>;<what they call the player>;<age>, need+ <item>, need- <item>, has+ <item>, has- <item>, recv <item the player gave them>, knows+ <fact>, want <item|help|leave|safety>, trust low|mid|high, promise+ <what>, promise- <what>, why <item they have a reason to refuse>)\n`
+const NPC_RULE = ' npc: <id> is a short lowercase id with dashes that stays the same for that person (ban-cong-704, haruto-quinn); write "meet" the first time a person speaks or acts; items in plain words (thuốc hạ sốt, thuốc giảm đau, nước uống); write only what the reply showed (said, done, handed, received), never a guess; "recv" when the player\'s character gave them the item; "why" only when they said why they refuse it.'
 const SOCIAL_MAX_LINES = 3
 const PLAYER_WORDS = new Set(['player', 'tôi', 'người chơi'])
 const nfc = (s: string) => (s ?? '').normalize('NFC')

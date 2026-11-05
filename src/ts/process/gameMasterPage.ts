@@ -3,6 +3,8 @@
 
 import { getDatabase, type Chat, type character, type groupChat } from '../storage/database.svelte'
 import { appendSocial, applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, companionNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, socialOf, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
+// @ts-ignore plain JS module (npcCheck.d.mts)
+import { appendNpcLines, npcCardsNote, npcOpsOf } from './npcCheck.mjs'
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
@@ -51,7 +53,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
     const note = gmNote(phase, state, dice, worldFlavour(card))
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
-    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) : '') + (held ? CARD_HELD : ''))
+    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) + npcCardsNote(String(chat.scriptstate?.$led_npc ?? ''), replies.length + 1) : '') + (held ? CARD_HELD : ''))
 }
 
 /**
@@ -99,7 +101,7 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
     }
     vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
     const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line)
-    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) : ''))
+    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) + npcCardsNote(String(vars.$led_npc ?? ''), n + 1) : ''))
 }
 
 const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'
@@ -171,8 +173,9 @@ function notePanelAtRequest(card: character, chat: Chat): string {
 }
 
 /** The card's ledger (status.lua's [[LEDGER]]: memories, relations, timeline), written by the reply as the panel is; $led_soc is the
- *  bookkeeper's social acts (gameMaster.ts appendSocial), kept in the snapshot so a rerolled reply takes its acts with it. */
-const LEDGER_VARS = ['$led_mem', '$led_rel', '$led_ev', '$led_soc']
+ *  bookkeeper's social acts (gameMaster.ts appendSocial), kept in the snapshot so a rerolled reply takes its acts with it; $led_npc the
+ *  NPC state ops (npcCheck.mjs appendNpcLines), the same way. */
+const LEDGER_VARS = ['$led_mem', '$led_rel', '$led_ev', '$led_soc', '$led_npc']
 /** Replies whose rollback is kept: a rollback over more replies at once goes back to before the oldest of these. */
 const PANEL_LOG_MAX = 20
 type PanelLog = [string, Record<string, string>][]
@@ -318,7 +321,7 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     const said = before.message.filter((m) => m.role === 'char')
     const previous = (said.at(-1)?.data === reply.data || (!!reply.chatId && said.at(-1)?.chatId === reply.chatId) ? said.at(-2) : said.at(-1))?.data ?? ''
     const written = opts.written ?? {}
-    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '', { social: wantSocial })
+    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '', { social: wantSocial, npc: wantSocial })
     const answer = await (ask ?? askSubmodel)(prompt)
     const chat = live()
     const last = chat.message[chat.message.length - 1]
@@ -333,6 +336,13 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     if (wantSocial) {
         const acts = socialOf([...(bodies ?? []), answer])
         if (acts.length && appendSocial(chat.scriptstate ??= {}, replies, acts)) wrote = true
+        // what each NPC the reply showed needs, holds, received, knows (the ledger $led_npc, under this reply's number)
+        const ops = npcOpsOf([...(bodies ?? []), answer])
+        if (ops.length) {
+            const vars = chat.scriptstate ??= {}
+            const r = appendNpcLines(String(vars.$led_npc ?? ''), replies, ops)
+            if (r.added) { vars.$led_npc = r.ledger; wrote = true }
+        }
     }
     if (opts.status) {
         const updates = parseStatus(answer, opts.status, chat.scriptstate, { reply: reply.data ?? '', written })
@@ -354,7 +364,7 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     return wrote
 }
 
-async function askSubmodel(prompt: string): Promise<string | null> {
+export async function askSubmodel(prompt: string): Promise<string | null> {
     const { requestChatData } = await import('./request/request')
     const ask = requestChatData({ formated: [{ role: 'user', content: prompt }], bias: {}, useStreaming: false, noMultiGen: true }, 'submodel')
     const res = await Promise.race([ask, new Promise<null>((r) => setTimeout(() => r(null), BOOKKEEP_TIMEOUT_MS))])

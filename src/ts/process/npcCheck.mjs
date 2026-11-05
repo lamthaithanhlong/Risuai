@@ -403,3 +403,28 @@ export function cutViolations(reply, hits) {
     }
     return { text, cut }
 }
+
+// ---- the optional model judge in the app (Settings npcJudge, OFF by default; the acceptance judge is npcDialogue.mjs) ---------
+/** A short prompt for the helper model: each NPC line with its speaker's card; answer JSON {"bad":[{"i","rule","why"}]}. */
+export function judgePrompt(reply, ctx = {}) {
+    const cards = foldNpc(ctx.ledger ?? '', ctx.n ?? Infinity)
+    const items = npcLines(reply, ctx)
+    if (!items.length) return null
+    const shown = [...cards.values()].filter((c) => !c.isAdmin).slice(0, 3).map(cardLine).join(' ')
+    return {
+        items,
+        prompt: `You check the spoken lines of the non-player characters of a Vietnamese story.${shown ? ` Their cards: ${shown}` : ''}
+A line is bad when it is ungrammatical or a telegram of bare fragments (npc-grammar), a direct question with no address term (npc-address), an errand, a place to go or an "if you do X I will Y" bargain (npc-quest-hook), or against the speaker's card: refuses what she needs with no reason, asks for what she holds (npc-contradicts-need). If unsure, it is good.
+${items.map((it, i) => `${i}: “${it.line}”`).join('\n')}
+Answer only JSON: {"bad":[{"i":<index>,"rule":"<rule>","why":"<short>"}]}`,
+    }
+}
+const JUDGE_RULES = new Set(['npc-grammar', 'npc-address', 'npc-quest-hook', 'npc-contradicts-need'])
+/** The judge's answer -> hits on lines that exist, known rules only; anything unreadable is no hit (fail-open). */
+export function parseJudge(text, items) {
+    const m = /\{[\s\S]*\}/.exec(String(text ?? '').replace(/```json|```/g, ''))
+    if (!m) return []
+    let j
+    try { j = JSON.parse(m[0]) } catch { return [] }
+    return (Array.isArray(j?.bad) ? j.bad : []).filter((b) => items[b?.i] && JUDGE_RULES.has(b?.rule)).map((b) => ({ rule: b.rule, text: items[b.i].line, npc: '?', why: String(b.why ?? '').slice(0, 120), judge: true }))
+}
