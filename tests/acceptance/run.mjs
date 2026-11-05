@@ -57,6 +57,7 @@ import { actChecks } from './lib/act.mjs'
 import { findsChecks, findsOfRun, MIN_TURNS as FINDS_MIN_TURNS } from './lib/finds.mjs'
 import { statsChecks, MIN_TURNS as STATS_MIN_TURNS } from './lib/stats.mjs'
 import { systemChecks, noCompanionProblems, parsePersonaFixture, systemSpeech, asSpeech } from './lib/system.mjs'
+import { gateTurns, systemPersona } from './lib/gateTurns.mjs'
 import { questChecks } from './lib/quests.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
@@ -116,7 +117,8 @@ const QUESTS = flag('--quests')
 const QUEST_TURNS = Math.max(14, Number(opt('--quest-turns', 20)))
 const QUEST_ACTIONS = ['Tôi làm theo nhiệm vụ Hệ thống vừa giao, từng bước một.', 'Tôi nghe ngóng quanh đây xem còn manh mối nào cho nhiệm vụ.', 'Tôi tiếp tục nhiệm vụ và kiểm tra tiến độ của nó.', 'Tôi hoàn thành nhiệm vụ rồi báo lại cho Hệ thống.', 'Tôi nghỉ một lát, uống nước và xem Hệ thống nói gì tiếp.']
 if (PERSONA_FILE && PERSONA_FROM) throw new Error('--persona-file and --persona-from both set the persona')
-if (SYSTEM && (!GATE_N || PERSONA_FIX?.companion !== 'none')) throw new Error('--system needs --gate and a --persona-file whose first line declares `companion: none`')
+if (SYSTEM && !GATE_N) throw new Error('--system needs --gate')
+if (SYSTEM && PERSONA_FIX && PERSONA_FIX.companion !== 'none') throw new Error('--system: the --persona-file must declare `companion: none` on its first line')
 if (QUESTS && !SYSTEM) throw new Error('--quests needs --system')
 if ((SYSTEM || QUESTS) && (flag('--finds') || flag('--stats'))) throw new Error('--system/--quests, --finds and --stats are separate gates: run them one after the other')
 const isCore = (x) => x.phase !== 'creation' && x.phase !== 'finds' && x.phase !== 'stats' && x.phase !== 'quest'
@@ -312,12 +314,14 @@ async function playStory(key, ctx) {
             rec.persona = text
             log(`persona of ${PERSONA_FROM}: ${text.length} chars`)
         }
-        if (PERSONA_FIX) {
-            patchCopyRoot(path.join(dir, 'save'), ctx.backend, { personaPrompt: PERSONA_FIX.text })
-            ctx.persona = PERSONA_FIX.text
-            rec.persona = PERSONA_FIX.text
-            rec.companionDeclared = PERSONA_FIX.companion
-            log(`persona file ${PERSONA_FILE}: ${PERSONA_FIX.text.length} chars, companion ${PERSONA_FIX.companion ?? 'not declared'}`)
+        // a --system run plays the persona fixture of ITS story (fixtures/personas/<story>-system.md, `companion: none`) unless --persona-file names one
+        const fix = SYSTEM ? systemPersona(key, PERSONA_FILE) : PERSONA_FIX
+        if (fix) {
+            patchCopyRoot(path.join(dir, 'save'), ctx.backend, { personaPrompt: fix.text })
+            ctx.persona = fix.text
+            rec.persona = fix.text
+            rec.companionDeclared = fix.companion
+            log(`persona file ${PERSONA_FILE ?? `${key} system fixture`}: ${fix.text.length} chars, companion ${fix.companion ?? 'not declared'}`)
         }
         log(`candidate card in the copy: lore ${r.report.lore.join('->')}, desc ${desc.length} chars, Lua hash ${r.luaHash.copy.slice(0, 12)} (${r.luaHash.found} script(s) from ${r.file})`)
     }
@@ -400,12 +404,13 @@ async function playStory(key, ctx) {
                 rec.gate.runs.push(run)
                 try {
                   // the default persona (the live one) may describe no look: the answer set is complete so creation never waits on the look question
-                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', (PERSONA_FROM || PERSONA_FIX) ? 'Hard. dùng persona kenji của tui' : 'Hard. dùng persona kenji của tui, ngoại hình để thế giới chọn')
+                  const gt = gateTurns({ key, system: SYSTEM, hasPersona: !!(PERSONA_FROM || PERSONA_FIX) })
+                  let t = await play1(run, `g${g}.1`, 'creation', 'creation', gt.creation)
                   // the card may ask an item before it shows the record; ask for the record the way the main run does (at most twice)
                   for (let k = 0; k < 2 && t.ok && !asksDuocChua(t.reply); k++) t = await play1(run, `g${g}.1${'bc'[k]}`, 'creation', 'creation', 'Cho tôi xem lại cả hồ sơ nhân vật.')
                   await play1(run, `g${g}.2`, 'yes', 'yes', 'Được')
-                  await play1(run, `g${g}.3`, 'story', 'npc', SYSTEM ? 'Hệ thống, cho tôi xem tình trạng của tôi và việc cần làm.' : 'evelyn')
-                  await play1(run, `g${g}.4`, 'story', 'npc', SYSTEM ? 'Hệ thống, quét thử ngoài hành lang giúp tôi xem có gì không.' : 'Evelyn, nhìn thử ngoài hành lang giúp tôi xem có gì không.')
+                  await play1(run, `g${g}.3`, 'story', 'npc', gt.call1)
+                  await play1(run, `g${g}.4`, 'story', 'npc', gt.call2)
                   if (QUESTS) for (let k = 4; k < QUEST_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'quest', 'quest', QUEST_ACTIONS[(k - 4 + g) % QUEST_ACTIONS.length])
                   if (STATS) await playStats(run, g, play1)
                   if (FINDS) for (let k = 4; k < FINDS_TURNS; k++) await play1(run, `g${g}.${k + 1}`, 'finds', 'finds', FINDS_ACTIONS[(k - 4 + g) % FINDS_ACTIONS.length])
@@ -484,6 +489,7 @@ async function main() {
     const which = opt('--story', 'all')
     const keys = which === 'all' ? STORY_KEYS : which.split(',')
     for (const k of keys) if (!STORIES[k]) throw new Error(`unknown story "${k}" (${STORY_KEYS.join(", ")}, all)`)
+    if (SYSTEM) for (const k of keys) systemPersona(k, PERSONA_FILE)   // fail fast: a story without its no-Evelyn persona fixture never starts a copy
     fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true })
     if (!flag('--keep-runs')) pruneRuns()
     const runDir = newRunDir()
