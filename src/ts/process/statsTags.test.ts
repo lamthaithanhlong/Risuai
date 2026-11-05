@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { stripStatTags } from './statsTags'
 import { stripFind } from './findDrop'
+import { tidyDisplay, tidyReply } from './replyTidy'
 
 describe('stripStatTags', () => {
     it('takes a finished ACT tag out, with the line it stood on', () => {
@@ -91,5 +92,48 @@ describe('stripStatTags: the NPC inner line (2026-11-05)', () => {
     })
     it('leaves words that only start with N alone ([[img: …]] and prose)', () => {
         expect(stripStatTags('Nắng lên. [[img: a balcony]]')).toBe('Nắng lên. [[img: a balcony]]')
+    })
+})
+
+describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + npc-state merged)', () => {
+    // ACT, BREAK, QUEST (done / fail / progress), NPC and FIND in the same reply, the way the screen (parser.svelte.ts: stripFind then
+    // stripStatTags, then tidyDisplay) and the stored text (noteFind's stripFind, then tidyReply) take them out. At every length the stream
+    // can stop at, no "[[" and nothing a tag carries may show; the finished reply keeps exactly the prose.
+    const PROSE = ['Cô nhìn sang.', '“Anh còn thuốc giảm đau không?”', 'Anh đưa chai nước, rồi nâng cánh cửa.', 'Chai thứ hai nằm sau tủ lạnh.']
+    const REPLY = [
+        PROSE[0],
+        '[[NPC|ban-cong-704|thuốc hạ sốt|sợ, đau|vết cắn của chồng]]',
+        PROSE[1],
+        PROSE[2] + ' [[ACT|nâng-cửa|suc_manh+the_luc|hard|]]',
+        '[[BREAK|the_luc]]',
+        PROSE[3],
+        '[[QUEST|progress|nuoc-sach|2]]',
+        '[[QUEST|done|nuoc-sach]]',
+        '[[QUEST|fail|gia-co-cua]]',
+        '[[FIND|skill|Mở khóa|Lockpick|mở khóa nhanh|common|có dụng cụ|yes]]',
+    ].join('\n')
+    const PAYLOAD = ['ban-cong', 'thuốc hạ', 'vết cắn', 'suc_manh', 'the_luc', 'nâng-cửa', 'nuoc-sach', 'gia-co-cua', 'progress', 'Lockpick', 'Mở khóa']
+    const screen = (t: string) => tidyDisplay(stripStatTags(stripFind(t)))
+    const stored = (t: string) => tidyReply(stripFind(t))
+    it('the finished reply keeps only the prose, on the screen and in the stored text', () => {
+        const clean = [PROSE[0], PROSE[1], PROSE[2], PROSE[3]].join('\n')
+        expect(screen(REPLY)).toBe(clean)
+        expect(stored(REPLY)).toBe(clean)
+        // the stored path without its FIND pass still takes out every other kind
+        expect(tidyReply(REPLY.replace(/\n\[\[FIND[^\n]*$/, ''))).toBe(clean)
+    })
+    it('hides every tag at every streaming prefix length', () => {
+        for (let n = 1; n <= REPLY.length; n++) {
+            const part = REPLY.slice(0, n)
+            for (const [name, out] of [['screen', screen(part)], ['stored', stored(part)]] as const) {
+                const where = `${name} at ${n}: ${JSON.stringify(part.slice(-30))} -> ${JSON.stringify(out.slice(-40))}`
+                expect(out.includes('[['), where).toBe(false)
+                for (const p of PAYLOAD) expect(out.includes(p), `${where} shows ${p}`).toBe(false)
+            }
+        }
+    })
+    it('still leaves look-alike words and other blocks alone', () => {
+        const t = 'Nắng lên. [[img: a balcony]] [[QUESTION|x]] [[NPCS]] [[ACTION|y]] [[BREAKFAST]]\n[[STATUS\nday: 2\n]]'
+        expect(stripStatTags(t)).toBe(t)
     })
 })

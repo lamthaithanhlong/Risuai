@@ -107,8 +107,9 @@ export type FindRecord = {
 
 const BLOCK = /\[\[FIND\b([^\]]*)\]\]/
 const BLOCK_ALL = /[ \t]*\[\[FIND\b[^\]]*\]\][ \t]*\n?/g
-// a block still being streamed ("[[FIND|skill|Tên"), or only the first characters of its opening
-const OPEN_TAIL = /[ \t]*\[\[FIND\b[^\]]*$/
+// a block still being streamed ("[[FIND|skill|Tên"), or only the first characters of its opening; the stream can also stop between its
+// two closing brackets ("…|yes]"), and that frame showed the whole line (release-2 test, 2026-11-05)
+const OPEN_TAIL = /[ \t]*\[\[FIND\b[^\]]*\]?$/
 const PREFIX_TAIL = /[ \t]*\[\[(?:F|FI|FIN)?$/
 
 /** The reply with every find block taken out, and one still being streamed hidden (for the screen and for the stored text). */
