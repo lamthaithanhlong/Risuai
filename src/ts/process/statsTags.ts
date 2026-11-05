@@ -7,14 +7,19 @@
 // ("[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]"), spaces after "[[", another case, the closing brackets missing (the tag then ends at
 // its line). Every one of those is taken out too; stats.lua (S.hide / parse_act) reads the same variants.
 const CLOSED = /(?:[ \t]*\n)?[ \t]*\[\[\s*(?:ACT|BREAK)(?![\p{L}\p{N}_])[^\]\n]*(?:\]\]?|(?=\n)|$)/giu
-const OPEN_TAIL = /[ \t]*\[\[\s*(?:ACT|BREAK)(?![\p{L}\p{N}_])[^\]]*$/iu
-const PREFIX_TAIL = /[ \t]*\[\[(?:A|AC|B|BR|BRE|BREA)$/i
+// The quest tags (quests.lua; grammar in ~/.risu-story-work/quest-tag-grammar.md): [[QUEST|done|id]], [[QUEST|fail|id]] and, since the goal contract
+// (2026-11-05), [[QUEST|progress|id|n]], with the same tolerance (first pipe missing, spaces, case, the close missing). Only these kinds: the Lua reads
+// them before this runs (onOutput) and cuts them itself; the client never interprets one. A tag still streaming is hidden whatever its kind so far.
+export const QUEST_KINDS = ['done', 'fail', 'progress'] as const
+const QUEST_CLOSED = new RegExp(String.raw`(?:[ \t]*\n)?[ \t]*\[\[\s*QUEST(?![\p{L}\p{N}_])\s*\|?\s*(?:${QUEST_KINDS.join('|')})(?![\p{L}\p{N}_])[^\]\n]*(?:\]\]?|(?=\n)|$)`, 'giu')
+const OPEN_TAIL = /[ \t]*\[\[\s*(?:ACT|BREAK|QUEST)(?![\p{L}\p{N}_])[^\]]*$/iu
+const PREFIX_TAIL = /[ \t]*\[\[(?:A|AC|B|BR|BRE|BREA|Q|QU|QUE|QUES)$/i
 
-/** The text with every growth tag taken out, and one still being streamed hidden; text without a tag comes back untouched. */
+/** The text with every growth tag and quest tag taken out, and one still being streamed hidden; text without a tag comes back untouched. */
 export function stripStatTags(text: string): string {
     const t = text ?? ''
-    if (!/\[\[\s*[ab]/i.test(t)) return t
-    const out = t.replace(CLOSED, '').replace(OPEN_TAIL, '').replace(PREFIX_TAIL, '')
+    if (!/\[\[\s*[abq]/i.test(t)) return t
+    const out = t.replace(CLOSED, '').replace(QUEST_CLOSED, '').replace(OPEN_TAIL, '').replace(PREFIX_TAIL, '')
     if (out === t) return t
     return out.replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '')
 }

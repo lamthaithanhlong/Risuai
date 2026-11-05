@@ -54,3 +54,31 @@ describe('stripStatTags: the forms the narrator really wrote (gate runs, 2026-11
         expect(stripStatTags('[[ACTION|x]] và [[BREAKFAST]]')).toBe('[[ACTION|x]] và [[BREAKFAST]]')
     })
 })
+
+describe('stripStatTags: the quest tags (quests.lua, ~/.risu-story-work/quest-tag-grammar.md)', () => {
+    // done / fail close the quest, progress (2026-11-05, ZR quest-goal) says how many of the count the character has now; quests.lua cuts all three from
+    // the stored message, but the stream shows them before the Lua runs. The client only hides them, it never reads them.
+    const FORMS = [
+        '[[QUEST|done|gia-co-cua]]', '[[QUEST|fail|gia-co-cua]]',
+        '[[QUEST|progress|nuoc-sach|1]]', '[[QUEST progress|nuoc-sach|2]]', '[[QUEST|progress|nuoc-sach 2]]', '[[ quest | Progress | nuoc-sach | 1 ]]',
+        '[[QUEST|progress|nuoc-sach|1]', '[[QUEST|progress|nuoc-sach|1', '[[QUEST done|gia-co-cua]]',
+    ]
+    for (const tag of FORMS) {
+        it(`takes out ${tag}`, () => {
+            expect(stripStatTags(`Anh tìm thấy chai đầu tiên.\n[💡Kế hoạch| Không ] ${tag}`)).toBe('Anh tìm thấy chai đầu tiên.\n[💡Kế hoạch| Không ]')
+            expect(stripStatTags(`Anh tìm thấy chai đầu tiên. ${tag}\n[[STATUS\nday: 2\n]]`)).toBe('Anh tìm thấy chai đầu tiên.\n[[STATUS\nday: 2\n]]')
+        })
+    }
+    it('takes out a progress tag and a done tag of the same reply', () => {
+        expect(stripStatTags('Chai thứ hai nằm sau tủ lạnh.\n[[QUEST|progress|nuoc-sach|2]]\n[[QUEST|done|nuoc-sach]]')).toBe('Chai thứ hai nằm sau tủ lạnh.')
+    })
+    it('hides a quest tag still being streamed, at every length', () => {
+        for (const tail of ['[[Q', '[[QU', '[[QUE', '[[QUES', '[[QUEST', '[[QUEST|', '[[QUEST|pro', '[[QUEST|progress|nuoc-s', '[[QUEST|progress|nuoc-sach|1', '[[QUEST|do']) {
+            expect(stripStatTags('Anh thở ra.\n' + tail)).toBe('Anh thở ra.')
+        }
+    })
+    it('leaves words that only start like a quest tag alone', () => {
+        expect(stripStatTags('[[QUESTION|x]] và [[QUESTLOG]]')).toBe('[[QUESTION|x]] và [[QUESTLOG]]')
+        expect(stripStatTags('Chữ [[Quý]] giữa câu')).toBe('Chữ [[Quý]] giữa câu')
+    })
+})
