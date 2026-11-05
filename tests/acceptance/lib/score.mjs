@@ -5,6 +5,7 @@
 // Turn labels: s1.. = the step-by-step creation run, t1.. = the surprise run (creation replies first, then the ~20 story turns).
 
 import { narrationProblems, companionProblems } from './narration.mjs'
+import { noCompanionProblems } from './system.mjs'
 
 const VI_WORDS = new Set('và của là không một những người có đã trong được này cho với anh cô tôi bạn ngươi lại ra vào như thì mà đến nó gì sẽ đang cũng còn khi từ trên dưới hắn họ ta mình chỉ rồi đó nào'.split(' '))
 const EN_WORDS = new Set('the and of to was is you your that with his her it in for on as at be are were this from have had not but they'.split(' '))
@@ -85,6 +86,26 @@ const check = (id, title, status, summary, evidence = []) => ({ id, title, statu
 const pass = (ok) => (ok ? 'PASS' : 'FAIL')
 
 /** the score of one story; `judge` holds the model judge's answers (judge.mjs), or {} when it was not run */
+
+/**
+ * companion.match. Runs as it always did (a persona that names companions: the record names them; a persona that names none: N/A). The ONLY
+ * skip that is new is for a persona fixture that DECLARES `companion: none` (rec.companionDeclared, from its first line): the check is then
+ * N/A "(no companion)", never PASS, and it goes FAIL when the record's Đồng hành line is not "Không" or a reply still has a companion.
+ */
+export function companionMatchResult({ companions, declaredNone, sheets, replies }) {
+    if (declaredNone) {
+        if (!sheets.length) return { status: 'N/A', summary: 'N/A (no companion): no creation record to read', evidence: [] }
+        const bad = [...new Set(sheets.flatMap((t) => noCompanionProblems({ record: t.reply, replies: [] }).map((q) => `${t.label}: ${q.text}`)).concat(noCompanionProblems({ record: 'Đồng hành: Không', replies }).map((q) => q.text)))]
+        return bad.length ? { status: 'FAIL', summary: 'the persona declares companion: none but a companion shows up', evidence: bad } : { status: 'N/A', summary: 'N/A (no companion)', evidence: [] }
+    }
+    const cProblems = sheets.map((t) => ({ t, p: companionProblems(t.reply, companions) }))
+    return {
+        status: !companions.length || !sheets.length ? 'N/A' : pass(cProblems.every((x) => !x.p.length)),
+        summary: !companions.length ? 'the persona names no companion' : `${cProblems.filter((x) => !x.p.length).length}/${sheets.length} records name ${companions.join(', ')}`,
+        evidence: cProblems.filter((x) => x.p.length).map((x) => `${x.t.label}: ${x.p.map((q) => q.text).join('; ')}`),
+    }
+}
+
 export function scoreStory(rec, judge = {}) {
     const out = []
     const steps = rec.steps?.turns ?? []
@@ -141,10 +162,8 @@ export function scoreStory(rec, judge = {}) {
 
     // L1 gates (2026-11-03, the owner's Zombie chats): the record names every companion the persona names, and the narrator's replies are clean.
     // companion.match here covers the records one run produced; the hard gate (gate.mjs) replays creation five times and needs 5 of 5.
-    const cProblems = sheets.map((t) => ({ t, p: companionProblems(t.reply, companions) }))
-    out.push(check('companion.match', "The record's Đồng hành line names the persona's companions", !companions.length || !sheets.length ? 'N/A' : pass(cProblems.every((x) => !x.p.length)),
-        !companions.length ? 'the persona names no companion' : `${cProblems.filter((x) => !x.p.length).length}/${sheets.length} records name ${companions.join(', ')}`,
-        cProblems.filter((x) => x.p.length).map((x) => `${x.t.label}: ${x.p.map((q) => q.text).join('; ')}`)))
+    const cm = companionMatchResult({ companions, declaredNone: rec.companionDeclared === 'none', sheets, replies: story.map((t) => t.shown || t.reply) })
+    out.push(check('companion.match', "The record's Đồng hành line names the persona's companions", cm.status, cm.summary, cm.evidence))
     const nProblems = narrationProblems(story.map((t) => t.shown || t.reply))
     out.push(check('narration.clean', 'The narrator does not explain the setup, repeat itself, stack emoji or leak tags', story.length >= 2 ? pass(!nProblems.length) : 'N/A',
         story.length >= 2 ? (nProblems.length ? `${nProblems.length} problem(s): ${[...new Set(nProblems.map((q) => q.rule))].join(', ')}` : `${story.length} replies clean`) : 'fewer than 2 story replies',
