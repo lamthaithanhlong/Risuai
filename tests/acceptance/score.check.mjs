@@ -318,6 +318,13 @@ test('guide.scout and guide.noSpoiler: green on a good scout, each rule red once
     assert.ok(guideScoutProblems(say('Cách cậu 40 m có hai người, tớ sợ đấy, đừng ra nhé?')).some((p) => p.rule === 'range'))
     assert.ok(guideNoSpoilerProblems(herSpeech(say('Mức nhiễm của cậu đang là 3% đấy, cậu.'))).some((p) => p.rule === 'system-text'))
     assert.ok(guideNoSpoilerProblems(herSpeech(say('Lát nữa sẽ có cả đám đông tràn vào đây, cậu ạ.'))).some((p) => p.rule === 'future'))
+    // Hệ thống → Admin rename: ADMIN in her speech is System text too; administrator / badminton / an email / a url are not
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('ADMIN vừa báo cho cậu đấy, tớ nghe thấy.'))).some((p) => p.rule === 'system-text'))
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('Admin bảo cậu đừng ra ngoài, tớ nghe rõ.'))).some((p) => p.rule === 'system-text'))
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('ADMIN gọi cậu là KHÁCH-704 đấy, tớ nghe rồi.'))).some((p) => p.rule === 'system-text'))
+    for (const s of ['Anh ấy là administrator của tòa nhà, cậu.', 'Tớ từng chơi badminton ngoài sân, cậu.', 'Tớ thấy địa chỉ admin@example.com dán trên cửa, cậu.', 'Trang https://admin.example.com không vào được, cậu.'])
+        assert.deepEqual(guideNoSpoilerProblems(herSpeech(say(s))), [], `not System text: ${s}`)
+    assert.ok(guideNoSpoilerProblems(herSpeech(say('HỆ THỐNG vừa báo cho cậu đấy, tớ nghe thấy.'))).some((p) => p.rule === 'system-text'), 'the old label still caught')
     // a remembered place asked as a question is a memory, not a sight
     assert.deepEqual(guideNoSpoilerProblems(herSpeech(say('Cậu nhớ cái máy phát ở tầng hầm không?'))), [])
 })

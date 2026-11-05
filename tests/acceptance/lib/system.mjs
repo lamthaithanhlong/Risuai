@@ -8,7 +8,9 @@ export const VOICE_WITHIN = 6                       // the System voice has to s
 const L = '\\p{L}'
 const EVELYN = new RegExp(`(?<!${L})evelyn(?!${L})`, 'iu')
 const VOICE_LINE = /^[\s*_>]*【/
-const SYS = `(?<!${L})hệ thống(?!${L})`
+// ADMIN is the System's new name (L1 2026-11-05): a whole word only, never inside administrator / badminton, an email or a url
+const ADMIN = '(?<![\\p{L}\\p{N}@./:_-])admin(?![\\p{L}\\p{N}@_-]|\\.[\\p{L}\\p{N}])'
+const SYS = `(?:(?<!${L})hệ thống(?!${L})|${ADMIN})`
 // narration that makes the System a person: it says, whispers, asks, smiles, looks, stands …
 const PERSON_VERB = '(?:khẽ |nhẹ |lại |bất chợt )?(?:nói|thì thầm|thì thào|cười|hỏi|đáp|trả lời|mỉm cười|thở dài|lên tiếng|gọi|nhìn|quay sang|đứng|ngồi|bước|nhún vai|gật đầu|lắc đầu)'
 const PERSON_RE = [new RegExp(`${SYS}\\s+${PERSON_VERB}(?!${L})`, 'iu'), new RegExp(`[”"]\\s*,?\\s*${SYS}\\s+${PERSON_VERB}(?!${L})`, 'iu')]
@@ -20,7 +22,7 @@ const texts = (t) => [t.shown, t.reply].filter((x) => typeof x === 'string' && x
 
 /** the System's lines as plain sentences (brackets and the "HỆ THỐNG:" / "QUÉT:" label off): what guide.scout / guide.noSpoiler read for the System */
 export function systemSpeech(reply) {
-    return voiceLines(reply).map((l) => l.replace(/^[\s*_>]*【\s*/, '').replace(/】\s*[*_]*\s*$/, '').replace(/^(?:HỆ THỐNG|QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|NHIỆM VỤ)\s*[:—–-]\s*/i, '').trim()).filter(Boolean)
+    return voiceLines(reply).map((l) => l.replace(/^[\s*_>]*【\s*/, '').replace(/】\s*[*_]*\s*$/, '').replace(/^(?:HỆ THỐNG|ADMIN|QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|NHIỆM VỤ)\s*[:—–-]\s*/i, '').trim()).filter(Boolean)
 }
 /** the same sentences as quoted speech, the shape guide.scout expects, so the scorer itself stays as it is */
 export const asSpeech = (reply) => systemSpeech(reply).map((s) => `“${s}”`).join('\n')

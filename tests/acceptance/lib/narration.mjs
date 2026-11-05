@@ -93,7 +93,7 @@ export function sceneRepeats(replies) {
 /** Her spoken lines: quoted speech in her register (tớ / cậu). */
 export const herSpeech = (reply) => [...String(reply ?? '').matchAll(/“([^”]+)”/g)].map((m) => m[1]).filter((s) => /(?<!\p{L})(tớ|cậu)(?!\p{L})/iu.test(s))
 
-const SYSTEM_WORDS = /mức nhiễm|HỆ THỐNG|nhận dạng mẫu|KHÁCH-\d+|\d+\s?%/i
+const SYSTEM_WORDS = /mức nhiễm|HỆ THỐNG|nhận dạng mẫu|KHÁCH-\d+|\d+\s?%|(?<![\p{L}\p{N}@./:_-])ADMIN(?![\p{L}\p{N}@_-]|\.[\p{L}\p{N}])/iu   // ADMIN = the System's new name, a whole word only
 const FUTURE = /(?<!\p{L})(sắp|sẽ|rồi sẽ|lát nữa|ngày mai|tuần sau|sau này)(?!\p{L})[^.?!…]{0,40}(?<!\p{L})(chết|tấn công|bùng phát|sập|nổ|xảy ra|kéo đến|tràn vào|đến đây|đến cửa)(?!\p{L})/iu
 const FAR = /tận\s+(tầng|B\d|dưới cùng|mái|sảnh)|\bB\d\b|tầng hầm/i
 

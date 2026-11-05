@@ -42,3 +42,17 @@ test('prose around fenced JSON still parses (via judgeLogic with a stub)', async
     assert.equal(out.findings.length, 1)
     assert.ok(out.raw.includes('Hope that helps'))
 })
+
+test('chatReplies: a 【ADMIN…】 line is stripped like 【HỆ THỐNG…】; prose that merely says admin is kept', () => {
+    const msg = (data) => ({ role: 'char', data })
+    const r = chatReplies({ message: [
+        msg('Hành lang im lặng.\n【ADMIN: Đã nhận diện KHÁCH-704, mức đồng bộ 12%.】\nKenji nín thở.'),
+        msg('Kenji nhắn cho admin của tòa nhà nhưng không ai đáp.\nMàn hình hiện chữ ADMIN to tướng.\nTrang https://admin.example.com sập.'),
+        msg('Cửa kẽo kẹt.\n**【ADMIN — Mục tiêu đã khóa.】**'),
+        msg('Gió lùa.\n【HỆ THỐNG: Không phát hiện chuyển động.】'),
+    ] })
+    assert.equal(r[0], 'Hành lang im lặng.\n\nKenji nín thở.')
+    assert.equal(r[1], 'Kenji nhắn cho admin của tòa nhà nhưng không ai đáp.\nMàn hình hiện chữ ADMIN to tướng.\nTrang https://admin.example.com sập.')
+    assert.equal(r[2], 'Cửa kẽo kẹt.')
+    assert.equal(r[3], 'Gió lùa.', 'the old HỆ THỐNG strip, unchanged')
+})

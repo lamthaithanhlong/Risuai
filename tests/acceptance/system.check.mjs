@@ -107,6 +107,45 @@ test('guide.scout / guide.noSpoiler stay as they are and read the System through
     assert.ok(rules(guideNoSpoilerProblems(systemSpeech(spoil))).includes('range'))
 })
 
+// ---- Hệ thống → Admin rename (L1-approved 2026-11-05): the label ADMIN is ADDED next to HỆ THỐNG, nothing is loosened -------------------------
+const ADMIN_SCAN = `${PROSE}\n【ADMIN: Có một người đứng sát cửa căn 706, quay lưng về phía hành lang, áo xám.】`
+test('admin: a 【ADMIN: …】 line is System speech for guide.scout / guide.noSpoiler, its label is stripped like HỆ THỐNG', () => {
+    assert.deepEqual(systemSpeech(ADMIN_SCAN), ['Có một người đứng sát cửa căn 706, quay lưng về phía hành lang, áo xám.'])
+    assert.deepEqual(systemSpeech(`${PROSE}\n**【ADMIN — Mục tiêu đã khóa.】**`), ['Mục tiêu đã khóa.'])
+    assert.deepEqual(guideScoutProblems(asSpeech(ADMIN_SCAN)), [])
+    assert.deepEqual(guideNoSpoilerProblems(systemSpeech(ADMIN_SCAN)), [], 'the label itself is not System text inside the System voice')
+    const tagged = `${PROSE}\n【ADMIN: Đã nhận diện KHÁCH-704, mức đồng bộ 12%.】`
+    assert.ok(rules(guideNoSpoilerProblems(systemSpeech(tagged))).includes('system-text'), 'KHÁCH-704 / a % number in an ADMIN line is system text')
+    // the old HỆ THỐNG fixtures, unchanged
+    assert.deepEqual(systemSpeech(`${PROSE}\n【HỆ THỐNG: Không phát hiện chuyển động trong 8 m.】`), ['Không phát hiện chuyển động trong 8 m.'])
+})
+
+test('admin: "Admin lên tiếng" in prose makes the System a person; administrator / badminton / an email / a url do not', () => {
+    const adm = goodRun(); adm.turns.forEach((t) => { t.shown = t.shown.replace('【HỆ THỐNG:', '【ADMIN:'); t.reply = t.reply.replace('【HỆ THỐNG:', '【ADMIN:') })
+    assert.deepEqual(presentProblems(runs(adm)), [], 'a run whose voice is 【ADMIN: …】 is a good run')
+    const person = goodRun(); person.turns[3].shown += '\nAdmin lên tiếng: cẩn thận.'
+    assert.deepEqual(rules(presentProblems(runs(person))), ['person'])
+    const quoted = goodRun(); quoted.turns[3].shown += '\n“Đi nhanh lên.” Admin đáp.'
+    assert.ok(rules(presentProblems(runs(quoted))).includes('person'))
+    for (const line of ['Gã administrator lên tiếng: cẩn thận.', 'Hai đứa trẻ chơi badminton cười rộ ngoài sân.', 'Tờ giấy ghi admin@example.com nói rõ giờ mở cửa.', 'Trang https://admin.example.com đáp lại bằng một dòng lỗi.', 'Hộp thư admin@khu-704.vn nhìn trống trơn.']) {
+        const neg = goodRun(); neg.turns[3].shown += `\n${line}`
+        assert.deepEqual(presentProblems(runs(neg)), [], `not the System as a person: ${line}`)
+    }
+    // the old HỆ THỐNG person fixture, unchanged
+    const old = goodRun(); old.turns[3].shown += '\nHệ thống thì thầm vào tai anh: cẩn thận.'
+    assert.deepEqual(rules(presentProblems(runs(old))), ['person'])
+})
+
+test('admin: the zombie card\'s unbracketed-voice rule also catches an ADMIN: line outside brackets', async () => {
+    const { STORIES } = await import('./stories.mjs')
+    const re = STORIES.zombie.voice.unbracketed
+    assert.ok(re.test('ADMIN: Mục tiêu đã khóa.'))
+    assert.ok(re.test('*ADMIN: Mục tiêu đã khóa.'))
+    assert.ok(re.test('HỆ THỐNG: Không phát hiện chuyển động.'), 'the old label still caught')
+    assert.ok(!re.test('Gã administrator: một người đàn ông gầy.'))
+    assert.ok(!re.test('Kenji nhìn dòng chữ admin@example.com.'))
+})
+
 // ---- quests -------------------------------------------------------------------------------------------------------------------------------------
 test('quest.offered: good passes; no offer, late offer, silent offer, no reward each red', () => {
     assert.deepEqual(offeredProblems(runs(goodRun())), [])
