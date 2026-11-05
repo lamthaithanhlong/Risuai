@@ -56,3 +56,10 @@ test('npcChecks: report-only is INFO whatever it finds; gating FAILs above 5% of
     const g = npcChecks(good, { player, gate: true })[0]
     assert.equal(g.status, 'PASS', g.summary)
 })
+
+test('npc-inner: the raw reply\'s inner line is read even though the shown reply has none', () => {
+    const raw = 'Cô nhìn sang.\n[[NPC|ban-cong-704|đồ ăn|đói|chồng tôi bị cắn]]\n“Anh cứ giữ đồ ăn đi.”'
+    const shown = 'Cô nhìn sang.\n“Anh cứ giữ đồ ăn đi.”'
+    const hits = npcTurnHits([{ shown: '', vars: { led_npc: LEDGER } }, { shown, raw }], { player })[1].hits.map((h) => h.rule)
+    assert.ok(hits.includes('npc-inner'), hits.join(','))
+})

@@ -11,7 +11,7 @@ import { npcHits, npcLines, HARD_RULES } from '../../../src/ts/process/npcCheck.
 export const playerOf = (persona) => String(persona ?? '').split(/[(:\n]/)[0].trim()
 
 /**
- * Hits per story turn. turns: [{ shown|reply, text (the player's message), vars (the chat vars after the turn: led_npc) }].
+ * Hits per story turn. turns: [{ shown|reply, raw (the model's reply, inner lines still in it), text (the player's message), vars (the chat vars after the turn: led_npc) }].
  * -> [{ turn, lines (NPC lines in the reply), hits: [{rule, text, npc, soft?, why?}] }]
  */
 export function npcTurnHits(turns, { player = '' } = {}) {
@@ -19,7 +19,8 @@ export function npcTurnHits(turns, { player = '' } = {}) {
     let ledger = ''
     for (const [i, t] of (turns ?? []).entries()) {
         const reply = t.shown || t.reply || ''
-        const hits = npcHits(reply, { ledger, n: Infinity, player, playerText: t.text ?? '' })
+        // the raw reply still has the hidden [[NPC|…]] inner lines (the shown one does not): the inner-line clause reads them there
+        const hits = npcHits(reply, { ledger, n: Infinity, player, playerText: t.text ?? '', raw: t.raw || reply })
         out.push({ turn: i, lines: npcLines(reply, { player }).length, hits })
         ledger = String(t.vars?.led_npc ?? t.vars?.$led_npc ?? ledger)
     }

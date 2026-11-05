@@ -247,7 +247,7 @@ function finishGate(key, rec, ctx, story) {
     checks.push(...act)
     // npc.dialogue (lib/npcRules.mjs, the app's npcCheck): REPORT-ONLY (INFO) for the first 2 gates to measure false alarms (L1 2026-11-05);
     // NPC_GATE=1 makes it gating (FAIL above 5% of NPC lines on any hard rule)
-    const npcTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ shown: x.shown || x.reply || '', text: x.text ?? '', vars: x.vars ?? {} }))
+    const npcTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ shown: x.shown || x.reply || '', raw: x.raw ?? '', text: x.text ?? '', vars: x.vars ?? {} }))
     const npc = npcChecks(runs.map((run) => ({ turns: npcTurns(run) })), { player: playerOf(rec.persona), gate: process.env.NPC_GATE === '1' })
     checks.push(...npc)
     console.log(`[gate] npc.dialogue (${npc[0].status}): ${npc[0].summary}`)
