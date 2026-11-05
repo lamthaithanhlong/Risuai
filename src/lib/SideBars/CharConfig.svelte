@@ -35,6 +35,7 @@
     import { exportRegex, importRegex } from "src/ts/process/scripts";
     import SliderInput from "../UI/GUI/SliderInput.svelte";
     import Toggles from "./Toggles.svelte";
+    import AdminSwitch from "./AdminSwitch.svelte";
     import { convertCharacterToModule } from "src/ts/interchangeability";
 
     let iconRemoveMode = $state(false)
@@ -346,6 +347,7 @@
             </div>
         {/if}
     {/if}
+    <AdminSwitch chara={DBState.db.characters[$selectedCharID]} />
 {:else if licensed === 'private'}
     <span>You are not allowed</span>
     {(() => {

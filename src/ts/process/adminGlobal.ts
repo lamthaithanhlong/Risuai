@@ -246,6 +246,77 @@ export async function resolveAdmin(card: string, deps: AdminDeps): Promise<{ pay
     return { payload: source === 'off' ? null : p, source }
 }
 
+// ---- the on/off switch in the character settings (CharConfig.svelte) ------------------------------------------------------------
+// Reads GET /api/admin?card=<id> (enabled, locked) without touching the request cache; writes POST /api/admin/switch {card, off}
+// (adminBridge.cjs -> the asset manager -> global.json). An id in global.json "locked" cannot be switched here.
+
+export type AdminSwitchState = { card: string; state: 'on' | 'off' | 'unknown'; locked: boolean; stale?: boolean; error?: string }
+
+export const ADMIN_LOCKED_NOTE = 'khoá, sửa tay trong global.json'
+
+/** The current state for the switch: never throws; no answer = 'unknown' (the switch is then disabled). */
+export async function adminSwitchState(card: string, deps: AdminDeps): Promise<AdminSwitchState> {
+    if (!ID_RE.test(card)) return { card, state: 'unknown', locked: false, error: 'no card id' }
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? ADMIN_TIMEOUT_MS)
+    try {
+        const res = await deps.fetch(`/api/admin?card=${encodeURIComponent(card)}`, { headers: { 'risu-auth': await deps.auth() }, signal: ctl.signal })
+        let data: unknown = null
+        try { data = await res.json() } catch { data = null }
+        if (res.ok && valid(data)) {
+            const d = data as AdminPayload & { locked?: unknown }
+            return { card, state: d.enabled === false ? 'off' : 'on', locked: d.locked === true, stale: !!d.stale }
+        }
+        return { card, state: 'unknown', locked: false, error: `the server answered ${res.status}` }
+    } catch {
+        return { card, state: 'unknown', locked: false, error: ctl.signal.aborted ? 'no answer in time' : 'the server is not reachable' }
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
+/** What the switch row shows: checked = Admin on; disabled while locked, unknown or busy. */
+export function adminSwitchView(s: AdminSwitchState | null, busy = false): { checked: boolean; disabled: boolean; note: string } {
+    if (!s) return { checked: false, disabled: true, note: 'đang đọc…' }
+    if (s.locked) return { checked: s.state === 'on', disabled: true, note: ADMIN_LOCKED_NOTE }
+    if (s.state === 'unknown') return { checked: false, disabled: true, note: `không đọc được trạng thái${s.error ? ` (${s.error})` : ''}` }
+    return { checked: s.state === 'on', disabled: busy, note: s.stale ? 'bản lưu của server (kho asset đang tắt)' : '' }
+}
+
+/** Forget what this page knows about one card's Admin (the memory copy), e.g. after the switch changed it. */
+export function forgetAdmin(card: string): void { cache.delete(card) }
+
+/**
+ * Switch Admin on (on=true) or off for one card. On success the memory copy is dropped and the once-off set follows the new state
+ * (on: the card leaves it, off: it joins it). A locked card -> {locked: true}, nothing changes. Never throws.
+ */
+export async function setAdminSwitch(card: string, on: boolean, deps: AdminDeps): Promise<AdminSwitchState> {
+    if (!ID_RE.test(card)) return { card, state: 'unknown', locked: false, error: 'no card id' }
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), Math.max(deps.timeoutMs ?? 0, 5000))
+    try {
+        const res = await deps.fetch('/api/admin/switch', {
+            method: 'POST',
+            headers: { 'risu-auth': await deps.auth(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ card, off: !on }),
+            signal: ctl.signal,
+        })
+        let data: { ok?: boolean; enabled?: boolean; locked?: boolean; error?: string } | null = null
+        try { data = await res.json() } catch { data = null }
+        if (res.status === 403 && data?.locked === true) return { card, state: 'unknown', locked: true, error: data.error ?? 'locked' }
+        if (!res.ok || data?.ok !== true) return { card, state: 'unknown', locked: false, error: data?.error ?? `the server answered ${res.status}` }
+        const enabled = data.enabled !== false
+        cache.delete(card)
+        writeOffSeen(deps, card, !enabled)
+        deps.log?.(`[Admin] ${card}: switched ${enabled ? 'on' : 'off'} from the settings`)
+        return { card, state: enabled ? 'on' : 'off', locked: false }
+    } catch {
+        return { card, state: 'unknown', locked: false, error: ctl.signal.aborted ? 'no answer in time' : 'the server is not reachable' }
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
 /** The guide's name Admin's payload gave for this card (cached), for a card whose lore names no "Story guide: …"; '' otherwise. */
 export function adminGuideFor(card: CardLike): string {
     if (!card || cardHasOwnAdmin(card)) return ''
