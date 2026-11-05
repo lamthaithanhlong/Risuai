@@ -54,3 +54,14 @@ describe('stripStatTags: the forms the narrator really wrote (gate runs, 2026-11
         expect(stripStatTags('[[ACTION|x]] và [[BREAKFAST]]')).toBe('[[ACTION|x]] và [[BREAKFAST]]')
     })
 })
+
+describe('stripStatTags: the NPC inner line (2026-11-05)', () => {
+    it('takes a finished [[NPC|…]] line out, and one still being streamed', () => {
+        const reply = 'Cô nhìn sang.\n[[NPC|ban-cong-704|thuốc hạ sốt|sợ, đau|vết cắn của chồng]]\n“Anh còn thuốc giảm đau không? Tay tôi đau lắm.”'
+        expect(stripStatTags(reply)).toBe('Cô nhìn sang.\n“Anh còn thuốc giảm đau không? Tay tôi đau lắm.”')
+        for (const tail of ['[[N', '[[NP', '[[NPC', '[[NPC|ban-cong', '[[NPC|ban-cong-704|thuốc']) expect(stripStatTags('Cô nhìn sang.\n' + tail)).toBe('Cô nhìn sang.')
+    })
+    it('leaves words that only start with N alone ([[img: …]] and prose)', () => {
+        expect(stripStatTags('Nắng lên. [[img: a balcony]]')).toBe('Nắng lên. [[img: a balcony]]')
+    })
+})

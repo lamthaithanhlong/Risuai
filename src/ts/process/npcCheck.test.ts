@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'vitest'
 import fs from 'fs'
 import path from 'path'
-import { accept, appendNpcLines, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, stepNpc } from './npcCheck.mjs'
+import { accept, appendNpcLines, parseInner, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, stepNpc } from './npcCheck.mjs'
 
 const fx = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../tests/acceptance/fixtures/owner-chats/npc-dialogue-704.json'), 'utf8'))
 // the balcony woman's ledger as the bookkeeper would write it up to the owner's turn 11 (painkillers pulled over, fever medicine needed)
@@ -131,10 +131,10 @@ describe('the GM note and the fallback', () => {
         const big = foldNpc(Array.from({ length: 300 }, (_, i) => `1 | x | knows+ fact number ${i} with several words`).join('\n')).get('x')!
         expect(cardLine(big).split(/\s+/).length).toBeLessThanOrEqual(161)
     })
-    test('npcCardsNote: only NPCs active in the last 3 replies; empty without a ledger', () => {
-        expect(npcCardsNote('', 13)).toBe('')
+    test('npcCardsNote: only NPCs active in the last 3 replies; the inner-line rule alone without a ledger', () => {
+        expect(npcCardsNote('', 13)).not.toContain('NPC cards')
         expect(npcCardsNote(LEDGER, 13)).toContain('NPC cards (hidden, never named)')
-        expect(npcCardsNote(LEDGER, 30)).toBe('')
+        expect(npcCardsNote(LEDGER, 30)).not.toContain('NPC cards')
     })
     test('rewrite note names the rule, the quote and the card; cut drops the hook sentence only when one sentence remains', () => {
         const hits = npcHits(fx.contra_bad, { ...P, ledger: LEDGER, n: 13, playerText: 'thật ra tui có ít thuốc hạ sốt' })
@@ -146,5 +146,37 @@ describe('the GM note and the fallback', () => {
         expect(cut.cut).toEqual(['npc-quest-hook'])
         expect(cut.text).toBe('Cô nhìn anh. “Cánh tay tôi bị cứa.”')
         expect(cutViolations(fx.hook_bad, npcHits(fx.hook_bad, P)).cut).toEqual([])   // one sentence only: nothing left to keep, no cut
+    })
+})
+
+describe('the three techniques of 2026-11-05: inner line, voice card, presence', () => {
+    const L2 = LEDGER + '\n11 | ban-cong-704 | voice 14;thưa,quý khách;nói ngắn, hay hỏi lại;Anh còn thuốc không?\n11 | * | event kenji-bi-can;vết cắn,bị cắn\n11 | ban-cong-704 | present ban-cong-sang'
+    const say = (s: string, inner = '', ledger = L2) => rules(npcHits(`Cô nhìn sang.${inner ? `\n${inner}` : ''}\n“${s}”`, { ...P, ledger, n: 13 }))
+    test('the inner line parses, and refusing what it says she wants now is npc-inner; saying what she withholds too', () => {
+        expect(parseInner('[[NPC|Ban công 704|thuốc hạ sốt|sợ|chồng tôi đã bị cắn]]').get('ban-công-704')).toEqual({ wants: 'thuốc hạ sốt', feels: 'sợ', withholding: 'chồng tôi đã bị cắn' })
+        const inner = '[[NPC|ban-cong-704|đồ ăn|đói, sợ|chồng tôi đã bị cắn hôm qua]]'
+        expect(say('Anh cứ giữ đồ ăn đi.', inner)).toContain('npc-inner')
+        expect(say('Chồng tôi bị cắn hôm qua rồi.', inner)).toContain('npc-inner')
+        expect(say('Anh còn đồ ăn không? Tôi đói lắm.', inner)).toEqual([])
+    })
+    test('voice card: a forbidden word or a sentence longer than her 14 words is npc-voice; the card shows her voice', () => {
+        expect(say('Thưa anh, anh còn thuốc không?')).toEqual(['npc-voice'])
+        expect(say('Anh còn thuốc giảm đau không, vì cả đêm qua tay tôi cứ đau nhức mãi mà tôi không biết phải làm sao nữa?')).toEqual(['npc-voice'])
+        const card = cardLine(foldNpc(L2, 13).get('ban-cong-704')!)
+        for (const w of ['câu tối đa 14 chữ', 'không bao giờ nói: thưa, quý khách', 'ví dụ: “Anh còn thuốc không?”']) expect(card).toContain(w)
+        expect(card.split(/\s+/).length).toBeLessThanOrEqual(160)
+    })
+    test('presence: she mentions the bite she did not see and was not told: npc-unwitnessed; after "learn" she may', () => {
+        expect(say('Anh bị cắn rồi phải không? Tôi sợ lắm.')).toEqual(['npc-unwitnessed'])
+        expect(say('Anh bị cắn rồi phải không? Tôi sợ lắm.', '', L2 + '\n12 | ban-cong-704 | learn kenji-bi-can')).toEqual([])
+    })
+    test('the cut drops the sentence that names the unwitnessed event when another sentence stays', () => {
+        const reply = 'Cô nhìn sang. “Tay tôi đau lắm. Anh bị cắn rồi phải không?”'
+        const hits = npcHits(reply, { ...P, ledger: L2, n: 13 })
+        expect(cutViolations(reply, hits)).toEqual({ text: 'Cô nhìn sang. “Tay tôi đau lắm.”', cut: ['npc-unwitnessed'] })
+    })
+    test('the GM note always carries the inner-line rule; the cards follow when there are any', () => {
+        expect(npcCardsNote('', 13)).toContain('[[NPC|<their id')
+        expect(npcCardsNote(L2, 13)).toContain('NPC cards (hidden, never named)')
     })
 })

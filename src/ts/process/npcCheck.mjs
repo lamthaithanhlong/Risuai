@@ -73,6 +73,17 @@ export function accept(s, f) {
     if (inter(f.requests, has).length) hits.push({ rule: 'npc-contradicts-need', clause: 5, items: inter(f.requests, has) })
     // (6) AcceptAddressed: a direct question/request carries an address term (owner popup a)
     if (f.unaddressed) hits.push({ rule: 'npc-address', clause: 6 })
+    // (7) AcceptInnerLine: the hidden inner line [[NPC|…]]: never refuses what she wants now (same distrust exception), never says what she withholds
+    const wants = f.wantsNow ?? new Set()
+    if (!(inter(f.refusals, wants).length === 0 || (f.reasonFlag && s.trust < LOW_TRUST))) hits.push({ rule: 'npc-inner', clause: 7, items: inter(f.refusals, wants) })
+    if (f.leaksWithheld) hits.push({ rule: 'npc-inner', clause: 7, why: 'says what she withholds' })
+    // (8) AcceptVoice: her voice card: no forbidden word, no sentence longer than her voice
+    const forb = s.forbidden ?? new Set()
+    if (inter(f.forbiddenUsed ?? new Set(), forb).length) hits.push({ rule: 'npc-voice', clause: 8, items: inter(f.forbiddenUsed, forb) })
+    if (!((s.maxWords ?? 0) === 0 || (f.longestSentence ?? 0) <= s.maxWords)) hits.push({ rule: 'npc-voice', clause: 8, n: f.longestSentence })
+    // (9) AcceptOnlyKnownEvents: she refers only to events she was present for or learned (logged ops)
+    const knows = s.knows ?? new Set()
+    if (![...(f.mentions ?? [])].every((e) => knows.has(e))) hits.push({ rule: 'npc-unwitnessed', clause: 9, items: [...f.mentions].filter((e) => !knows.has(e)) })
     return hits
 }
 
@@ -89,14 +100,16 @@ export function stepNpc(s, f, given = new Set(), dTrust = 0) {
 
 // ---- the ledger -----------------------------------------------------------------------------------------------------------------
 const TRUST_OF = { low: 30, mid: 55, high: 80, 'thấp': 30, 'vừa': 55, 'cao': 80 }
-export const NPC_OPS = ['meet', 'need+', 'need-', 'has+', 'has-', 'recv', 'knows+', 'want', 'trust', 'promise+', 'promise-', 'why']
+export const NPC_OPS = ['meet', 'need+', 'need-', 'has+', 'has-', 'recv', 'knows+', 'want', 'trust', 'promise+', 'promise-', 'why', 'voice', 'present', 'learn', 'event']
+/** the ledger id of the scene's own lines: "n | * | event <slug>;<keyword>,<keyword>" logs an event and the words that name it */
+export const EVENTS_ID = '*'
 const slug = (s) => String(s ?? '').normalize('NFC').toLowerCase().trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40)
 /** a ledger item: an ITEM_LEX id as written, or the id of the Vietnamese words */
 const itemOf = (v) => { const t = String(v ?? '').trim(); if (LABEL[t]) return t; const i = itemsIn(t); return i[0] && i[0] !== 'unknown_item' ? i[0] : slug(t).replace(/-/g, '_') }
 
 /** a new card: a stranger starts at low trust (owner's balcony woman) */
 export function blankNpc(id, name = id) {
-    return { id, name, self: 'tôi', toPlayer: 'anh', age: '', isAdmin: false, needs: new Set(), has: new Map(), received: new Set(), knows: new Set(), want: '', trust: 30, promises: new Set(), why: new Set(), lastTurn: -1 }
+    return { id, name, self: 'tôi', toPlayer: 'anh', age: '', isAdmin: false, needs: new Set(), has: new Map(), received: new Set(), knows: new Set(), want: '', trust: 30, promises: new Set(), why: new Set(), lastTurn: -1, forbidden: new Set(), maxWords: 0, tics: '', sample: '', events: new Map() }
 }
 
 /** One ledger op on a card; false (nothing changed) when it would break Dafny Inv (stock below 1, a need already received or held). */
@@ -115,6 +128,12 @@ export function applyNpcOp(c, op, value, n) {
         case 'promise+': c.promises.add(slug(v)); break
         case 'promise-': c.promises.delete(slug(v)); break
         case 'why': c.why.add(itemOf(v)); break
+        // voice <max words>;<forbidden, words>;<tics>;<a sample line>
+        case 'voice': { const [mw, forb, tics, sample] = v.split(';').map((x) => x.trim()); const m = Number(mw); if (Number.isFinite(m) && m >= 0) c.maxWords = m; if (forb) forb.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).forEach((x) => c.forbidden.add(x)); if (tics) c.tics = tics; if (sample) c.sample = sample; break }
+        // presence (Talemate Learn): she was there when the event happened, or someone told her (both logged, never inferred from speech)
+        case 'present': case 'learn': c.knows.add(slug(v)); break
+        // the scene's event log (id "*"): slug and the words that name it
+        case 'event': { const [e, kws] = v.split(';'); if (!e) return false; c.events.set(slug(e), String(kws ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)); break }
         default: return false
     }
     c.lastTurn = Math.max(c.lastTurn, n)
@@ -128,7 +147,9 @@ export function parseNpcLine(line) {
     const n = Number(parts[0])
     const m = /^(\S+)\s*(.*)$/su.exec(parts.slice(2).join(' | '))
     if (!Number.isInteger(n) || !parts[1] || !m || !NPC_OPS.includes(m[1])) return null
-    return { n, id: slug(parts[1]), op: m[1], value: m[2] }
+    const id = parts[1] === EVENTS_ID ? EVENTS_ID : slug(parts[1])
+    if (!id) return null
+    return { n, id, op: m[1], value: m[2] }
 }
 
 /** The cards folded from the ledger lines of replies < beforeN (all when beforeN is omitted). Map id -> card. */
@@ -150,7 +171,7 @@ export function appendNpcLines(ledger, n, ops, max = 200) {
     const seen = new Set(have.map(key))
     let added = 0
     for (const o of ops) {
-        const line = `${n} | ${slug(o.id)} | ${o.op} ${String(o.value ?? '').trim()}`.trim()
+        const line = `${n} | ${o.id === EVENTS_ID ? EVENTS_ID : slug(o.id)} | ${o.op} ${String(o.value ?? '').trim()}`.trim()
         if (!parseNpcLine(line) || seen.has(key(line))) continue
         seen.add(key(line)); have.push(line); added++
     }
@@ -189,15 +210,22 @@ export function cardLine(c) {
         c.why.size ? `có lý do từ chối ${listVi(c.why)}` : '',
         c.knows.size ? `biết ${[...c.knows].join(', ')}` : '',
         c.promises.size ? `đã hứa ${[...c.promises].join(', ')}` : '',
+        c.maxWords || c.tics ? `giọng: ${[c.maxWords ? `câu tối đa ${c.maxWords} chữ` : '', c.tics].filter(Boolean).join(', ')}` : '',
+        c.forbidden.size ? `không bao giờ nói: ${[...c.forbidden].join(', ')}` : '',
+        c.sample ? `ví dụ: “${c.sample}”` : '',
+        'chỉ nhắc việc mình có mặt hoặc được kể',
     ].filter(Boolean)
     return capWords(parts.join('; ') + '.', 160)
 }
 
-/** The hidden note with the cards of the NPCs active in the last 3 replies (at most 3), '' when none. */
+/** The inner-line rule (always in the GM note): before a person other than the player speaks, one hidden line, stripped from the screen. */
+export const NPC_INNER_RULE = '\n\n[NPC inner line (hidden, never named): right before the first words a person other than the player\'s character says in this reply, write one line [[NPC|<their id, e.g. ban-cong-704>|<what they want right now>|<what they feel>|<what they hold back>]]; their words follow from it: they never refuse what they want right now without saying why, never say what they hold back, and mention only what they saw or were told.]'
+
+/** The hidden note with the cards of the NPCs active in the last 3 replies (at most 3); the inner-line rule alone when none. */
 export function npcCardsNote(ledger, n) {
-    const cards = [...foldNpc(ledger, n).values()].filter((c) => !c.isAdmin && c.lastTurn >= n - 3).sort((a, b) => b.lastTurn - a.lastTurn).slice(0, 3)
-    if (!cards.length) return ''
-    return `\n\n[NPC cards (hidden, never named): ${cards.map(cardLine).join(' ')} Each of them says one or two whole sentences built from this card, as a real person: what she needs, holds and knows, asked with the address term on the card; she never refuses what she needs unless she distrusts the player and says why, never asks for what she already holds, never hands out an errand, a place to go or an "if you do X I will Y" (tasks come only from Admin).]`
+    const cards = [...foldNpc(ledger, n).values()].filter((c) => !c.isAdmin && c.id !== EVENTS_ID && c.lastTurn >= n - 3).sort((a, b) => b.lastTurn - a.lastTurn).slice(0, 3)
+    if (!cards.length) return NPC_INNER_RULE
+    return NPC_INNER_RULE + `\n\n[NPC cards (hidden, never named): ${cards.map(cardLine).join(' ')} Each of them says one or two whole sentences built from this card, as a real person: what she needs, holds and knows, asked with the address term on the card; she never refuses what she needs unless she distrusts the player and says why, never asks for what she already holds, never hands out an errand, a place to go or an "if you do X I will Y" (tasks come only from Admin).]`
 }
 
 // ---- extraction: reply text -> per-speaker Facts --------------------------------------------------------------------------------
@@ -212,7 +240,8 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * echoing the player's words).
  */
 export function npcLines(reply, { player = '' } = {}) {
-    const text = String(reply ?? '').replace(/\[\[[\s\S]*?\]\]/g, '').replace(/\[💡[\s\S]*?\]/g, '')
+    // a hidden tag line goes with its own line break, so the quote stays in the paragraph it was written in
+    const text = String(reply ?? '').replace(/[ \t]*\n?[ \t]*\[\[[\s\S]*?\]\]/g, '').replace(/\[💡[\s\S]*?\]/g, '')
     const names = [...new Set([player, String(player).split(/\s+/)[0]].map((s) => s.trim()).filter(Boolean))]
     const before = names.length ? new RegExp(`(?:${names.map(esc).join('|')})[^.!?“”\\n]{0,24}${SPEECH_VERB}[^.!?“”\\n]{0,16}:?\\s*$`, 'u') : null
     const after = names.length ? new RegExp(`^\\s*(?:${names.map(esc).join('|')})\\s+[^.!?“”\\n]{0,12}${SPEECH_VERB}`, 'u') : null
@@ -266,7 +295,7 @@ function speakerOf(it, cards) {
         const nm = String(c.name ?? '').toLowerCase()
         if (nm && nm !== c.id && para.includes(nm)) return c
     }
-    const active = [...cards.values()].filter((c) => !c.isAdmin)
+    const active = [...cards.values()].filter((c) => !c.isAdmin && c.id !== EVENTS_ID)
     if (active.length && PRONOUN_SHE.test(para)) return active.sort((a, b) => b.lastTurn - a.lastTurn)[0]
     return null
 }
@@ -279,10 +308,13 @@ export function extractFacts(reply, cards, ctx = {}) {
     const groups = new Map()
     let last = ctx.lastItem || itemsIn(ctx.playerText ?? '').at(-1) || ''
     const playerItems = itemsIn(ctx.playerText ?? '')
+    const innerAll = ctx.inner ?? parseInner(ctx.raw ?? reply)
+    const innerOnly = innerAll.size === 1 ? cards.get([...innerAll.keys()][0]) : null
     for (const it of npcLines(reply, ctx)) {
-        const card = speakerOf(it, cards)
+        // the paragraph's name or pronoun; else the one NPC whose inner line this reply carries
+        const card = speakerOf(it, cards) ?? innerOnly ?? null
         const key = card ? card.id : '?' + it.para.slice(0, 80)   // an unknown speaker: one per paragraph
-        if (!groups.has(key)) groups.set(key, { card, lines: [], facts: { requests: new Set(), offers: new Set(), refusals: new Set(), handed: new Set(), questHook: false, exposition: false, playerAskedWhy: ASKED_WHY.test(ctx.playerText ?? ''), reasonFlag: false, sentences: 0, unaddressed: false } })
+        if (!groups.has(key)) groups.set(key, { card, lines: [], facts: { requests: new Set(), offers: new Set(), refusals: new Set(), handed: new Set(), questHook: false, exposition: false, playerAskedWhy: ASKED_WHY.test(ctx.playerText ?? ''), reasonFlag: false, sentences: 0, unaddressed: false, wantsNow: new Set(), leaksWithheld: false, forbiddenUsed: new Set(), longestSentence: 0, mentions: new Set() } })
         const g = groups.get(key)
         g.lines.push(it.line)
         const f = g.facts
@@ -308,6 +340,18 @@ export function extractFacts(reply, cards, ctx = {}) {
             if (question && !addressed) f.unaddressed = true
         }
         if (REASON.test(low) && [...f.refusals].length) f.reasonFlag = true
+        for (const s of sents) f.longestSentence = Math.max(f.longestSentence, words(s).length)
+        if (card) {
+            for (const w of card.forbidden) if (new RegExp(`(?<!\\p{L})${esc(w)}(?!\\p{L})`, 'iu').test(it.line)) f.forbiddenUsed.add(w)
+            const inner = innerAll.get(card.id)
+            if (inner) {
+                itemsIn(inner.wants).forEach((i) => i !== 'unknown_item' && f.wantsNow.add(i))
+                const kept = contentWords(inner.withholding)
+                if (kept.length && kept.filter((w) => low.includes(w)).length >= Math.min(2, kept.length)) f.leaksWithheld = true
+            }
+            const log = cards.get(EVENTS_ID)?.events ?? new Map()
+            for (const [e, kws] of log) if (kws.some((k) => k && low.includes(k))) f.mentions.add(e)
+        }
         if (HOOK_A.test(low)) f.questHook = true
         if (HOOK_B.test(low) && !(ASKED_WHERE.test(ctx.playerText ?? '') && card && [...card.knows].some((k) => low.includes(k.replace(/-/g, ' '))))) f.questHook = true
         if (EXPO.some((re) => re.test(low))) f.exposition = true
@@ -319,6 +363,20 @@ export function extractFacts(reply, cards, ctx = {}) {
     }
     return groups
 }
+
+// ---- the hidden inner line [[NPC|id|wants now|feels|withholding]] ------------------------------------------------------------
+const INNER = /\[\[\s*NPC\s*\|([^\]\n]*)\]\]?/giu
+/** id -> {wants, feels, withholding} from the raw reply (before the client strip and the card's Lua take the lines out) */
+export function parseInner(raw) {
+    const out = new Map()
+    for (const m of String(raw ?? '').matchAll(INNER)) {
+        const [id, wants = '', feels = '', withholding = ''] = m[1].split('|').map((x) => x.trim())
+        if (id) out.set(slug(id), { wants, feels, withholding })
+    }
+    return out
+}
+const STOP = new Set(['của', 'những', 'không', 'người', 'chuyện', 'việc', 'mình', 'được', 'đang', 'đã', 'với', 'cho', 'này', 'kia', 'một', 'các', 'là', 'và', 'thì', 'mà', 'rằng', 'anh', 'chị', 'tôi', 'cô', 'em'])
+const contentWords = (s) => [...new Set(String(s ?? '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 && !STOP.has(w)))]
 
 // ---- grammar / telegraph (deterministic part of class 1) ---------------------------------------------------------------------
 const BI_NOUN = /(?<!\p{L})bị (?:mảnh kính|kính|dao|đinh|gạch|kim|sắt|thủy tinh|mảnh sắt)(?: cửa| vỡ)?(?!\p{L})(?!\s*(?:cứa|cắt|đâm|rạch|găm|đập|cào|xước|chém|đè))/u
@@ -340,8 +398,8 @@ export function grammarHits(line) {
 
 // ---- the post-check of one reply --------------------------------------------------------------------------------------------
 /** rules a sentence cut may fix when the redo still has them (never the state rules) */
-export const CUT_RULES = ['npc-quest-hook', 'npc-exposition', 'npc-long']
-export const HARD_RULES = ['npc-grammar', 'npc-address', 'npc-quest-hook', 'npc-contradicts-need', 'npc-phantom-item', 'npc-exposition', 'npc-long']
+export const CUT_RULES = ['npc-quest-hook', 'npc-exposition', 'npc-long', 'npc-voice', 'npc-unwitnessed']
+export const HARD_RULES = ['npc-grammar', 'npc-address', 'npc-quest-hook', 'npc-contradicts-need', 'npc-phantom-item', 'npc-exposition', 'npc-long', 'npc-inner', 'npc-voice', 'npc-unwitnessed']
 
 /**
  * Every NPC hit of a reply: [{rule, text, npc, soft?, why?}]. ctx: { ledger ($led_npc), n (this reply's number: the state is the
@@ -357,7 +415,9 @@ export function npcHits(reply, ctx = {}) {
         const quote = g.lines.join(' … ')
         for (const h of accept(card, facts)) {
             if (!g.card && h.rule === 'npc-contradicts-need') continue
-            out.push({ rule: h.rule, text: quote, npc: name, why: h.items?.length ? h.items.map(itemLabel).join(', ') : h.n ? `${h.n} câu` : '' })
+            const ev = cards.get(EVENTS_ID)?.events ?? new Map()
+            const keys = h.rule === 'npc-unwitnessed' ? (h.items ?? []).flatMap((e) => ev.get(e) ?? []) : h.rule === 'npc-voice' ? (h.items ?? []) : undefined
+            out.push({ rule: h.rule, text: quote, npc: name, why: h.why ?? (h.items?.length ? h.items.map(itemLabel).join(', ') : h.n ? `${h.n} ${h.rule === 'npc-voice' ? 'chữ' : 'câu'}` : ''), ...(keys ? { keys } : {}) })
         }
         for (const l of g.lines) for (const h of grammarHits(l)) out.push({ ...h, text: l, npc: name })
         void key
@@ -369,6 +429,7 @@ const VI_RULE = {
     'npc-grammar': 'câu cụt hoặc thiếu động từ', 'npc-address': 'câu hỏi/nhờ thiếu từ xưng hô', 'npc-quest-hook': 'NPC không giao việc, không chỉ đi nơi khác, không mặc cả kiểu nhiệm vụ',
     'npc-contradicts-need': 'trái với điều cô ấy đang cần/đang giữ', 'npc-phantom-item': 'đưa/đặt món cô ấy không có', 'npc-exposition': 'tự giải thích động cơ khi không ai hỏi',
     'npc-long': 'quá 2 câu', 'npc-bare-request': 'nhờ trống không, không có gì neo',
+    'npc-inner': 'trái với dòng nội tâm ẩn (từ chối điều đang muốn, hoặc nói ra điều đang giấu)', 'npc-voice': 'sai giọng của NPC (từ cấm hoặc câu dài hơn giọng)', 'npc-unwitnessed': 'nhắc việc cô ấy không có mặt và chưa ai kể',
 }
 /** The part of the hidden rewrite note for the NPC hits (with each speaker's card), '' when none. */
 export function npcRewriteNote(hits, ledger, n) {
@@ -393,6 +454,7 @@ export function cutViolations(reply, hits) {
                 const l = s.toLowerCase()
                 if (h.rule === 'npc-quest-hook') return HOOK_A.test(l) || HOOK_B.test(l)
                 if (h.rule === 'npc-exposition') return EXPO.some((re) => re.test(l))
+                if (h.rule === 'npc-voice' || h.rule === 'npc-unwitnessed') return (h.keys ?? []).some((k) => k && l.includes(String(k).toLowerCase()))
                 return false
             }
             let keep = h.rule === 'npc-long' ? sents.slice(0, MAX_SENTENCES) : sents.filter((s) => !bad(s))

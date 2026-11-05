@@ -6,14 +6,16 @@
 // What the narrator really writes (gate runs, 2026-11-04) is not always the card's form: the first pipe missing
 // ("[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]"), spaces after "[[", another case, the closing brackets missing (the tag then ends at
 // its line). Every one of those is taken out too; stats.lua (S.hide / parse_act) reads the same variants.
-const CLOSED = /(?:[ \t]*\n)?[ \t]*\[\[\s*(?:ACT|BREAK)(?![\p{L}\p{N}_])[^\]\n]*(?:\]\]?|(?=\n)|$)/giu
-const OPEN_TAIL = /[ \t]*\[\[\s*(?:ACT|BREAK)(?![\p{L}\p{N}_])[^\]]*$/iu
-const PREFIX_TAIL = /[ \t]*\[\[(?:A|AC|B|BR|BRE|BREA)$/i
+// [[NPC|id|wants now|feels|withholding]] (2026-11-05): the hidden inner line the narrator writes before an NPC speaks (npcCheck.mjs
+// parseInner reads it from the raw reply); hidden the same way, finished or still streaming.
+const CLOSED = /(?:[ \t]*\n)?[ \t]*\[\[\s*(?:ACT|BREAK|NPC)(?![\p{L}\p{N}_])[^\]\n]*(?:\]\]?|(?=\n)|$)/giu
+const OPEN_TAIL = /[ \t]*\[\[\s*(?:ACT|BREAK|NPC)(?![\p{L}\p{N}_])[^\]]*$/iu
+const PREFIX_TAIL = /[ \t]*\[\[(?:A|AC|B|BR|BRE|BREA|N|NP)$/i
 
 /** The text with every growth tag taken out, and one still being streamed hidden; text without a tag comes back untouched. */
 export function stripStatTags(text: string): string {
     const t = text ?? ''
-    if (!/\[\[\s*[ab]/i.test(t)) return t
+    if (!/\[\[\s*[abn]/i.test(t)) return t
     const out = t.replace(CLOSED, '').replace(OPEN_TAIL, '').replace(PREFIX_TAIL, '')
     if (out === t) return t
     return out.replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '')
