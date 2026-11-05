@@ -1,17 +1,28 @@
-// Admin is global (owner 2026-11-05: "lore sẽ không có admin nhưng admin là global, mọi truyện trong Risu sẽ có admin"): no card
-// carries Admin in its lore; the asset manager's shared/characters/admin.md (CARDS: global) is fetched through the Risu server
-// (GET /api/admin?card=<id>, server/node/adminBridge.cjs, which keeps the last good copy on disk) and put into every request of
-// every character as one system message at the end of the prompt's leading system block. The world's @sections are chosen by the
-// card id (adminCardOf). Nothing here ever blocks a reply: no copy anywhere = the request goes without Admin, one log line.
+// Admin is global (owner 2026-11-05: "lore sẽ không có admin nhưng admin là global, mọi truyện trong Risu sẽ có admin") and FORCED
+// (owner 2026-11-05: "mọi truyện admin đều phải apply force"): the asset manager's shared/characters/admin.md (CARDS: global) is
+// fetched through the Risu server (GET /api/admin?card=<id>, server/node/adminBridge.cjs, which keeps the last good copy on disk) and
+// put into every request of every chat as one system message at the end of the prompt's leading system block. The world's @sections
+// are chosen by the card id (adminCardOf). There is no path that skips it:
+//   - a group chat gets the Admin of the member that speaks (the call site passes it); a group with no speaker known: "cha-<group id>";
+//   - a card that still carries its own "Admin" / "Story guide: Admin" lore entry still gets the global Admin; only an asset whose
+//     exact text (same title, same text after trimming and collapsing whitespace) is already in the card's lore is left out, so the
+//     same text is never sent twice (ownCopies / dedupe);
+//   - no answer and no copy anywhere: the built-in core (adminFallback.ts, <= 1200 chars) is used.
+// One debug line per request names the source used (fresh / stale cache / built-in / off), never the text; lastAdminSource() too.
+// THE ONLY WAY TO SWITCH ADMIN OFF is the per-card list in the asset manager's shared/_roles/global.json {"off": [<card id>]}: the
+// payload then says enabled:false and nothing is injected, not even the built-in core. An off answer is remembered (memory here,
+// the server's disk copy, and the server reads global.json itself when the asset manager is down), so an off card stays off offline.
+// Nothing here ever blocks a reply for more than 1.5 s.
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-global-design.md
 
 import { buildView, fetchFindNames, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
+import { FALLBACK_PAYLOAD } from './adminFallback'
 
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
 export type AdminPayload = { card: string; enabled?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
 
-type CardLike = { chaId?: string; type?: string; extentions?: Record<string, unknown>; globalLore?: { comment?: string }[] } | undefined
+type CardLike = { chaId?: string; type?: string; extentions?: Record<string, unknown>; globalLore?: { comment?: string; content?: string }[] } | undefined
 
 /** chaId prefix -> the asset manager's card id, for the cards that went live before their builds carried extensions.risu_story_card. */
 export const STORY_CARD_IDS: Record<string, string> = {
@@ -33,9 +44,23 @@ export function adminCardOf(card: CardLike): string {
     return short ? `cha-${short}` : ''
 }
 
-/** A card built before Admin went global still has the lore entry "Admin": then its own copy is used and nothing is injected. */
+/** A card built before Admin went global still has the lore entry "Admin" (it still gets the global Admin, without the same text twice). */
 export function cardHasOwnAdmin(card: CardLike): boolean {
     return (card?.globalLore ?? []).some((l) => /^\s*Admin(\s*\(\d+\))?\s*$/.test(l?.comment ?? ''))
+}
+
+const norm = (t: string) => (t ?? '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The payload without the assets the card already carries word for word: an asset is left out only when a lore entry of the card has
+ * the same title (comment) and the same text after trimming and collapsing whitespace. A different or older text is not a copy, so
+ * the global one still goes in. Returns the payload unchanged when nothing matches.
+ */
+export function dedupeOwn(p: AdminPayload, card: CardLike): AdminPayload {
+    const own = new Set((card?.globalLore ?? []).map((l) => `${norm(l?.comment ?? '')}\u0000${norm(l?.content ?? '')}`))
+    if (!own.size) return p
+    const assets = p.assets.filter((a) => !own.has(`${norm(a.title)}\u0000${norm(a.body)}`))
+    return assets.length === p.assets.length ? p : { ...p, assets }
 }
 
 /** ~3000 tokens. */
@@ -145,8 +170,30 @@ export async function fetchAdmin(card: string, deps: AdminDeps): Promise<AdminPa
         deps.log?.(`[Admin] ${card}: ${why}, using the copy from ${new Date(hit.at).toISOString()}`)
         return hit.payload
     }
-    deps.log?.(`[Admin] ${card}: ${why} and no copy, the request goes without Admin`)
+    deps.log?.(`[Admin] ${card}: ${why} and no copy`)
     return null
+}
+
+export type AdminSource = 'fresh' | 'stale cache' | 'built-in' | 'off'
+let lastSource: { card: string; source: AdminSource } | null = null
+/** The source Admin's text came from for the last request (debug; no content). */
+export function lastAdminSource(): { card: string; source: AdminSource } | null { return lastSource }
+
+/** The payload to use and where it came from; null only for a card switched off in global.json. Never throws. */
+export async function resolveAdmin(card: string, deps: AdminDeps): Promise<{ payload: AdminPayload | null; source: AdminSource }> {
+    const now = deps.now?.() ?? Date.now()
+    const before = cache.get(card)
+    let p: AdminPayload | null = null
+    try { p = await fetchAdmin(card, deps) } catch { p = null }
+    let source: AdminSource
+    if (p && p.enabled === false) source = 'off'
+    else if (p && p.assets?.length) {
+        const fromOldCopy = before && before.payload === p && now - before.at >= ADMIN_TTL_MS
+        source = p.stale || fromOldCopy ? 'stale cache' : 'fresh'
+    } else { p = FALLBACK_PAYLOAD(card); source = 'built-in' }
+    lastSource = { card, source }
+    deps.log?.(`[Admin] ${card}: source=${source}`)
+    return { payload: source === 'off' ? null : p, source }
 }
 
 /** The guide's name Admin's payload gave for this card (cached), for a card whose lore names no "Story guide: …"; '' otherwise. */
@@ -156,16 +203,21 @@ export function adminGuideFor(card: CardLike): string {
     return p && p.enabled !== false ? p.guide ?? '' : ''
 }
 
-/** The whole step for one request: a story character (not a group) whose card has no Admin of its own gets the global Admin. */
+/**
+ * The whole step for one request: every chat gets Admin (a group: pass the member that speaks; the group itself works too), a card
+ * with its own Admin lore gets the global one without the text it already carries, no copy anywhere = the built-in core. Only a
+ * card switched off in global.json gets nothing.
+ */
 export async function adminBeforeRequest<T extends { role: string; content: unknown }>(formated: T[], card: CardLike,
     messages: { role: string }[] | undefined, user: string, deps: AdminDeps,
     persona?: { id: string; chat?: { scriptstate?: Record<string, unknown> } }): Promise<T[]> {
-    if (!card || card.type === 'group' || cardHasOwnAdmin(card)) return formated
-    const id = adminCardOf(card)
-    let p: AdminPayload | null = null
-    try { p = await fetchAdmin(id, deps) } catch { p = null }
+    const id = adminCardOf(card) || 'cha-unknown'
+    const { payload } = await resolveAdmin(id, deps)
+    if (!payload) return formated
+    const p = dedupeOwn(payload, card)
+    if (!p.assets.length) return formated   // the card carries every part word for word already: Admin is in the prompt once
     let record = ''
-    if (p && p.enabled !== false && persona && !hasOwnEngine(card, persona.chat)) {
+    if (persona && card?.type !== 'group' && !hasOwnEngine(card, persona.chat)) {
         try {
             const view = await fetchRecord(persona.id, deps)
             if (view) record = personaRecordText(view, user)

@@ -1605,11 +1605,14 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(isNodeServer){
         findsBeforeRequest(currentChat)
     }
-    // Admin is global: no card carries it; its rules for this card's world come from the asset manager through the server and go
-    // in as one system message after the leading system block (adminGlobal.ts); no copy anywhere = no Admin, never a wait over 1.5 s
+    // Admin is global and forced: its rules for this card's world come from the asset manager through the server and go in as one
+    // system message after the leading system block (adminGlobal.ts); a group chat gets the speaking member's Admin; no copy anywhere =
+    // the built-in core; only a card off in global.json gets none; never a wait over 1.5 s
     if(isNodeServer){
         const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
-        formated = await brTimed('admin', () => adminBeforeRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }, { id: personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]), chat: currentChat }), 0)
+        const adminRoom = DBState.db.characters[sel.char]
+        const adminCard = adminRoom?.type === 'group' ? (currentChar?.type === 'group' ? adminRoom : currentChar) : (adminRoom ?? currentChar)
+        formated = await brTimed('admin', () => adminBeforeRequest(formated, adminCard, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }, { id: personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]), chat: currentChat }), 0)
     }
     // stats and skill mastery belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts; gives up after 1.5 s)
     if(isNodeServer){

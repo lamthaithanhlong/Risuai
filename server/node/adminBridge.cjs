@@ -7,7 +7,9 @@
 //     200 {card, enabled, assets, guide, text, sha}                    fresh from the asset manager
 //     200 {..., stale: true, cachedAt}                                 the asset manager failed, the last good copy
 //     400 {error}                                                      a bad card id
-//     502 {error}                                                      no answer and no copy: the request goes without Admin
+//     200 {..., enabled: false, stale: true, offList: true}            no answer and no copy, but global.json (read from disk,
+//                                                                      RISU_ADMIN_GLOBAL_JSON) lists the card as off: it stays off
+//     502 {error}                                                      no answer and no copy: the page uses its built-in Admin core
 // Logs say the card, the outcome and the text's sha, never the text.
 const fs = require('fs')
 const path = require('path')
@@ -16,6 +18,12 @@ const { atomicWriteFile } = require('./atomicWrite.cjs')
 const DEFAULT_TARGET = process.env.RISU_ASSETS_URL || 'http://127.0.0.1:6110'
 const TIMEOUT_MS = 1500
 const CARD_RE = /^[a-z0-9-]{0,40}$/
+const DEFAULT_GLOBAL_JSON = process.env.RISU_ADMIN_GLOBAL_JSON || path.join(require('os').homedir(), 'Downloads/apocalypse-tham-hoa-zombie/shared/_roles/global.json')
+
+/** The off list of shared/_roles/global.json read from disk ({"off": [...]}); empty when it is missing or unreadable. */
+function offList(file) {
+    try { return new Set(((JSON.parse(fs.readFileSync(file, 'utf8')) || {}).off || []).map(String)) } catch { return new Set() }
+}
 
 const valid = (d) => !!d && typeof d === 'object' && Array.isArray(d.assets) && typeof d.text === 'string'
 const fileOf = (cacheDir, card) => path.join(cacheDir, `${card || '_none'}.json`)
@@ -28,7 +36,7 @@ function readCopy(cacheDir, card) {
 }
 
 /** -> {status, body}. Never throws. */
-async function getAdmin(card, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, cacheDir, log = () => {}, now = () => new Date() } = {}) {
+async function getAdmin(card, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, cacheDir, log = () => {}, now = () => new Date(), globalJson = DEFAULT_GLOBAL_JSON } = {}) {
     card = String(card ?? '')
     if (!CARD_RE.test(card)) return { status: 400, body: { error: 'card: lowercase letters, digits and dashes, at most 40' } }
     const ctl = new AbortController()
@@ -59,14 +67,18 @@ async function getAdmin(card, { target = DEFAULT_TARGET, fetch = globalThis.fetc
         log(`[Admin] ${card || '-'}: ${why}, serving the copy from ${copy.cachedAt}`)
         return { status: 200, body: { ...copy.payload, stale: true, cachedAt: copy.cachedAt } }
     }
-    log(`[Admin] ${card || '-'}: ${why} and no copy, the reply goes without Admin`)
+    if (globalJson && offList(globalJson).has(card)) {
+        log(`[Admin] ${card || '-'}: ${why} and no copy, off in global.json`)
+        return { status: 200, body: { card, enabled: false, assets: [], guide: '', text: '', stale: true, offList: true } }
+    }
+    log(`[Admin] ${card || '-'}: ${why} and no copy, the page uses its built-in Admin`)
     return { status: 502, body: { error: `${why}; no copy of Admin` } }
 }
 
-function mountAdmin(app, { auth, limiter, cacheDir, target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} }) {
+function mountAdmin(app, { auth, limiter, cacheDir, target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {}, globalJson = DEFAULT_GLOBAL_JSON }) {
     app.get('/api/admin', limiter, async (req, res) => {
         if (!await auth(req, res)) return
-        const { status, body } = await getAdmin(req.query.card, { target, fetch, timeoutMs, cacheDir, log })
+        const { status, body } = await getAdmin(req.query.card, { target, fetch, timeoutMs, cacheDir, log, globalJson })
         res.status(status).set('Cache-Control', 'no-store').send(body)
     })
 }

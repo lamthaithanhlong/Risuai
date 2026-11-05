@@ -6,7 +6,8 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { ADMIN_BOOT, adminBeforeRequest, adminBlock, adminCardOf, adminGuideFor, adminRequest, cardHasOwnAdmin, fetchAdmin, fitBudget, resetAdminCache, type AdminPayload } from './adminGlobal'
+import { FALLBACK_BODY, FALLBACK_PAYLOAD } from './adminFallback'
+import { ADMIN_BOOT, adminBeforeRequest, dedupeOwn, lastAdminSource, adminBlock, adminCardOf, adminGuideFor, adminRequest, cardHasOwnAdmin, fetchAdmin, fitBudget, resetAdminCache, type AdminPayload } from './adminGlobal'
 import { guideNameOf } from './guideDirective'
 
 const require = createRequire(import.meta.url)
@@ -100,14 +101,17 @@ describe('fetchAdmin: cache, offline, never blocks', () => {
         expect((await fetchAdmin('zombie', d))?.sha).toBe('abcdef0123')
         expect(logs).toEqual([expect.stringMatching(/^\[Admin\] zombie: the server is not reachable, using the copy from /)])
     })
-    it('no cache and no store: the request goes WITHOUT Admin, exactly one log line, nothing else changes', async () => {
+    it('no cache and no store: the built-in Admin core goes in (forced), one reason line + one source line, no guide', async () => {
         const logs: string[] = []
         const d = deps(async () => jsonRes(502, { error: 'no copy' }), logs)
         const card = { chaId: 'aa7f021d-b690', globalLore: [] }
-        const before = prompt()
-        const out = await adminBeforeRequest(before, card, [{ role: 'char' }], 'Kenji', d)
-        expect(out).toEqual(prompt())
-        expect(logs).toEqual(['[Admin] mailman: the server answered 502 and no copy, the request goes without Admin'])
+        const out = await adminBeforeRequest(prompt(), card, [{ role: 'char' }], 'Kenji', d)
+        expect(out).toHaveLength(prompt().length + 1)
+        expect(out[2]).toMatchObject({ role: 'system', removable: false })
+        expect(String(out[2].content)).toContain('【ADMIN: …】')
+        expect(String(out[2].content)).not.toContain('{{user}}')
+        expect(logs).toEqual(['[Admin] mailman: the server answered 502 and no copy', '[Admin] mailman: source=built-in'])
+        expect(lastAdminSource()).toEqual({ card: 'mailman', source: 'built-in' })
         expect(guideNameOf(card)).toBe('')
     })
     it('a timeout never waits past timeoutMs', async () => {
@@ -117,7 +121,7 @@ describe('fetchAdmin: cache, offline, never blocks', () => {
         const d2 = { ...d, fetch: (u: string, o?: RequestInit) => new Promise<Response>((_, rej) => { void u; o?.signal?.addEventListener('abort', () => rej(new Error('aborted'))) }) }
         expect(await fetchAdmin('lotm', d2)).toBeNull()
         expect(Date.now() - start).toBeLessThan(1000)
-        expect(logs).toEqual(['[Admin] lotm: no answer in time and no copy, the request goes without Admin'])
+        expect(logs).toEqual(['[Admin] lotm: no answer in time and no copy'])
     })
 })
 
@@ -132,16 +136,97 @@ describe('adminBeforeRequest + the guide name', () => {
         expect(guideNameOf(card)).toBe('Admin')
         expect(adminGuideFor(card)).toBe('Admin')
     })
-    it('a card that still carries its Admin entry: nothing injected, its own guide name', async () => {
-        const card = { chaId: 'fc27f53b-773d', globalLore: [{ comment: 'Admin' }, { comment: 'Story guide: Admin' }] }
-        expect(await adminBeforeRequest(prompt(), card, [], 'Kenji', d(payload()))).toEqual(prompt())
+    it('a card that still carries an (older) Admin entry: the global Admin still goes in, its own guide name', async () => {
+        const card = { chaId: 'fc27f53b-773d', globalLore: [{ comment: 'Admin', content: 'old Admin text' }, { comment: 'Story guide: Admin', content: 'old guide' }] }
+        const out = await adminBeforeRequest(prompt(), card, [], 'Kenji', d(payload()))
+        expect(out).toHaveLength(prompt().length + 1)
+        expect(String(out[2].content)).toContain('Admin is the interface. Kenji sees lines.')
+        expect(String(out[2].content)).toContain('[Story guide: Admin]')
         expect(guideNameOf(card)).toBe('Admin')
     })
-    it('a group chat is left alone; a switched-off card gets nothing and no guide', async () => {
-        expect(await adminBeforeRequest(prompt(), { type: 'group', chaId: 'x' }, [], 'K', d(payload()))).toEqual(prompt())
+    it('a card carrying the SAME text: that part is not sent twice (whitespace does not matter); all parts the same = no second copy', async () => {
+        const p = payload()
+        const sameAdmin = { comment: ' Admin ', content: '  ' + ADMIN_BODY.replace(/\n\n/g, '\n \n') + '\n' }
+        const card = { chaId: 'fc27f53b-773d', globalLore: [sameAdmin] }
+        const out = await adminBeforeRequest(prompt(), card, [], 'Kenji', d(p))
+        const c = String(out[2].content)
+        expect(c).not.toContain('Admin is the interface')
+        expect(c).toContain('[Story guide: Admin]')
+        expect(dedupeOwn(p, card).assets.map((a) => a.id)).toEqual(['_roles/guide/characters/admin'])
+        // same text under another title is not a copy of that part
+        expect(dedupeOwn(p, { globalLore: [{ comment: 'Rules', content: ADMIN_BODY }] }).assets).toHaveLength(2)
+        const both = { chaId: 'fc27f53b-773d', globalLore: [sameAdmin, { comment: 'Story guide: Admin', content: '## Guide: hints\nOnly when asked.' }] }
+        expect(await adminBeforeRequest(prompt(), both, [], 'Kenji', d(p))).toEqual(prompt())
+    })
+    it('a group chat gets Admin: the speaking member\'s card id, or the group\'s own id; boot on the first reply', async () => {
+        const calls: string[] = []
+        const df = (u: string) => { calls.push(u); return Promise.resolve(jsonRes(200, payload(decodeURIComponent(u.split('card=')[1])))) }
+        const member = { chaId: 'aa7f021d-b690', globalLore: [] }
+        const out = await adminBeforeRequest(prompt(), member, [], 'K', { fetch: df, auth: () => 't', log: () => {} })
+        expect(String(out[2].content)).toContain('Admin is the interface')
+        const grp = await adminBeforeRequest(prompt(), { type: 'group', chaId: '9F8E7D6C-0000' }, [], 'K', { fetch: df, auth: () => 't', log: () => {} })
+        expect(grp).toHaveLength(prompt().length + 1)
+        expect(String(grp[2].content)).toContain('Admin boot')
+        expect(calls).toEqual(['/api/admin?card=mailman', '/api/admin?card=cha-9f8e7d6c'])
+        // a group whose answer is missing gets the built-in core as well
+        const none = await adminBeforeRequest(prompt(), { type: 'group', chaId: '11112222-x' }, [], 'K', { fetch: async () => jsonRes(502, {}), auth: () => 't', log: () => {} })
+        expect(String(none[2].content)).toContain('【ADMIN: …】')
+    })
+    it('a switched-off card gets nothing and no guide', async () => {
         const card = { chaId: '22a987d8-4a13', globalLore: [] }
         expect(await adminBeforeRequest(prompt(), card, [{ role: 'char' }], 'K', d(payload('lotm', { enabled: false, assets: [], text: '', guide: '' })))).toEqual(prompt())
         expect(guideNameOf(card)).toBe('')
+        expect(lastAdminSource()).toEqual({ card: 'lotm', source: 'off' })
+    })
+    it('an off card stays off offline: no built-in core from the memory copy, nor from the server\'s off answer', async () => {
+        let t = 0, up = true
+        const logs: string[] = []
+        const off = payload('cha-0f0f0f0f', { enabled: false, assets: [], text: '', guide: '' })
+        const card = { chaId: '0f0f0f0f-aaaa', globalLore: [] }
+        const dep = { fetch: async () => { if (!up) throw new Error('down'); return jsonRes(200, off) }, auth: () => 't', now: () => t, log: (m: string) => logs.push(m) }
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', dep)).toEqual(prompt())
+        up = false; t = 120_000
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', dep)).toEqual(prompt())
+        resetAdminCache()
+        const srvOff = { fetch: async () => jsonRes(200, { ...off, stale: true, offList: true }), auth: () => 't', log: () => {} }
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', srvOff)).toEqual(prompt())
+        expect(logs.filter((l) => l.includes('source='))).toEqual(['[Admin] cha-0f0f0f0f: source=off', '[Admin] cha-0f0f0f0f: source=off'])
+    })
+    it('one source line per request, no content: fresh, then stale cache when the server is down', async () => {
+        let t = 0, up = true
+        const logs: string[] = []
+        const dep = { fetch: async () => { if (!up) throw new Error('down'); return jsonRes(200, payload()) }, auth: () => 't', now: () => t, log: (m: string) => logs.push(m) }
+        const card = { chaId: 'fc27f53b-773d' }
+        await adminBeforeRequest(prompt(), card, [], 'K', dep)
+        up = false; t = 120_000
+        const out = await adminBeforeRequest(prompt(), card, [], 'K', dep)
+        expect(String(out[2].content)).toContain('Admin is the interface')
+        const src = logs.filter((l) => l.includes('source='))
+        expect(src).toEqual(['[Admin] zombie: source=fresh', '[Admin] zombie: source=stale cache'])
+        for (const l of src) expect(l).not.toContain('interface')
+        const srvStale = { fetch: async () => jsonRes(200, { ...payload(), stale: true }), auth: () => 't', log: () => {} }
+        resetAdminCache()
+        await adminBeforeRequest(prompt(), card, [], 'K', srvStale)
+        expect(lastAdminSource()).toEqual({ card: 'zombie', source: 'stale cache' })
+    })
+})
+
+describe('built-in fallback (adminFallback.ts)', () => {
+    it('<= 1200 chars and keeps the key rules', () => {
+        expect(FALLBACK_BODY.length).toBeLessThanOrEqual(1200)
+        expect(FALLBACK_BODY).toMatch(/server-side manager/)
+        for (const k of ['stats', 'skills', 'items', 'quests']) expect(FALLBACK_BODY).toContain(k)
+        expect(FALLBACK_BODY).toContain('【ADMIN: …】')
+        expect(FALLBACK_BODY).toMatch(/never a person/)
+        expect(FALLBACK_BODY).toMatch(/only what the records already show/)
+        expect(FALLBACK_BODY).toMatch(/never invents a number/)
+        expect(FALLBACK_BODY).toMatch(/^## Connecting and standing duties$/m)
+        expect(FALLBACK_BODY).toMatch(/first reply/)
+    })
+    it('the built-in text survives any budget: intro and Connecting are never cut', () => {
+        const r = fitBudget(FALLBACK_PAYLOAD('x').assets, 10)
+        expect(r.cut).toEqual([])
+        expect(r.text).toContain(FALLBACK_BODY.trim())
     })
 })
 
@@ -163,11 +248,21 @@ describe('adminBridge.cjs (server)', () => {
         const dir = tmp()
         const logs: string[] = []
         let called = 0
-        const r = await getAdmin('mailman', { fetch: async () => { called++; return jsonRes(500, {}) }, cacheDir: dir, log: (m: string) => logs.push(m) })
+        const r = await getAdmin('mailman', { fetch: async () => { called++; return jsonRes(500, {}) }, cacheDir: dir, log: (m: string) => logs.push(m), globalJson: path.join(dir, 'none.json') })
         expect(r.status).toBe(502)
-        expect(logs).toEqual(['[Admin] mailman: the asset manager answered 500 and no copy, the reply goes without Admin'])
+        expect(logs).toEqual(['[Admin] mailman: the asset manager answered 500 and no copy, the page uses its built-in Admin'])
         expect((await getAdmin('../etc', { fetch: async () => { called++; return jsonRes(200, payload()) }, cacheDir: dir })).status).toBe(400)
         expect(called).toBe(1)
+        fs.rmSync(dir, { recursive: true, force: true })
+    })
+    it('no answer and no copy for a card off in global.json: 200 enabled false (stays off), not 502', async () => {
+        const dir = tmp()
+        const gj = path.join(dir, 'global.json')
+        fs.writeFileSync(gj, JSON.stringify({ off: ['cha-0f0f0f0f'] }))
+        const logs: string[] = []
+        const r = await getAdmin('cha-0f0f0f0f', { fetch: async () => { throw new Error('down') }, cacheDir: dir, log: (m: string) => logs.push(m), globalJson: gj })
+        expect(r).toMatchObject({ status: 200, body: { enabled: false, assets: [], offList: true } })
+        expect((await getAdmin('zombie', { fetch: async () => { throw new Error('down') }, cacheDir: dir, globalJson: gj })).status).toBe(502)
         fs.rmSync(dir, { recursive: true, force: true })
     })
 })
