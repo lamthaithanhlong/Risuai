@@ -1,3 +1,4 @@
+import { loadSidebarOpen, saveSidebarOpen } from './sidebarPref'
 import { writable } from "svelte/store";
 import type { character, Database, groupChat } from "./storage/database.svelte";
 import { type simpleCharacterArgument } from "./parser/parser.svelte";
@@ -23,7 +24,8 @@ export const SizeStore = writable({
 export const loadedStore = writable(false)
 export const DynamicGUI = writable(false)
 export const sideBarClosing = writable(false)
-export const sideBarStore = writable(window.innerWidth > 1024)
+export const sideBarStore = writable(loadSidebarOpen() ?? window.innerWidth > 1024)
+sideBarStore.subscribe((open) => saveSidebarOpen(open))
 export const selectedCharID = writable(-1)
 export const CurrentTriggerIdStore = writable<string | null>(null)
 export const CharEmotion = writable({} as {[key:string]: [string, string, number][]})
