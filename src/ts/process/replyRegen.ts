@@ -1,6 +1,8 @@
 // Regenerate-once for a story reply (2026-11-03): prompt rules did not stop setup exposition, a repeated sentence or an unchanged System
 // line, so the app checks the finished reply (replyCheck.mjs, the same checker the acceptance scorer uses) and asks once more.
 import { replyHits, type ReplyHit } from './replyCheck.mjs'
+// @ts-ignore plain JS module (npcCheck.d.mts)
+import { cutViolations, HARD_RULES, type NpcHit } from './npcCheck.mjs'
 
 /** Only the first attempt is ever redone: never a loop. */
 export function shouldRegenerate(hits: ReplyHit[], attempt: number): boolean {
@@ -21,6 +23,10 @@ export function regenerationNote(hits: ReplyHit[]): string {
     return `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. Rewrite the reply without them.]`
 }
 
+function npcCut(text: string, hits: NpcHit[]): { text: string; cut: string[] } {
+    return hits.length ? cutViolations(text, hits) : { text, cut: [] }
+}
+
 /** Rules that mean "said it again": only these earn a second redo (setup/system/lang/tag keep exactly one). */
 export const REPEAT_RULES: ReplyHit['rule'][] = ['repeat', 'dialogue', 'scene']
 export const MAX_REDOS = 2
@@ -38,15 +44,48 @@ export function strongRegenerationNote(hits: ReplyHit[]): string {
  * later). `redo` returning null (request failed) keeps the best draft so far, or the first one when the first redo failed.
  * `redos` and `afterFirst` are additions to the record; `fired`/`left`/`redoFailed` keep their meaning (`left` = after the last redo kept).
  */
-export type RegenRecord = { fired: string[]; left: string[]; redoFailed: boolean; redos?: number; afterFirst?: string[] }
+export type RegenRecord = { fired: string[]; left: string[]; redoFailed: boolean; redos?: number; afterFirst?: string[]; npcFired?: string[]; npcLeft?: string[]; npcCut?: string[] }
 
-export async function settleReply(first: string, previous: string[], redo: (note: string) => Promise<string | null>, warn: (m: string) => void = () => {}, record: (r: RegenRecord) => void = () => {}): Promise<string> {
+/**
+ * The NPC check (npcCheck.mjs, 2026-11-05): `hits` reads one draft against the NPC cards (the fold of $led_npc before this reply),
+ * `note` turns hits into the hidden rewrite line (rule, quote, reason, card); `judge` is the optional model judge (Settings
+ * npcJudge, off by default): fail-open, its hits only added, never awaited longer than `judgeMs`.
+ * Its hard hits join the first check: they earn the ONE redo every non-repeat rule gets, never a second; when the kept draft still
+ * has an NPC errand, an unprompted motive or more than two sentences, those sentences are cut once (cutViolations), no third call.
+ */
+export type NpcCheckOpts = { hits: (text: string) => NpcHit[]; note: (hits: NpcHit[]) => string; judge?: (text: string) => Promise<NpcHit[]>; judgeMs?: number }
+
+async function npcHitsOf(text: string, npc?: NpcCheckOpts): Promise<NpcHit[]> {
+    if (!npc) return []
+    const hard = npc.hits(text).filter((h) => !h.soft && HARD_RULES.includes(h.rule))
+    if (!npc.judge) return hard
+    const judged = await Promise.race([npc.judge(text).catch(() => [] as NpcHit[]), new Promise<NpcHit[]>((r) => setTimeout(() => r([]), npc.judgeMs ?? 1500))])
+    return [...hard, ...judged.filter((j) => !hard.some((h) => h.rule === j.rule && h.text === j.text))]
+}
+
+export async function settleReply(first: string, previous: string[], redo: (note: string) => Promise<string | null>, warn: (m: string) => void = () => {}, record: (r: RegenRecord) => void = () => {}, npc?: NpcCheckOpts): Promise<string> {
     const hits = replyHits(first, previous)
-    if (!shouldRegenerate(hits, 0)) return first
+    const npcFirst = await npcHitsOf(first, npc)
+    if (!shouldRegenerate(hits, 0) && !npcFirst.length) return first
     const fired = hits.map((h) => h.rule)
-    const second = await redo(regenerationNote(hits))
-    if (second === null || !second.trim()) { warn('reply check: redo failed, first draft kept'); record({ fired, left: fired, redoFailed: true, redos: 1 }); return first }
+    const npcExtra = npcFirst.length ? { npcFired: npcFirst.map((h) => h.rule) } : {}
+    const second = await redo(regenerationNote(hits) + (npcFirst.length && npc ? npc.note(npcFirst) : ''))
+    if (second === null || !second.trim()) {
+        warn('reply check: redo failed, first draft kept')
+        const cut = npcCut(first, npcFirst)
+        record({ fired, left: fired, redoFailed: true, redos: 1, ...npcExtra, ...(npcFirst.length ? { npcLeft: npcFirst.map((h) => h.rule), npcCut: cut.cut } : {}) })
+        return cut.text
+    }
     const left = replyHits(second, previous)
+    if (npcFirst.length && npc) {
+        // NPC rules get their one redo only; what the redo still has is cut once (errand, motive, a third sentence), never redone again
+        const npcLeft = await npcHitsOf(second, npc)
+        const cut = npcCut(second, npcLeft)
+        record({ fired, left: left.map((h) => h.rule), redoFailed: false, redos: 1, ...npcExtra, npcLeft: npcLeft.map((h) => h.rule), npcCut: cut.cut })
+        if (npcLeft.length) warn(`reply check: NPC lines still have ${npcLeft.map((h) => `${h.rule} "${h.text.slice(0, 60)}"`).join(', ')}${cut.cut.length ? `; cut ${cut.cut.join(', ')}` : ''}`)
+        if (left.length) warn(`reply check: second draft still has ${left.map((h) => `${h.rule} "${h.text.slice(0, 60)}"`).join(', ')}`)
+        return cut.text
+    }
     if (left.length && left.every((h) => REPEAT_RULES.includes(h.rule))) {
         const third = await redo(strongRegenerationNote(left))
         const usable = third !== null && third.trim() !== ''

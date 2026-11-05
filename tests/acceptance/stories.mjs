@@ -139,7 +139,7 @@ STORIES.zombie = {
     nameMatch: 'Thảm Họa Zombie',
     src: path.join(home, 'Downloads/apocalypse-tham-hoa-zombie/fate-simulator'),
     // the Hacker System speaks in bracket lines (【QUÉT: …】, 【HỆ THỐNG: …】); a function's line outside brackets is a slip
-    voice: { name: 'Hacker System', bracketLines: true, unbracketed: /^\s*(?:\*|_)?\s*(?:QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|HỆ THỐNG)\s*:/m },
+    voice: { name: 'Hacker System', bracketLines: true, unbracketed: /^\s*(?:\*|_)?\s*(?:QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|HỆ THỐNG|ADMIN)\s*:/m },
     stepAnswers: ['Lấy gợi ý đầu tiên.', 'Để thế giới chọn.', 'Lấy gợi ý thứ hai.'],
     lookAnswer: 'Giữ ngoại hình của persona.',
     turns: [

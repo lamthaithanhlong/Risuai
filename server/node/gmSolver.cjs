@@ -509,7 +509,8 @@ const INTENT = {
     own: 'goes about their own business (no offer)',
     watch: 'watches and keeps their distance',
     help: 'is willing to help, without being asked to bargain',
-    ask_help: 'needs help for their own trouble',
+    // 2026-11-05 (owner, Zombie 704 balcony): "needs help" became an errand and a bargain in the NPC's mouth; they ask plainly
+    ask_help: 'asks plainly for what their NPC card lists as needs (no condition, no errand, no place to go)',
 }
 function intentText(i, ctx = {}) {
     if (i.what === 'tell') {
@@ -518,8 +519,10 @@ function intentText(i, ctx = {}) {
         const hearsay = as === 'rumor' || f?.status === 'rumor'
         return `may tell the player what they know: ${f ? q(f.text) : 'something they know'}${hearsay ? ' (only as hearsay, a rumour they heard: never as a fact)' : ''}`
     }
-    if (i.what === 'offer') return `offers help with the character's ${NEED_WORD[i.need] ?? i.need} (stated already)`
-    if (i.what === 'lure') return `baits the character with their ${NEED_WORD[i.need] ?? i.need} (stated already), for their own ends`
+    if (i.what === 'offer') return `offers help with the character's ${NEED_WORD[i.need] ?? i.need} (stated already), with no condition attached`
+    // a lure is a hostile person's move only (owner 2026-11-05: an ordinary NPC who "baits" became a quest giver with a bargain);
+    // worded as an offer that draws the character in, never a condition. For anyone else the lure intent reads as asking plainly.
+    if (i.what === 'lure') return ctx.hostile ? `offers something for the character's ${NEED_WORD[i.need] ?? i.need} (stated already) to draw the character in, with no condition attached` : INTENT.ask_help
     return INTENT[i.what] ?? i.what
 }
 
@@ -543,9 +546,10 @@ function lineOf(dec, ctx) {
     else if (t.name === 'order') ev = `the side's first order or test comes due now.`
     else if (t.name === 'land') ev = `a due consequence lands now: ${q(head(due(ctx.vars.gm_consequences_due)[Number(t.args[0].name.replace(/\D/g, '')) - 1] ?? ''))}; no other new trouble.`
     else if (t.name === 'new') ev = `at the next natural pause something new surfaces: ${kindText ?? t.args[0].name}${stance ? `, ${stance}` : ''} (the card's die), a hook in the prose, this reply's one new trouble.`
-    const people = dec.intents.map((i) => `${i.who === 'newcomer' ? 'the newcomer' : shown(i.who)} ${intentText(i, { told: ctx.told, knowsHere: dec.knowsHere })}`)
+    const hostileOf = (who) => (who === 'newcomer' ? ctx.stance === 'hostile' : dec.hostile.some((h) => (h?.name ?? h) === who))
+    const people = dec.intents.map((i) => `${i.who === 'newcomer' ? 'the newcomer' : shown(i.who)} ${intentText(i, { told: ctx.told, knowsHere: dec.knowsHere, hostile: hostileOf(i.who) })}`)
     const need = needs.length
-        ? `The character's stated needs: ${needs.map((n) => NEED_WORD[n] ?? n).join(', ')}; an offer, bait or bargain may only target these.`
+        ? `The character's stated needs: ${needs.map((n) => NEED_WORD[n] ?? n).join(', ')}; an NPC may ask for or offer a thing, but no NPC sets a condition, an errand or a place to go: tasks come only from Admin's script.`
         : 'The character has stated no need (no thirst, hunger, wound, being lost): nobody offers water, food, care or a way, and nobody bargains with one.'
     const first = ev ? `This turn (decided, follow it): ${ev}` : ''
     const already = (ctx.established ?? []).length ? `Already true in this story, so it never newly happens again (no second blackout, no "goes dark" beat, no new sign of it): ${ctx.established.map((k) => WORLD_STATE_TEXT[k]).join('; ')}.` : ''

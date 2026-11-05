@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { replyHits } from './replyCheck.mjs'
-import { settleReply, strongRegenerationNote } from './replyRegen'
+import { settleReply, strongRegenerationNote, type NpcCheckOpts } from './replyRegen'
+// @ts-ignore plain JS module
+import { npcHits, npcRewriteNote } from './npcCheck.mjs'
 
 // The real gate miss (Evelyn run 1, turn 15, label g1.16): her new line repeats the previous reply's speech at 60% token overlap.
 const PREV = 'Evelyn dừng ở chân cầu thang. “Tớ không biết cửa trên đó có mở được không.”'
@@ -59,5 +61,38 @@ describe('second redo for a repeat-type hit', () => {
         const n = strongRegenerationNote([{ rule: 'repeat', text: 'một' }, { rule: 'dialogue', text: 'hai' }])
         expect(n).toContain('"một" / "hai"')
         expect(strongRegenerationNote([])).toBe('')
+    })
+})
+
+describe('the NPC check in settleReply (2026-11-05, owner\'s 704 balcony)', () => {
+    const HOOK = 'Cô nhìn anh. “Cánh tay tôi bị cứa. Có một phòng khám gần Kisaragi Cũ… nếu anh tìm được thuốc ở đó, tôi sẽ tin lời anh hơn.”'
+    const GOOD = 'Cô nhìn anh. “Cánh tay tôi bị cứa. Tôi cần thuốc hạ sốt, hoặc thứ gì đó để rửa vết thương.”'
+    const npc = (judge?: NpcCheckOpts['judge'], judgeMs?: number): NpcCheckOpts => ({ hits: (t) => npcHits(t, { player: 'Kenji Park' }), note: (h) => npcRewriteNote(h), judge, judgeMs })
+    it('no npc option: unchanged (an NPC hook alone triggers nothing)', async () => {
+        let calls = 0
+        expect(await settleReply(HOOK, [], async () => { calls++; return GOOD })).toBe(HOOK)
+        expect(calls).toBe(0)
+    })
+    it('an NPC hit gets ONE redo whose note names the rule and the quote; a clean redo is kept', async () => {
+        const notes: string[] = []
+        const rec: unknown[] = []
+        expect(await settleReply(HOOK, [], async (n) => { notes.push(n); return GOOD }, () => {}, (r) => rec.push(r), npc())).toBe(GOOD)
+        expect(notes).toHaveLength(1)
+        expect(notes[0]).toContain('(npc-quest-hook)')
+        expect(rec).toEqual([{ fired: [], left: [], redoFailed: false, redos: 1, npcFired: ['npc-quest-hook'], npcLeft: [], npcCut: [] }])
+    })
+    it('the redo still has the hook: the hook sentence is cut once, never a second redo', async () => {
+        let calls = 0
+        const out = await settleReply(HOOK, [], async () => { calls++; return HOOK }, () => {}, () => {}, npc())
+        expect(calls).toBe(1)
+        expect(out).toBe('Cô nhìn anh. “Cánh tay tôi bị cứa.”')
+    })
+    it('a clean draft makes no call; the judge (on) is fail-open and bounded', async () => {
+        let calls = 0
+        expect(await settleReply(GOOD, [], async () => { calls++; return GOOD }, () => {}, () => {}, npc(() => new Promise(() => {}), 20))).toBe(GOOD)
+        expect(calls).toBe(0)
+        const judged = await settleReply(GOOD, [], async () => { calls++; return GOOD }, () => {}, () => {}, npc(async () => [{ rule: 'npc-grammar', text: 'x', npc: '?' }]))
+        expect(calls).toBe(1)
+        expect(judged).toBe(GOOD)
     })
 })

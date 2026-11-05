@@ -3,7 +3,7 @@
 // it lists findings, and a finding whose quote is not copied verbatim from the reply is not trusted (moved to `rejected`).
 import { askClaude } from './judge.mjs'
 
-/** the char replies of a risuChat export, with [💡…] and [[…]] blocks and 【HỆ THỐNG…】 lines stripped */
+/** the char replies of a risuChat export, with [💡…] and [[…]] blocks and 【HỆ THỐNG…】 / 【ADMIN…】 lines stripped */
 export function chatReplies(exportJson) {
     const msgs = exportJson?.data?.message ?? exportJson?.message ?? []
     return msgs
@@ -11,7 +11,7 @@ export function chatReplies(exportJson) {
         .map((m) => String(m.data ?? '')
             .replace(/\[\[[\s\S]*?\]\]/g, '')
             .replace(/\[💡[\s\S]*?\]/g, '')
-            .replace(/^.*【HỆ THỐNG[^\n]*$/gm, '')
+            .replace(/^.*【(?:HỆ THỐNG|ADMIN)[^\n]*$/gm, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim())
 }

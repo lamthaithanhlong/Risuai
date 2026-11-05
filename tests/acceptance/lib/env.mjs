@@ -14,6 +14,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { createRequire } from 'module'
+import { cloneCopy } from './diskCopy.mjs'
 
 const require = createRequire(import.meta.url)
 export const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..')
@@ -102,19 +103,51 @@ async function backupSqlite(src, dst) {
     try { await db.backup(dst) } finally { db.close() }
 }
 
+/** quick_check of a snapshot that is a clone of a live file: 'ok' or the first complaint. Opens only the clone, never the live file. */
+function quickCheckClone(dst) {
+    const Database = require(path.join(REPO, 'node_modules/better-sqlite3'))
+    const db = new Database(dst, { fileMustExist: true })
+    try {
+        db.pragma('wal_checkpoint(TRUNCATE)')   // fold the cloned WAL into the cloned main file (copy-on-write: only the changed pages cost disk)
+        return String(db.pragma('quick_check', { simple: true }))
+    } finally { db.close() }
+}
+
+/**
+ * The SQLite snapshot of one live file. A copy-on-write clone of the file plus its -wal/-shm costs no disk (the online backup API wrote 1.4 GB
+ * per launch: 2026-11-04 gates stopped at 3 GB free), but the three files are cloned one after the other while the live server may write, so
+ * the clone is accepted only when it opens and quick_check says ok; otherwise it is thrown away and the backup API makes a consistent copy.
+ * Returns 'clone' or 'backup'. `check` and `backup` are injectable for tests.
+ */
+export async function snapshotSqlite(src, dst, { log = console.log, check = quickCheckClone, backup = backupSqlite } = {}) {
+    try {
+        cloneFileStrict(src, dst)
+        for (const ext of ['-wal', '-shm']) if (fs.existsSync(src + ext)) cloneFileStrict(src + ext, dst + ext)
+        const verdict = check(dst)
+        if (verdict === 'ok') return 'clone'
+        throw new Error(`quick_check said ${verdict}`)
+    } catch (e) {
+        log(`[env] clone of ${path.basename(src)} not usable (${String(e.message).split('\n')[0].slice(0, 100)}): online backup instead, this one costs real disk`)
+        for (const ext of ['', '-wal', '-shm']) fs.rmSync(dst + ext, { force: true })
+        await backup(src, dst)
+        return 'backup'
+    }
+}
+function cloneFileStrict(src, dst) { sh('cp', ['-c', src, dst]) }
+
 /**
  * Snapshot the live save once per run into RUN/_base: save/ as an APFS clone (copy-on-write, instant), the SQLite files (the store
- * with every stored file as a BLOB, the queue, sync and story bookkeeping) through the online backup API, which is consistent while
- * the live server writes and folds its WAL in. The live files are only opened read-only.
+ * with every stored file as a BLOB, the queue, sync and story bookkeeping) as verified clones (snapshotSqlite), or through the online backup
+ * API when a clone does not pass quick_check. The live files are never written.
  */
 export async function snapshotLive(runDir, { liveCwd = REPO, backend = 'sqlite', log = console.log } = {}) {
     const base = path.join(runDir, '_base')
     fs.mkdirSync(base, { recursive: true })
-    try { sh('cp', ['-cR', path.join(liveCwd, 'save'), path.join(base, 'save')]) } catch { sh('cp', ['-R', path.join(liveCwd, 'save'), path.join(base, 'save')]) }
+    cloneCopy(path.join(liveCwd, 'save'), path.join(base, 'save'), { log })
     const t0 = Date.now()
     for (const name of ['save.store.sqlite', 'save.queue.sqlite', 'save.sync.sqlite', 'save.story.sqlite']) {
         const f = path.join(liveCwd, name)
-        if (fs.existsSync(f)) await backupSqlite(f, path.join(base, name))
+        if (fs.existsSync(f)) log(`[env] ${name}: ${await snapshotSqlite(f, path.join(base, name), { log })}`)
     }
     if (backend === 'sqlite' && !fs.existsSync(path.join(base, 'save.store.sqlite'))) throw new Error('the live server uses the sqlite store but there is no save.store.sqlite to copy')
     log(`[env] live save snapshot in ${Math.round((Date.now() - t0) / 1000)} s (${backend} store) -> ${base}`)
@@ -126,7 +159,7 @@ export function copySave(runDir, base, story, { log = console.log } = {}) {
     const dir = path.join(runDir, story)
     fs.mkdirSync(dir, { recursive: true })
     for (const name of fs.readdirSync(base)) {
-        try { sh('cp', ['-cR', path.join(base, name), path.join(dir, name)]) } catch { sh('cp', ['-R', path.join(base, name), path.join(dir, name)]) }
+        cloneCopy(path.join(base, name), path.join(dir, name), { log })
     }
     fs.rmSync(path.join(dir, 'save.server.pid'), { force: true })
     fs.symlinkSync(path.join(runDir, 'dist'), path.join(dir, 'dist'))
