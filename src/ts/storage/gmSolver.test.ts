@@ -60,6 +60,17 @@ describe.skipIf(!HAS_CLINGO)('the turn (clingo)', () => {
         const met = await G.decide({ ...lure, messages: [{ role: 'user', text: 'Kenji khát khô cổ.' }, { role: 'char', text: 'Marek đưa bình, Kenji uống một hơi dài.' }, { role: 'user', text: 'Kenji cảm ơn.' }] }, { budgetMs: 3000 })
         expect(met.needs).toEqual([])
     })
+    test('owner 2026-11-05: the note never words a bait or a bargain; an ordinary NPC\'s lure reads as asking plainly, a hostile one\'s as an offer with no condition', async () => {
+        const wounded = { ...lure, vars: { ...vars, st_condition: 'Cẳng tay rách, chảy máu' } }
+        const plain = await G.decide(wounded, { budgetMs: 3000 })
+        expect(intents(plain)).toContain('newcomer:lure(wound)')
+        expect(plain.line).not.toMatch(/bait|bargain/)
+        expect(plain.line).toContain('no NPC sets a condition, an errand or a place to go: tasks come only from Admin\'s script')
+        expect(plain.line).toContain('the newcomer asks plainly for what their NPC card lists as needs')
+        const hostile = await G.decide({ ...wounded, stance: 'hostile' }, { budgetMs: 3000 })
+        if (intents(hostile).includes('newcomer:lure(wound)')) expect(hostile.line).toContain('to draw the character in, with no condition attached')
+        expect(hostile.line).not.toMatch(/bait|bargain/)
+    })
     test('nobody acts where they are not or after death; an absent enemy only comes closer off-stage, on a planned road', async () => {
         const r = await G.decide({ ...lure, dice: { pace: 'escalate', surface: 'the antagonist (người cầm gậy)' }, kinds: [], stance: '' }, { budgetMs: 3000 })
         expect(r.dead).toContain('aldric')
