@@ -1955,7 +1955,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             return false
         }
 
-        // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【HỆ THỐNG】 line gets ONE
+        // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【ADMIN】 / 【HỆ THỐNG】 line gets ONE
         // more draft (replyCheck.mjs / replyRegen.ts). The second draft replaces the first and is kept even if it still has hits.
         const firstChunkKey0 = Object.keys(lastResponseChunk)[0]
         if(checkReply && receivedStreamingResult && firstChunkKey0 !== undefined){

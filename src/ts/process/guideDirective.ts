@@ -149,7 +149,7 @@ export function guideDirective(i: GuideInput): string {
     if (i.recentLines.length) out.push(`Do not restate: ${i.recentLines.map((l) => `"${l}"`).join(' ')}`)
     if (i.told?.length) out.push(`đã kể rồi, không nhắc lại: ${i.told.join('; ')}`)
     if (i.avoid?.length) out.push(`do not reuse these sentences verbatim: ${i.avoid.map((l) => `"${l}"`).join(' ')}`)
-    out.push('a 【HỆ THỐNG…】 line may repeat only when a value changed.')
+    out.push('a 【ADMIN…】 or 【HỆ THỐNG…】 line may repeat only when a value changed.')
     return out.join(' ')
 }
 
