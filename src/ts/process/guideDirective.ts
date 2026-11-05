@@ -3,16 +3,20 @@
 // narrator only gets one short directive line. Nothing of this is shown to the player.
 
 import { sentencesOf } from './replyCheck.mjs'
+import { adminGuideFor } from './adminGlobal'
 
 type Msg = { role: string; data: string; chatId?: string }
 
-/** The guide's name from the card's lore: the built lore entry is titled "Story guide: <Name>". */
+/**
+ * The guide's name: from the card's lore (a built entry titled "Story guide: <Name>"), else from the global Admin payload this
+ * card got (adminGlobal.ts: since Admin went global, no card carries the guide entry; the payload names the guide).
+ */
 export function guideNameOf(card: { globalLore?: { comment?: string }[] } | undefined): string {
     for (const l of card?.globalLore ?? []) {
         const m = /^\s*Story guide\s*:\s*(.+?)\s*$/i.exec(l?.comment ?? '')
         if (m) return m[1]
     }
-    return ''
+    return adminGuideFor(card)
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -149,7 +153,7 @@ export function guideDirective(i: GuideInput): string {
     if (i.recentLines.length) out.push(`Do not restate: ${i.recentLines.map((l) => `"${l}"`).join(' ')}`)
     if (i.told?.length) out.push(`đã kể rồi, không nhắc lại: ${i.told.join('; ')}`)
     if (i.avoid?.length) out.push(`do not reuse these sentences verbatim: ${i.avoid.map((l) => `"${l}"`).join(' ')}`)
-    out.push('a 【HỆ THỐNG…】 line may repeat only when a value changed.')
+    out.push('a 【ADMIN…】 or 【HỆ THỐNG…】 line may repeat only when a value changed.')
     return out.join(' ')
 }
 

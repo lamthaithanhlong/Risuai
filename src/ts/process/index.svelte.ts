@@ -19,6 +19,7 @@ import { agencyRequest } from "./playerAgency";
 import { settleReply } from "./replyRegen";
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
+import { adminBeforeRequest } from "./adminGlobal";
 import { statsAfterReplyPage, statsBeforeRequestPage } from "./statsGlue";
 import { creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
@@ -1602,6 +1603,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(isNodeServer){
         findsBeforeRequest(currentChat)
     }
+    // Admin is global: no card carries it; its rules for this card's world come from the asset manager through the server and go
+    // in as one system message after the leading system block (adminGlobal.ts); no copy anywhere = no Admin, never a wait over 1.5 s
+    if(isNodeServer){
+        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+        formated = await brTimed('admin', () => adminBeforeRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }), 0)
+    }
     // stats and skill mastery belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts; gives up after 1.5 s)
     if(isNodeServer){
         await statsBeforeRequestPage(currentChar, currentChat)
@@ -1955,7 +1962,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             return false
         }
 
-        // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【HỆ THỐNG】 line gets ONE
+        // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【ADMIN】 / 【HỆ THỐNG】 line gets ONE
         // more draft (replyCheck.mjs / replyRegen.ts). The second draft replaces the first and is kept even if it still has hits.
         const firstChunkKey0 = Object.keys(lastResponseChunk)[0]
         if(checkReply && receivedStreamingResult && firstChunkKey0 !== undefined){

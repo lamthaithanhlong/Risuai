@@ -4,7 +4,8 @@
 /** Setup exposition the narrator must not say to the player (the owner's Evelyn / Zombie chats). */
 export const SETUP = [/chỉ mình (anh|cậu|Kenji) (mới )?(thấy|nghe)/i, /(là )?người bạn thân đã (mất|qua đời) của/i, /chỉ (anh|cậu|Kenji) (mới )?(thấy|nghe) (và nghe )?được (cô|Evelyn)/i]
 
-const SYSTEM_START = /^[\s*_>]*【\s*HỆ THỐNG/u
+// The global interface line: 【HỆ THỐNG: …】, or 【ADMIN: …】 since the owner renamed the interface card Admin. Both are the same line.
+const SYSTEM_START = /^[\s*_>]*【\s*(?:HỆ THỐNG|ADMIN)/u
 
 /** Case, punctuation and whitespace folded away: two sentences that read the same compare equal. */
 export const normalize = (s) => String(s ?? '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
@@ -33,7 +34,7 @@ export function verbatimRepeats(text, previousReplies, n = 3) {
     return out
 }
 
-/** 【HỆ THỐNG…】 lines identical (after trim and whitespace folding) to one in a recent previous reply: it may repeat only when a value changed. */
+/** 【HỆ THỐNG…】 / 【ADMIN…】 lines identical (after trim and whitespace folding) to one in a recent previous reply: it may repeat only when a value changed. */
 export function systemLineRepeats(text, previousReplies, n = 3) {
     const prev = new Set()
     for (const p of (previousReplies ?? []).slice(-n)) for (const l of systemLines(p)) prev.add(l.replace(/\s+/g, ' '))
@@ -71,7 +72,7 @@ export function consecutiveSpeechRepeat(text, previous) {
 }
 
 /** The scene half of that rule, the one the scorer reports for narration: any sentence of `text` (>= 6 tokens) at >= 90% of a sentence of the
- *  previous reply. 【HỆ THỐNG…】 lines are left out (the 'system' rule has its own meaning for them: they may repeat when a value changed).
+ *  previous reply. 【HỆ THỐNG…】 / 【ADMIN…】 lines are left out (the 'system' rule has its own meaning for them: they may repeat when a value changed).
  *  A short sentence whose words all occur in a longer previous one counts, as it does for the scorer. Shown form or null. */
 export function consecutiveSceneRepeat(text, previous) {
     const prevScene = scoredSentences(previous).filter((x) => !SYSTEM_START.test(x))
@@ -138,7 +139,7 @@ const VIET_ONLY = /[ăơưđảạẩậẳặẻẹểệỉịỏọổộở�
 const VIET_PLAIN = new Set('và là các mà cô tôi anh em cho con nhưng này đó khi rồi một những không được trong của với như thì nó ta họ ai gì sao đây kia nên bị tay chân mặt mắt cửa nhà tiếng lại ra vào lên xuống tới qua'.split(' '))
 const FOREIGN_FN = new Set('le la les des du un une et est en que qui dans pour pas sur au aux se sa son ses il elle ils elles nous vous je tu ce cette ne mais ou avec sans plus comme the and of to is in that it for with was he she they his her you on as at be this had not but by from are or an which one all would there their what so if we i el los las del y es por con para pero su sus lo al más'.split(' '))
 
-/** The narration of a reply: [[...]] and [💡...] tags, 【HỆ THỐNG】 lines and quoted speech taken out. */
+/** The narration of a reply: [[...]] and [💡...] tags, 【HỆ THỐNG】 / 【ADMIN】 lines and quoted speech taken out. */
 export function narrationOf(text) {
     return String(text ?? '').normalize('NFC').replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\[💡[^\]]*\]/g, ' ')
         .split('\n').filter((l) => !SYSTEM_START.test(l)).join('\n').replace(/[“"][^”"]*[”"]/g, ' ')

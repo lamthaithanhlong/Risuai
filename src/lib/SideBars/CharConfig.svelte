@@ -15,7 +15,9 @@
     import Help from "../Others/Help.svelte";
     import { exportChar } from "src/ts/characterCards";
     import { getElevenTTSVoices, getWebSpeechTTSVoices, getVOICEVOXVoices, oaiVoices, getNovelAIVoices } from "src/ts/process/tts";
-    import { getFileSrc } from "src/ts/globalApi.svelte";
+    import { getFileSrc, forageStorage } from "src/ts/globalApi.svelte";
+    import AssetPicker from "./AssetPicker.svelte";
+    import { entryFromLibrary, type LibItem } from "src/ts/process/assetLibrary";
     import { addGroupChar, rmCharFromGroup } from "src/ts/process/group";
     import TextInput from "../UI/GUI/TextInput.svelte";
     import NumberInput from "../UI/GUI/NumberInput.svelte";
@@ -37,6 +39,7 @@
 
     let iconRemoveMode = $state(false)
     let viewSubMenu = $state(0)
+    let assetPickerOpen = $state(false)
     let emos:[string, string][] = $state([])
     let iconButtonSize = window.innerWidth > 360 ? 24 as const : 20 as const
     let tokens = $state({
@@ -586,6 +589,11 @@
                 <OptionInput value="">{language.static}</OptionInput>
                 <OptionInput value="dynamic">{language.dynamic}</OptionInput>
             </SelectInput>
+            {/if}
+            {#if DBState.db.characters[$selectedCharID].type === 'character'}
+            <button class="mt-2 w-full rounded-md border border-selected p-2 text-sm hover:text-green-500" data-risu-asset-picker-open onclick={() => { assetPickerOpen = true }}>
+                {DBState.db.language === 'vi' ? 'Từ Asset Manager' : 'From Asset Manager'}
+            </button>
             {/if}
             <div class="w-full max-w-full border border-selected rounded-md p-2 mt-2">
                 <table class="contain w-full max-w-full tabler mt-2">
@@ -1285,6 +1293,27 @@
     {/if}
 {/if}
 
+
+{#if assetPickerOpen}
+    <AssetPicker
+        onclose={() => { assetPickerOpen = false }}
+        onpick={async (items: LibItem[]) => {
+            const ch = DBState.db.characters[$selectedCharID]
+            if(ch.type !== 'character'){ return }
+            ch.additionalAssets = ch.additionalAssets ?? []
+            for(const it of items){
+                try{
+                    const entry = await entryFromLibrary(it, { getItem: (p) => forageStorage.getItem(p) as Promise<Uint8Array | null>, saveAsset })
+                    ch.additionalAssets.push(entry)
+                    ch.additionalAssets = ch.additionalAssets
+                }catch(e){
+                    console.error('[asset picker]', e)
+                }
+            }
+            assetPickerOpen = false
+        }}
+    />
+{/if}
 
 <style>
 

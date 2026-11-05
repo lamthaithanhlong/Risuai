@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import viReplies from './replyLang.fixture.json'
-import { consecutiveRepeat, consecutiveSceneRepeat, malformedTags, tagWellFormed, dialogueRepeats, languageDrift, languageHits, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
+import { consecutiveRepeat, consecutiveSceneRepeat, malformedTags, tagWellFormed, dialogueRepeats, languageDrift, languageHits, narrationOf, replyHits, setupHits, systemLineRepeats, verbatimRepeats } from './replyCheck.mjs'
 import { narrationProblems } from '../../../tests/acceptance/lib/narration.mjs'
 import { regenerationNote, settleReply, shouldRegenerate } from './replyRegen'
 import { alreadyTold, guideDirective, guideNote, verbatimAvoid } from './guideDirective'
@@ -251,5 +251,32 @@ describe('malformed growth tags (rule "tag")', () => {
         const rec: { fired: string[] }[] = []
         await settleReply(dirty, [], async () => `${body}\n[[ACT|leo-cầu-thang|the_luc|normal|]]`, () => {}, (r) => rec.push(r))
         expect(rec[0].fired).toEqual(['tag'])
+    })
+})
+
+describe('the global interface line is 【ADMIN: …】 as well as 【HỆ THỐNG: …】 (owner renamed the interface card to Admin)', () => {
+    const admin = '【ADMIN: Tình trạng ổn định | Điểm sinh tồn 12/20 | Thức ăn 3 | Nước 2 | Ngày 1】'
+    const prev = `Tiếng cào ngoài hành lang ngừng hẳn. Hana ngồi sát cửa.\n${admin}`
+    it('an unchanged ADMIN line repeated is the system rule, never a repeated sentence or scene', () => {
+        const cur = `Kenji nắm chặt cán dao và đếm nhịp thở của mình.\n${admin}`
+        expect(verbatimRepeats(cur, [prev])).toEqual([])
+        expect(consecutiveSceneRepeat(cur, prev)).toBeNull()
+        expect(systemLineRepeats(cur, [prev])).toEqual([admin])
+        expect(replyHits(cur, [prev]).map((h) => h.rule)).toEqual(['system'])
+        expect(replyHits(admin, ['【ADMIN:   Tình trạng ổn định | Điểm sinh tồn 12/20 | Thức ăn 3 | Nước 2 | Ngày 1】']).map((h) => h.rule)).toEqual(['system'])
+    })
+    it('a changed ADMIN line is fine', () => {
+        const cur = 'Kenji nắm chặt cán dao và đếm nhịp thở của mình.\n【ADMIN: Tình trạng ổn định | Điểm sinh tồn 12/20 | Thức ăn 3 | Nước 2 | Ngày 2】'
+        expect(replyHits(cur, [prev])).toEqual([])
+    })
+    it('narration extraction drops the ADMIN line, as it drops a HỆ THỐNG one', () => {
+        expect(narrationOf(`Kenji thở ra.\n${admin}`)).not.toContain('ADMIN')
+        expect(narrationOf('Kenji thở ra.\n【HỆ THỐNG: Ngày 1】')).not.toContain('HỆ THỐNG')
+        expect(narrationOf('Kenji thở ra.\n  【 ADMIN: Ngày 1】')).not.toContain('ADMIN')
+    })
+    it('the guide directive names both forms', () => {
+        const d = guideDirective({ present: true, name: 'Admin', asked: false, turnsWithoutProgress: 0, recentLines: [] } as any)
+        expect(d).toContain('【ADMIN…】')
+        expect(d).toContain('【HỆ THỐNG…】')
     })
 })
