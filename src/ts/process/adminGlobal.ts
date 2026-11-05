@@ -12,6 +12,11 @@
 // THE ONLY WAY TO SWITCH ADMIN OFF is the per-card list in the asset manager's shared/_roles/global.json {"off": [<card id>]}: the
 // payload then says enabled:false and nothing is injected, not even the built-in core. An off answer is remembered (memory here,
 // the server's disk copy, and the server reads global.json itself when the asset manager is down), so an off card stays off offline.
+// FAIL-CLOSED: every card id ever answered enabled:false is kept in localStorage (OFF_SEEN_KEY, a JSON list). When the off state of
+// such a card cannot be determined (no answer, no memory copy, no server copy, and the server could not read global.json), it gets
+// NO Admin and NO built-in core: one line "[Admin] <card>: source=off (unknown, fail-closed)". A card never seen off still gets the
+// built-in core. Only a fresh (not stale) answer with enabled true takes a card out of the list (the owner switched it back on).
+// Storage blocked, missing or holding anything but a list of strings counts as an empty list, i.e. the card behaves as never seen.
 // Nothing here ever blocks a reply for more than 1.5 s.
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-global-design.md
 
@@ -133,12 +138,40 @@ const cache = new Map<string, Cached>()
 
 export function resetAdminCache(): void { cache.clear() }
 
+export type OffSeenStorage = { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void }
+
 export type AdminDeps = {
     fetch: (input: string, init?: RequestInit) => Promise<Response>
     auth: () => Promise<string> | string
     now?: () => number
     timeoutMs?: number
     log?: (m: string) => void
+    /** where the once-off card ids live; default window.localStorage (none outside a browser) */
+    storage?: OffSeenStorage
+}
+
+export const OFF_SEEN_KEY = 'risu-admin-off-seen'
+
+function storageOf(deps: AdminDeps): OffSeenStorage | undefined {
+    if (deps.storage) return deps.storage
+    try { return typeof window !== 'undefined' ? window.localStorage : undefined } catch { return undefined }
+}
+
+/** The card ids ever seen off; an empty set when storage is blocked or holds anything but a list of strings. Never throws. */
+export function readOffSeen(deps: AdminDeps): Set<string> {
+    try {
+        const v = JSON.parse(storageOf(deps)?.getItem(OFF_SEEN_KEY) ?? '[]')
+        return Array.isArray(v) ? new Set(v.filter((x): x is string => typeof x === 'string')) : new Set()
+    } catch { return new Set() }
+}
+
+function writeOffSeen(deps: AdminDeps, card: string, off: boolean): void {
+    try {
+        const set = readOffSeen(deps)
+        if (set.has(card) === off) return
+        if (off) set.add(card); else set.delete(card)
+        storageOf(deps)?.setItem(OFF_SEEN_KEY, JSON.stringify([...set]))
+    } catch { /* blocked storage: the card simply behaves as never seen */ }
 }
 
 const valid = (d: unknown): d is AdminPayload =>
@@ -146,20 +179,28 @@ const valid = (d: unknown): d is AdminPayload =>
 
 /** The payload for this card: fresh within the TTL from memory, else asked (1.5 s at most), else the last good one, else null. */
 export async function fetchAdmin(card: string, deps: AdminDeps): Promise<AdminPayload | null> {
+    return (await fetchAdminFull(card, deps)).payload
+}
+
+/** fetchAdmin, plus offKnown: true only when the server said so (it read global.json and the card is not on it). */
+async function fetchAdminFull(card: string, deps: AdminDeps): Promise<{ payload: AdminPayload | null; offKnown: boolean }> {
     const now = deps.now?.() ?? Date.now()
     const hit = cache.get(card)
-    if (hit && now - hit.at < ADMIN_TTL_MS) return hit.payload
+    if (hit && now - hit.at < ADMIN_TTL_MS) return { payload: hit.payload, offKnown: true }
+    let offKnown = false
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), deps.timeoutMs ?? ADMIN_TIMEOUT_MS)
     let why = ''
     try {
         const res = await deps.fetch(`/api/admin?card=${encodeURIComponent(card)}`, { headers: { 'risu-auth': await deps.auth() }, signal: ctl.signal })
-        const data = res.ok ? await res.json() : null
-        if (valid(data)) {
+        let data: unknown = null
+        try { data = await res.json() } catch { data = null }
+        if (res.ok && valid(data)) {
             cache.set(card, { at: now, payload: data })
             if (data.stale) deps.log?.(`[Admin] ${card}: the asset manager is down, using the server's copy of ${data.cachedAt ?? '?'}`)
-            return data
+            return { payload: data, offKnown: true }
         }
+        offKnown = !!data && typeof data === 'object' && (data as { offKnown?: unknown }).offKnown === true
         why = `the server answered ${res.status}`
     } catch {
         why = ctl.signal.aborted ? 'no answer in time' : 'the server is not reachable'
@@ -168,10 +209,10 @@ export async function fetchAdmin(card: string, deps: AdminDeps): Promise<AdminPa
     }
     if (hit) {
         deps.log?.(`[Admin] ${card}: ${why}, using the copy from ${new Date(hit.at).toISOString()}`)
-        return hit.payload
+        return { payload: hit.payload, offKnown: true }
     }
     deps.log?.(`[Admin] ${card}: ${why} and no copy`)
-    return null
+    return { payload: null, offKnown }
 }
 
 export type AdminSource = 'fresh' | 'stale cache' | 'built-in' | 'off'
@@ -179,20 +220,29 @@ let lastSource: { card: string; source: AdminSource } | null = null
 /** The source Admin's text came from for the last request (debug; no content). */
 export function lastAdminSource(): { card: string; source: AdminSource } | null { return lastSource }
 
-/** The payload to use and where it came from; null only for a card switched off in global.json. Never throws. */
+/**
+ * The payload to use and where it came from; null for a card switched off in global.json, and for a card once seen off whose off
+ * state cannot be determined now (fail-closed). Never throws.
+ */
 export async function resolveAdmin(card: string, deps: AdminDeps): Promise<{ payload: AdminPayload | null; source: AdminSource }> {
     const now = deps.now?.() ?? Date.now()
     const before = cache.get(card)
     let p: AdminPayload | null = null
-    try { p = await fetchAdmin(card, deps) } catch { p = null }
+    let offKnown = false
+    try { ({ payload: p, offKnown } = await fetchAdminFull(card, deps)) } catch { p = null }
     let source: AdminSource
-    if (p && p.enabled === false) source = 'off'
+    let note = ''
+    if (p && p.enabled === false) { source = 'off'; writeOffSeen(deps, card, true) }
     else if (p && p.assets?.length) {
         const fromOldCopy = before && before.payload === p && now - before.at >= ADMIN_TTL_MS
         source = p.stale || fromOldCopy ? 'stale cache' : 'fresh'
-    } else { p = FALLBACK_PAYLOAD(card); source = 'built-in' }
+    } else if (!p && !offKnown && readOffSeen(deps).has(card)) { source = 'off'; note = ' (unknown, fail-closed)' }
+    else { source = 'built-in' }
+    // only a fresh answer of the asset manager that says on takes the card out of the once-off list
+    if (p && p.enabled !== false && !p.stale && !(before && before.payload === p)) writeOffSeen(deps, card, false)
+    if (source === 'built-in') p = FALLBACK_PAYLOAD(card)
     lastSource = { card, source }
-    deps.log?.(`[Admin] ${card}: source=${source}`)
+    deps.log?.(`[Admin] ${card}: source=${source}${note}`)
     return { payload: source === 'off' ? null : p, source }
 }
 

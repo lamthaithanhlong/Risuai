@@ -354,3 +354,112 @@ describe('persona record', () => {
         expect(b.text).toContain('Admin is the interface')
     })
 })
+
+// ---- fail-closed for a card once seen off (owner 2026-11-05: "tắt" must survive restart, a store that is down and an empty cache) ----
+// The client keeps every card id it has ever seen as enabled:false in localStorage (OFF_SEEN_KEY). When the off state of such a card
+// cannot be determined (asset manager down, no memory copy, no server copy, global.json unreadable), it gets NO Admin and NO built-in
+// core. A card never seen off keeps the built-in core. Storage blocked or holding garbage = never seen (the old behaviour).
+import { OFF_SEEN_KEY } from './adminGlobal'
+
+describe('off seen once: fail-closed', () => {
+    const CARD = 'cha-testoff1'
+    const card = { chaId: 'testoff1-aaaa', globalLore: [] }
+    const memStore = () => { const m = new Map<string, string>(); return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) } } }
+    const offPayload = () => payload(CARD, { enabled: false, assets: [], text: '', guide: '' })
+    // the real server bridge with the asset manager down, an empty cache dir and a global.json that cannot be read
+    const downChain = (gjContent: string | null) => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-off-'))
+        const gj = path.join(dir, 'global.json')
+        if (gjContent !== null) fs.writeFileSync(gj, gjContent)
+        return async (url: string) => {
+            const id = decodeURIComponent(url.split('card=')[1])
+            const r = await getAdmin(id, { fetch: async () => { throw new Error('ECONNREFUSED') }, cacheDir: path.join(dir, 'cache'), globalJson: gj, log: () => {} })
+            return jsonRes(r.status, r.body)
+        }
+    }
+    const depsWith = (fetch: (u: string) => Promise<Response>, storage: unknown, logs: string[]) => ({ fetch, auth: () => 't', log: (m: string) => logs.push(m), storage }) as never
+
+    it('a card seen off once, then restart + asset manager down + no cache + global.json read error: NO Admin, NO built-in core', async () => {
+        const st = memStore()
+        const logs: string[] = []
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => jsonRes(200, offPayload()), st, logs))).toEqual(prompt())
+        expect(JSON.parse(st.m.get(OFF_SEEN_KEY) ?? '[]')).toContain(CARD)
+        resetAdminCache()   // a restart: memory is gone, localStorage stays
+        for (const gj of ['{not json', null]) {   // garbage global.json, and no global.json at all
+            logs.length = 0
+            expect(await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain(gj), st, logs))).toEqual(prompt())
+            expect(logs.filter((l) => l.includes('source='))).toEqual([`[Admin] ${CARD}: source=off (unknown, fail-closed)`])
+            expect(lastAdminSource()).toEqual({ card: CARD, source: 'off' })
+        }
+        // the Risu server itself not reachable: the same
+        logs.length = 0
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => { throw new Error('down') }, st, logs))).toEqual(prompt())
+        expect(logs.filter((l) => l.includes('source='))).toEqual([`[Admin] ${CARD}: source=off (unknown, fail-closed)`])
+    })
+    it('the same case for a card never seen off: the built-in core goes in', async () => {
+        const st = memStore()
+        const logs: string[] = []
+        const out = await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain('{not json'), st, logs))
+        expect(out).toHaveLength(prompt().length + 1)
+        expect(String(out[2].content)).toContain('【ADMIN: …】')
+        expect(logs.filter((l) => l.includes('source='))).toEqual([`[Admin] ${CARD}: source=built-in`])
+    })
+    it('global.json read fine and the card is not listed: the off state is known (on), the built-in core goes in', async () => {
+        const st = memStore()
+        st.setItem(OFF_SEEN_KEY, JSON.stringify([CARD]))
+        const logs: string[] = []
+        const out = await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain(JSON.stringify({ off: ['cha-other0001'] })), st, logs))
+        expect(out).toHaveLength(prompt().length + 1)
+        expect(logs.filter((l) => l.includes('source='))).toEqual([`[Admin] ${CARD}: source=built-in`])
+    })
+    it('re-enabled: a fresh enabled:true answer removes the card from the set; later down = the built-in core again', async () => {
+        const st = memStore()
+        st.setItem(OFF_SEEN_KEY, JSON.stringify(['cha-keepoff02', CARD]))
+        const logs: string[] = []
+        const out = await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => jsonRes(200, payload(CARD)), st, logs))
+        expect(String(out[2].content)).toContain('Admin is the interface')
+        expect(JSON.parse(st.m.get(OFF_SEEN_KEY) ?? '')).toEqual(['cha-keepoff02'])
+        resetAdminCache()
+        const out2 = await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain('{not json'), st, logs))
+        expect(out2).toHaveLength(prompt().length + 1)
+        expect(lastAdminSource()).toEqual({ card: CARD, source: 'built-in' })
+    })
+    it('a stale (server copy) enabled:true answer is used but does not clear the set', async () => {
+        const st = memStore()
+        st.setItem(OFF_SEEN_KEY, JSON.stringify([CARD]))
+        const logs: string[] = []
+        await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => jsonRes(200, { ...payload(CARD), stale: true }), st, logs))
+        expect(lastAdminSource()).toEqual({ card: CARD, source: 'stale cache' })
+        expect(JSON.parse(st.m.get(OFF_SEEN_KEY) ?? '')).toEqual([CARD])
+    })
+    it('storage blocked or holding garbage: behaves as never seen (built-in core), never throws; an off answer is still off', async () => {
+        const blocked = { getItem: () => { throw new Error('SecurityError') }, setItem: () => { throw new Error('QuotaExceeded') } }
+        const logs: string[] = []
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => jsonRes(200, offPayload()), blocked, logs))).toEqual(prompt())
+        resetAdminCache()
+        expect(await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain('{not json'), blocked, logs))).toHaveLength(prompt().length + 1)
+        for (const junk of ['{not json', '"cha-testoff1"', '{"0":"cha-testoff1"}', 'null', '[1,{"a":2}]']) {
+            const st = memStore()
+            st.setItem(OFF_SEEN_KEY, junk)
+            resetAdminCache()
+            const out = await adminBeforeRequest(prompt(), card, [], 'K', depsWith(downChain('{not json'), st, []))
+            expect(out).toHaveLength(prompt().length + 1)
+        }
+        // garbage is replaced by a clean list on the next off answer
+        const st = memStore()
+        st.setItem(OFF_SEEN_KEY, '{not json')
+        resetAdminCache()
+        await adminBeforeRequest(prompt(), card, [], 'K', depsWith(async () => jsonRes(200, offPayload()), st, []))
+        expect(JSON.parse(st.m.get(OFF_SEEN_KEY) ?? '')).toEqual([CARD])
+    })
+    it('server: global.json unreadable says offKnown false, read fine and not listed says offKnown true', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-off-'))
+        const down = async () => { throw new Error('down') }
+        const bad = path.join(dir, 'bad.json'); fs.writeFileSync(bad, '{not json')
+        const good = path.join(dir, 'good.json'); fs.writeFileSync(good, JSON.stringify({ off: [] }))
+        expect(await getAdmin(CARD, { fetch: down, cacheDir: dir, globalJson: bad })).toMatchObject({ status: 502, body: { offKnown: false } })
+        expect(await getAdmin(CARD, { fetch: down, cacheDir: dir, globalJson: path.join(dir, 'none.json') })).toMatchObject({ status: 502, body: { offKnown: false } })
+        expect(await getAdmin(CARD, { fetch: down, cacheDir: dir, globalJson: good })).toMatchObject({ status: 502, body: { offKnown: true } })
+        fs.rmSync(dir, { recursive: true, force: true })
+    })
+})
