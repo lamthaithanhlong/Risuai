@@ -61,6 +61,7 @@ import { questChecks } from './lib/quests.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 import { launchProblem } from './lib/launchGuard.mjs'
+import { cloneCopy, diskProblem, freeBytes, gb } from './lib/diskCopy.mjs'
 
 const argv = process.argv.slice(2)
 const flag = (n) => argv.includes(n)
@@ -134,7 +135,7 @@ function cloneBase(fromRun, runDir) {
     const from = path.join(fromRun, '_base')
     const b = path.join(runDir, '_base')
     fs.mkdirSync(b, { recursive: true })
-    for (const n of fs.readdirSync(from)) execFileSync('cp', ['-cR', path.join(from, n), path.join(b, n)])
+    for (const n of fs.readdirSync(from)) cloneCopy(path.join(from, n), path.join(b, n))
     console.log(`[env] snapshot cloned from ${from}`)
     return b
 }
@@ -491,7 +492,11 @@ async function main() {
     console.log(`[env] live server ${live ? `pid ${live.pid} in ${live.cwd}` : 'not running'}; copy uses the ${backend} store`)
     const build = flag('--no-build') ? "the repo's dist" : 'built from the working tree at ' + new Date().toISOString().slice(0, 16)
     buildClient(runDir, { noBuild: flag('--no-build'), dist: opt('--dist') })
+    const freeBefore = freeBytes(runDir)
     const base = opt('--base-from') ? cloneBase(opt('--base-from'), runDir) : await snapshotLive(runDir, { liveCwd: live?.cwd || undefined, backend })
+    const freeAfter = freeBytes(runDir)
+    console.log(`[env] disk free before the save copy ${gb(freeBefore)} GB, after ${gb(freeAfter)} GB (the copy cost ${gb(freeBefore - freeAfter)} GB)`)
+    { const bad = diskProblem({ free: freeAfter }); if (bad) { console.error(bad); process.exit(1) } }
     const ms = modelSettings(path.join(base, 'save'), backend)
     // the owner may have another slot active on the live server; the run can pin the narrator to a named one (copy only)
     const slot = opt('--narrator-slot') ? ms.slots.find((x) => x.name === opt('--narrator-slot')) : null
