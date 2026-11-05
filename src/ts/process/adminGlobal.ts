@@ -266,23 +266,26 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
     if (!payload) return formated
     const p = dedupeOwn(payload, card)
     if (!p.assets.length) return formated   // the card carries every part word for word already: Admin is in the prompt once
+    // the persona record is mandatory in every story Admin goes into (owner 2026-11-05: "mọi truyện admin phải dùng stat của persona,
+    // bắt buộc"); a story with its own engine gets it in words (its gated lines never carry stat numbers), one with none gets the values
     let record = ''
-    if (persona && card?.type !== 'group' && !hasOwnEngine(card, persona.chat)) {
+    if (card?.type === 'group') deps.log?.(`[Admin] ${id}: group chat with no speaking member known, the request goes without the persona record`)
+    else if (persona) {
         try {
             const view = await fetchRecord(persona.id, deps)
-            if (view) record = personaRecordText(view, user)
+            if (view) record = personaRecordText(view, user, hasOwnEngine(card, persona.chat) ? 'words' : 'numbers')
         } catch { record = '' }
     }
     const opening = !(messages ?? []).some((m) => m.role === 'char')
     return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log, record }))
 }
 
-// ---- the persona record (stats, slots, skills, items) from the global store, for a story with no engine of its own -------------
+// ---- the persona record (stats, slots, skills, items) from the global store, in every story (words where the story has an engine) --
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-persona-record.md
 
 export const RECORD_TITLE = '[Hồ sơ persona (kho chung, chỉ đọc)]'
 
-/** A card with its own growth panel (a registered story card, the [[ACT| rule, or `$stats` in the chat): the panel wins, no record. */
+/** A card with its own growth panel (a registered story card, the [[ACT| rule, or `$stats` in the chat): its record is in words. */
 export function hasOwnEngine(card: CardLike, chat?: { scriptstate?: Record<string, unknown> }): boolean {
     const ext = card?.extentions?.risu_story_card
     if (typeof ext === 'string' && ID_RE.test(ext)) return true
@@ -293,10 +296,38 @@ export function hasOwnEngine(card: CardLike, chat?: { scriptstate?: Record<strin
     return st !== undefined && st !== null && String(st).trim() !== '' && String(st) !== 'null'
 }
 
-/** The block Admin reads: the persona page's numbers (2 decimals), or one plain line when the store has nothing. */
-export function personaRecordText(view: View, name: string): string {
+export type RecordStyle = 'words' | 'numbers'
+
+export const RECORD_WORDS_HEADER = 'Sự thật chung của persona qua mọi truyện; bảng chỉ số của truyện (nếu có) vẫn là chỗ hiện số. Không bao giờ viết con số, phần trăm hay số thập phân của chỉ số hay kỹ năng: chỉ nói bằng lời (cao, thấp, cấp kỹ năng).'
+
+const VI_COUNT = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười']
+
+/** One stat in words, from its place among the persona's stats: never a number. */
+function statWord(v: number, all: number[]): string {
+    const max = Math.max(...all), min = Math.min(...all)
+    if (max === min) return 'ngang các chỉ số khác'
+    if (v === max) return 'cao nhất, khá hơn các chỉ số khác'
+    if (v === min) return 'thấp nhất'
+    return 'ở giữa'
+}
+
+/**
+ * The block Admin reads. style 'numbers' (a card with no engine): the persona page's numbers (2 decimals). style 'words' (a registered
+ * story card or a card with its own engine, whose Admin lines must never carry stat numbers): stats as ranks in words, the open slots
+ * and skills with their tier, no percent and no decimals, and the rule "never write numbers". One plain line when the store has nothing.
+ */
+export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers'): string {
     const who = name || 'persona'
     if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
+    if (style === 'words') {
+        const vals = view.stats.map((s) => Number(s.value) || 0)
+        const slots = view.slots.total
+        return [RECORD_TITLE, RECORD_WORDS_HEADER, `Persona: ${who}`,
+            `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}`).join('; ')}`,
+            `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
+            `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
+            'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.'].join('\n')
+    }
     const lines = [RECORD_TITLE, `Persona: ${who}`,
         `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct}`).join(', ')}`,
         `Ô kỹ năng mở: ${view.slots.total}`,

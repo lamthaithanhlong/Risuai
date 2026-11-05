@@ -299,7 +299,7 @@ describe('persona record', () => {
         expect(t).toContain('Kho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của Kenji Park.')
         expect(t).not.toMatch(/%/)
     })
-    it('a card with its own engine gets no record: story cards, the [[ACT| rule, $stats in the chat', () => {
+    it('a card with its own engine (its record goes in words): story cards, the [[ACT| rule, $stats in the chat', () => {
         expect(hasOwnEngine({ chaId: 'fc27f53b-773d' })).toBe(true)
         expect(hasOwnEngine({ chaId: 'x', extentions: { risu_story_card: 'lotm' } })).toBe(true)
         expect(hasOwnEngine({ chaId: 'x', desc: 'tag [[ACT|...]]' } as never)).toBe(true)
@@ -314,11 +314,77 @@ describe('persona record', () => {
         expect(String(sys[0].content)).toContain('Thể lực 10.15%')
         expect(String(sys[0].content)).toContain('Nghe rung vách')
     })
-    it('the Zombie path is unchanged: no record, not even a store call', async () => {
+    it('a registered story card (Zombie) gets the record too, in words: no percent, no decimals, "never write numbers"', async () => {
         const calls: string[] = []
         const out = await adminBeforeRequest(prompt(), { chaId: 'fc27f53b-773d' }, [], 'Kenji Park', { fetch: storeFetch(KENJI, { calls }) as never, auth: () => 't' }, { id: 'kenji', chat: { scriptstate: {} } })
+        const sys = out.filter((m) => String(m.content).includes('[Admin (global'))
+        expect(sys).toHaveLength(1)
+        const text = String(sys[0].content)
+        expect(text).toContain(RECORD_TITLE)
+        const rec = text.slice(text.indexOf(RECORD_TITLE))
+        expect(rec).toContain('Không bao giờ viết con số')
+        expect(rec).toContain('Thể lực: cao nhất')
+        expect(rec).toContain('Ý chí: thấp nhất')
+        expect(rec).toContain('Ô kỹ năng mở: một')
+        expect(rec).toContain('Nghe rung vách (Sơ nhập)')
+        expect(rec).not.toMatch(/\d\s*%/)
+        expect(rec).not.toMatch(/\d[.,]\d/)
+        expect(calls.some((u) => u.includes('/api/assets/stats'))).toBe(true)
+    })
+    it('every engine kind gets words; a card with no engine keeps the exact values', async () => {
+        const kinds: [unknown, unknown][] = [
+            [{ chaId: 'x', extentions: { risu_story_card: 'lotm' } }, { scriptstate: {} }],
+            [{ chaId: '0b0b0b0b-1', desc: 'tag [[ACT|...]]' }, { scriptstate: {} }],
+            [plain, { scriptstate: { $stats: '{"suc_manh":1000}' } }],
+        ]
+        for (const [card, chat] of kinds) {
+            resetAdminCache(); resetRecordCache()
+            const out = await adminBeforeRequest(prompt(), card as never, [], 'Kenji Park', { fetch: storeFetch(KENJI) as never, auth: () => 't' }, { id: 'kenji', chat: chat as never })
+            const text = String(out.find((m) => String(m.content).includes(RECORD_TITLE))?.content ?? '')
+            const rec = text.slice(text.indexOf(RECORD_TITLE))
+            expect(rec).toContain('Không bao giờ viết con số')
+            expect(rec).not.toMatch(/\d\s*%|\d[.,]\d/)
+        }
+        const n = personaRecordText(buildView(KENJI, undefined, { 'wall-vibration-listening': { vi: 'Nghe rung vách' } }), 'K', 'numbers')
+        expect(n).toContain('Thể lực 10.15%')
+        expect(n).not.toContain('Không bao giờ viết con số')
+    })
+    it('all stats equal: said in words, no number', () => {
+        const t = personaRecordText(buildView({ stats: { the_luc: 1000, nhanh_nhen: 1000, suc_manh: 1000, cam_nhan: 1000, tinh_than: 1000 }, skills: {} }, undefined), 'K', 'words')
+        expect(t).toContain('Thể lực: ngang các chỉ số khác')
+        expect(t).not.toMatch(/\d/)
+    })
+    it('a story card with the store down: no record block, one log line, the reply is not blocked and still gets Admin', async () => {
+        const logs: string[] = []
+        const down = async (url: string) => { if (url.startsWith('/api/assets/')) throw new Error('down'); return jsonRes(200, payload('zombie')) }
+        const out = await adminBeforeRequest(prompt(), { chaId: 'fc27f53b-773d' }, [], 'K', { fetch: down as never, auth: () => 't', log: (m) => logs.push(m) }, { id: 'kenji', chat: { scriptstate: {} } })
+        expect(out.some((m) => String(m.content).includes('[Admin (global'))).toBe(true)
         expect(out.some((m) => String(m.content).includes(RECORD_TITLE))).toBe(false)
+        expect(logs.filter((l) => l.includes('persona kenji'))).toHaveLength(1)
+    })
+    it('a group with no speaking member known: Admin goes in without the record, one log line, no store call', async () => {
+        const logs: string[] = [], calls: string[] = []
+        const out = await adminBeforeRequest(prompt(), { chaId: '0c0c0c0c-1', type: 'group' }, [], 'K', { fetch: storeFetch(KENJI, { calls }) as never, auth: () => 't', log: (m) => logs.push(m) }, { id: 'kenji', chat: { scriptstate: {} } })
+        expect(out.some((m) => String(m.content).includes('[Admin (global'))).toBe(true)
+        expect(out.some((m) => String(m.content).includes(RECORD_TITLE))).toBe(false)
+        expect(logs.filter((l) => l.includes('without the persona record'))).toHaveLength(1)
         expect(calls.some((u) => u.includes('/api/assets/'))).toBe(false)
+    })
+    it('an off card: no Admin and no store call', async () => {
+        const calls: string[] = []
+        const f = async (url: string) => { calls.push(url); return url.startsWith('/api/admin') ? jsonRes(200, payload('lotm', { enabled: false, assets: [], text: '', guide: '' })) : jsonRes(200, KENJI) }
+        expect(await adminBeforeRequest(prompt(), { chaId: '22a987d8-4a13' }, [], 'K', { fetch: f as never, auth: () => 't' }, { id: 'kenji' })).toEqual(prompt())
+        expect(calls.some((u) => u.includes('/api/assets/'))).toBe(false)
+    })
+    it('cut order with the words block: sections first, then the record, never intro, Connecting or the Story guide', () => {
+        const assets = payload().assets
+        const rec = personaRecordText(buildView(KENJI, undefined), 'K', 'words')
+        const full = fitBudget(assets, 100000, rec).text
+        const noRec = fitBudget(assets, 100000).text
+        expect(fitBudget(assets, full.length - 10, rec)).toMatchObject({ cut: ['Scouting'] })
+        const b = fitBudget(assets, noRec.length - 1, rec)
+        expect(b.cut).toEqual(['Scouting', 'Admin lines', 'Persona record'])
+        expect(b.text).toContain('Story guide: Admin')
     })
     it('offline: no store and no copy = no record block, one log line, the reply still gets Admin from its cache', async () => {
         const logs: string[] = []
