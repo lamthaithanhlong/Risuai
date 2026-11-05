@@ -231,7 +231,7 @@ function finishGate(key, rec, ctx, story) {
         console.log('[gate] gate.companion: N/A (no companion)')
     }
     if (QUESTS) {
-        const qturns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply, reply: x.reply, ticks: x.vars?.stat_ticks ?? '', panel: x.panel ?? '', stats: x.vars?.stats, skills: x.vars?.skills, rank: x.vars?.stat_rank, brk: x.vars?.stat_break, quest: x.vars?.quest, hist: x.vars?.quest_hist }))
+        const qturns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply, reply: x.reply, ticks: x.vars?.stat_ticks ?? '', panel: x.panel?.text ?? '', stats: x.vars?.stats, skills: x.vars?.skills, rank: x.vars?.stat_rank, brk: x.vars?.stat_break, quest: x.vars?.quest, hist: x.vars?.quest_hist, qlast: x.vars?.quest_last }))
         const c0 = (run) => run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1)
         checks.push(...questChecks(runs.map((run) => ({ start: { stats: c0(run)?.vars?.stats, skills: c0(run)?.vars?.skills }, turns: qturns(run) }))))
     }

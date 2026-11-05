@@ -164,6 +164,68 @@ test('quest.rewarded: the reward is read in the STORE; none, wrong amount, paid 
     assert.deepEqual(rules(rewardedProblems(runs(skUnpaid))), ['reward-mismatch'])
 })
 
+// The script pays through stats.apply: the reward is a tick line ("Thể lực 10.01% (+0.01)") and the script records what it paid in $quest_last.delta.gains.
+// (Measured on the gate of 2026-11-05: a ticked reward read as 0 moved beyond the ticks, so no correct payment could ever pass.)
+const TICKED = { kind: 'stat', key: 'the_luc', amount: 1 }
+function tickedRun() {
+    const g = goodRun()
+    g.turns.forEach((t, i) => {
+        if (t.quest) t.quest = JSON.stringify({ id: 'q1', state: 'active', reward: TICKED })
+        t.stats = { ...STATS0, the_luc: i >= 4 ? 1001 : 1000 }
+        t.ticks = i === 4 ? 'Thể lực 10.01% (+0.01)' : ''
+        if (i >= 4) t.hist = JSON.stringify([{ id: 'q1', state: 'done', reward: TICKED }])
+        if (i === 4) t.qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 's:the_luc', before: 1000, after: 1001 }], hist: [] } })
+    })
+    return g
+}
+test('quest.rewarded with the script\'s own record: a reward shown as a tick line passes; unpaid, wrong stat, wrong amount and an untracked move are red', () => {
+    assert.deepEqual(rewardedProblems(runs(tickedRun())), [], 'a +0.01 paid by stats.apply and shown as a tick line is a paid reward')
+    const unpaid = tickedRun(); unpaid.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0 } }); unpaid.turns[4].ticks = ''; unpaid.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [], hist: [] } })
+    assert.deepEqual(rules(rewardedProblems(runs(unpaid))), ['reward-mismatch'], 'the script paid nothing')
+    const wrongStat = tickedRun(); wrongStat.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 's:y_chi', before: 1000, after: 1001 }], hist: [] } })
+    assert.ok(rules(rewardedProblems(runs(wrongStat))).includes('reward-mismatch'), 'the script paid another stat')
+    const wrongAmount = tickedRun(); wrongAmount.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1003 } }); wrongAmount.turns[4].ticks = 'Thể lực 10.01% (+0.01)\nThể lực 10.02% (+0.01)\nThể lực 10.03% (+0.01)'; wrongAmount.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 's:the_luc', before: 1000, after: 1003 }], hist: [] } })
+    assert.deepEqual(rules(rewardedProblems(runs(wrongAmount))), ['reward-mismatch'], 'three gains for a quest that declares one')
+    const untracked = tickedRun(); untracked.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1002 } })
+    assert.deepEqual(rules(rewardedProblems(runs(untracked))), ['untracked-move'], 'the store moved one more than the tick lines say')
+    const failPaid = tickedRun(); failPaid.turns[4].raw = failPaid.turns[4].raw.replace('done', 'fail'); failPaid.turns.forEach((t, i) => { if (i >= 4) t.hist = JSON.stringify([{ id: 'q1', state: 'fail', reward: TICKED }]) }); failPaid.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'fail', delta: { gains: [{ key: 's:the_luc', before: 1000, after: 1001 }], hist: [] } })
+    assert.ok(rules(rewardedProblems(runs(failPaid))).includes('reward-on-fail'), 'a failed quest that paid')
+    // a stat reward that also ticked the equipped skill (reward.skill) is not held to a skill amount, but the move must be on a tick line
+    const bonus = tickedRun(); bonus.turns.forEach((t, i) => { t.skills = { 'nghe-nhip-buoc': { m: i >= 4 ? 1 : 0, eq: 1, link: ['cam_nhan'], name: 'Nghe nhịp bước' } } })
+    bonus.turns[4].ticks = 'Thể lực 10.01% (+0.01)\nThành thạo Nghe nhịp bước 0.01% (+0.01)'
+    bonus.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 's:the_luc', before: 1000, after: 1001 }, { key: 'k:nghe-nhip-buoc', before: 0, after: 1 }], hist: [] } })
+    assert.deepEqual(rewardedProblems(runs(bonus)), [], 'the skill tick is a bonus of a stat reward')
+    const bonusHidden = clone(bonus); bonusHidden.turns[4].ticks = 'Thể lực 10.01% (+0.01)'
+    assert.deepEqual(rules(rewardedProblems(runs(bonusHidden))), ['untracked-move'], 'a skill move with no tick line is untracked')
+})
+
+// L1's condition on the script's self-declared gains: what $quest_last.delta.gains says must be what the STORE did, before/after the completing turn.
+test('quest.rewarded: the script\'s declared gains must match the store - declared but not added, or added by another amount, is red; the turn\'s own ACT tick is allowed', () => {
+    // Lua mutant 1: delta.gains says +1 but stats.apply never ran (no tick line, store unchanged)
+    const notAdded = tickedRun(); notAdded.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0 } }); notAdded.turns[4].ticks = ''
+    assert.deepEqual(rules(rewardedProblems(runs(notAdded))), ['store-vs-gains'], 'a reward on paper only')
+    assert.ok(rewardedProblems(runs(notAdded))[0].text.includes('the store moved 0'))
+    // Lua mutant 2: delta.gains says +1, the store (with its own tick lines) moved +3
+    const wrongBy = tickedRun(); wrongBy.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1003 } }); wrongBy.turns[4].ticks = 'Thể lực 10.01% (+0.01)\nThể lực 10.02% (+0.01)\nThể lực 10.03% (+0.01)'
+    assert.deepEqual(rules(rewardedProblems(runs(wrongBy))), ['store-vs-gains'], 'the store paid 3 for a declared 1')
+    // a skill claim the store does not show
+    const skillRw = { kind: 'skill', id: 'nghe-nhip-buoc', amount: 1 }
+    const sk = tickedRun(); sk.turns.forEach((t, i) => { t.quest = t.quest ? JSON.stringify({ id: 'q1', state: 'active', reward: skillRw }) : ''; t.stats = { ...STATS0 }; t.ticks = ''; t.skills = { 'nghe-nhip-buoc': { m: 400, eq: 1, link: ['cam_nhan'], name: 'Nghe nhịp bước' } }; if (i >= 4) t.hist = JSON.stringify([{ id: 'q1', state: 'done', reward: skillRw }]) })
+    sk.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 'k:nghe-nhip-buoc', before: 400, after: 401 }], hist: [] } })
+    assert.deepEqual(rules(rewardedProblems(runs(sk))), ['store-vs-gains'], 'a skill reward on paper only')
+    const skOk = clone(sk); skOk.turns.forEach((t, i) => { if (i >= 4) t.skills['nghe-nhip-buoc'].m = 401 }); skOk.turns[4].ticks = 'Thành thạo Nghe nhịp bước 4.01% (+0.01)'
+    assert.deepEqual(rewardedProblems(runs(skOk)), [], 'the same claim with the store and the tick line is a paid reward')
+    // the same turn also holds an action of the narrator on the reward's stat: +1 reward and +1 ACT tick = 2 in the store, still fine; 3 is not
+    const withAct = tickedRun(); withAct.turns[4].raw += '\n[[ACT|keo-cua|the_luc+suc_manh|normal|]]'
+    withAct.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1002 } }); withAct.turns[4].ticks = 'Thể lực 10.01% (+0.01)\nThể lực 10.02% (+0.01)'
+    assert.deepEqual(rewardedProblems(runs(withAct)), [], 'one ACT tick on the same stat is not a mismatch')
+    const tooMany = clone(withAct); tooMany.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1003 } }); tooMany.turns[4].ticks += '\nThể lực 10.03% (+0.01)'
+    assert.deepEqual(rules(rewardedProblems(runs(tooMany))), ['store-vs-gains'], 'one more than the claim and the one possible ACT tick')
+    // a failed quest and a run with no declared record behave as before
+    assert.deepEqual(rewardedProblems(runs(tickedRun())), [])
+    assert.deepEqual(rewardedProblems(runs(goodRun())), [])
+})
+
 test('quest.hidden: a whole or half-streamed [[QUEST tag in the shown or stored text is red', () => {
     assert.deepEqual(hiddenProblems(runs(goodRun())), [])
     const shown = goodRun(); shown.turns[4].shown += '\n[[QUEST|done|q1]]'
@@ -191,9 +253,26 @@ test('mutation: a scorer that can never go red is caught', async () => {
     const m3 = await mutant('quests', 'if (!done) out.push', 'if (false) out.push')
     const none3 = goodRun(); none3.turns.forEach((t) => { t.hist = '[]'; t.quest = '' })
     assert.deepEqual(m3.rewardedProblems(runs(none3)), []); assert.ok(rewardedProblems(runs(none3)).length)
-    const m4 = await mutant('quests', "if ((net.stats[k] || 0) !== (want.stats[k] || 0))", 'if (false)')
+    const m4 = await mutant('quests', "if (got !== (want.stats[k] || 0)) out.push", 'if (false) out.push')
     const unpaid = goodRun(); unpaid.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1001 } })
     assert.deepEqual(m4.rewardedProblems(runs(unpaid)), []); assert.ok(rewardedProblems(runs(unpaid)).length)
+    // the script's own record: reading the paid amount from it, and the untracked-move rule, can each be removed and a test must notice
+    const m8 = await mutant('quests', "const got = gains ? (paid.stats[k] || 0) : (net.stats[k] || 0)", 'const got = want.stats[k] || 0')
+    const unpaidTicked = tickedRun(); unpaidTicked.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0 } }); unpaidTicked.turns[4].ticks = ''; unpaidTicked.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [], hist: [] } })
+    assert.deepEqual(m8.rewardedProblems(runs(unpaidTicked)), [], 'the mutant no longer sees the unpaid reward'); assert.ok(rewardedProblems(runs(unpaidTicked)).length)
+    const m9 = await mutant('quests', "if (gains && (net.stats[k] || 0) !== 0) out.push", 'if (false) out.push')
+    const untrackedMove = tickedRun(); untrackedMove.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1002 } })
+    assert.deepEqual(m9.rewardedProblems(runs(untrackedMove)), []); assert.ok(rewardedProblems(runs(untrackedMove)).length)
+    // L1: the declared gains held against the store; both Lua mutants must stop being caught when the new comparison is removed
+    const m10 = await mutant('quests', "if (moved < declared || moved > declared + room) out.push({ rule: 'store-vs-gains', text: `${at}: quest ${e.id} ${e.state}: the script declares stat", "if (false) out.push({ rule: 'store-vs-gains', text: `${at}: quest ${e.id} ${e.state}: the script declares stat")
+    const notAdded = tickedRun(); notAdded.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0 } }); notAdded.turns[4].ticks = ''
+    assert.deepEqual(m10.rewardedProblems(runs(notAdded)), [], 'the mutant no longer sees gains that the store never got'); assert.ok(rewardedProblems(runs(notAdded)).length)
+    const wrongBy = tickedRun(); wrongBy.turns.forEach((t, i) => { if (i >= 4) t.stats = { ...STATS0, the_luc: 1003 } }); wrongBy.turns[4].ticks = 'Thể lực 10.01% (+0.01)\nThể lực 10.02% (+0.01)\nThể lực 10.03% (+0.01)'
+    assert.deepEqual(m10.rewardedProblems(runs(wrongBy)), [], 'nor a store that moved by another amount'); assert.ok(rewardedProblems(runs(wrongBy)).length)
+    const m11 = await mutant('quests', 'if (moved < declared || moved > declared + room) out.push({ rule: \'store-vs-gains\', text: `${at}: quest ${e.id} ${e.state}: the script declares skill', "if (false) out.push({ rule: 'store-vs-gains', text: `${at}: quest ${e.id} ${e.state}: the script declares skill")
+    const skNot = tickedRun(); skNot.turns.forEach((t, i) => { t.quest = t.quest ? JSON.stringify({ id: 'q1', state: 'active', reward: { kind: 'skill', id: 'nghe-nhip-buoc', amount: 1 } }) : ''; t.stats = { ...STATS0 }; t.ticks = ''; t.skills = { 'nghe-nhip-buoc': { m: 400, eq: 1, link: ['cam_nhan'], name: 'Nghe nhịp bước' } }; if (i >= 4) t.hist = JSON.stringify([{ id: 'q1', state: 'done', reward: { kind: 'skill', id: 'nghe-nhip-buoc', amount: 1 } }]) })
+    skNot.turns[4].qlast = JSON.stringify({ turn: 5, id: 'q1', event: 'done', delta: { gains: [{ key: 'k:nghe-nhip-buoc', before: 400, after: 401 }], hist: [] } })
+    assert.deepEqual(m11.rewardedProblems(runs(skNot)), []); assert.ok(rewardedProblems(runs(skNot)).length)
     const m7 = await mutant('score', "return bad.length ? { status: 'FAIL'", "return false ? { status: 'FAIL'")
     const sheets = [{ label: 'g1.1', reply: '- Đồng hành: Không\n- a: 1\n- b: 2\n- c: 3\n- d: 4' }]
     const args = { companions: [], declaredNone: true, sheets, replies: ['Đồng hành: Evelyn'] }
