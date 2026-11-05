@@ -114,7 +114,7 @@ test('helpers: the goal of an offer line, vague goals', () => {
     assert.equal(vagueGoal('Đi tới cầu thang B của toà nhà và xem lối thoát.'), '')
 })
 
-test('not in the gate: questChecks is unchanged (4 checks, no quest.goal)', () => {
+test('questChecks itself is unchanged (4 checks, no quest.goal): run.mjs adds questGoalChecks beside it', () => {
     assert.deepEqual(questChecks(fx('goal-complete.json')).map((c) => c.id), ['quest.offered', 'quest.tracked', 'quest.rewarded', 'quest.hidden'])
 })
 

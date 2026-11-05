@@ -58,7 +58,8 @@ import { findsChecks, findsOfRun, MIN_TURNS as FINDS_MIN_TURNS } from './lib/fin
 import { statsChecks, MIN_TURNS as STATS_MIN_TURNS } from './lib/stats.mjs'
 import { systemChecks, noCompanionProblems, parsePersonaFixture, systemSpeech, asSpeech } from './lib/system.mjs'
 import { gateTurns, systemPersona } from './lib/gateTurns.mjs'
-import { questChecks } from './lib/quests.mjs'
+import { questChecks, questGoalChecks } from './lib/quests.mjs'
+import { npcChecks, playerOf } from './lib/npcRules.mjs'
 import { narrationProblems, companionCaseProblems, sceneRepeats, herSpeech, guideNoSpoilerProblems, guideScoutProblems, scoutWorry } from './lib/narration.mjs'
 import { createRequire } from 'module'
 import { launchProblem } from './lib/launchGuard.mjs'
@@ -233,7 +234,10 @@ function finishGate(key, rec, ctx, story) {
     if (QUESTS) {
         const qturns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? x.reply, shown: x.shown || x.reply, reply: x.reply, ticks: x.vars?.stat_ticks ?? '', panel: x.panel?.text ?? '', stats: x.vars?.stats, skills: x.vars?.skills, rank: x.vars?.stat_rank, brk: x.vars?.stat_break, quest: x.vars?.quest, hist: x.vars?.quest_hist, qlast: x.vars?.quest_last }))
         const c0 = (run) => run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1)
-        checks.push(...questChecks(runs.map((run) => ({ start: { stats: c0(run)?.vars?.stats, skills: c0(run)?.vars?.skills }, turns: qturns(run) }))))
+        const qruns = runs.map((run) => ({ start: { stats: c0(run)?.vars?.stats, skills: c0(run)?.vars?.skills }, turns: qturns(run) }))
+        checks.push(...questChecks(qruns))
+        // quest.goal (L1 approved 2026-11-05): gating, same --quests turns; kept out of questChecks so that list stays the 4 original checks
+        checks.push(...questGoalChecks(qruns))
     }
     // finds (--finds): the fresh runs' story turns: the model's raw reply (block still in it) and the prose the player saw
     if (FINDS) {
@@ -244,6 +248,12 @@ function finishGate(key, rec, ctx, story) {
     const actRuns = runs.map((run) => ({ turns: run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ raw: x.raw ?? '', shown: x.shown || '', reply: x.reply || '' })) }))
     const act = actChecks(actRuns)
     checks.push(...act)
+    // npc.dialogue (lib/npcRules.mjs, the app's npcCheck): REPORT-ONLY (INFO) for the first 2 gates to measure false alarms (L1 2026-11-05);
+    // NPC_GATE=1 makes it gating (FAIL above 5% of NPC lines on any hard rule)
+    const npcTurns = (run) => run.turns.filter((x) => x.phase !== 'creation' && x.ok).map((x) => ({ shown: x.shown || x.reply || '', raw: x.raw ?? '', text: x.text ?? '', vars: x.vars ?? {} }))
+    const npc = npcChecks(runs.map((run) => ({ turns: npcTurns(run) })), { player: playerOf(rec.persona), gate: process.env.NPC_GATE === '1' })
+    checks.push(...npc)
+    console.log(`[gate] npc.dialogue (${npc[0].status}): ${npc[0].summary}`)
     console.log(`[gate] ACT tags per run: ${act[1].summary}; hidden: ${act[0].status}`)
     // growth (--stats): the fresh runs' story turns with the chat variables each turn left; start = the values after the creation turns (default 10.00% each)
     if (STATS) {
