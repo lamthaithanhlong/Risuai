@@ -166,9 +166,11 @@ export function hiddenProblems(runs) {
 // ---- quest.goal (owner 2026-11-05 "nhiệm vụ admin phải có goal mục tiêu rõ ràng"; L1: the reward grows with the difficulty, Admin states it with numbers) ----
 // NOT in questChecks and not in any gate until L1 approves it. Every offered quest: a concrete goal (a verb, an object, a place, not vague) in the
 // 【…Nhiệm vụ…】 offer line, a countable condition ($quest.need, shown as "Xong khi: đủ N" or "Tiến độ p/N"), its progress shown while open, a reward
-// with its number ("+N <stat or skill>" in the offer line or the panel row) equal to what the store declares, a reward that does not shrink as the tier
-// grows, and the deadline shown when it has one. Numbers in Admin's words are allowed in the quest line only: a 【ADMIN: …】 line that is not a quest
-// line carries no digit, and a quest line still carries no percent, no mức nhiễm and no KHÁCH-n code (those stay system text).
+// with its number in the panel's own unit ("Thưởng: Cảm nhận +0.20, Thành thạo Lục soát +0.10" in the offer line or the panel row, L1 2026-11-05) equal to
+// what the store declares, a reward that does not shrink as the tier grows, and the deadline shown when it has one. Growth numbers in Admin's words are
+// allowed in the quest line only: a 【ADMIN: …】 line that is not a quest line carries no number that comes with a stat or skill name, a sign (+N / -N), a
+// percent, mức nhiễm or a KHÁCH-n code (L1: narrowed after the old gate records; a floor, a room, a date, a count of turns or metres is not flagged), and
+// a quest line still carries no percent, no mức nhiễm and no KHÁCH-n code (those stay system text).
 export const TIERS = { de: 1, vua: 2, kho: 3, rat_kho: 4 }
 const GOAL_VERB = /^(tìm|kiếm|nhặt|lấy|đi tới|đi đến|lên|xuống|đưa|dẫn|gia cố|làm|tự chế|sửa|thăm dò|bắt|lách qua|mang|chặn|dọn)(?!\p{L})/iu
 const GOAL_PLACE = /(?<!\p{L})(trong|ở|tới|tại|qua|khỏi|về|vào|ra|lên|xuống|từ|đến|trên|dọc)(?!\p{L})/iu
@@ -176,6 +178,9 @@ const VAGUE = /(?<!\p{L})(sống sót|khám phá xung quanh|khám phá khu vực
 const QUEST_LINE = /^[\s*_>]*【\s*(?:ADMIN|HỆ THỐNG)\s*:\s*NHIỆM VỤ(?!\p{L})[^】\n]*】?/imu
 const ADMIN_LINE = /^[\s*_>]*【\s*ADMIN\s*:([^】\n]*)】?/imu
 const SYSTEM_TEXT = /\d+(?:[.,]\d+)?\s?%|mức\s+nhiễm|KHÁCH-\d+/iu
+const STAT_NAMES = '(?:Sức mạnh|Nhanh nhẹn|Thể lực|Tinh thần|Cảm nhận|Ý chí|Thành thạo)'
+// a growth or status number in a non-quest Admin line: a percent, mức nhiễm, a KHÁCH-n code, a signed number, or a number next to a stat / mastery name
+export const ADMIN_NUMBER = new RegExp(`\\d+(?:[.,]\\d+)?\\s?%|mức\\s+nhiễm|KHÁCH-\\d+|(?<![\\p{L}\\p{N}])[+-]\\s*\\d|(?<!\\p{L})${STAT_NAMES}(?!\\p{L})[^.;,】\\d]{0,14}\\d|\\d+(?:[.,]\\d+)?\\s*(?:điểm\\s+)?${STAT_NAMES}(?!\\p{L})`, 'iu')
 const sees = (t) => [t.shown, t.panel].filter((x) => typeof x === 'string' && x).join('\n')
 /** the goal of an offer line: after "Nhiệm vụ —" and an optional "<title>:", up to "Xong khi" / "Thưởng" / "Hạn" / the end */
 export function offerGoal(line) {
@@ -203,12 +208,11 @@ export function goalProblems(runs) {
         const seen = new Set()
         turns.forEach((t, i) => {
             const at = `run ${r + 1} turn ${i + 1}`
-            for (const x of new Set([t.shown, t.reply])) {
-                for (const m of String(x ?? '').matchAll(new RegExp(ADMIN_LINE.source, 'gimu'))) {
-                    const line = m[0]
-                    if (QUEST_LINE.test(line)) { if (SYSTEM_TEXT.test(line)) out.push({ rule: 'quest-line-system-text', text: `${at}: «${clip(line, 0, 120)}»` }) }
-                    else if (/\d/.test(m[1])) out.push({ rule: 'number-in-admin-line', text: `${at}: «${clip(line, 0, 120)}»` })
-                }
+            const lines = new Map()                 // the shown and the stored reply hold the same lines: each line once per turn
+            for (const x of [t.shown, t.reply]) for (const m of String(x ?? '').matchAll(new RegExp(ADMIN_LINE.source, 'gimu'))) lines.set(m[0].trim(), m[1])
+            for (const [line, body] of lines) {
+                if (QUEST_LINE.test(line)) { if (SYSTEM_TEXT.test(line)) out.push({ rule: 'quest-line-system-text', text: `${at}: «${clip(line, 0, 120)}»` }) }
+                else if (ADMIN_NUMBER.test(body)) out.push({ rule: 'number-in-admin-line', text: `${at}: «${clip(line, 0, 120)}»` })
             }
             const q = activeOf(t)
             if (!q || seen.has(q.id)) return
@@ -227,9 +231,11 @@ export function goalProblems(runs) {
             const rw = q.reward ?? {}
             const amount = Number(rw.amount)
             const name = rw.kind === 'skill' ? (rw.name ?? rw.id) : labelOf(rw.key)
-            const stated = new RegExp(`Thưởng\\s*:?\\s*[^】\\n]*?\\+\\s*(\\d+)\\s+${esc(name)}`, 'iu').exec(window)
-            if (!stated) out.push({ rule: 'goal-no-reward', text: `${where}: no reward with its number ("Thưởng: +N ${name}") in the offer line or the panel` })
-            else if (!(amount > 0) || Number(stated[1]) !== amount) out.push({ rule: 'reward-not-promised', text: `${where}: Admin promises +${stated[1]} ${name}, the store declares ${JSON.stringify(rw.amount)}` })
+            // the panel's own unit: "<name> +0.20" (hundredths), the number of the tick line "<name> 10.20% (+0.20)" the payment shows
+            const stated = new RegExp(`Thưởng\\s*:?\\s*[^】\\n]*?(?<!\\p{L})(?:Thành thạo\\s+)?${esc(name)}\\s*\\+\\s*(\\d+)[.,](\\d{2})(?!\\d)`, 'iu').exec(window)
+            const said = stated ? Number(stated[1]) * 100 + Number(stated[2]) : null
+            if (!stated) out.push({ rule: 'goal-no-reward', text: `${where}: no reward with its number in the panel's unit ("Thưởng: ${name} +0.NN") in the offer line or the panel` })
+            else if (!(amount > 0) || said !== amount) out.push({ rule: 'reward-not-promised', text: `${where}: Admin promises ${name} +${stated[1]}.${stated[2]}, the store declares ${JSON.stringify(rw.amount)} hundredths` })
             if (!(q.tier in TIERS)) out.push({ rule: 'goal-no-tier', text: `${where}: no difficulty tier (${JSON.stringify(q.tier)})` })
             else offered.push({ where, rank: TIERS[q.tier], amount: amount + (Number(rw.skill_amount) || 0), tier: q.tier })
             const dl = Number(q.deadline_turns)

@@ -56,21 +56,22 @@ test('each rule alone: break the complete fixture one part at a time', () => {
     assert.deepEqual(one((r) => setQ(r, (q) => { delete q.need })), ['goal-no-condition'])
     assert.deepEqual(one((r) => { swap(r, 'Xong khi: đủ 2/2 chai. ', ''); swap(r, 'Tiến độ 0/2 chai', 'Tiến độ —'); swap(r, 'Tiến độ 1/2 chai', 'Tiến độ —') }), ['goal-no-condition', 'goal-no-progress'])
     assert.deepEqual(one((r) => { swap(r, ' · Tiến độ 1/2 chai', ''); swap(r, ' · Tiến độ 0/2 chai', '') }), ['goal-no-progress'])
-    assert.deepEqual(one((r) => { swap(r, 'Thưởng: +2 Cảm nhận, +1 Lục soát. ', ''); swap(r, 'Thưởng +2 Cảm nhận, +1 Lục soát', 'Thưởng có') }), ['goal-no-reward'])
-    assert.deepEqual(one((r) => { swap(r, 'Thưởng: +2 Cảm nhận', 'Thưởng: tăng Cảm nhận'); swap(r, 'Thưởng +2 Cảm nhận', 'Thưởng tăng Cảm nhận') }), ['goal-no-reward'], 'a reward in words only has no number')
-    assert.deepEqual(one((r) => setQ(r, (q) => { q.reward.amount = 1 })), ['reward-not-promised'], 'Admin promises +2, the store declares 1')
+    assert.deepEqual(one((r) => { swap(r, 'Thưởng: Cảm nhận +0.20, Thành thạo Lục soát +0.10. ', ''); swap(r, 'Thưởng Cảm nhận +0.20, Thành thạo Lục soát +0.10', 'Thưởng có') }), ['goal-no-reward'])
+    assert.deepEqual(one((r) => { swap(r, 'Thưởng: Cảm nhận +0.20', 'Thưởng: tăng Cảm nhận'); swap(r, 'Thưởng Cảm nhận +0.20', 'Thưởng tăng Cảm nhận') }), ['goal-no-reward'], 'a reward in words only has no number')
+    assert.deepEqual(one((r) => { swap(r, 'Thưởng: Cảm nhận +0.20', 'Thưởng: +20 Cảm nhận'); swap(r, 'Thưởng Cảm nhận +0.20', 'Thưởng +20 Cảm nhận') }), ['goal-no-reward'], 'a reward not in the panel unit ("+20 Cảm nhận") is not the number the panel shows')
+    assert.deepEqual(one((r) => setQ(r, (q) => { q.reward.amount = 10 })), ['reward-not-promised'], 'Admin promises +0.20, the store declares 10 hundredths')
     assert.deepEqual(one((r) => setQ(r, (q) => { delete q.tier })), ['goal-no-tier'])
     assert.deepEqual(one((r) => { swap(r, ' Hạn: 10 lượt.', ''); swap(r, ' · Hạn còn 10/10 lượt', ''); swap(r, ' · Hạn còn 9/10 lượt', '') }), ['goal-no-deadline'])
     // proportional: the rất khó quest of run 2 paying less than the vừa quest of run 1 is red
     const r = clone(fx('goal-complete.json'))
-    r[1].turns.forEach((t) => { if (t.quest) { const q = JSON.parse(t.quest); q.reward.amount = 1; q.reward.skill_amount = 0; t.quest = JSON.stringify(q) } for (const k of ['shown', 'reply', 'panel']) if (typeof t[k] === 'string') t[k] = t[k].replace('+5 Sức mạnh, +2 Lục soát', '+1 Sức mạnh') })
+    r[1].turns.forEach((t) => { if (t.quest) { const q = JSON.parse(t.quest); q.reward.amount = 10; q.reward.skill_amount = 0; t.quest = JSON.stringify(q) } for (const k of ['shown', 'reply', 'panel']) if (typeof t[k] === 'string') t[k] = t[k].replace('Sức mạnh +0.50, Thành thạo Lục soát +0.20', 'Sức mạnh +0.10') })
     assert.deepEqual(rules(goalProblems(r)), ['reward-not-proportional'])
 })
 
 test('the one relaxation is the quest line; everything else Admin writes stays as strict as before', () => {
     const good = fx('goal-complete.json')
     const offerLine = good[0].turns[1].shown.split('\n').pop()
-    // existing scorers on the real quest line: unchanged code, already green (the reward "+2 Cảm nhận" is not a percent, not +0.0n, not KHÁCH-n)
+    // existing scorers on the real quest line: unchanged code, already green (the reward "Cảm nhận +0.20" is not a percent, not +0.0n, not KHÁCH-n)
     assert.deepEqual(leakProblems(good), [], 'stats.noLeak passes the quest lines and panel rows')
     assert.deepEqual(guideNoSpoilerProblems(systemSpeech(offerLine)), [], 'guide.noSpoiler (system-text) passes the quest line')
     assert.deepEqual(presentProblems(good, 99).filter((p) => p.rule !== 'no-voice'), [], 'system.present passes')
@@ -82,17 +83,29 @@ test('the one relaxation is the quest line; everything else Admin writes stays a
     assert.ok(rules(goalProblems(infQuest)).includes('quest-line-system-text'), 'and quest.goal says so')
     const code = clone(good); code[0].turns[1].shown = code[0].turns[1].shown.replace('Hạn: 10 lượt.', 'Hạn: 10 lượt, KHÁCH-704.')
     assert.ok(rules(goalProblems(code)).includes('quest-line-system-text'), 'a KHÁCH-n code in a quest line is red')
-    // still red: a number in an Admin line that is not a quest line (the reward amount outside the quest line, a stat value, a count)
-    for (const line of ['【ADMIN: Thưởng: +2 Cảm nhận.】', '【ADMIN: Thể lực đang ở 10.02.】', '【ADMIN: Đã quét 3 phòng.】']) {
+    // why the bands start at +0.10: a +0.0N reward in the quest line is a stats.noLeak number-in-prose (that scorer is not loosened)
+    const small = clone(good); small[0].turns[1].shown = small[0].turns[1].shown.replace('Cảm nhận +0.20', 'Cảm nhận +0.02')
+    assert.deepEqual(rules(leakProblems(small)), ['number-in-prose'], 'a +0.02 reward would trip stats.noLeak')
+    // still red: a growth or status number in an Admin line that is not a quest line (the reward outside the quest line, a stat value, a signed number, the
+    // infection, the subject code)
+    for (const line of ['【ADMIN: Thưởng: Cảm nhận +0.20.】', '【ADMIN: Thưởng: +2 Cảm nhận.】', '【ADMIN: Thể lực đang ở 10.02.】', '【ADMIN: Thành thạo Lục soát 0.10.】', '【ADMIN: Chủ thể KHÁCH-704.】', '【ADMIN: Mức nhiễm: 3%.】']) {
         const r = clone(good); r[0].turns[2].shown += '\n' + line
         assert.deepEqual(rules(goalProblems(r)), ['number-in-admin-line'], line)
     }
+    // narrowed (L1, after the old gate records): a floor, a room, a date, a count of rooms, turns or metres is not a growth number
+    for (const line of ['【ADMIN: Đã quét 3 phòng.】', '【ADMIN: Ngày 1 · 15 tháng 8 năm 2026, buổi sáng · Chung cư Kisaragi, căn 704.】', '【ADMIN: Hành lang tầng 6 trống trong 8 m; cửa chặn được 3 lượt.】', '【ADMIN: Sức mạnh nhích lên.】']) {
+        const r = clone(good); r[0].turns[2].shown += '\n' + line
+        assert.deepEqual(goalProblems(r), [], line)
+    }
+    // the shown and the stored reply carry the same line: one hit, not two
+    const twice = clone(good); twice[0].turns[2].shown += '\n【ADMIN: Mức nhiễm: 3%.】'; twice[0].turns[2].reply += '\n【ADMIN: Mức nhiễm: 3%.】'
+    assert.equal(goalProblems(twice).length, 1)
     // a non-Admin bracket line (QUÉT: a reading within about 10 m) keeps its own rules (guide.scout / range), quest.goal does not touch it
     assert.ok(good[0].turns[0].shown.includes('【QUÉT: Một chuyển động sau cửa, cách 8 m'))
 })
 
 test('helpers: the goal of an offer line, vague goals', () => {
-    assert.equal(offerGoal('【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch trong bếp. Xong khi: đủ 2/2 chai. Thưởng: +2 Cảm nhận. Hạn: 10 lượt.】'), 'Tìm 2 chai nước sạch trong bếp.')
+    assert.equal(offerGoal('【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch trong bếp. Xong khi: đủ 2/2 chai. Thưởng: Cảm nhận +0.20. Hạn: 10 lượt.】'), 'Tìm 2 chai nước sạch trong bếp.')
     assert.equal(offerGoal('【HỆ THỐNG: NHIỆM VỤ — Tìm nguồn nước sạch trong tòa nhà.】'), 'Tìm nguồn nước sạch trong tòa nhà.')
     assert.equal(vagueGoal('Hãy sống sót.'), 'too short')
     assert.equal(vagueGoal('Khám phá xung quanh toà nhà một lúc.'), 'no concrete verb')
@@ -119,11 +132,11 @@ test('mutation: each quest.goal rule can go red', async () => {
         assert.ok(rules(goalProblems(fx(file))).includes(rule), `the real scorer sees ${rule}`)
         assert.ok(!rules(m.goalProblems(fx(file))).includes(rule), `the mutant no longer sees ${rule}`)
     }
-    const m = await mutant("else if (/\\d/.test(m[1])) out.push(", "else if (false) out.push(")
-    const r = clone(fx('goal-complete.json')); r[0].turns[2].shown += '\n【ADMIN: Đã quét 3 phòng.】'
+    const m = await mutant("else if (ADMIN_NUMBER.test(body)) out.push(", "else if (false) out.push(")
+    const r = clone(fx('goal-complete.json')); r[0].turns[2].shown += '\n【ADMIN: Thể lực đang ở 10.02.】'
     assert.ok(!m.goalProblems(r).length && goalProblems(r).length, 'number-in-admin-line can be removed and a test notices')
     const m2 = await mutant("if (a.rank > b.rank && a.amount < b.amount)", "if (false)")
     const p = clone(fx('goal-complete.json'))
-    p[1].turns.forEach((t) => { if (t.quest) { const q = JSON.parse(t.quest); q.reward.amount = 1; q.reward.skill_amount = 0; t.quest = JSON.stringify(q) } for (const k of ['shown', 'reply', 'panel']) if (typeof t[k] === 'string') t[k] = t[k].replace('+5 Sức mạnh, +2 Lục soát', '+1 Sức mạnh') })
+    p[1].turns.forEach((t) => { if (t.quest) { const q = JSON.parse(t.quest); q.reward.amount = 10; q.reward.skill_amount = 0; t.quest = JSON.stringify(q) } for (const k of ['shown', 'reply', 'panel']) if (typeof t[k] === 'string') t[k] = t[k].replace('Sức mạnh +0.50, Thành thạo Lục soát +0.20', 'Sức mạnh +0.10') })
     assert.ok(!m2.goalProblems(p).length && goalProblems(p).length, 'reward-not-proportional can be removed and a test notices')
 })

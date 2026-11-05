@@ -1,5 +1,5 @@
 {
- "note": "quest.goal GREEN fixture: the offer lines and panel rows are what quests.lua of ZR quest-goal 440a29c prints (tests/quests_test.mjs 10d).",
+ "note": "quest.goal GREEN fixture: the offer lines and panel rows are what quests.lua of ZR quest-goal 069be84 prints (tests/quests_test.mjs 10d; the reward in the panel unit, L1 2026-11-05).",
  "runs": [
   {
    "turns": [
@@ -11,26 +11,26 @@
      "panel": ""
     },
     {
-     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. Xong khi: đủ 2/2 chai. Thưởng: +2 Cảm nhận, +1 Lục soát. Hạn: 10 lượt.】",
-     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. Xong khi: đủ 2/2 chai. Thưởng: +2 Cảm nhận, +1 Lục soát. Hạn: 10 lượt.】",
-     "quest": "{\"id\": \"nuoc-sach\", \"title\": \"Nước sạch\", \"goal\": \"Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú.\", \"need\": 2, \"unit\": \"chai\", \"tier\": \"vua\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 2, \"stat\": \"cam_nhan\", \"difficulty\": \"normal\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 1}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 10}",
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. Xong khi: đủ 2/2 chai. Thưởng: Cảm nhận +0.20, Thành thạo Lục soát +0.10. Hạn: 10 lượt.】",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Nước sạch: Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. Xong khi: đủ 2/2 chai. Thưởng: Cảm nhận +0.20, Thành thạo Lục soát +0.10. Hạn: 10 lượt.】",
+     "quest": "{\"id\": \"nuoc-sach\", \"title\": \"Nước sạch\", \"goal\": \"Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú.\", \"need\": 2, \"unit\": \"chai\", \"tier\": \"vua\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 20, \"stat\": \"cam_nhan\", \"difficulty\": \"normal\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 10}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 10}",
      "hist": "[]",
-     "panel": "Nhiệm vụ: Nước sạch — Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. · Tiến độ 0/2 chai · Thưởng +2 Cảm nhận, +1 Lục soát · Hạn còn 10/10 lượt"
+     "panel": "Nhiệm vụ: Nước sạch — Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. · Tiến độ 0/2 chai · Thưởng Cảm nhận +0.20, Thành thạo Lục soát +0.10 · Hạn còn 10/10 lượt"
     },
     {
      "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
      "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
-     "quest": "{\"id\": \"nuoc-sach\", \"title\": \"Nước sạch\", \"goal\": \"Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú.\", \"need\": 2, \"unit\": \"chai\", \"tier\": \"vua\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 2, \"stat\": \"cam_nhan\", \"difficulty\": \"normal\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 1}, \"progress\": 1, \"turn_started\": 2, \"deadline_turns\": 10}",
+     "quest": "{\"id\": \"nuoc-sach\", \"title\": \"Nước sạch\", \"goal\": \"Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú.\", \"need\": 2, \"unit\": \"chai\", \"tier\": \"vua\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 20, \"stat\": \"cam_nhan\", \"difficulty\": \"normal\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 10}, \"progress\": 1, \"turn_started\": 2, \"deadline_turns\": 10}",
      "hist": "[]",
-     "panel": "Nhiệm vụ: Nước sạch — Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. · Tiến độ 1/2 chai · Thưởng +2 Cảm nhận, +1 Lục soát · Hạn còn 9/10 lượt"
+     "panel": "Nhiệm vụ: Nước sạch — Tìm 2 chai nước sạch còn niêm phong trong các căn hộ của tầng đang trú. · Tiến độ 1/2 chai · Thưởng Cảm nhận +0.20, Thành thạo Lục soát +0.10 · Hạn còn 9/10 lượt"
     },
     {
      "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ hoàn thành — Nước sạch】",
      "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
      "raw": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n[[QUEST|done|nuoc-sach]]",
      "quest": "",
-     "hist": "[{\"id\": \"nuoc-sach\", \"state\": \"done\", \"turn\": 4, \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 2}}]",
-     "panel": "Nhiệm vụ hoàn thành: Nước sạch · Thưởng +2 Cảm nhận, +1 Lục soát"
+     "hist": "[{\"id\": \"nuoc-sach\", \"state\": \"done\", \"turn\": 4, \"reward\": {\"kind\": \"stat\", \"key\": \"cam_nhan\", \"amount\": 20}}]",
+     "panel": "Nhiệm vụ hoàn thành: Nước sạch · Thưởng Cảm nhận +0.20, Thành thạo Lục soát +0.10"
     }
    ]
   },
@@ -44,18 +44,18 @@
      "panel": ""
     },
     {
-     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Đưa một người về: Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. Xong khi: đủ 1/1 người. Thưởng: +5 Sức mạnh, +2 Lục soát. Hạn: 14 lượt.】",
-     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Đưa một người về: Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. Xong khi: đủ 1/1 người. Thưởng: +5 Sức mạnh, +2 Lục soát. Hạn: 14 lượt.】",
-     "quest": "{\"id\": \"dua-nguoi-ve\", \"title\": \"Đưa một người về\", \"goal\": \"Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình.\", \"need\": 1, \"unit\": \"người\", \"tier\": \"rat_kho\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"suc_manh\", \"amount\": 5, \"stat\": \"suc_manh\", \"difficulty\": \"hard\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 2}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 14}",
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Đưa một người về: Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. Xong khi: đủ 1/1 người. Thưởng: Sức mạnh +0.50, Thành thạo Lục soát +0.20. Hạn: 14 lượt.】",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Đưa một người về: Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. Xong khi: đủ 1/1 người. Thưởng: Sức mạnh +0.50, Thành thạo Lục soát +0.20. Hạn: 14 lượt.】",
+     "quest": "{\"id\": \"dua-nguoi-ve\", \"title\": \"Đưa một người về\", \"goal\": \"Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình.\", \"need\": 1, \"unit\": \"người\", \"tier\": \"rat_kho\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"suc_manh\", \"amount\": 50, \"stat\": \"suc_manh\", \"difficulty\": \"hard\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 20}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 14}",
      "hist": "[]",
-     "panel": "Nhiệm vụ: Đưa một người về — Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. · Tiến độ 0/1 người · Thưởng +5 Sức mạnh, +2 Lục soát · Hạn còn 14/14 lượt"
+     "panel": "Nhiệm vụ: Đưa một người về — Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. · Tiến độ 0/1 người · Thưởng Sức mạnh +0.50, Thành thạo Lục soát +0.20 · Hạn còn 14/14 lượt"
     },
     {
      "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
      "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
-     "quest": "{\"id\": \"dua-nguoi-ve\", \"title\": \"Đưa một người về\", \"goal\": \"Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình.\", \"need\": 1, \"unit\": \"người\", \"tier\": \"rat_kho\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"suc_manh\", \"amount\": 5, \"stat\": \"suc_manh\", \"difficulty\": \"hard\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 2}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 14}",
+     "quest": "{\"id\": \"dua-nguoi-ve\", \"title\": \"Đưa một người về\", \"goal\": \"Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình.\", \"need\": 1, \"unit\": \"người\", \"tier\": \"rat_kho\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"suc_manh\", \"amount\": 50, \"stat\": \"suc_manh\", \"difficulty\": \"hard\", \"skill\": true, \"skill_id\": \"luc-soat\", \"skill_name\": \"Lục soát\", \"skill_amount\": 20}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 14}",
      "hist": "[]",
-     "panel": "Nhiệm vụ: Đưa một người về — Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. · Tiến độ 0/1 người · Thưởng +5 Sức mạnh, +2 Lục soát · Hạn còn 13/14 lượt"
+     "panel": "Nhiệm vụ: Đưa một người về — Đưa 1 người hàng xóm còn sống về căn hộ an toàn của mình. · Tiến độ 0/1 người · Thưởng Sức mạnh +0.50, Thành thạo Lục soát +0.20 · Hạn còn 13/14 lượt"
     }
    ]
   }
