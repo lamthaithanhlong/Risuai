@@ -10,41 +10,9 @@
 // judge.mjs askClaude), so the tests run with a stub and the live check with the acceptance runs' judge slot (claude:sonnet).
 import { askClaude } from './judge.mjs'
 
-const SPEECH_VERB = '(?:nói|hỏi|đáp|gọi|hét|thì thầm|lẩm bẩm|thốt|kêu|bảo|trả lời|lên tiếng|cất giọng|gắt)'
-const SYSTEM_LINE = /【|^\s*(?:\*|_)?\s*(?:QUÉT|GHI NHẬN|NHẬN DẠNG MẪU|HỆ THỐNG|ADMIN)\s*:/
-
-/**
- * The NPC lines of one reply: every “…” quote that is not the player's character speaking and not a System/Admin line.
- * [{ line, para }] — para is the paragraph the line sits in (the judge's context for who speaks and why).
- * A quote is the player's when the player's name (or its first word) is the speaker right before it ("Kenji hỏi: “…”") or right
- * after it ("“…” Kenji nói."), or when the reply opens with a paragraph of bare quotes (the narrator echoing the player's words).
- */
-export function npcLines(reply, { player = '' } = {}) {
-    const text = String(reply ?? '')
-        .replace(/\[\[[\s\S]*?\]\]/g, '')
-        .replace(/\[💡[\s\S]*?\]/g, '')
-    const names = [...new Set([player, String(player).split(/\s+/)[0]].map((s) => s.trim()).filter(Boolean))]
-    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const before = names.length ? new RegExp(`(?:${names.map(esc).join('|')})[^.!?“”\\n]{0,24}${SPEECH_VERB}[^.!?“”\\n]{0,16}:?\\s*$`, 'u') : null
-    const after = names.length ? new RegExp(`^\\s*(?:${names.map(esc).join('|')})\\s+[^.!?“”\\n]{0,12}${SPEECH_VERB}`, 'u') : null
-    const out = []
-    const paras = text.split(/\n\s*\n/)
-    for (const [k, para] of paras.entries()) {
-        if (SYSTEM_LINE.test(para) && !para.includes('“')) continue
-        // the reply's first paragraph made only of quotes is the narrator echoing the player's own words (live 2026-11-05, turns 11, 13
-        // and 15: “Thật ra, trong phòng tôi còn ít thuốc hạ sốt đấy.”); an NPC line always has its speaker or a gesture in its paragraph
-        if (k === paras.findIndex((x) => x.trim()) && !para.replace(/“[^”]*”/g, '').trim()) continue
-        for (const m of para.matchAll(/“([^”]+)”/g)) {
-            const line = m[1].trim()
-            if (!line || SYSTEM_LINE.test(line)) continue
-            const pre = para.slice(Math.max(0, m.index - 60), m.index)
-            const post = para.slice(m.index + m[0].length, m.index + m[0].length + 40)
-            if ((before && before.test(pre)) || (after && after.test(post))) continue
-            out.push({ line, para: para.trim() })
-        }
-    }
-    return out
-}
+// npcLines lives in the app's checker now (one extractor for the app, this judge and npcRules.mjs)
+import { npcLines } from '../../../src/ts/process/npcCheck.mjs'
+export { npcLines }
 
 const stripped = (r) => String(r ?? '').replace(/\[\[[\s\S]*?\]\]/g, '').replace(/\[💡[\s\S]*?\]/g, '').trim()
 
