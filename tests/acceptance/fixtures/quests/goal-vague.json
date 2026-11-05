@@ -1,0 +1,29 @@
+{
+ "note": "quest.goal RED fixture: a vague quest (no verb, no place, no count, no reward number, no tier, the deadline not shown).",
+ "runs": [
+  {
+   "turns": [
+    {
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "quest": "",
+     "hist": "[]"
+    },
+    {
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Sống sót: Hãy sống sót.】",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.\n\n【ADMIN: Nhiệm vụ — Sống sót: Hãy sống sót.】",
+     "quest": "{\"id\": \"song-sot\", \"title\": \"Sống sót\", \"goal\": \"Hãy sống sót.\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"the_luc\", \"amount\": 1}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 10}",
+     "hist": "[]",
+     "panel": "Nhiệm vụ: Sống sót — Hãy sống sót. (lượt 0/10)"
+    },
+    {
+     "shown": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "reply": "Hành lang im phăng phắc. Kenji áp tai vào cánh cửa và nghe tiếng kéo lê xa dần phía cuối dãy.",
+     "quest": "{\"id\": \"song-sot\", \"title\": \"Sống sót\", \"goal\": \"Hãy sống sót.\", \"state\": \"active\", \"reward\": {\"kind\": \"stat\", \"key\": \"the_luc\", \"amount\": 1}, \"progress\": 0, \"turn_started\": 2, \"deadline_turns\": 10}",
+     "hist": "[]",
+     "panel": "Nhiệm vụ: Sống sót — Hãy sống sót. (lượt 1/10)"
+    }
+   ]
+  }
+ ]
+}
