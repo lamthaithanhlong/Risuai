@@ -135,3 +135,52 @@ test('RED: a gate that ignores --candidate-json would run the plain build\'s Lua
         assert.notEqual(real, wrong)
     } finally { fx.st.close() }
 })
+
+// ---- gate.lua_locals: the Lua must really compile in the client's wrapper (wave 2 of the Zombie card died live at 203 locals) ----
+import { luaLocalsCheck, measureLocals, clientLuaWrapper } from './lib/luaGate.mjs'
+const locals = (n) => `${Array.from({ length: n }, (_, i) => `local v${i} = ${i}`).join('\n')}\nreturn v0`
+const one = (code) => [lua('Zombie', code)]
+const HOME = os.homedir()
+const REAL = {
+    wave2: path.join(HOME, '.risu-story-work/release-2/fate-simulator/tham_hoa_zombie_fate_illustrated.finds+stats+loadout+quests.json'),
+    wave3: path.join(HOME, '.risu-story-work/release-3/fate-simulator/tham_hoa_zombie_fate_illustrated.finds+stats+loadout+quests.json'),
+    wave1: path.join(HOME, '.risu-story-work/release-1/fate-simulator/tham_hoa_zombie_fate_illustrated.finds+stats+loadout+quests.json'),
+}
+const realScripts = (f) => JSON.parse(fs.readFileSync(f, 'utf8')).data.extensions.risuai.triggerscript
+
+test('the wrapper is read from the client source', () => {
+    const w = clientLuaWrapper()
+    assert.match(w.pre, /editRequestFuncs/)
+})
+
+test('gate.lua_locals: 10 main-level locals PASS; 197 do not compile (197 + the client prelude > 200) and FAIL', async () => {
+    const ok = await luaLocalsCheck(one(locals(10)))
+    assert.equal(ok.status, 'PASS', ok.summary)
+    assert.equal(ok.id, 'gate.lua_locals')
+    const bad = await luaLocalsCheck(one(locals(197)))
+    assert.equal(bad.status, 'FAIL')
+    assert.match(bad.summary, /does not compile/)
+})
+
+test('gate.lua_locals: compiles but too close (peak >= limit) FAILs with the number', async () => {
+    const r = await luaLocalsCheck(one(locals(185)))
+    assert.equal(r.status, 'FAIL')
+    assert.match(r.summary, /has 189 main-level locals at peak/)
+    assert.equal((await measureLocals(locals(10))).peak, 14, '10 locals + the 4 of the client prelude')
+})
+
+test('RED: a check that does not compile (mutant skips the compile result) lets the 197-local script through', async () => {
+    const m = await mutant("if (!r.ok) problems.push", "if (false) problems.push")
+    const bad = one(locals(197))
+    assert.equal((await luaLocalsCheck(bad)).status, 'FAIL')
+    assert.equal((await m.luaLocalsCheck(bad)).status, 'PASS', 'the mutant must differ')
+})
+
+for (const [name, want, expect] of [['wave2', 'FAIL', /does not compile.*too many local variables/s], ['wave3', 'PASS', null], ['wave1', 'FAIL', /has 198 main-level locals at peak/]]) {
+    test(`real card ${name}: ${want} at limit 180`, { skip: !fs.existsSync(REAL[name]) && `${REAL[name]} not on this machine` }, async () => {
+        const r = await luaLocalsCheck(realScripts(REAL[name]), { limit: 180 })
+        console.log(`# ${name}: ${r.status} - ${r.summary}`)
+        assert.equal(r.status, want, r.summary)
+        if (expect) assert.match(r.evidence.join('\n'), expect)
+    })
+}

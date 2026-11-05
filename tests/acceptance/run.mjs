@@ -39,7 +39,7 @@
 // Setup once: (cd tests/acceptance && npm install && npx playwright install chromium).
 // Never touches the live server (:6001) or the real save: the save is snapshotted read-only into ~/.risu-story-work/acceptance/<stamp>
 // (only the newest run is kept: --rejudge needs that run's copy) and the owner's settings are used from the copy as they are. Outputs are not committed.
-import { patchGateCopy, luaHashCheck, gateHashFiles, candidateFile } from './lib/luaGate.mjs'
+import { patchGateCopy, luaHashCheck, luaLocalsCheck, candidateLua, gateHashFiles, candidateFile } from './lib/luaGate.mjs'
 import fs from 'fs'
 import { execFileSync } from 'child_process'
 import os from 'os'
@@ -252,7 +252,7 @@ function finishGate(key, rec, ctx, story) {
         const startOf = (run) => { const c = run.turns.filter((x) => x.phase === 'creation' && x.ok).at(-1); return { stats: c?.vars?.stats ?? undefined, skills: c?.vars?.skills ?? undefined } }
         checks.push(...statsChecks(runs.map((run) => ({ start: startOf(run), turns: storyTurns(run) }))))
     }
-    if (GATE_N) { checks.push(luaHashCheck({ ...(rec.luaHash ?? {}), drop: LUA_DROP })) }
+    if (GATE_N) { checks.push(luaHashCheck({ ...(rec.luaHash ?? {}), drop: LUA_DROP })); if (rec.luaLocals) checks.push(rec.luaLocals) }
     const pass = checks.every((c) => c.status === 'PASS' || c.status === 'INFO') && !rec.blocked.length
     const scene = runs.flatMap((run, i) => sceneRepeats(run.turns.filter((x) => isCore(x) && x.ok).map((x) => x.shown || x.reply)).map((q) => `run ${i + 1}: ${q.text}`))
     const outFile = path.join(os.homedir(), '.risu-story-work', 'gate', `${key}${PERSONA_FROM ? '-persona' : ''}${SYSTEM ? '-system' : ''}${QUESTS ? '-quests' : ''}${FINDS ? '-finds' : ''}${STATS ? '-stats' : ''}.json`)
@@ -305,6 +305,10 @@ async function playStory(key, ctx) {
         // lore + description + the candidate's built Lua; the copy's Lua hash must equal the candidate's or this throws (never plays old Lua)
         const r = patchGateCopy({ saveDir: path.join(dir, 'save'), prefix: story.cardId.slice(0, 8), candidateDir: CANDIDATE, candidateJson: CANDIDATE_JSON, defaultVars: DEFAULT_VARS, lore, desc, drop: LUA_DROP, backupDir: path.join(dir, 'backup'), log })
         rec.luaHash = r.luaHash
+        // the candidate's Lua must compile in the client's wrapper with room to spare (a card at 203 locals died live; nothing else compiles it)
+        rec.luaLocals = await luaLocalsCheck(candidateLua(CANDIDATE, CANDIDATE_JSON).scripts, { limit: 180 })
+        log(`${rec.luaLocals.id}: ${rec.luaLocals.status} - ${rec.luaLocals.summary}`)
+        if (rec.luaLocals.status !== 'PASS') throw new Error(`gate ${rec.luaLocals.id}: ${rec.luaLocals.summary}`)
         rec.luaScripts = r.scripts
         if (PERSONA_FROM) {
             const { modelSettings: ms2, patchCopyRoot: pr2 } = await import('./lib/save.mjs')

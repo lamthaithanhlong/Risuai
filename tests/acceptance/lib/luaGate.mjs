@@ -67,3 +67,68 @@ export function patchGateCopy({ saveDir, prefix, candidateDir, candidateJson = n
     if (check.status !== 'PASS') throw new Error(`gate copy: ${check.summary}`)
     return { report: r.report, luaHash: { candidate: cand.hash, copy: back.hash, found: back.found, of: back.of, drop }, scripts: r.report.lua ?? [], file: cand.file }
 }
+
+// ---- gate.lua_locals: the shipped Lua must COMPILE inside the client's wrapper, with room to spare --------------------------------------
+// Why: Lua allows 200 locals per function. The client (src/ts/process/scriptings.ts luaCodeWrapper) puts its own prelude (4 main-level locals)
+// in front of the card's code and runs both as ONE chunk; a card at 199 locals died live with "too many local variables (limit is 200)" while
+// every other check was green (the hash check above only hashes; the client swallows load errors). This check really compiles.
+// Measure: K pad locals go at the very top of the wrapped chunk; the largest K that still compiles gives peak = 200 - K.
+const MAXVARS = 200
+const CLIENT_SRC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/ts/process/scriptings.ts')
+
+/** The client's wrapper, read from the client source: { pre, post } = the text before and after ${code} in luaCodeWrapper's template. */
+export function clientLuaWrapper(file = CLIENT_SRC) {
+    const m = fs.readFileSync(file, 'utf8').match(/function luaCodeWrapper\(code:\s*string\)\s*\{\s*return `([\s\S]*?)\$\{code\}([\s\S]*?)`/)
+    if (!m) throw new Error(`luaCodeWrapper not found in ${file}`)
+    return { pre: m[1], post: m[2] }
+}
+
+async function compiler() {
+    const { LuaFactory } = createRequire(import.meta.url)('wasmoon')
+    const L = await new LuaFactory().createEngine()
+    await L.doString(`function COMPILES(src) local f, e = load(src, "=card") f = nil collectgarbage() if e == nil then return "ok" end return e end`)
+    return { compile: async (src) => { L.global.set('SRC', src); return String(await L.doString('local r = COMPILES(SRC) SRC = nil return r')) }, close: () => L.global.close() }
+}
+const pad = (k) => (k ? 'local ' + Array.from({ length: k }, (_, i) => '__pad' + i).join(', ') + '\n' : '')
+
+/** { ok, peak, error } for one script's code as the client runs it. Fresh wasm engine per call (a shared one ran out of memory). */
+export async function measureLocals(code, wrapper = clientLuaWrapper()) {
+    const c = await compiler()
+    try {
+        const full = wrapper.pre + code + wrapper.post
+        const bare = await c.compile(full)
+        if (bare !== 'ok') return { ok: false, peak: null, error: bare }
+        let lo = 0, hi = MAXVARS
+        while (lo < hi) {
+            const mid = Math.ceil((lo + hi) / 2)
+            if ((await c.compile(pad(mid) + full)) === 'ok') lo = mid
+            else hi = mid - 1
+        }
+        return { ok: true, peak: MAXVARS - lo, error: null }
+    } finally { c.close() }
+}
+
+/** The gate.lua_locals check over the candidate's scripts (candidateLua(...).scripts): every triggerlua effect, wrapped as the client does. */
+export async function luaLocalsCheck(scripts, { limit = 180 } = {}) {
+    const wrapper = clientLuaWrapper()
+    const problems = []
+    const seen = []
+    let n = 0
+    for (const s of scripts ?? []) {
+        for (const e of s.effect ?? []) {
+            if (e.type !== 'triggerlua') continue
+            n++
+            const r = await measureLocals(e.code ?? '', wrapper)
+            if (!r.ok) problems.push(`"${s.comment}" does not compile in the client wrapper: ${r.error}`)
+            else if (r.peak >= limit) problems.push(`"${s.comment}" has ${r.peak} main-level locals at peak (client prelude included); limit ${limit} (Lua's is ${MAXVARS})`)
+            else seen.push(`${s.comment}: ${r.peak}`)
+        }
+    }
+    if (!n) problems.push('no triggerlua code to compile')
+    return {
+        id: 'gate.lua_locals', title: 'The shipped Lua compiles in the client wrapper with room to spare',
+        status: problems.length ? 'FAIL' : 'PASS',
+        summary: problems.length ? problems[0] : `${n} chunk(s) compile; peak main-level locals ${seen.map((x) => x.split(': ').pop()).join(', ')} (limit ${limit})`,
+        evidence: problems.length ? problems : seen,
+    }
+}
