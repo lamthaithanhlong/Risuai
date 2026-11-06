@@ -1,11 +1,11 @@
-// Model slots: up to 4 named model choices, one of them active, set in the settings and picked from the chat menu.
+// Model slots: up to 5 named model choices, one of them active, set in the settings and picked from the chat menu.
 // A port of specs/modelslots/ModelSlots.dfy, where every operation is proved to keep the state valid. The request code keeps reading
 // the two legacy fields (aiModel, customProxyRequestModel); a slot is applied by writing them, so that code does not change.
 //
 // Valid state: at most MAX_MODEL_SLOTS slots, unique non-empty ids, the active id names a slot (or is empty), and the legacy fields show
 // the active slot (its model, and for the Custom API its request model).
 
-export const MAX_MODEL_SLOTS = 4
+export const MAX_MODEL_SLOTS = 5  // the 5th is the DeepSeek harness (owner 2026-11-06)
 export const CUSTOM_API = 'reverse_proxy'
 
 export interface ModelSlot {

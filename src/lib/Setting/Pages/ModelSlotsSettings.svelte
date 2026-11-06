@@ -1,5 +1,5 @@
 <script lang="ts">
-    // Up to 4 named model choices. The one marked "in use" is what the chat menu shows; picking one writes the model fields.
+    // Up to 5 named model choices. The one marked "in use" is what the chat menu shows; picking one writes the model fields.
     import { DBState } from 'src/ts/stores.svelte'
     import ModelList from 'src/lib/UI/ModelList.svelte'
     import TextInput from 'src/lib/UI/GUI/TextInput.svelte'

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, skillNeed, skillCum, skillLevelOf, skillExpIn, expFromMastery, skillProgress, levelFacts, TIERS, TIER_POWER, tierPowerLine, effectOf } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, skillNeed, skillCum, skillLevelOf, skillExpIn, expFromMastery, skillProgress, levelFacts, statCapOfRank, TIERS, TIER_POWER, tierPowerLine, effectOf } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -51,12 +51,36 @@ describe('buildInventory', () => {
         expect(buildInventory(data(), { level: 1, exp: 0 }, 'diamond').skills).toEqual([])
         expect(TIERS.map((t) => buildInventory(data(), { level: 1, exp: 0 }).skills[0].cls)[0]).toBe('tier-gold')
     })
-    it('caps per stat: R1 = 20, R10 = 92', () => {
+    it('caps per stat: R1 = 20, R10 = 100', () => {
         const caps = { suc_manh: 92, nhanh_nhen: 92, the_luc: 92, tinh_than: 92, cam_nhan: 92, y_chi: 92 }
         const v10 = buildInventory(data({ rank: 10, stat_cap: 92, stat_caps: caps }), { level: 91, exp: 0 })
-        expect(v10.caps.map((c) => c.cap)).toEqual([92, 92, 92, 92, 92, 92])
+        expect(v10.caps.map((c) => c.cap)).toEqual([100, 100, 100, 100, 100, 100])
         expect(buildInventory(data(), { level: 1, exp: 0 }).caps[0]).toMatchObject({ key: 'suc_manh', cap: 20 })
         expect(buildInventory(data(), { level: 1, exp: 0 }).caps[1].cap).toBe(20)
+    })
+})
+
+describe('statCapOfRank', () => {
+    it('R1..R10 table', () => {
+        expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(statCapOfRank)).toEqual([20, 28, 37, 46, 55, 64, 73, 82, 91, 100])
+    })
+    it('Level 10000 -> 100; Lv25 (R3) -> 37', () => {
+        expect(levelFacts(10000).statCap).toBe(100)
+        expect(levelFacts(25).statCap).toBe(37)
+        expect(levelFacts(91).statCap).toBe(100)
+    })
+    it('never above 100 and never below 20 for any input', () => {
+        for (const r of [0, -5, 11, 1e9, Infinity, NaN, undefined as any, '7' as any]) {
+            const c = statCapOfRank(r)
+            expect(c).toBeLessThanOrEqual(100); expect(c).toBeGreaterThanOrEqual(20)
+        }
+        expect(statCapOfRank(1e9)).toBe(100); expect(statCapOfRank(0)).toBe(20); expect(statCapOfRank(NaN)).toBe(20)
+    })
+    it('the view shows the cap, not a stat: a server stat above the cap (92 at R9) does not change the cap row', () => {
+        const d = data({ rank: 9, stat_cap: 92, stat_caps: { suc_manh: 92 } })
+        const v = buildInventory(d, { level: 81, exp: 0 })
+        expect(v.caps[0].cap).toBe(91)
+        expect(d.stat_caps.suc_manh).toBe(92)
     })
 })
 
@@ -152,7 +176,7 @@ describe('everything level-derived comes from the ONE page Level, never the serv
             expect(v.itemSlotsOpen).toBe(open)
             expect(v.itemSlotsDefault).toBe(open)
             expect(v.skillCount.endsWith(`/ ${Math.max(100, 100 + 20 * (rank - 1) + 5 * level)}`)).toBe(true)
-            expect(v.caps[0].cap).toBe(20 + 8 * (rank - 1))
+            expect(v.caps[0].cap).toBe(statCapOfRank(rank))
             const f = levelFacts(level)
             expect([f.rank, f.slotsOpen, f.need]).toEqual([rank, open, needExp(level)])
         })

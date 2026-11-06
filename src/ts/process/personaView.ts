@@ -98,6 +98,13 @@ export function lockedLine(open: number, rank: number, limit: number | null = nu
     return `🔒 Mở thêm 1 slot ở Lv ${10 * Math.max(1, rank) + 1} (còn ${k} slot khoá)`
 }
 
+/** The per-stat cap of a rank: R1..R10 = 20, 28, 37, 46, 55, 64, 73, 82, 91, 100. Rank is clamped to 1..10 and the result never exceeds 100.
+ *  A stat already above its cap is shown as it is; nothing here ever lowers a stat. */
+export function statCapOfRank(rank: number): number {
+    const r = Math.min(10, Math.max(1, Math.floor(Number(rank)) || 1))
+    return Math.min(100, 20 + Math.floor((80 * (r - 1)) / 9))
+}
+
 /** EVERYTHING that is a function of the Level, from the one Level on the page (same formulas as persona_store.py: rank_of, slots_open, max_storage, stat_cap).
  *  The server view's own level/rank/slots_open/max_storage/stat_cap are never read: a view asked at another Level cannot make the head disagree with its bar. */
 export function levelFacts(levelIn: number) {
@@ -107,7 +114,7 @@ export function levelFacts(levelIn: number) {
         level, rank, rankName: rankName(rank), need: needExp(level),
         slotsOpen: Math.min(SLOT_TOTAL, 1 + rank),
         maxStorage: Math.max(100, 100 + 20 * (rank - 1) + 5 * level),
-        statCap: 20 + 8 * (rank - 1),
+        statCap: statCapOfRank(rank),
     }
 }
 
