@@ -7,7 +7,7 @@
     import { personaIdOf } from 'src/ts/process/statsGlue'
     import { checkPersonaBinded } from 'src/ts/util'
     import { fetchPersona, deleteEntry, equipSkill, unequipSkill, equipItem, unequipItem, setItemSlots, type PersonaData } from 'src/ts/storage/personaStore'
-    import { buildInventory, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
+    import { buildInventory, entryDetail, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
     import { fetchLedger } from 'src/ts/storage/statsSave'
 
     let data: PersonaData | null = $state(null)
@@ -22,6 +22,15 @@
     let itemsOpen = $state(true)
     let busy = $state(false)
     let tick = $state(0)
+    // the one open detail block: which entry, and where it was clicked (a card of the slot grid or a row of the list)
+    let detail: { kind: 'skill' | 'item', id: string, src: 'card' | 'row' } | null = $state(null)
+    const det = $derived(data && detail ? entryDetail(data, detail.kind, detail.id) : null)
+    // a click on a button inside the card/row (Gắn, Gỡ, Xoá, a slot chip) is that button's, never the detail's
+    function toggleDetail(e: Event, kind: 'skill' | 'item', id: string, src: 'card' | 'row') {
+        if ((e.target as HTMLElement | null)?.closest?.('button, input, a')) return
+        detail = detail && detail.kind === kind && detail.id === id && detail.src === src ? null : { kind, id, src }
+    }
+    const onKey = (e: KeyboardEvent, kind: 'skill' | 'item', id: string, src: 'card' | 'row') => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleDetail(e, kind, id, src) } }
 
     const persona = $derived(personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]))
     const lvl = $derived.by(() => { tick; return parseLvl((getCurrentChat()?.scriptstate as any)?.$lvl) })
@@ -69,6 +78,21 @@
     }
 </script>
 
+{#snippet detailBlock()}
+    {#if det}
+        <div class="detail rounded-md bg-darkbg p-2 text-sm mt-1 {det.cls}" data-testid="entry-detail" role="group" aria-label="Chi tiết {det.name}" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+            <div class="flex justify-between gap-2 items-start">
+                <div class="min-w-0 break-words"><span class="font-bold">{det.name}</span> <span class="tchip">{det.tierLabel}</span></div>
+                <button class="text-textcolor2 hover:text-red-500" data-testid="entry-detail-close" aria-label="Đóng chi tiết" onclick={(e) => { e.stopPropagation(); detail = null }}>✕</button>
+            </div>
+            <div class="text-xs mt-1 break-words" data-testid="entry-detail-stat">{det.stat}</div>
+            <div class="text-xs break-words" data-testid="entry-detail-rule">{det.rule}</div>
+            <div class="mt-1 break-words" data-testid="entry-detail-effect">Công dụng: {det.effect}</div>
+            {#if det.conditions}<div class="break-words" data-testid="entry-detail-conditions">Điều kiện: {det.conditions}</div>{/if}
+        </div>
+    {/if}
+{/snippet}
+
 <div class="inv-root mt-4 w-full max-w-full shrink-0 rounded-md border border-darkborderc p-4" data-risu-persona-inventory>
     <div class="flex items-center justify-between flex-wrap gap-2">
         <h3 class="text-xl font-bold">Kho & Slot</h3>
@@ -85,7 +109,7 @@
         <h4 class="mt-4 mb-1 font-bold">{inv.skillHeading}</h4>
         <div class="grid gap-2 cards">
             {#each inv.openSkillSlots as c (c.index)}
-                <div class="card bg-darkbg {c.tier ? TIER_CLASS[c.tier] : ''}" data-slot={c.index} data-testid="skill-slot-{c.index}">
+                <div class="card bg-darkbg {c.tier ? TIER_CLASS[c.tier] : ''}" class:clickable={!!c.skillId} data-slot={c.index} data-testid="skill-slot-{c.index}" role={c.skillId ? 'button' : undefined} tabindex={c.skillId ? 0 : undefined} onclick={c.skillId ? (e) => toggleDetail(e, 'skill', c.skillId as string, 'card') : undefined} onkeydown={c.skillId ? (e) => onKey(e, 'skill', c.skillId as string, 'card') : undefined}>
                     <div class="text-xs text-textcolor2">Slot {c.index + 1}</div>
                     {#if c.skillId}
                         <div class="name">{c.name}</div>
@@ -99,6 +123,7 @@
                 </div>
             {/each}
         </div>
+        {#if detail?.src === 'card' && detail.kind === 'skill'}{@render detailBlock()}{/if}
         {#if slotPick?.kind === 'skill'}
             <div class="flex gap-1 flex-wrap mt-1 text-xs" data-testid="skill-slot-picker">
                 {#if inv.pickableSkills.length === 0}<span class="text-textcolor2">Không còn kỹ năng nào để gắn</span>{/if}
@@ -110,7 +135,7 @@
         <h4 class="mt-4 mb-1 font-bold">{inv.itemHeading}</h4>
         <div class="grid gap-2 cards">
             {#each inv.openItemSlots as c (c.index)}
-                <div class="card bg-darkbg {c.tier ? TIER_CLASS[c.tier] : ''}" data-testid="item-slot-{c.index}">
+                <div class="card bg-darkbg {c.tier ? TIER_CLASS[c.tier] : ''}" class:clickable={!!c.itemId} data-testid="item-slot-{c.index}" role={c.itemId ? 'button' : undefined} tabindex={c.itemId ? 0 : undefined} onclick={c.itemId ? (e) => toggleDetail(e, 'item', c.itemId as string, 'card') : undefined} onkeydown={c.itemId ? (e) => onKey(e, 'item', c.itemId as string, 'card') : undefined}>
                     <div class="text-xs text-textcolor2">Slot {c.index + 1}</div>
                     {#if c.itemId}
                         <div class="name">{c.name}</div>
@@ -123,6 +148,7 @@
                 </div>
             {/each}
         </div>
+        {#if detail?.src === 'card' && detail.kind === 'item'}{@render detailBlock()}{/if}
         {#if slotPick?.kind === 'item'}
             <div class="flex gap-1 flex-wrap mt-1 text-xs" data-testid="item-slot-picker">
                 {#if inv.pickableItems.length === 0}<span class="text-textcolor2">Không còn vật phẩm nào để gắn</span>{/if}
@@ -155,7 +181,7 @@
         {#if inv.skills.length === 0}<p class="text-sm text-textcolor2">Không có kỹ năng nào.</p>{/if}
         <ul class="flex flex-col gap-1">
             {#each inv.skills as k (k.id)}
-                <li class="rounded-md bg-darkbg p-2 text-sm">
+                <li class="rounded-md bg-darkbg p-2 text-sm clickable" data-testid="skill-row-{k.id}" role="button" tabindex="0" onclick={(e) => toggleDetail(e, 'skill', k.id, 'row')} onkeydown={(e) => onKey(e, 'skill', k.id, 'row')}>
                     <div class="flex justify-between flex-wrap gap-1">
                         <div class="{k.cls} min-w-0 break-words"><span data-testid="skill-level-{k.id}">{k.text}</span><div class="bar" data-testid="skill-expbar-{k.id}"><div style="width: {k.prog.barPct}%"></div></div>{#if k.slot !== null} <span class="text-green-500">· slot {k.slot + 1}</span>{/if}</div>
                         <span class="flex gap-2">
@@ -164,6 +190,7 @@
                             <button class="hover:text-red-500" disabled={busy} onclick={() => remove('skill', k.id, k.name, k.slot)}>Xoá</button>
                         </span>
                     </div>
+                    {#if detail?.src === 'row' && detail.kind === 'skill' && detail.id === k.id}{@render detailBlock()}{/if}
                     {#if picking === k.id}
                         <div class="flex gap-1 flex-wrap mt-1 text-xs">
                             {#if inv.freeOpenSlots.length === 0}<span class="text-textcolor2">Không còn slot trống đã mở</span>{/if}
@@ -185,7 +212,7 @@
         <ul class="flex flex-col gap-1">
             {#each inv.items as i (i.id)}
                 {@const block = itemEquipBlock(inv, i.slot)}
-                <li class="rounded-md bg-darkbg p-2 text-sm">
+                <li class="rounded-md bg-darkbg p-2 text-sm clickable" data-testid="item-row-{i.id}" role="button" tabindex="0" onclick={(e) => toggleDetail(e, 'item', i.id, 'row')} onkeydown={(e) => onKey(e, 'item', i.id, 'row')}>
                     <div class="flex justify-between flex-wrap gap-1">
                         <span class="{i.cls} min-w-0 break-words">{i.name} × {i.qty} · {i.label}{#if i.slot !== null} <span class="text-green-500" data-testid="item-equipped-{i.id}">· Đã gắn (slot {i.slot + 1})</span>{/if}</span>
                         <span class="flex gap-2">
@@ -194,6 +221,7 @@
                         </span>
                     </div>
                     {#if block !== null && i.slot === null}<div class="text-xs text-textcolor2">{block}</div>{/if}
+                    {#if detail?.src === 'row' && detail.kind === 'item' && detail.id === i.id}{@render detailBlock()}{/if}
                     {#if pickingItem === i.id}
                         <div class="flex gap-1 flex-wrap mt-1 text-xs">
                             {#each inv.freeOpenItemSlots as s}
@@ -222,6 +250,8 @@
     button, input { min-height: 44px; min-width: 44px }
     .cards { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)) }
     .card { border-radius: 0.375rem; padding: 0.5rem; font-size: 0.875rem; min-width: 0; min-height: 7.5rem; display: flex; flex-direction: column; gap: 0.25rem }
+    .clickable { cursor: pointer }
+    .detail { overflow-wrap: anywhere; min-width: 0; max-width: 100%; border: 1px solid currentColor }
     .name { overflow-wrap: anywhere }
     .tchip { align-self: flex-start; border: 1px solid currentColor; border-radius: 9999px; padding: 0 0.5rem; font-size: 0.7rem }
     .bar { height: 6px; border-radius: 3px; background: rgba(128,128,128,.3); overflow: hidden }

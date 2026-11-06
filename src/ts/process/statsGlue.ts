@@ -1,7 +1,8 @@
 // Connects the growth pieces on the client (storage/statsSave.ts sends and loads, statsTags.ts hides): after a reply the panel's
 // `$stat_export` goes to the global store stamped with the persona's id; at the start of a request the waiting entries are retried and the
 // persona's stored stats are merged into the chat. Nothing here blocks a reply for more than LOAD_WAIT_MS, and nothing here throws.
-import { fetchPersona, itemSlotsOf, type Deps as PersonaDeps } from '../storage/personaStore'
+import { fetchPersona, itemSlotsOf, type Deps as PersonaDeps, type PersonaData } from '../storage/personaStore'
+import { displayName, effectOf } from './personaView'
 import { levelOf } from './findDrop'
 import { lastTurnIsAsk } from './adminAsk'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
@@ -126,11 +127,29 @@ export async function pageDeps(): Promise<StatsDeps> {
     return { persona, send: (b) => sendStats(b), current: (p) => fetchCurrent(p), sendTurn: (b) => sendTurn(b), ledger: (p) => fetchLedger(p) }
 }
 
+/** {id: {name, effect, conditions}} for the equipped skills and items; effect falls back to the client sentence so it is never empty. */
+export function equippedEffects(d: PersonaData): Record<string, { name: string, effect: string, conditions: string }> {
+    const out: Record<string, { name: string, effect: string, conditions: string }> = {}
+    const skills = new Map(d.skills.map((s) => [s.id, s])), items = new Map(d.items.map((i) => [i.id, i]))
+    for (const id of d.slots) {
+        const s = typeof id === 'string' ? skills.get(id) : undefined
+        if (s) out[s.id] = { name: displayName(s), effect: effectOf('skill', s), conditions: typeof s.conditions === 'string' ? s.conditions.trim() : '' }
+    }
+    for (const id of itemSlotsOf(d)) {
+        const i = id ? items.get(id) : undefined
+        if (i) out[i.id] = { name: displayName(i), effect: effectOf('item', i), conditions: typeof i.conditions === 'string' ? i.conditions.trim() : '' }
+    }
+    return out
+}
+
 /** The chat variable holding the equipped skill ids (a JSON list), written before each request from the persona's slots. */
 export const STORE_SLOTS_KEY = '$store_slots'
 
 /** The chat variable holding the equipped item ids (a JSON list of the non-null item slots): the truth Lua reads for which items are equipped. */
 export const STORE_ITEM_SLOTS_KEY = '$store_item_slots'
+
+/** The chat variable holding what the EQUIPPED skills and items do: JSON {id: {name, effect, conditions}} (the non-null slots only). */
+export const STORE_EFFECTS_KEY = '$store_effects'
 
 /** Reads the persona's store and writes the equipped skill ids (the non-null slots) to `$store_slots`; a failed read leaves the old value. Never throws. */
 export async function syncStoreSlots(chat: ChatLike, persona: string, deps: PersonaDeps = {}): Promise<void> {
@@ -141,6 +160,7 @@ export async function syncStoreSlots(chat: ChatLike, persona: string, deps: Pers
         const st = (chat.scriptstate ??= {})
         st[STORE_SLOTS_KEY] = JSON.stringify(r.data.slots.filter((x): x is string => typeof x === 'string' && x !== ''))
         st[STORE_ITEM_SLOTS_KEY] = JSON.stringify(itemSlotsOf(r.data).filter((x): x is string => x !== null))
+        st[STORE_EFFECTS_KEY] = JSON.stringify(equippedEffects(r.data))
     } catch { /* never blocks */ }
 }
 

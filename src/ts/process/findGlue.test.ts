@@ -203,7 +203,7 @@ describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
         expect(calls).toHaveLength(1)
         expect(calls[0].url).toBe('/api/persona/loot/turn')
         expect(calls[0].body).toEqual({ persona: 'nhan-vat', chat: 'chat-1', turn: 6, level: 23,
-            loots: [{ kind: 'skill', entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'silver', source: 'zombie', exp: 0 } }] })
+            loots: [{ kind: 'skill', entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'silver', source: 'zombie', exp: 0, effect: 'Nghe bước chân qua tường mỏng.', conditions: 'Cần yên tĩnh' } }] })
         expect(saved.map((r) => r.id)).toEqual(['muffled-footsteps'])
         expect(chat.scriptstate.$loot_pending).toBe('')
         expect(chat.scriptstate.$loot_turn_pending).toBeFalsy()
@@ -214,7 +214,7 @@ describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
         find(chat, { ...rec('Torch'), kind: 'item', rarity: 'rare' as never })
         const { f, calls } = bridge(() => ({ status: 200, body: { ok: true, results: [{ idx: 0, ok: true, added: 'new' }] } }))
         await run(chat, f)
-        expect(calls[0].body.loots[0]).toEqual({ kind: 'item', entry: { id: 'torch', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', qty: 1 } })
+        expect(calls[0].body.loots[0]).toEqual({ kind: 'item', entry: { id: 'torch', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', qty: 1, effect: 'Nghe bước chân qua tường mỏng.', conditions: 'Cần yên tĩnh' } })
     })
 
     test('a regenerated reply with other loot replaces the turn: same (chat, turn), the old loot is gone from the store', async () => {
@@ -302,5 +302,15 @@ describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
         await tick()
         expect(sent).toHaveLength(1)
         expect(chat.scriptstate.$loot_pending).toBeUndefined()
+    })
+})
+
+describe('lootEntry carries the find\'s effect and conditions', () => {
+    test('effect and conditions go with the entry; blanks are left out', async () => {
+        const { lootEntry } = await import('./findGlue')
+        const rec: any = { id: 'a-b', kind: 'item', name: { vi: 'Dao', en: 'Knife' }, effect: 'Cắt dây', conditions: 'Còn bén', rarity: 'bronze', source: { card: 'c', chapter: '' } }
+        expect(lootEntry(rec, 'c')).toMatchObject({ id: 'a-b', name: 'Dao', qty: 1, effect: 'Cắt dây', conditions: 'Còn bén' })
+        const e = lootEntry({ ...rec, kind: 'skill', conditions: ' ' }, 'c')
+        expect(e).toMatchObject({ exp: 0, effect: 'Cắt dây' }); expect('conditions' in e).toBe(false)
     })
 })

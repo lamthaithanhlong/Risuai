@@ -178,6 +178,34 @@ export function withLedgerMastery(d: PersonaData, skills: Record<string, number>
     return { ...d, skills: d.skills.map((s) => { if (!ok(skills[s.id])) return s; const { mastery: _old, ...rest } = s; return { ...rest, exp: skills[s.id] } }) }
 }
 
+// ENTRY DETAIL: what a skill / item DOES. Never an entry without a "Công dụng" line: a row the server sent without `effect` (old server, or '')
+// gets the same words the server's default uses.
+export const TIER_MOD: Record<Tier, number> = { bronze: 0, silver: 1, gold: 2, platinum: 3, diamond: 4 }
+/** The dice modifier of a skill now = tier_mod + floor(skill level / 3). */
+export const skillMod = (tier: Tier, level: number) => (TIER_MOD[tier] ?? 0) + Math.floor(Math.max(1, Math.floor(Number(level) || 1)) / 3)
+export const modLine = (mod: number) => `Xúc xắc +${mod} khi dùng`
+export const ITEM_SLOT_SENTENCE = 'Chỉ có tác dụng khi gắn vào slot trang bị; không gắn thì nằm trong kho, không ảnh hưởng lượt chơi.'
+/** The text of "Công dụng": the row's own effect, else the client fallback (skill: the mod sentence; item: the slot sentence). */
+export function effectOf(kind: 'skill' | 'item', e: { tier: Tier, effect?: unknown, exp?: unknown, mastery?: unknown }): string {
+    const own = typeof e.effect === 'string' ? e.effect.trim() : ''
+    if (own) return own
+    return kind === 'skill' ? `Cộng +${skillMod(e.tier, skillProgress(e as any).level)} vào xúc xắc mỗi khi dùng kỹ năng này.` : ITEM_SLOT_SENTENCE
+}
+export type EntryDetail = { kind: 'skill' | 'item', id: string, name: string, tier: Tier, tierLabel: string, cls: string, stat: string, rule: string, effect: string, conditions: string }
+/** The detail block of one skill / item (null when the id is not in the view). Equipped = its slot in the view, whatever the tier filter hides. */
+export function entryDetail(d: PersonaData, kind: 'skill' | 'item', id: string): EntryDetail | null {
+    if (kind === 'skill') {
+        const s = d.skills.find((x) => x.id === id)
+        if (!s) return null
+        const p = skillProgress(s)
+        return { kind, id, name: displayName(s), tier: s.tier, tierLabel: TIER_LABEL[s.tier], cls: TIER_CLASS[s.tier], stat: p.text, rule: modLine(skillMod(s.tier, p.level)), effect: effectOf('skill', s), conditions: typeof s.conditions === 'string' ? s.conditions.trim() : '' }
+    }
+    const i = d.items.find((x) => x.id === id)
+    if (!i) return null
+    const at = itemSlotsOf(d).indexOf(id)
+    return { kind, id, name: displayName(i), tier: i.tier, tierLabel: TIER_LABEL[i.tier], cls: TIER_CLASS[i.tier], stat: `× ${i.qty}`, rule: `Chỉ có tác dụng khi gắn slot (${at >= 0 ? `Đã gắn slot ${at + 1}` : 'Chưa gắn'})`, effect: effectOf('item', i), conditions: typeof i.conditions === 'string' ? i.conditions.trim() : '' }
+}
+
 /** Why Gắn is disabled for an item, or null when it can be gắn. */
 export function itemEquipBlock(inv: Pick<Inventory, 'freeOpenItemSlots'>, slot: number | null): string | null {
     if (slot !== null) return `Đã gắn (slot ${slot + 1})`

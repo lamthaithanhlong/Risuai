@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest'
-import { STORE_SLOTS_KEY, STORE_ITEM_SLOTS_KEY, syncStoreSlots } from './statsGlue'
+import { STORE_SLOTS_KEY, STORE_ITEM_SLOTS_KEY, STORE_EFFECTS_KEY, syncStoreSlots } from './statsGlue'
 
 const view = (slots: (string | null)[]) => ({ persona: 'k', level: 12, rank: 2, slots_open: 3, max_storage: 140, stat_cap: 28, stat_caps: {}, skills: [], items: [], slots, skill_count: 0, item_count: 0 })
 const fake = (status: number, body: unknown) => {
@@ -49,6 +49,29 @@ describe('syncStoreSlots', () => {
             const chat = { scriptstate: { [STORE_ITEM_SLOTS_KEY]: '["old"]' } as Record<string, string> }
             await syncStoreSlots(chat, 'k', { fetch: f, auth })
             expect(chat.scriptstate[STORE_ITEM_SLOTS_KEY]).toBe('["old"]')
+        }
+    })
+    test('$store_effects: {id: {name, effect, conditions}} for the EQUIPPED skills and items only; an empty effect gets the fallback; failed read keeps the old value', async () => {
+        const chat = { scriptstate: {} as Record<string, string> }
+        const v = {
+            ...view(['wall-vibration-listening', null]),
+            skills: [
+                { id: 'wall-vibration-listening', name: 'Nghe rung tường', tier: 'gold', exp: 62, effect: 'Nghe qua tường', conditions: 'Cần yên tĩnh' },
+                { id: 'rhythm-separation', name: 'Tách nhịp', tier: 'bronze', exp: 0, effect: 'x' },
+            ],
+            items: [{ id: 'rusty-knife', name: 'Dao gỉ', tier: 'bronze', qty: 1, effect: '' }, { id: 'old-laptop', name: 'Laptop', tier: 'silver', qty: 1, effect: 'y' }],
+            item_slots: ['rusty-knife', ...Array(10).fill(null)],
+        }
+        await syncStoreSlots(chat, 'k', { fetch: fake(200, v).f, auth })
+        const e = JSON.parse(chat.scriptstate[STORE_EFFECTS_KEY])
+        expect(Object.keys(e).sort()).toEqual(['rusty-knife', 'wall-vibration-listening'])
+        expect(e['wall-vibration-listening']).toEqual({ name: 'Nghe rung tường', effect: 'Nghe qua tường', conditions: 'Cần yên tĩnh' })
+        expect(e['rusty-knife'].name).toBe('Dao gỉ')
+        expect(e['rusty-knife'].effect).toContain('slot trang bị')
+        expect(e['rusty-knife'].conditions).toBe('')
+        for (const f of [(async () => { throw new Error('x') }) as any, fake(502, {}).f]) {
+            await syncStoreSlots(chat, 'k', { fetch: f, auth })
+            expect(Object.keys(JSON.parse(chat.scriptstate[STORE_EFFECTS_KEY])).length).toBe(2)
         }
     })
 })

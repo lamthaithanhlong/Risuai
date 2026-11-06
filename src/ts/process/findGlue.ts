@@ -37,10 +37,14 @@ export type GlueDeps = {
 /** The text of the panel line when the persona's storage is full. */
 export const fullLine = (name: string) => `Kho đầy: không nhận được ${name}`
 
-/** The persona-store entry for a find: skill {id, name, tier, source, exp 0}, item {id, name, tier, qty 1, source}; name = the Vietnamese one. */
+/** The persona-store entry for a find: skill {id, name, tier, source, exp 0}, item {id, name, tier, qty 1, source}; name = the Vietnamese one;
+ *  the find's effect and conditions go with it so the Kho & Slot page can say what it does. */
 export function lootEntry(rec: FindRecord, source: string): Record<string, unknown> {
     const tier = LEGACY_RARITY[rec.rarity] ?? rec.rarity
-    const base = { id: rec.id, name: rec.name.vi, tier, source }
+    const base: Record<string, unknown> = { id: rec.id, name: rec.name.vi, tier, source }
+    const effect = str(rec.effect), conditions = str(rec.conditions)
+    if (effect) base.effect = effect
+    if (conditions) base.conditions = conditions
     return rec.kind === 'skill' ? { ...base, exp: 0 } : { ...base, qty: 1 }
 }
 

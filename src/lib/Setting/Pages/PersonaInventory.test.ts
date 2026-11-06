@@ -5,11 +5,11 @@ const view = {
     persona: 'k', level: 12, rank: 2, slots_open: 3, max_storage: 3, stat_cap: 28, stat_caps: {},
     skills: [
         { id: 'wall-vibration-listening', name: 'wall-vibration-listening', tier: 'gold', exp: 62 },
-        { id: 'rhythm-separation', name: 'Tách nhịp', tier: 'bronze', exp: 540 },
+        { id: 'rhythm-separation', name: 'Tách nhịp', tier: 'bronze', exp: 540, effect: '', conditions: '' },
         { id: 'void-eye-scan', name: '', tier: 'silver', exp: 0 },
     ],
     items: [
-        { id: 'rusty-knife', name: 'rusty-knife', tier: 'bronze', qty: 2 },
+        { id: 'rusty-knife', name: 'rusty-knife', tier: 'bronze', qty: 2, effect: 'Cắt dây', conditions: 'Cần còn bén' },
         { id: 'old-laptop', name: 'old-laptop', tier: 'silver', qty: 1 },
     ],
     slots: ['wall-vibration-listening', null, null, null, null, null, null, null, null, null, null],
@@ -113,4 +113,53 @@ it('skill label is "<name> · <tier> · Lv 3 (EXP 12/40)" with an EXP bar, Lv 10
     expect(text).toContain('Bạc · Lv 1 (EXP 0/20)')
     expect(text).not.toMatch(/\d+\s*%/)
     expect(text).not.toContain('Thành thạo')
+})
+
+// ---- the detail block: what an entry DOES ----
+const click = (el: Element) => { (el as HTMLElement).click(); flushSync() }
+const detailOf = (t: HTMLElement) => t.querySelectorAll('[data-testid="entry-detail"]')
+
+it('every skill/item, as card or row, shows a non-empty "Công dụng" after a click (old-server rows without effect, and effect \'\')', async () => {
+    const t = await render()
+    const targets = ['skill-slot-0', 'item-slot-1', 'skill-row-wall-vibration-listening', 'skill-row-rhythm-separation', 'skill-row-void-eye-scan', 'item-row-rusty-knife', 'item-row-old-laptop']
+    for (const id of targets) {
+        click(q(t, id)!)
+        expect(detailOf(t).length).toBe(1)
+        const eff = q(t, 'entry-detail-effect')!.textContent!
+        expect(eff.replace('Công dụng:', '').trim().length).toBeGreaterThan(5)
+        expect(eff).toMatch(/^Công dụng: /)
+        expect(detailOf(t)[0].textContent).not.toMatch(KEBAB)
+    }
+})
+
+it('a Lv3 gold skill shows its mod (gold 2 + floor(3/3) = 3); an item shows × qty, the slot rule and the server effect + conditions', async () => {
+    const t = await render()
+    click(q(t, 'skill-row-wall-vibration-listening')!)
+    const d = q(t, 'entry-detail')!.textContent!
+    expect(d).toContain('Nghe rung tường'); expect(d).toContain('Vàng'); expect(d).toContain('Lv 3 (EXP 12/40)'); expect(d).toContain('Xúc xắc +3 khi dùng')
+    click(q(t, 'item-row-rusty-knife')!)
+    const i = q(t, 'entry-detail')!.textContent!
+    expect(i).toContain('× 2'); expect(i).toContain('Chỉ có tác dụng khi gắn slot (Đã gắn slot 2)'); expect(i).toContain('Công dụng: Cắt dây'); expect(i).toContain('Điều kiện: Cần còn bén')
+    click(q(t, 'item-row-old-laptop')!)
+    expect(q(t, 'entry-detail')!.textContent).toContain('Chưa gắn')
+    expect(q(t, 'entry-detail-conditions')).toBeNull()
+})
+
+it('one detail at a time, a second click on the same entry or the close button (>= 44px) closes it', async () => {
+    const t = await render()
+    click(q(t, 'skill-row-rhythm-separation')!); click(q(t, 'item-row-old-laptop')!)
+    expect(detailOf(t).length).toBe(1)
+    const closeBtn = q(t, 'entry-detail-close')!
+    click(closeBtn); expect(detailOf(t).length).toBe(0)
+    click(q(t, 'item-row-old-laptop')!); click(q(t, 'item-row-old-laptop')!)
+    expect(detailOf(t).length).toBe(0)
+})
+
+it('clicking Gắn / Gỡ does not open the detail (and still does its job)', async () => {
+    const t = await render()
+    click(q(t, 'item-equip-old-laptop')!)
+    expect(detailOf(t).length).toBe(0)
+    click(q(t, 'item-unequip-1')!); await wait()
+    expect(detailOf(t).length).toBe(0)
+    expect(store.unequipItem).toHaveBeenCalled()
 })
