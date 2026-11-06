@@ -1,6 +1,7 @@
 // Connects the growth pieces on the client (storage/statsSave.ts sends and loads, statsTags.ts hides): after a reply the panel's
 // `$stat_export` goes to the global store stamped with the persona's id; at the start of a request the waiting entries are retried and the
 // persona's stored stats are merged into the chat. Nothing here blocks a reply for more than LOAD_WAIT_MS, and nothing here throws.
+import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
 import { EXPORT_KEY, PENDING_KEY, drain, enqueue, fetchCurrent, mergeCurrent, parseEntries, parsePending, sendStats, type Current, type SendResult, type StatEntry } from '../storage/statsSave'
 
 export const LOAD_WAIT_MS = 1500
@@ -81,4 +82,38 @@ export async function statsBeforeRequestPage(card: { desc?: string, type?: strin
 export async function statsAfterReplyPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
     if (!hasStatsRule(card)) return
     try { await statsAfterReply(chat, await pageDeps()) } catch { /* never blocks */ }
+}
+
+// ---- the global training tag: [[TRAIN|stat+stat|level]] on a card with no growth engine of its own (storage/trainSave.ts) ----------------
+
+type TrainChat = { id?: string, message?: { role?: string, data?: string }[] } | undefined
+
+/** The text of the newest character message as the model wrote it. Read BEFORE tidyLastReply takes the hidden tags out of the stored text. */
+export function lastReplyRaw(chat: TrainChat): string {
+    const m = chat?.message
+    const last = Array.isArray(m) && m.length ? m[m.length - 1] : undefined
+    return last && last.role === 'char' ? String(last.data ?? '') : ''
+}
+
+/** After a reply: its TRAIN tag (if any) goes to the global store, once per (persona, chat, turn); the store skips Admin-off, locked and engine cards.
+ *  A card whose description teaches [[ACT| counts its own training in its Lua, so it never posts (no double count). Never throws. */
+export async function trainAfterReply(card: { desc?: string, type?: string } | undefined, chat: TrainChat, raw: string,
+    deps: { persona: () => string, cardId: () => string, send: (b: TrainBody) => Promise<string> }): Promise<void> {
+    try {
+        if (!card || card.type === 'group' || hasStatsRule(card)) return
+        const tag = parseTrain(raw)
+        const id = String(chat?.id ?? '')
+        const cardId = deps.cardId()
+        if (!tag || !cardId || !/^[A-Za-z0-9_.-]{1,64}$/.test(id) || !Array.isArray(chat?.message)) return
+        await deps.send(trainBody(tag, { persona: deps.persona(), card: cardId, chat: id, turn: chat!.message!.length }))
+    } catch { /* the reply is never held by this */ }
+}
+
+export async function trainAfterReplyPage(card: { desc?: string, type?: string, chaId?: string } | undefined, chat: TrainChat, raw: string): Promise<void> {
+    if (!raw || !/\[\[\s*train/i.test(raw)) return
+    try {
+        const d = await pageDeps()
+        const { adminCardOf } = await import('./adminGlobal')
+        await trainAfterReply(card, chat, raw, { persona: d.persona, cardId: () => adminCardOf(card as never), send: (b) => sendTrain(b) })
+    } catch { /* never blocks */ }
 }

@@ -52,12 +52,54 @@ async function saveStats(body, { target = DEFAULT_TARGET, fetch = globalThis.fet
     }
 }
 
+// POST /api/train: the global side of the hidden [[TRAIN|stat+stat|level]] tag for a card with no growth engine of its own (the asset manager's
+// train_store.py applies the scale, the cap, the regenerated-reply rule and skips engine / off / locked cards). Same auth as /api/stats.
+//   body: {persona, card, chat, turn, stats: [1-2 stat ids], level: nhe|vua|manh|cuc}
+//   200 {applied, ...}  400 {error} the store refused it (the page drops it)  502/504 the asset manager is down or slow (the page drops it too:
+//   a tiny gain is not queued; the same turn sent again later replaces itself)
+const TRAIN_KEYS = ['persona', 'card', 'chat', 'turn', 'stats', 'level']
+
+/** The body the asset manager gets, only the known fields, or null when it is not an object with a stats list. */
+function trainOf(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !Array.isArray(body.stats)) return null
+    const out = {}
+    for (const k of TRAIN_KEYS) if (body[k] !== undefined) out[k] = body[k]
+    return out
+}
+
+async function saveTrain(body, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} } = {}) {
+    const clean = trainOf(body)
+    if (!clean) return { status: 400, body: { error: 'send {persona, card, chat, turn, stats, level}' } }
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), timeoutMs)
+    try {
+        const r = await fetch(`${target}/api/train`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clean), signal: ctl.signal })
+        let data = null
+        try { data = await r.json() } catch { /* not JSON */ }
+        if (r.status === 200 && data && typeof data.applied === 'boolean') { log(`[Train] ${data.applied ? 'applied' : 'skipped: ' + String(data.reason).slice(0, 20)}`); return { status: 200, body: data } }
+        if (r.status >= 400 && r.status < 500) { log(`[Train] refused (${r.status})`); return { status: 400, body: { error: String(data?.error ?? 'the store refused it').slice(0, 300) } } }
+        log(`[Train] the asset manager answered ${r.status}`)
+        return { status: 502, body: { error: 'the asset manager failed' } }
+    } catch (e) {
+        const timedOut = ctl.signal.aborted
+        log(`[Train] ${timedOut ? 'timeout' : 'unreachable'}`)
+        return { status: timedOut ? 504 : 502, body: { error: timedOut ? 'the asset manager did not answer in time' : 'the asset manager is not running' } }
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
 function mountStats(app, { auth, limiter, target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} }) {
     app.post('/api/stats', limiter, async (req, res) => {
         if (!await auth(req, res)) return
         const { status, body } = await saveStats(req.body, { target, fetch, timeoutMs, log })
         res.status(status).set('Cache-Control', 'no-store').send(body)
     })
+    app.post('/api/train', limiter, async (req, res) => {
+        if (!await auth(req, res)) return
+        const { status, body } = await saveTrain(req.body, { target, fetch, timeoutMs, log })
+        res.status(status).set('Cache-Control', 'no-store').send(body)
+    })
 }
 
-module.exports = { mountStats, saveStats, entriesOf, MAX_BATCH, TIMEOUT_MS }
+module.exports = { mountStats, saveStats, saveTrain, trainOf, entriesOf, MAX_BATCH, TIMEOUT_MS }
