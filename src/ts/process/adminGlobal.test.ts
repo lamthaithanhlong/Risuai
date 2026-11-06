@@ -288,8 +288,8 @@ describe('persona record', () => {
     it('the text carries the persona page numbers (2 decimals), slots, skills with mastery and tier, items', () => {
         const t = personaRecordText(buildView(KENJI, undefined, { 'wall-vibration-listening': { vi: 'Nghe rung vách' } }), 'Kenji Park')
         expect(t.startsWith(RECORD_TITLE)).toBe(true)
-        expect(t).toContain('Thể lực 10.15%')
-        expect(t).toContain('Ý chí 10.00%')
+        expect(t).toContain('Thể lực 10 (EXP 3/20)')
+        expect(t).toContain('Ý chí 10 (EXP 0/20)')
         expect(t).toContain('Ô kỹ năng mở: 1')
         expect(t).toContain('Nghe rung vách (thành thạo 0.04%, Sơ nhập)')
         expect(t).toContain('Vật phẩm:')
@@ -311,7 +311,7 @@ describe('persona record', () => {
         const sys = out.filter((m) => String(m.content).includes('[Admin (global'))
         expect(sys).toHaveLength(1)
         expect(String(sys[0].content)).toContain(RECORD_TITLE)
-        expect(String(sys[0].content)).toContain('Thể lực 10.15%')
+        expect(String(sys[0].content)).toContain('Thể lực 10 (EXP 3/20)')
         expect(String(sys[0].content)).toContain('Nghe rung vách')
     })
     it('a registered story card (Zombie) gets the record too, in words: no percent, no decimals, "never write numbers"', async () => {
@@ -346,7 +346,7 @@ describe('persona record', () => {
             expect(rec).not.toMatch(/\d\s*%|\d[.,]\d/)
         }
         const n = personaRecordText(buildView(KENJI, undefined, { 'wall-vibration-listening': { vi: 'Nghe rung vách' } }), 'K', 'numbers')
-        expect(n).toContain('Thể lực 10.15%')
+        expect(n).toContain('Thể lực 10 (EXP 3/20)')
         expect(n).not.toContain('Không bao giờ viết con số')
     })
     it('all stats equal: said in words, no number', () => {
@@ -400,7 +400,7 @@ describe('persona record', () => {
         await fetchRecord('kenji', { fetch: storeFetch(KENJI) as never, auth: () => 't', now: () => t })
         t = 120_000
         const v = await fetchRecord('kenji', { fetch: storeFetch(KENJI, { down: true }) as never, auth: () => 't', now: () => t, log: () => {} })
-        expect(v?.stats.find((s) => s.key === 'the_luc')?.pct).toBe('10.15%')
+        expect(v?.stats.find((s) => s.key === 'the_luc')?.pct).toBe('10 (EXP 3/20)')
     })
     it('cut order: sections first, then the record, never intro, Connecting or the Story guide', () => {
         const assets = payload().assets
