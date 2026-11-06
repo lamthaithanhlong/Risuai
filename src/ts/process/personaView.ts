@@ -1,5 +1,5 @@
 // What the "Kho & Slot" tab shows, from the server's answer and the persona's Level/EXP (pure; the component only draws it).
-import type { PersonaData, SkillEntry, ItemEntry, Tier } from '../storage/personaStore'
+import { itemSlotsOf, itemSlotsOpenOf, type PersonaData, type SkillEntry, type ItemEntry, type Tier } from '../storage/personaStore'
 
 export const TIERS: Tier[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
 export const TIER_LABEL: Record<Tier, string> = { bronze: 'Đồng', silver: 'Bạc', gold: 'Vàng', platinum: 'Bạch kim', diamond: 'Kim cương' }
@@ -8,8 +8,8 @@ export const RANK_LABELS = ['Tân binh', 'Học việc', 'Sơ cấp', 'Trung c�
 export const SLOT_TOTAL = 11
 export const STAT_LABEL: Record<string, string> = { suc_manh: 'Sức mạnh', nhanh_nhen: 'Nhanh nhẹn', the_luc: 'Thể lực', tinh_than: 'Tinh thần', cam_nhan: 'Cảm nhận', y_chi: 'Ý chí' }
 export const REASON_VI: Record<string, string> = {
-    full: 'Kho đầy', not_found: 'Không còn trong kho', slot_locked: 'Slot chưa mở ở rank này', no_such_skill: 'Kỹ năng này không có trong kho',
-    already_equipped: 'Kỹ năng đã gắn ở slot khác', network: 'Không kết nối được máy chủ', unknown: 'Không thực hiện được',
+    full: 'Kho đầy', not_found: 'Không còn trong kho', slot_locked: 'Slot chưa mở ở rank này', no_such_skill: 'Kỹ năng này không có trong kho', no_such_item: 'Vật phẩm này không có trong kho',
+    already_equipped: 'Đã gắn ở slot khác', network: 'Không kết nối được máy chủ', unknown: 'Không thực hiện được',
 }
 export const reasonText = (r: string) => REASON_VI[r] ?? REASON_VI.unknown
 
@@ -40,6 +40,7 @@ export function parseLvl(text: unknown): Lvl {
 }
 
 export type SlotCell = { index: number, open: boolean, skillId: string | null, name: string | null, tier: Tier | null }
+export type ItemSlotCell = { index: number, open: boolean, itemId: string | null, name: string | null, tier: Tier | null }
 export type Filter = Tier | 'all'
 
 export function filterTier<T extends { tier: Tier }>(list: T[], f: Filter): T[] { return f === 'all' ? list : list.filter((e) => e.tier === f) }
@@ -55,13 +56,27 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     const equippedAt = new Map<string, number>()
     slots.forEach((c) => { if (c.skillId) equippedAt.set(c.skillId, c.index) })
     const used = slots.filter((c) => c.skillId).length
+    const iById = new Map(d.items.map((i) => [i.id, i]))
+    const itemOpen = itemSlotsOpenOf(d)
+    const itemSlots: ItemSlotCell[] = itemSlotsOf(d).map((id, i) => {
+        const it = id ? iById.get(id) : undefined
+        return { index: i, open: i < itemOpen, itemId: id, name: it?.name ?? id, tier: it?.tier ?? null }
+    })
+    const itemAt = new Map<string, number>()
+    itemSlots.forEach((c) => { if (c.itemId) itemAt.set(c.itemId, c.index) })
+    const itemUsed = itemSlots.filter((c) => c.itemId).length
+    const itemDefault = Number.isInteger(d.item_slots_default) ? d.item_slots_default as number : d.slots_open
+    const limit = Number.isInteger(d.item_slots_limit) ? d.item_slots_limit as number : null
     return {
         rank: d.rank, rankName: rankName(d.rank),
         level: lvl.level, exp: lvl.exp, need, expPct: Math.min(100, Math.round((lvl.exp / need) * 100)),
         slots, slotText: `${used}/${d.slots_open} (mở ${d.slots_open} trên ${SLOT_TOTAL})`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
+        itemSlots, itemSlotText: `${itemUsed}/${itemOpen} (mở ${itemOpen} trên ${SLOT_TOTAL})`, freeOpenItemSlots: itemSlots.filter((c) => c.open).map((c) => c.index),
+        itemSlotsLimit: limit, itemSlotsDefault: itemDefault, itemSlotsOpen: itemOpen,
+        skillsFull: d.skill_count >= d.max_storage, itemsFull: d.item_count >= d.max_storage,
         skillCount: `${d.skill_count} / ${d.max_storage}`, itemCount: `${d.item_count} / ${d.max_storage}`,
         skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
-        items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier] })),
+        items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier], slot: itemAt.get(i.id) ?? null })),
         caps: Object.keys(STAT_LABEL).map((k) => ({ key: k, label: STAT_LABEL[k], cap: d.stat_caps?.[k] ?? d.stat_cap })),
     }
 }
@@ -73,6 +88,17 @@ export function withLedgerMastery(d: PersonaData, skills: Record<string, number>
     if (!skills) return d
     const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10000
     return { ...d, skills: d.skills.map((s) => ok(skills[s.id]) ? { ...s, mastery: skills[s.id] } : s) }
+}
+
+/** Why Gắn is disabled for an item, or null when it can be gắn. */
+export function itemEquipBlock(inv: Pick<Inventory, 'freeOpenItemSlots'>, slot: number | null): string | null {
+    if (slot !== null) return `Đã gắn (slot ${slot + 1})`
+    return inv.freeOpenItemSlots.length === 0 ? 'Không có slot trang bị nào đã mở' : null
+}
+/** The "Số slot item" input text -> a limit 1..11, or null when it is not a whole number in range. */
+export function parseItemSlotsLimit(text: unknown): number | null {
+    const n = Number(String(text ?? '').trim())
+    return String(text ?? '').trim() !== '' && Number.isInteger(n) && n >= 1 && n <= SLOT_TOTAL ? n : null
 }
 
 /** The confirmation text for Xoá. */

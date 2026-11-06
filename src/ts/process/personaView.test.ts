@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -82,5 +82,41 @@ describe('withLedgerMastery (Kho & Slot shows the ledger mastery, L1 2026-11-06 
         expect(withLedgerMastery(d, null)).toBe(d)
         expect(withLedgerMastery(d, undefined).skills).toEqual(d.skills)
         expect(buildInventory(withLedgerMastery(d, { a: 777 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.mastery).toBe(777)
+    })
+})
+
+describe('item slot grid', () => {
+    const isl = (o: Record<number, string>) => Array.from({ length: 11 }, (_, i) => o[i] ?? null)
+    it('an old server view (no item_slots): 11 empty cells, open = skill slots open', () => {
+        const v = buildInventory(data(), { level: 1, exp: 0 })
+        expect(v.itemSlots.length).toBe(11)
+        expect(v.itemSlots.every((c) => c.itemId === null)).toBe(true)
+        expect(v.itemSlots.filter((c) => c.open).length).toBe(2)
+        expect(v.itemSlotText).toBe('0/2 (mở 2 trên 11)')
+        expect(v.itemSlotsLimit).toBeNull()
+        expect(v.itemSlotsDefault).toBe(2)
+    })
+    it('cells: open, locked, equipped with name+tier; the item row knows its slot; limit and default come from the server', () => {
+        const v = buildInventory(data({ item_slots: isl({ 1: 'i' }), item_slots_open: 3, item_slots_limit: 3, item_slots_default: 2 }), { level: 1, exp: 0 })
+        expect(v.itemSlots[1]).toMatchObject({ open: true, itemId: 'i', name: 'Thuốc', tier: 'bronze' })
+        expect(v.itemSlots[3].open).toBe(false)
+        expect(v.itemSlotText).toBe('1/3 (mở 3 trên 11)')
+        expect(v.freeOpenItemSlots).toEqual([0, 1, 2])
+        expect(v.items[0].slot).toBe(1)
+        expect([v.itemSlotsLimit, v.itemSlotsDefault, v.itemSlotsOpen]).toEqual([3, 2, 3])
+    })
+    it('itemEquipBlock: equipped, no open slot, or free to gắn', () => {
+        expect(itemEquipBlock({ freeOpenItemSlots: [0] }, 4)).toBe('Đã gắn (slot 5)')
+        expect(itemEquipBlock({ freeOpenItemSlots: [] }, null)).toMatch(/slot/)
+        expect(itemEquipBlock({ freeOpenItemSlots: [0] }, null)).toBeNull()
+    })
+    it('parseItemSlotsLimit: whole numbers 1..11 only', () => {
+        expect([parseItemSlotsLimit('4'), parseItemSlotsLimit(11), parseItemSlotsLimit(1)]).toEqual([4, 11, 1])
+        for (const bad of ['', '0', '12', '2.5', 'x', null, undefined]) expect(parseItemSlotsLimit(bad)).toBeNull()
+    })
+    it('storage full flags; the new reasons are in Vietnamese', () => {
+        const v = buildInventory(data({ skill_count: 100, item_count: 99 }), { level: 1, exp: 0 })
+        expect([v.skillsFull, v.itemsFull]).toEqual([true, false])
+        expect(reasonText('no_such_item')).toBe('Vật phẩm này không có trong kho')
     })
 })

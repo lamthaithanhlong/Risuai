@@ -1,7 +1,7 @@
 // Connects the growth pieces on the client (storage/statsSave.ts sends and loads, statsTags.ts hides): after a reply the panel's
 // `$stat_export` goes to the global store stamped with the persona's id; at the start of a request the waiting entries are retried and the
 // persona's stored stats are merged into the chat. Nothing here blocks a reply for more than LOAD_WAIT_MS, and nothing here throws.
-import { fetchPersona, type Deps as PersonaDeps } from '../storage/personaStore'
+import { fetchPersona, itemSlotsOf, type Deps as PersonaDeps } from '../storage/personaStore'
 import { levelOf } from './findDrop'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
 import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldSkills, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
@@ -123,13 +123,18 @@ export async function pageDeps(): Promise<StatsDeps> {
 /** The chat variable holding the equipped skill ids (a JSON list), written before each request from the persona's slots. */
 export const STORE_SLOTS_KEY = '$store_slots'
 
+/** The chat variable holding the equipped item ids (a JSON list of the non-null item slots): the truth Lua reads for which items are equipped. */
+export const STORE_ITEM_SLOTS_KEY = '$store_item_slots'
+
 /** Reads the persona's store and writes the equipped skill ids (the non-null slots) to `$store_slots`; a failed read leaves the old value. Never throws. */
 export async function syncStoreSlots(chat: ChatLike, persona: string, deps: PersonaDeps = {}): Promise<void> {
     try {
         if (!chat) return
         const r = await fetchPersona(persona, levelOf(chat.scriptstate), deps)
         if (!r.ok) return
-        ;(chat.scriptstate ??= {})[STORE_SLOTS_KEY] = JSON.stringify(r.data.slots.filter((x): x is string => typeof x === 'string' && x !== ''))
+        const st = (chat.scriptstate ??= {})
+        st[STORE_SLOTS_KEY] = JSON.stringify(r.data.slots.filter((x): x is string => typeof x === 'string' && x !== ''))
+        st[STORE_ITEM_SLOTS_KEY] = JSON.stringify(itemSlotsOf(r.data).filter((x): x is string => x !== null))
     } catch { /* never blocks */ }
 }
 

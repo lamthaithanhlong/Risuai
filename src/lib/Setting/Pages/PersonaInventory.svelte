@@ -6,8 +6,8 @@
     import { alertConfirm } from 'src/ts/alert'
     import { personaIdOf } from 'src/ts/process/statsGlue'
     import { checkPersonaBinded } from 'src/ts/util'
-    import { fetchPersona, deleteEntry, equipSkill, unequipSkill, type PersonaData } from 'src/ts/storage/personaStore'
-    import { buildInventory, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
+    import { fetchPersona, deleteEntry, equipSkill, unequipSkill, equipItem, unequipItem, setItemSlots, type PersonaData } from 'src/ts/storage/personaStore'
+    import { buildInventory, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
     import { fetchLedger } from 'src/ts/storage/statsSave'
 
     let data: PersonaData | null = $state(null)
@@ -15,6 +15,8 @@
     let note = $state('')
     let filter: Filter = $state('all')
     let picking: string | null = $state(null) // skill id waiting for a slot choice
+    let pickingItem: string | null = $state(null) // item id waiting for an item slot choice
+    let limitText = $state('')
     let busy = $state(false)
     let tick = $state(0)
 
@@ -36,12 +38,22 @@
         busy = true; note = ''
         const r = await fn()
         if (!r.ok) note = reasonText(String(r.reason))
-        picking = null
+        picking = null; pickingItem = null
         await reload()
         busy = false
     }
     const equip = (id: string, slot: number) => act(() => equipSkill(persona, slot, id, lvl.level))
     const unequip = (slot: number) => act(() => unequipSkill(persona, slot, lvl.level))
+    const equipI = (id: string, slot: number) => act(() => equipItem(persona, slot, id, lvl.level))
+    const unequipI = (slot: number) => act(() => unequipItem(persona, slot, lvl.level))
+    function applyLimit() {
+        const n = parseItemSlotsLimit(limitText)
+        if (n === null) { note = 'Số slot item phải là số nguyên từ 1 đến 11'; return }
+        act(() => setItemSlots(persona, n, lvl.level))
+    }
+    const resetLimit = () => act(() => setItemSlots(persona, null, lvl.level))
+    // the box shows the server's number again after every reload
+    $effect(() => { limitText = String(inv?.itemSlotsOpen ?? '') })
     async function remove(kind: 'skill' | 'item', id: string, name: string, slot: number | null) {
         if (!await alertConfirm(deleteWarning(name, slot))) return
         await act(async () => {
@@ -81,6 +93,27 @@
             {/each}
         </div>
 
+        <h4 class="mt-4 mb-1 font-bold">Slot trang bị: {inv.itemSlotText}</h4>
+        <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(120px, 1fr))">
+            {#each inv.itemSlots as c (c.index)}
+                <div class="rounded-md p-2 text-sm {c.open ? 'bg-darkbg' : 'bg-darkbg opacity-40'} {c.tier ? TIER_CLASS[c.tier] : ''}" data-testid="item-slot-{c.index}" data-locked={!c.open}>
+                    <div class="text-xs text-textcolor2">Slot {c.index + 1}{#if !c.open} · khoá{/if}</div>
+                    {#if !c.open}<div>🔒</div>
+                    {:else if c.itemId}
+                        <div class="truncate">{c.name}{#if c.tier} · {TIER_LABEL[c.tier]}{/if}</div>
+                        <button class="text-xs text-textcolor2 hover:text-red-500" disabled={busy} data-testid="item-unequip-{c.index}" onclick={() => unequipI(c.index)}>Bỏ gắn</button>
+                    {:else}<div class="text-textcolor2">Trống</div>{/if}
+                </div>
+            {/each}
+        </div>
+        <div class="flex gap-2 flex-wrap mt-2 items-center text-sm">
+            <label for="item-slots-limit">Số slot item:</label>
+            <input id="item-slots-limit" class="w-14 rounded bg-darkbg p-1 text-center" type="number" min="1" max="11" bind:value={limitText} data-testid="item-slots-limit" />
+            <button class="chip on" disabled={busy} data-testid="item-slots-apply" onclick={applyLimit}>Đặt</button>
+            <span class="text-textcolor2">(mặc định {inv.itemSlotsDefault})</span>
+            <button class="chip" disabled={busy || inv.itemSlotsLimit === null} data-testid="item-slots-reset" onclick={resetLimit}>Về mặc định</button>
+        </div>
+
         <div class="flex gap-1 flex-wrap mt-4 items-center">
             <button class="chip {filter === 'all' ? 'on' : ''}" onclick={() => filter = 'all'}>Tất cả</button>
             {#each TIERS as t}
@@ -90,6 +123,7 @@
         {#if note}<p class="text-sm text-red-500 mt-2" data-note>{note}</p>{/if}
 
         <h4 class="mt-3 mb-1 font-bold">Kỹ năng: {inv.skillCount}</h4>
+        {#if inv.skillsFull}<p class="text-sm text-red-500" data-testid="storage-full-skills">Kho kỹ năng đầy: không nhận thêm kỹ năng mới</p>{/if}
         {#if inv.skills.length === 0}<p class="text-sm text-textcolor2">Không có kỹ năng nào.</p>{/if}
         <ul class="flex flex-col gap-1">
             {#each inv.skills as k (k.id)}
@@ -113,12 +147,28 @@
         </ul>
 
         <h4 class="mt-3 mb-1 font-bold">Vật phẩm: {inv.itemCount}</h4>
+        {#if inv.itemsFull}<p class="text-sm text-red-500" data-testid="storage-full-items">Kho vật phẩm đầy: không nhận thêm vật phẩm mới</p>{/if}
         {#if inv.items.length === 0}<p class="text-sm text-textcolor2">Không có vật phẩm nào.</p>{/if}
         <ul class="flex flex-col gap-1">
             {#each inv.items as i (i.id)}
-                <li class="rounded-md bg-darkbg p-2 text-sm flex justify-between flex-wrap gap-1">
-                    <span class={i.cls}>{i.name} × {i.qty} · {i.label}</span>
-                    <button class="hover:text-red-500" disabled={busy} onclick={() => remove('item', i.id, i.name, null)}>Xoá</button>
+                {@const block = itemEquipBlock(inv, i.slot)}
+                <li class="rounded-md bg-darkbg p-2 text-sm">
+                    <div class="flex justify-between flex-wrap gap-1">
+                        <span class={i.cls}>{i.name} × {i.qty} · {i.label}{#if i.slot !== null} <span class="text-green-500" data-testid="item-equipped-{i.id}">· Đã gắn (slot {i.slot + 1})</span>{/if}</span>
+                        <span class="flex gap-2">
+                            <button class="hover:text-green-500 disabled:opacity-40" disabled={busy || block !== null} title={block ?? ''} data-testid="item-equip-{i.id}" onclick={() => pickingItem = pickingItem === i.id ? null : i.id}>Gắn</button>
+                            <button class="hover:text-red-500" disabled={busy} onclick={() => remove('item', i.id, i.name, null)}>Xoá</button>
+                        </span>
+                    </div>
+                    {#if block !== null && i.slot === null}<div class="text-xs text-textcolor2">{block}</div>{/if}
+                    {#if pickingItem === i.id}
+                        <div class="flex gap-1 flex-wrap mt-1 text-xs">
+                            {#each inv.freeOpenItemSlots as s}
+                                {@const cur = inv.itemSlots[s]}
+                                <button class="chip on" disabled={busy} data-testid="item-slot-pick-{s}" onclick={() => equipI(i.id, s)}>Slot {s + 1}: {cur.itemId ? `${cur.name} (thay)` : 'trống'}</button>
+                            {/each}
+                        </div>
+                    {/if}
                 </li>
             {/each}
         </ul>

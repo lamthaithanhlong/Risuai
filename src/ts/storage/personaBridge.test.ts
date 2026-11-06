@@ -65,7 +65,7 @@ describe('GET /api/persona (bridge)', () => {
 describe('POST /api/persona/* (bridge)', () => {
     it('every write route needs risu-auth', async () => {
         const b = await bridge(json({ ok: true }))
-        for (const route of ['loot', 'loot/turn', 'delete', 'equip', 'unequip']) {
+        for (const route of ['loot', 'loot/turn', 'delete', 'equip', 'unequip', 'equip-item', 'unequip-item', 'item-slots']) {
             expect((await b.post(route, { persona: 'k' }, '')).status, route).toBe(400)
             expect((await b.post(route, { persona: 'k' }, 'bad')).status, route).toBe(400)
         }
@@ -89,6 +89,27 @@ describe('POST /api/persona/* (bridge)', () => {
             ['/api/persona/equip', ['level', 'persona', 'skillId', 'slot']],
             ['/api/persona/unequip', ['level', 'persona', 'slot']],
         ])
+    })
+    it('the item-slot routes keep only their own fields; limit null goes on; migrate is not a route', async () => {
+        const b = await bridge(json({ ok: true }))
+        await b.post('equip-item', { persona: 'k', slot: 1, itemId: 'i1', level: 3, skillId: 'x', admin: 1 })
+        await b.post('unequip-item', { persona: 'k', slot: 1, level: 3, itemId: 'i1' })
+        await b.post('item-slots', { persona: 'k', limit: null, level: 3, slot: 2 })
+        expect(b.seen.map((s) => [s.url, JSON.parse(s.body)])).toEqual([
+            ['/api/persona/equip-item', { persona: 'k', slot: 1, itemId: 'i1', level: 3 }],
+            ['/api/persona/unequip-item', { persona: 'k', slot: 1, level: 3 }],
+            ['/api/persona/item-slots', { persona: 'k', limit: null, level: 3 }],
+        ])
+        const n = b.seen.length
+        const m = await b.post('migrate', { persona: 'k', chat: 'c', entries: [], level: 1 })
+        expect(m.status).toBe(404)
+        expect(b.seen.length).toBe(n)
+    })
+    it('item-slot routes: junk body is 400, refusal 400, dead manager 502', async () => {
+        expect((await (await bridge(json({ ok: true }))).post('equip-item', 'junk' as any)).status).toBe(400)
+        const refuse = await bridge(json({ error: 'slot: 99 is outside 0..10' }, 400))
+        expect((await refuse.post('equip-item', { persona: 'k', slot: 99, itemId: 'x', level: 1 })).status).toBe(400)
+        expect((await (await bridge(null)).post('item-slots', { persona: 'k', limit: 3, level: 1 })).status).toBe(502)
     })
     it('loot/turn forwards {persona, chat, turn, loots, level} only, to the same route', async () => {
         const b = await bridge(json({ ok: true, written: true, results: [{ idx: 0, ok: true, added: 'new' }] }))

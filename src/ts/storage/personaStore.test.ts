@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { fetchPersona, lootPersona, deleteEntry, equipSkill, unequipSkill } from './personaStore'
+import { fetchPersona, lootPersona, deleteEntry, equipSkill, unequipSkill, equipItem, unequipItem, setItemSlots, itemSlotsOf, itemSlotsOpenOf } from './personaStore'
 
 const auth = async () => 'tok'
 function fake(status: number, body: unknown) {
@@ -47,5 +47,28 @@ describe('personaStore', () => {
     it('HTTP 400/502 and network failure never throw', async () => {
         expect(await unequipSkill('k', 0, 1, { fetch: fake(400, { error: 'x' }).f, auth })).toEqual({ ok: false, reason: 'network' })
         expect(await equipSkill('k', 0, 's', 1, { fetch: down, auth })).toEqual({ ok: false, reason: 'network' })
+    })
+    it('item slot calls post exactly the bridge fields', async () => {
+        const { f, calls } = fake(200, { ok: true })
+        await equipItem('k', 1, 'i1', 5, { fetch: f, auth })
+        await unequipItem('k', 1, 5, { fetch: f, auth })
+        await setItemSlots('k', 4, 5, { fetch: f, auth })
+        await setItemSlots('k', null, 5, { fetch: f, auth })
+        expect(calls.map((c) => c.url)).toEqual(['/api/persona/equip-item', '/api/persona/unequip-item', '/api/persona/item-slots', '/api/persona/item-slots'])
+        expect(calls.map((c) => JSON.parse(c.init.body))).toEqual([
+            { persona: 'k', slot: 1, itemId: 'i1', level: 5 }, { persona: 'k', slot: 1, level: 5 },
+            { persona: 'k', limit: 4, level: 5 }, { persona: 'k', limit: null, level: 5 },
+        ])
+    })
+    it('item slot failures: reason passes, network never throws', async () => {
+        expect(await equipItem('k', 9, 'i', 1, { fetch: fake(200, { ok: false, reason: 'already_equipped' }).f, auth })).toMatchObject({ ok: false, reason: 'already_equipped' })
+        expect(await unequipItem('k', 0, 1, { fetch: down, auth })).toEqual({ ok: false, reason: 'network' })
+    })
+    it('a view from an old server has 11 empty item slots and the skill slots count as open', () => {
+        expect(itemSlotsOf(view as any)).toEqual(Array(11).fill(null))
+        expect(itemSlotsOpenOf(view as any)).toBe(3)
+        expect(itemSlotsOf({ item_slots: ['a', null, ''] })).toEqual(['a', ...Array(10).fill(null)])
+        expect(itemSlotsOpenOf({ item_slots_open: 5, slots_open: 3 })).toBe(5)
+        expect(itemSlotsOpenOf({ item_slots_open: 99, slots_open: 3 })).toBe(11)
     })
 })

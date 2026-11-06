@@ -11,6 +11,9 @@
 //   POST /api/persona/delete   {persona, kind, id, level?}               200 {ok:true, unequipped: slot|null, view?} | {ok:false, reason:'not_found'}
 //   POST /api/persona/equip    {persona, slot, skillId, level}           200 {ok:true, slot, replaced, view} | {ok:false, reason:'slot_locked'|'no_such_skill'|'already_equipped'}
 //   POST /api/persona/unequip  {persona, slot, level?}                   200 {ok:true, slot, was, view?}
+//   POST /api/persona/equip-item   {persona, slot, itemId, level}      200 {ok:true, slot, replaced, view} | {ok:false, reason:'slot_locked'|'no_such_item'|'already_equipped'}  (1 unit: the slot holds the id, the stack stays in storage)
+//   POST /api/persona/unequip-item {persona, slot, level?}              200 {ok:true, slot, was, view?}
+//   POST /api/persona/item-slots   {persona, limit: 1..11|null, level}  the owner's number of open item slots (null = the formula)  (/api/persona/migrate is for scripts, NOT passed on)
 //   GET  /api/persona/state?persona=       -> 200 {persona, level, exp, rank, stats: {stat: hundredths}, stat_exp: {stat: e}, event_count, skills: {id: mastery} | null,
 //                                              skill_gain: {id: summed gain}}: skills = min(10000, persona store loot mastery + the ledger's gains); the FOLD of the
 //        persona's event ledger (event_ledger.py; owner/L1 2026-11-06 "fold theo event id; regen thay cùng id; bỏ last-value-wins")
@@ -28,6 +31,9 @@ const FIELDS = {
     delete: ['persona', 'kind', 'id', 'level'],
     equip: ['persona', 'slot', 'skillId', 'level'],
     unequip: ['persona', 'slot', 'level'],
+    'equip-item': ['persona', 'slot', 'itemId', 'level'],
+    'unequip-item': ['persona', 'slot', 'level'],
+    'item-slots': ['persona', 'limit', 'level'],
 }
 
 /** The body the asset manager gets: only the known fields of that route, or null when it is not a plain object. */

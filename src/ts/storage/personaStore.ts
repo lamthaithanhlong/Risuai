@@ -8,6 +8,19 @@ export type PersonaData = {
     persona: string, level: number, rank: number, slots_open: number, max_storage: number, stat_cap: number,
     stat_caps: Record<string, number>, skills: SkillEntry[], items: ItemEntry[], slots: (string | null)[],
     skill_count: number, item_count: number,
+    // the item slot grid (an older server sends none: read it through itemSlotsOf / itemSlotsOpenOf)
+    item_slots?: (string | null)[], item_slots_open?: number, item_slots_limit?: number | null, item_slots_default?: number,
+}
+export const ITEM_SLOT_TOTAL = 11
+/** The 11 item slots of a view: an old server's view has none = 11 empty. */
+export function itemSlotsOf(d: Pick<PersonaData, 'item_slots'>): (string | null)[] {
+    const g = Array.isArray(d.item_slots) ? d.item_slots : []
+    return Array.from({ length: ITEM_SLOT_TOTAL }, (_, i) => (typeof g[i] === 'string' && g[i] !== '' ? g[i] as string : null))
+}
+/** How many item slots are open: the server's number, else (old server) the same as the skill slots. */
+export function itemSlotsOpenOf(d: Pick<PersonaData, 'item_slots_open' | 'slots_open'>): number {
+    const n = Number.isInteger(d.item_slots_open) ? d.item_slots_open as number : d.slots_open
+    return Math.max(0, Math.min(ITEM_SLOT_TOTAL, Number(n) || 0))
 }
 export type Fail = { ok: false, reason: string, [k: string]: unknown }
 export type Deps = { fetch?: typeof fetch, auth?: () => Promise<string> }
@@ -51,6 +64,13 @@ export const equipSkill = (persona: string, slot: number, skillId: string, level
     post('equip', { persona, slot, skillId, level }, deps)
 export const unequipSkill = (persona: string, slot: number, level: number, deps: Deps = {}) =>
     post('unequip', { persona, slot, level }, deps)
+export const equipItem = (persona: string, slot: number, itemId: string, level: number, deps: Deps = {}) =>
+    post('equip-item', { persona, slot, itemId, level }, deps)
+export const unequipItem = (persona: string, slot: number, level: number, deps: Deps = {}) =>
+    post('unequip-item', { persona, slot, level }, deps)
+/** The owner's number of open item slots (1..11), null = back to the formula. */
+export const setItemSlots = (persona: string, limit: number | null, level: number, deps: Deps = {}) =>
+    post('item-slots', { persona, limit, level }, deps)
 
 // ---- the loot of a reply as an event with an id (chat, turn, 'loot', idx): POST /api/persona/loot/turn (persona_store.loot_turn) ----------
 // The turn's loot REPLACES what that (chat, turn) had: a regenerated reply takes the earlier loot back, [] takes it all back, a replay adds nothing.
