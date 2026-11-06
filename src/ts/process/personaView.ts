@@ -1,5 +1,5 @@
 // What the "Kho & Slot" tab shows, from the server's answer and the persona's Level/EXP (pure; the component only draws it).
-import { itemSlotsOf, itemSlotsOpenOf, type PersonaData, type SkillEntry, type ItemEntry, type Tier } from '../storage/personaStore'
+import { itemSlotsOf, type PersonaData, type SkillEntry, type ItemEntry, type Tier } from '../storage/personaStore'
 
 export const TIERS: Tier[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
 export const TIER_LABEL: Record<Tier, string> = { bronze: 'Đồng', silver: 'Bạc', gold: 'Vàng', platinum: 'Bạch kim', diamond: 'Kim cương' }
@@ -64,6 +64,19 @@ export function lockedLine(open: number, rank: number, limit: number | null = nu
     return `🔒 Mở thêm 1 slot ở Lv ${10 * Math.max(1, rank) + 1} (còn ${k} slot khoá)`
 }
 
+/** EVERYTHING that is a function of the Level, from the one Level on the page (same formulas as persona_store.py: rank_of, slots_open, max_storage, stat_cap).
+ *  The server view's own level/rank/slots_open/max_storage/stat_cap are never read: a view asked at another Level cannot make the head disagree with its bar. */
+export function levelFacts(levelIn: number) {
+    const level = Math.max(1, Math.floor(Number(levelIn) || 1))
+    const rank = rankOf(level)
+    return {
+        level, rank, rankName: rankName(rank), need: needExp(level),
+        slotsOpen: Math.min(SLOT_TOTAL, 1 + rank),
+        maxStorage: Math.max(100, 100 + 20 * (rank - 1) + 5 * level),
+        statCap: 20 + 8 * (rank - 1),
+    }
+}
+
 export type Lvl = { level: number, exp: number }
 /** The chat variable $lvl ({"l":..,"e":..}) -> level and exp; anything else is Level 1, EXP 0. */
 export function parseLvl(text: unknown): Lvl {
@@ -81,18 +94,20 @@ export type Filter = Tier | 'all'
 export function filterTier<T extends { tier: Tier }>(list: T[], f: Filter): T[] { return f === 'all' ? list : list.filter((e) => e.tier === f) }
 
 export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all') {
-    const need = needExp(lvl.level)
+    const f = levelFacts(lvl.level)
+    const need = f.need
     const byId = new Map(d.skills.map((s) => [s.id, s]))
     const slots: SlotCell[] = Array.from({ length: SLOT_TOTAL }, (_, i) => {
         const id = d.slots[i] ?? null
         const s = id ? byId.get(id) : undefined
-        return { index: i, open: i < d.slots_open, skillId: id, name: id ? (s ? displayName(s) : viName(id)) : null, tier: s?.tier ?? null, pct: masteryPct(s?.mastery) }
+        return { index: i, open: i < f.slotsOpen, skillId: id, name: id ? (s ? displayName(s) : viName(id)) : null, tier: s?.tier ?? null, pct: masteryPct(s?.mastery) }
     })
     const equippedAt = new Map<string, number>()
     slots.forEach((c) => { if (c.skillId) equippedAt.set(c.skillId, c.index) })
     const used = slots.filter((c) => c.skillId).length
     const iById = new Map(d.items.map((i) => [i.id, i]))
-    const itemOpen = itemSlotsOpenOf(d)
+    const limit = Number.isInteger(d.item_slots_limit) ? d.item_slots_limit as number : null
+    const itemOpen = limit !== null ? Math.max(0, Math.min(SLOT_TOTAL, limit)) : f.slotsOpen
     const itemSlots: ItemSlotCell[] = itemSlotsOf(d).map((id, i) => {
         const it = id ? iById.get(id) : undefined
         return { index: i, open: i < itemOpen, itemId: id, name: id ? (it ? displayName(it) : viName(id)) : null, tier: it?.tier ?? null, qty: it?.qty ?? 0 }
@@ -100,24 +115,23 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     const itemAt = new Map<string, number>()
     itemSlots.forEach((c) => { if (c.itemId) itemAt.set(c.itemId, c.index) })
     const itemUsed = itemSlots.filter((c) => c.itemId).length
-    const itemDefault = Number.isInteger(d.item_slots_default) ? d.item_slots_default as number : d.slots_open
-    const limit = Number.isInteger(d.item_slots_limit) ? d.item_slots_limit as number : null
+    const itemDefault = f.slotsOpen
     return {
-        rank: d.rank, rankName: rankName(d.rank),
+        rank: f.rank, rankName: f.rankName,
         level: lvl.level, exp: lvl.exp, need, expPct: Math.min(100, Math.round((lvl.exp / need) * 100)),
         openSkillSlots: slots.filter((c) => c.open), openItemSlots: itemSlots.filter((c) => c.open),
-        skillHeading: `Slot kỹ năng · đang mở ${used}/${d.slots_open} (tối đa ${SLOT_TOTAL})`, itemHeading: `Slot trang bị · đang mở ${itemUsed}/${itemOpen} (tối đa ${SLOT_TOTAL})`,
-        skillLockedLine: lockedLine(d.slots_open, d.rank), itemLockedLine: lockedLine(itemOpen, d.rank, limit),
-        slots, slotText: `${used}/${d.slots_open} (mở ${d.slots_open} trên ${SLOT_TOTAL})`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
+        skillHeading: `Slot kỹ năng · đang mở ${used}/${f.slotsOpen} (tối đa ${SLOT_TOTAL})`, itemHeading: `Slot trang bị · đang mở ${itemUsed}/${itemOpen} (tối đa ${SLOT_TOTAL})`,
+        skillLockedLine: lockedLine(f.slotsOpen, f.rank), itemLockedLine: lockedLine(itemOpen, f.rank, limit),
+        slots, slotText: `${used}/${f.slotsOpen} (mở ${f.slotsOpen} trên ${SLOT_TOTAL})`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
         itemSlots, itemSlotText: `${itemUsed}/${itemOpen} (mở ${itemOpen} trên ${SLOT_TOTAL})`, freeOpenItemSlots: itemSlots.filter((c) => c.open).map((c) => c.index),
         itemSlotsLimit: limit, itemSlotsDefault: itemDefault, itemSlotsOpen: itemOpen,
-        skillsFull: d.skill_count >= d.max_storage, itemsFull: d.item_count >= d.max_storage,
+        skillsFull: d.skill_count >= f.maxStorage, itemsFull: d.item_count >= f.maxStorage,
         pickableSkills: d.skills.filter((x) => !equippedAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
         pickableItems: d.items.filter((x) => !itemAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
-        skillCount: `${d.skill_count} / ${d.max_storage}`, itemCount: `${d.item_count} / ${d.max_storage}`,
+        skillCount: `${d.skill_count} / ${f.maxStorage}`, itemCount: `${d.item_count} / ${f.maxStorage}`,
         skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, name: displayName(s), pct: masteryPct(s.mastery), cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
         items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, name: displayName(i), cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier], slot: itemAt.get(i.id) ?? null })),
-        caps: Object.keys(STAT_LABEL).map((k) => ({ key: k, label: STAT_LABEL[k], cap: d.stat_caps?.[k] ?? d.stat_cap })),
+        caps: Object.keys(STAT_LABEL).map((k) => ({ key: k, label: STAT_LABEL[k], cap: f.statCap })),
     }
 }
 export type Inventory = ReturnType<typeof buildInventory>

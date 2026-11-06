@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, masteryPct, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, masteryPct, levelFacts, TIERS } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -44,8 +44,8 @@ describe('buildInventory', () => {
     })
     it('storage counts and tier filter', () => {
         const v = buildInventory(data(), { level: 1, exp: 0 }, 'bronze')
-        expect(v.skillCount).toBe('2 / 100')
-        expect(v.itemCount).toBe('1 / 100')
+        expect(v.skillCount).toBe('2 / 105')
+        expect(v.itemCount).toBe('1 / 105')
         expect(v.skills.map((s) => s.id)).toEqual(['b'])
         expect(filterTier(data().skills, 'all').length).toBe(2)
         expect(buildInventory(data(), { level: 1, exp: 0 }, 'diamond').skills).toEqual([])
@@ -115,7 +115,7 @@ describe('item slot grid', () => {
         for (const bad of ['', '0', '12', '2.5', 'x', null, undefined]) expect(parseItemSlotsLimit(bad)).toBeNull()
     })
     it('storage full flags; the new reasons are in Vietnamese', () => {
-        const v = buildInventory(data({ skill_count: 100, item_count: 99 }), { level: 1, exp: 0 })
+        const v = buildInventory(data({ skill_count: 105, item_count: 104 }), { level: 1, exp: 0 })
         expect([v.skillsFull, v.itemsFull]).toEqual([true, false])
         expect(reasonText('no_such_item')).toBe('Vật phẩm này không có trong kho')
     })
@@ -136,4 +136,34 @@ describe('display names and locked line', () => {
         expect(lockedLine(4, 3, 4)).toBe('🔒 Đang giới hạn ở 4 slot (còn 7 slot khoá)')
     })
     it('masteryPct', () => { expect([masteryPct(2500), masteryPct(99999), masteryPct(undefined)]).toEqual([25, 100, 0]) })
+})
+
+describe('everything level-derived comes from the ONE page Level, never the server view', () => {
+    const wrong = (o: Partial<PersonaData> = {}) => data({ level: 25, rank: 9, slots_open: 7, max_storage: 999, stat_cap: 77, stat_caps: { suc_manh: 77 }, item_slots_open: 8, item_slots_default: 6, ...o })
+    for (const level of [1, 2, 10, 11, 25, 100, 10000]) {
+        it(`Level ${level}: head, slots, storage and caps match rankOf(${level}) although the view says rank 9 / level 25`, () => {
+            const v = buildInventory(wrong(), { level, exp: 0 })
+            const rank = rankOf(level)
+            expect(v.rank).toBe(rank)
+            expect(v.rankName).toBe(rankName(rank))
+            expect(v.rankName.startsWith(`R${rank} `)).toBe(true)
+            expect(v.level).toBe(level)
+            const open = Math.min(11, 1 + rank)
+            expect(v.slots.filter((c) => c.open).length).toBe(open)
+            expect(v.itemSlotsOpen).toBe(open)
+            expect(v.itemSlotsDefault).toBe(open)
+            expect(v.skillCount.endsWith(`/ ${Math.max(100, 100 + 20 * (rank - 1) + 5 * level)}`)).toBe(true)
+            expect(v.caps[0].cap).toBe(20 + 8 * (rank - 1))
+            const f = levelFacts(level)
+            expect([f.rank, f.slotsOpen, f.need]).toEqual([rank, open, needExp(level)])
+        })
+    }
+    it('a view with rank 9 at Level 1 must show R1 (fails if buildInventory reads d.rank)', () => {
+        const v = buildInventory(wrong({ rank: 9 }), { level: 1, exp: 0 })
+        expect(v.rankName).toBe('R1 · Tân binh')
+        expect(v.skillLockedLine).toContain('Lv 11')
+    })
+    it('the owner item-slot limit is the only item-slot number taken from the server', () => {
+        expect(buildInventory(wrong({ item_slots_limit: 4 }), { level: 1, exp: 0 }).itemSlotsOpen).toBe(4)
+    })
 })
