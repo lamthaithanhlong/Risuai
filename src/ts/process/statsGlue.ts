@@ -13,6 +13,10 @@ export function hasStatsRule(card: { desc?: string, type?: string } | undefined)
     return !!card && card.type !== 'group' && /\[\[ACT\|/.test(card.desc ?? '')
 }
 
+/** The global Admin engine module counts growth in this chat ($admin_module, which the module's Lua writes): its $stat_export goes to the persona's store
+ *  and the persona's stored stats are merged in, exactly as for a card with a stats script of its own. */
+export function moduleCounts(chat: ChatLike): boolean { return String((chat?.scriptstate as Record<string, unknown> | undefined)?.$admin_module ?? '') === '1' }
+
 /** A persona's id for the store: its own id, else its name without accents, else 'default'; only letters, digits, dot, dash, underscore. */
 export function personaIdOf(p: { id?: string, name?: string } | undefined | null): string {
     const clean = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
@@ -76,11 +80,11 @@ export async function pageDeps(): Promise<StatsDeps> {
 
 /** index.svelte.ts calls these two; both do nothing for a card without the rule. */
 export async function statsBeforeRequestPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
-    if (!hasStatsRule(card)) return
+    if (!hasStatsRule(card) && !moduleCounts(chat)) return
     try { await statsBeforeRequest(chat, await pageDeps()) } catch { /* never blocks */ }
 }
 export async function statsAfterReplyPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
-    if (!hasStatsRule(card)) return
+    if (!hasStatsRule(card) && !moduleCounts(chat)) return
     try { await statsAfterReply(chat, await pageDeps()) } catch { /* never blocks */ }
 }
 
@@ -100,7 +104,7 @@ export function lastReplyRaw(chat: TrainChat): string {
 export async function trainAfterReply(card: { desc?: string, type?: string } | undefined, chat: TrainChat, raw: string,
     deps: { persona: () => string, cardId: () => string, send: (b: TrainBody) => Promise<string> }): Promise<void> {
     try {
-        if (!card || card.type === 'group' || hasStatsRule(card)) return
+        if (!card || card.type === 'group' || hasStatsRule(card) || moduleCounts(chat as ChatLike)) return   // the module (or the card's Lua) counts it: no second count
         const tag = parseTrain(raw)   // no tag: the store is still told (stats []), so a regenerated reply that lost its tag takes the earlier gain back
         const id = String(chat?.id ?? '')
         const cardId = deps.cardId()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import { parseTrain, sendTrain, trainBody } from './trainSave'
-import { lastReplyRaw, trainAfterReply } from '../process/statsGlue'
+import { lastReplyRaw, moduleCounts, trainAfterReply } from '../process/statsGlue'
 
 const require = createRequire(import.meta.url)
 const { saveTrain, trainOf } = require('../../../server/node/statsBridge.cjs')
@@ -92,6 +92,11 @@ describe('trainAfterReply: only a card with no engine of its own posts, once, wi
         expect(await run({ desc: '' }, chat, 'Gió lùa.')).toEqual([{ persona: 'p1', card: 'mailman', chat: 'chat-1', turn: 3, stats: [] }])
         expect(await run({ desc: 'rule [[ACT|id|stat|normal|]]' }, chat, 'Gió lùa.')).toEqual([])   // a card with its own engine still never posts
     })
+    it('a chat the Admin module counts ($admin_module = 1) never posts: the module and its store export do the counting', async () => {
+        const counted = { ...chat, scriptstate: { $admin_module: '1' } }
+        expect(await run({ desc: '' }, counted as never, chat.message[2].data)).toEqual([])
+        expect(await run({ desc: '' }, counted as never, 'Gió lùa.')).toEqual([])
+    })
     it('no card, a group, no card id, a bad chat id: nothing is posted, nothing throws', async () => {
         expect(await run(undefined, chat, chat.message[2].data)).toEqual([])
         expect(await run({ type: 'group' }, chat, chat.message[2].data)).toEqual([])
@@ -103,5 +108,12 @@ describe('trainAfterReply: only a card with no engine of its own posts, once, wi
         expect(lastReplyRaw(chat)).toContain('[[TRAIN|the_luc|manh]]')
         expect(lastReplyRaw({ message: [{ role: 'user', data: 'x' }] })).toBe('')
         expect(lastReplyRaw(undefined)).toBe('')
+    })
+})
+
+describe('moduleCounts', () => {
+    it('is true only for a chat the Admin module marked ($admin_module = 1)', () => {
+        expect(moduleCounts({ scriptstate: { $admin_module: '1' } })).toBe(true)
+        for (const c of [undefined, {}, { scriptstate: {} }, { scriptstate: { $admin_module: '' } }, { scriptstate: { $admin_module: '0' } }]) expect(moduleCounts(c as never)).toBe(false)
     })
 })
