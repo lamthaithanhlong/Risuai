@@ -206,6 +206,40 @@ export function entryDetail(d: PersonaData, kind: 'skill' | 'item', id: string):
     return { kind, id, name: displayName(i), tier: i.tier, tierLabel: TIER_LABEL[i.tier], cls: TIER_CLASS[i.tier], stat: `× ${i.qty}`, rule: `Chỉ có tác dụng khi gắn slot (${at >= 0 ? `Đã gắn slot ${at + 1}` : 'Chưa gắn'})`, effect: effectOf('item', i), conditions: typeof i.conditions === 'string' ? i.conditions.trim() : '' }
 }
 
+// SHOW/HIDE of the effect text under each entry. Per kind: a mode ('auto' = hidden when the list has more than EFFECT_AUTO_MAX entries, else shown;
+// 'all'; 'none') and `flipped` ids whose state is the opposite of the mode's. One state per entry id, shared by the row, the card and the detail block.
+export const EFFECT_AUTO_MAX = 6
+export const EFFECT_PREFS_KEY = 'persona_effects_shown'
+export type EffectMode = 'auto' | 'all' | 'none'
+export type EffectKindPrefs = { mode: EffectMode, flipped: string[] }
+export type EffectPrefs = { skill: EffectKindPrefs, item: EffectKindPrefs }
+export const defaultEffectPrefs = (): EffectPrefs => ({ skill: { mode: 'auto', flipped: [] }, item: { mode: 'auto', flipped: [] } })
+export function parseEffectPrefs(text: unknown): EffectPrefs {
+    const out = defaultEffectPrefs()
+    try {
+        const v = JSON.parse(String(text ?? ''))
+        for (const k of ['skill', 'item'] as const) {
+            const m = v?.[k]?.mode, f = v?.[k]?.flipped
+            if (m === 'auto' || m === 'all' || m === 'none') out[k].mode = m
+            if (Array.isArray(f)) out[k].flipped = f.filter((x: unknown): x is string => typeof x === 'string')
+        }
+    } catch { /* default */ }
+    return out
+}
+export function effectShown(p: EffectPrefs, kind: 'skill' | 'item', id: string, count: number): boolean {
+    const k = p[kind]
+    const base = k.mode === 'all' ? true : k.mode === 'none' ? false : count <= EFFECT_AUTO_MAX
+    return k.flipped.includes(id) ? !base : base
+}
+/** A new prefs object with this entry's state set to `want` (flipped only when it differs from the mode's default). */
+export function setEffectShown(p: EffectPrefs, kind: 'skill' | 'item', id: string, want: boolean, count: number): EffectPrefs {
+    const k = p[kind]
+    const rest = k.flipped.filter((x) => x !== id)
+    const base = effectShown({ ...p, [kind]: { mode: k.mode, flipped: [] } } as EffectPrefs, kind, id, count)
+    return { ...p, [kind]: { mode: k.mode, flipped: base === want ? rest : [...rest, id] } }
+}
+export const setEffectMode = (p: EffectPrefs, kind: 'skill' | 'item', mode: 'all' | 'none'): EffectPrefs => ({ ...p, [kind]: { mode, flipped: [] } })
+
 /** Why Gắn is disabled for an item, or null when it can be gắn. */
 export function itemEquipBlock(inv: Pick<Inventory, 'freeOpenItemSlots'>, slot: number | null): string | null {
     if (slot !== null) return `Đã gắn (slot ${slot + 1})`

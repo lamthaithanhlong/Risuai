@@ -187,3 +187,19 @@ describe('skill level + EXP derivation', () => {
         expect(skillProgress({ exp: 540 }).text).toBe('Lv 10 (tối đa)')
     })
 })
+
+import { effectShown, setEffectShown, setEffectMode, defaultEffectPrefs, parseEffectPrefs } from './personaView'
+describe('effect show/hide prefs', () => {
+    it('auto: shown up to 6 entries, hidden above; a flip and the modes behave; junk parses to default', () => {
+        const p = defaultEffectPrefs()
+        expect(effectShown(p, 'skill', 'a', 6)).toBe(true)
+        expect(effectShown(p, 'skill', 'a', 7)).toBe(false)
+        const q = setEffectShown(p, 'skill', 'a', true, 7)
+        expect(effectShown(q, 'skill', 'a', 7)).toBe(true); expect(effectShown(q, 'skill', 'b', 7)).toBe(false)
+        expect(setEffectShown(q, 'skill', 'a', false, 7).skill.flipped).toEqual([])
+        expect(effectShown(setEffectMode(q, 'skill', 'all'), 'skill', 'b', 99)).toBe(true)
+        expect(effectShown(setEffectMode(q, 'skill', 'none'), 'skill', 'a', 1)).toBe(false)
+        expect(parseEffectPrefs('{nope')).toEqual(defaultEffectPrefs())
+        expect(parseEffectPrefs(JSON.stringify(q))).toEqual(q)
+    })
+})

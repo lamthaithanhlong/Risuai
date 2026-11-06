@@ -7,7 +7,7 @@
     import { personaIdOf } from 'src/ts/process/statsGlue'
     import { checkPersonaBinded } from 'src/ts/util'
     import { fetchPersona, deleteEntry, equipSkill, unequipSkill, equipItem, unequipItem, setItemSlots, type PersonaData } from 'src/ts/storage/personaStore'
-    import { buildInventory, entryDetail, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
+    import { buildInventory, entryDetail, defaultEffectPrefs, parseEffectPrefs, effectShown, setEffectShown, setEffectMode, EFFECT_PREFS_KEY, type EffectPrefs, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
     import { fetchLedger } from 'src/ts/storage/statsSave'
 
     let data: PersonaData | null = $state(null)
@@ -22,13 +22,23 @@
     let itemsOpen = $state(true)
     let busy = $state(false)
     let tick = $state(0)
+    // show/hide of each entry's công dụng, kept per browser (every storage access may throw: the page works without it)
+    function loadPrefs(): EffectPrefs { try { return parseEffectPrefs(localStorage.getItem(EFFECT_PREFS_KEY)) } catch { return defaultEffectPrefs() } }
+    let prefs: EffectPrefs = $state(loadPrefs())
+    function savePrefs(p: EffectPrefs) { prefs = p; try { localStorage.setItem(EFFECT_PREFS_KEY, JSON.stringify(p)) } catch { /* not kept */ } }
+    const countOf = (kind: 'skill' | 'item') => (kind === 'skill' ? data?.skills.length : data?.items.length) ?? 0
+    const shown = (kind: 'skill' | 'item', id: string) => effectShown(prefs, kind, id, countOf(kind))
+    const toggleEffect = (kind: 'skill' | 'item', id: string) => savePrefs(setEffectShown(prefs, kind, id, !shown(kind, id), countOf(kind)))
+    const inlineOf = (kind: 'skill' | 'item', id: string) => (data ? entryDetail(data, kind, id) : null)
     // the one open detail block: which entry, and where it was clicked (a card of the slot grid or a row of the list)
     let detail: { kind: 'skill' | 'item', id: string, src: 'card' | 'row' } | null = $state(null)
     const det = $derived(data && detail ? entryDetail(data, detail.kind, detail.id) : null)
     // a click on a button inside the card/row (Gắn, Gỡ, Xoá, a slot chip) is that button's, never the detail's
     function toggleDetail(e: Event, kind: 'skill' | 'item', id: string, src: 'card' | 'row') {
         if ((e.target as HTMLElement | null)?.closest?.('button, input, a')) return
-        detail = detail && detail.kind === kind && detail.id === id && detail.src === src ? null : { kind, id, src }
+        const closing = detail && detail.kind === kind && detail.id === id && detail.src === src
+        detail = closing ? null : { kind, id, src }
+        if (!closing && !shown(kind, id)) toggleEffect(kind, id)
     }
     const onKey = (e: KeyboardEvent, kind: 'skill' | 'item', id: string, src: 'card' | 'row') => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleDetail(e, kind, id, src) } }
 
@@ -78,6 +88,27 @@
     }
 </script>
 
+{#snippet effectToggle(kind, id)}
+    <button class="text-xs text-textcolor2 hover:text-green-500 self-start" data-testid="effect-toggle-{id}" aria-expanded={shown(kind, id)} onclick={() => toggleEffect(kind, id)}>Công dụng {shown(kind, id) ? '▴' : '▾'}</button>
+{/snippet}
+{#snippet effectInline(kind, id)}
+    {#if shown(kind, id) && !(detail && detail.kind === kind && detail.id === id)}
+        {@const d = inlineOf(kind, id)}
+        {#if d}
+            <div class="inline-effect text-xs break-words" data-testid="effect-inline-{id}">
+                {#if kind === 'skill'}<div>{d.rule}</div>{/if}
+                <div>Công dụng: {d.effect}</div>
+                {#if d.conditions}<div>Điều kiện: {d.conditions}</div>{/if}
+            </div>
+        {/if}
+    {/if}
+{/snippet}
+{#snippet allButtons(kind)}
+    <span class="flex gap-1 flex-wrap">
+        <button class="chip on" data-testid="effects-show-all-{kind}s" onclick={() => savePrefs(setEffectMode(prefs, kind, 'all'))}>Hiện hết công dụng</button>
+        <button class="chip on" data-testid="effects-hide-all-{kind}s" onclick={() => savePrefs(setEffectMode(prefs, kind, 'none'))}>Ẩn hết công dụng</button>
+    </span>
+{/snippet}
 {#snippet detailBlock()}
     {#if det}
         <div class="detail rounded-md bg-darkbg p-2 text-sm mt-1 {det.cls}" data-testid="entry-detail" role="group" aria-label="Chi tiết {det.name}" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -117,6 +148,7 @@
                         <div class="bar" data-testid="skill-expbar-{c.skillId}"><div style="width: {c.prog?.barPct ?? 0}%"></div></div>
                         <div class="text-xs" data-testid="skill-level-{c.skillId}">{c.prog?.text ?? ''}</div>
                         <button class="text-textcolor2 hover:text-red-500" disabled={busy} onclick={() => unequip(c.index)}>Gỡ</button>
+                        {@render effectToggle('skill', c.skillId)}{@render effectInline('skill', c.skillId)}
                     {:else}
                         <button class="hover:text-green-500" disabled={busy} data-testid="skill-slot-add-{c.index}" onclick={() => slotPick = slotPick?.kind === 'skill' && slotPick.slot === c.index ? null : { kind: 'skill', slot: c.index }}>+ Gắn</button>
                     {/if}
@@ -142,6 +174,7 @@
                         {#if c.tier}<span class="tchip">{TIER_LABEL[c.tier]}</span>{/if}
                         <div class="text-xs">× {c.qty}</div>
                         <button class="text-textcolor2 hover:text-red-500" disabled={busy} data-testid="item-unequip-{c.index}" onclick={() => unequipI(c.index)}>Gỡ</button>
+                        {@render effectToggle('item', c.itemId)}{@render effectInline('item', c.itemId)}
                     {:else}
                         <button class="hover:text-green-500" disabled={busy} data-testid="item-slot-add-{c.index}" onclick={() => slotPick = slotPick?.kind === 'item' && slotPick.slot === c.index ? null : { kind: 'item', slot: c.index }}>+ Gắn</button>
                     {/if}
@@ -176,6 +209,7 @@
             <h4 class="font-bold">Kỹ năng: {inv.skillCount}</h4>
             <button class="text-textcolor2" data-testid="skills-toggle" aria-expanded={skillsOpen} onclick={() => skillsOpen = !skillsOpen}>{skillsOpen ? 'Thu gọn ▲' : 'Mở rộng ▼'}</button>
         </div>
+        <div class="mb-1">{@render allButtons('skill')}</div>
         {#if inv.skillsFull}<p class="text-sm text-red-500" data-testid="storage-full-skills">Kho kỹ năng đầy: không nhận thêm kỹ năng mới</p>{/if}
         {#if skillsOpen}
         {#if inv.skills.length === 0}<p class="text-sm text-textcolor2">Không có kỹ năng nào.</p>{/if}
@@ -190,6 +224,7 @@
                             <button class="hover:text-red-500" disabled={busy} onclick={() => remove('skill', k.id, k.name, k.slot)}>Xoá</button>
                         </span>
                     </div>
+                    {@render effectToggle('skill', k.id)}{@render effectInline('skill', k.id)}
                     {#if detail?.src === 'row' && detail.kind === 'skill' && detail.id === k.id}{@render detailBlock()}{/if}
                     {#if picking === k.id}
                         <div class="flex gap-1 flex-wrap mt-1 text-xs">
@@ -206,6 +241,7 @@
             <h4 class="font-bold">Vật phẩm: {inv.itemCount}</h4>
             <button class="text-textcolor2" data-testid="items-toggle" aria-expanded={itemsOpen} onclick={() => itemsOpen = !itemsOpen}>{itemsOpen ? 'Thu gọn ▲' : 'Mở rộng ▼'}</button>
         </div>
+        <div class="mb-1">{@render allButtons('item')}</div>
         {#if inv.itemsFull}<p class="text-sm text-red-500" data-testid="storage-full-items">Kho vật phẩm đầy: không nhận thêm vật phẩm mới</p>{/if}
         {#if itemsOpen}
         {#if inv.items.length === 0}<p class="text-sm text-textcolor2">Không có vật phẩm nào.</p>{/if}
@@ -221,6 +257,7 @@
                         </span>
                     </div>
                     {#if block !== null && i.slot === null}<div class="text-xs text-textcolor2">{block}</div>{/if}
+                    {@render effectToggle('item', i.id)}{@render effectInline('item', i.id)}
                     {#if detail?.src === 'row' && detail.kind === 'item' && detail.id === i.id}{@render detailBlock()}{/if}
                     {#if pickingItem === i.id}
                         <div class="flex gap-1 flex-wrap mt-1 text-xs">
@@ -250,6 +287,7 @@
     button, input { min-height: 44px; min-width: 44px }
     .cards { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)) }
     .card { border-radius: 0.375rem; padding: 0.5rem; font-size: 0.875rem; min-width: 0; min-height: 7.5rem; display: flex; flex-direction: column; gap: 0.25rem }
+    .inline-effect { overflow-wrap: anywhere; min-width: 0; max-width: 100% }
     .clickable { cursor: pointer }
     .detail { overflow-wrap: anywhere; min-width: 0; max-width: 100%; border: 1px solid currentColor }
     .name { overflow-wrap: anywhere }

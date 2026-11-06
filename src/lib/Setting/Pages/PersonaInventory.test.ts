@@ -163,3 +163,68 @@ it('clicking Gắn / Gỡ does not open the detail (and still does its job)', as
     expect(detailOf(t).length).toBe(0)
     expect(store.unequipItem).toHaveBeenCalled()
 })
+
+// ---- show/hide of công dụng ----
+const KEY = 'persona_effects_shown'
+const inl = (t: HTMLElement, id: string) => t.querySelectorAll(`[data-testid="effect-inline-${id}"]`)
+const tog = (t: HTMLElement, id: string) => t.querySelectorAll(`[data-testid="effect-toggle-${id}"]`)
+import { beforeEach } from 'vitest'
+beforeEach(() => { try { localStorage.clear() } catch { /* */ } })
+
+it('short lists show every công dụng by default; the toggle hides and shows it, and every shown one is non-empty (with the mod for skills)', async () => {
+    const t = await render()
+    for (const id of ['wall-vibration-listening', 'rhythm-separation', 'void-eye-scan', 'rusty-knife', 'old-laptop']) {
+        expect(inl(t, id).length).toBeGreaterThan(0)
+        expect(inl(t, id)[0].textContent).toMatch(/Công dụng: \S+ \S+/)
+    }
+    expect(inl(t, 'wall-vibration-listening')[0].textContent).toContain('Xúc xắc +3 khi dùng')
+    expect(inl(t, 'rusty-knife')[0].textContent).toContain('Điều kiện: Cần còn bén')
+    const b = tog(t, 'old-laptop')[0]
+    expect(b.textContent).toContain('▴')
+    click(b); expect(inl(t, 'old-laptop').length).toBe(0); expect(tog(t, 'old-laptop')[0].textContent).toContain('▾')
+    click(tog(t, 'old-laptop')[0]); expect(inl(t, 'old-laptop').length).toBeGreaterThan(0)
+})
+
+it('show-all / hide-all per section; they do not touch the other section', async () => {
+    const t = await render()
+    click(q(t, 'effects-hide-all-skills')!)
+    expect(inl(t, 'rhythm-separation').length).toBe(0); expect(inl(t, 'old-laptop').length).toBeGreaterThan(0)
+    click(q(t, 'effects-hide-all-items')!); expect(inl(t, 'old-laptop').length).toBe(0)
+    click(q(t, 'effects-show-all-items')!); expect(inl(t, 'old-laptop').length).toBeGreaterThan(0)
+    click(q(t, 'effects-show-all-skills')!); expect(inl(t, 'rhythm-separation').length).toBeGreaterThan(0)
+})
+
+it('the choice is kept in localStorage and comes back; opening the detail marks the entry shown', async () => {
+    let t = await render()
+    click(q(t, 'effects-hide-all-skills')!)
+    expect(JSON.parse(localStorage.getItem(KEY)!).skill.mode).toBe('none')
+    unmount(m); m = null; document.body.innerHTML = ''
+    t = await render()
+    expect(inl(t, 'rhythm-separation').length).toBe(0)
+    click(q(t, 'skill-row-rhythm-separation')!)
+    expect(detailOf(t).length).toBe(1)
+    expect(JSON.parse(localStorage.getItem(KEY)!).skill.flipped).toContain('rhythm-separation')
+    expect(inl(t, 'rhythm-separation').length).toBe(0) // the detail block shows it instead, never twice
+    click(q(t, 'entry-detail-close')!)
+    expect(inl(t, 'rhythm-separation').length).toBeGreaterThan(0)
+})
+
+it('works when localStorage throws on every access', async () => {
+    const orig = Object.getOwnPropertyDescriptor(window, 'localStorage')!
+    Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('blocked') } })
+    try {
+        const t = await render()
+        expect(inl(t, 'old-laptop').length).toBeGreaterThan(0)
+        click(tog(t, 'old-laptop')[0]); expect(inl(t, 'old-laptop').length).toBe(0)
+        click(q(t, 'effects-show-all-items')!); expect(inl(t, 'old-laptop').length).toBeGreaterThan(0)
+    } finally { Object.defineProperty(window, 'localStorage', orig) }
+})
+
+it('the toggle buttons do not equip, unequip, delete or open the detail', async () => {
+    const t = await render()
+    const calls = () => [store.equipSkill, store.unequipSkill, store.deleteEntry, store.equipItem, store.unequipItem].map((f) => (f as any).mock.calls.length)
+    const before = calls()
+    for (const id of ['wall-vibration-listening', 'rusty-knife']) for (const b of tog(t, id)) click(b)
+    await wait()
+    expect(calls()).toEqual(before); expect(detailOf(t).length).toBe(0)
+})
