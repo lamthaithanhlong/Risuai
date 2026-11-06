@@ -29,6 +29,41 @@ export function needExp(level: number): number {
 export function rankOf(level: number): number { return Math.min(10, 1 + Math.floor((Math.max(1, Math.floor(Number(level) || 1)) - 1) / 10)) }
 export const rankName = (rank: number) => `R${rank} · ${RANK_LABELS[Math.min(10, Math.max(1, rank)) - 1]}`
 
+export const VI_WORDS: Record<string, string> = {
+    'wall': 'tường', 'vibration': 'rung', 'listening': 'nghe', 'listen': 'nghe', 'rhythm': 'nhịp', 'separation': 'tách', 'sound': 'âm thanh',
+    'audio': 'âm thanh', 'plastic': 'nhựa', 'clothespin': 'kẹp áo', 'knife': 'dao', 'rusty': 'gỉ', 'bandage': 'băng gạc', 'pistol': 'súng ngắn',
+    'gun': 'súng', 'armor': 'giáp', 'shield': 'khiên', 'sword': 'kiếm', 'fire': 'lửa', 'ice': 'băng', 'lightning': 'sét', 'water': 'nước',
+    'shadow': 'bóng tối', 'light': 'ánh sáng', 'dark': 'bóng đêm', 'sense': 'cảm nhận', 'sensing': 'cảm nhận', 'detect': 'dò', 'detection': 'dò tìm',
+    'scan': 'quét', 'scanning': 'quét', 'record': 'ghi', 'recording': 'ghi nhận', 'pattern': 'mẫu', 'recognition': 'nhận dạng', 'heal': 'chữa',
+    'healing': 'chữa trị', 'medicine': 'thuốc', 'potion': 'thuốc', 'key': 'chìa khoá', 'door': 'cửa', 'map': 'bản đồ', 'phone': 'điện thoại',
+    'radio': 'radio', 'battery': 'pin', 'food': 'thực phẩm', 'rope': 'dây thừng', 'tool': 'dụng cụ', 'step': 'bước', 'silent': 'im lặng',
+    'stealth': 'ẩn nấp', 'run': 'chạy', 'running': 'chạy', 'jump': 'nhảy', 'climb': 'leo', 'climbing': 'leo trèo', 'strike': 'đòn', 'hit': 'đánh',
+    'punch': 'đấm', 'kick': 'đá', 'breath': 'hơi thở', 'breathing': 'thở', 'focus': 'tập trung', 'will': 'ý chí', 'power': 'sức mạnh', 'speed': 'tốc độ',
+    'eye': 'mắt', 'eagle': 'ưng', 'void': 'hư không', 'core': 'lõi', 'energy': 'năng lượng', 'laptop': 'máy tính xách tay', 'old': 'cũ',
+}
+const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)+$/
+/** "wall-vibration-listening" -> "Nghe rung tường" (mirrors persona_store.vi_name: the words reversed, translated, an unknown word capitalised, never a hyphen). */
+export function viName(id: string): string {
+    const words = String(id ?? '').toLowerCase().split(/[-_\s]+/).filter(Boolean)
+    const out = words.reverse().map((w) => VI_WORDS[w] ?? w).join(' ') || String(id ?? '')
+    return out.charAt(0).toUpperCase() + out.slice(1)
+}
+/** What the page shows for an entry: its own name, unless it is missing, equal to the id or looks like a kebab-case id. */
+export function displayName(e: { id: string, name?: string | null }): string {
+    const n = typeof e.name === 'string' ? e.name.trim() : ''
+    return !n || n === e.id || KEBAB.test(n) ? viName(e.id) : n
+}
+/** Mastery 0..10000 -> a whole percent for the bar. */
+export const masteryPct = (m: unknown) => Math.max(0, Math.min(100, Math.round((Number(m) || 0) / 100)))
+
+/** "🔒 Mở thêm 1 slot ở Lv N (còn K slot khoá)" or null when every slot is open. Rank steps every 10 levels: the next unlock is at Lv 10*rank+1. */
+export function lockedLine(open: number, rank: number, limit: number | null = null): string | null {
+    const k = SLOT_TOTAL - open
+    if (k <= 0) return null
+    if (limit !== null) return `🔒 Đang giới hạn ở ${open} slot (còn ${k} slot khoá)`
+    return `🔒 Mở thêm 1 slot ở Lv ${10 * Math.max(1, rank) + 1} (còn ${k} slot khoá)`
+}
+
 export type Lvl = { level: number, exp: number }
 /** The chat variable $lvl ({"l":..,"e":..}) -> level and exp; anything else is Level 1, EXP 0. */
 export function parseLvl(text: unknown): Lvl {
@@ -39,8 +74,8 @@ export function parseLvl(text: unknown): Lvl {
     } catch { return { level: 1, exp: 0 } }
 }
 
-export type SlotCell = { index: number, open: boolean, skillId: string | null, name: string | null, tier: Tier | null }
-export type ItemSlotCell = { index: number, open: boolean, itemId: string | null, name: string | null, tier: Tier | null }
+export type SlotCell = { index: number, open: boolean, skillId: string | null, name: string | null, tier: Tier | null, pct: number }
+export type ItemSlotCell = { index: number, open: boolean, itemId: string | null, name: string | null, tier: Tier | null, qty: number }
 export type Filter = Tier | 'all'
 
 export function filterTier<T extends { tier: Tier }>(list: T[], f: Filter): T[] { return f === 'all' ? list : list.filter((e) => e.tier === f) }
@@ -51,7 +86,7 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     const slots: SlotCell[] = Array.from({ length: SLOT_TOTAL }, (_, i) => {
         const id = d.slots[i] ?? null
         const s = id ? byId.get(id) : undefined
-        return { index: i, open: i < d.slots_open, skillId: id, name: s?.name ?? (id ? id : null), tier: s?.tier ?? null }
+        return { index: i, open: i < d.slots_open, skillId: id, name: id ? (s ? displayName(s) : viName(id)) : null, tier: s?.tier ?? null, pct: masteryPct(s?.mastery) }
     })
     const equippedAt = new Map<string, number>()
     slots.forEach((c) => { if (c.skillId) equippedAt.set(c.skillId, c.index) })
@@ -60,7 +95,7 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     const itemOpen = itemSlotsOpenOf(d)
     const itemSlots: ItemSlotCell[] = itemSlotsOf(d).map((id, i) => {
         const it = id ? iById.get(id) : undefined
-        return { index: i, open: i < itemOpen, itemId: id, name: it?.name ?? id, tier: it?.tier ?? null }
+        return { index: i, open: i < itemOpen, itemId: id, name: id ? (it ? displayName(it) : viName(id)) : null, tier: it?.tier ?? null, qty: it?.qty ?? 0 }
     })
     const itemAt = new Map<string, number>()
     itemSlots.forEach((c) => { if (c.itemId) itemAt.set(c.itemId, c.index) })
@@ -70,13 +105,18 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     return {
         rank: d.rank, rankName: rankName(d.rank),
         level: lvl.level, exp: lvl.exp, need, expPct: Math.min(100, Math.round((lvl.exp / need) * 100)),
+        openSkillSlots: slots.filter((c) => c.open), openItemSlots: itemSlots.filter((c) => c.open),
+        skillHeading: `Slot kỹ năng · đang mở ${used}/${d.slots_open} (tối đa ${SLOT_TOTAL})`, itemHeading: `Slot trang bị · đang mở ${itemUsed}/${itemOpen} (tối đa ${SLOT_TOTAL})`,
+        skillLockedLine: lockedLine(d.slots_open, d.rank), itemLockedLine: lockedLine(itemOpen, d.rank, limit),
         slots, slotText: `${used}/${d.slots_open} (mở ${d.slots_open} trên ${SLOT_TOTAL})`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
         itemSlots, itemSlotText: `${itemUsed}/${itemOpen} (mở ${itemOpen} trên ${SLOT_TOTAL})`, freeOpenItemSlots: itemSlots.filter((c) => c.open).map((c) => c.index),
         itemSlotsLimit: limit, itemSlotsDefault: itemDefault, itemSlotsOpen: itemOpen,
         skillsFull: d.skill_count >= d.max_storage, itemsFull: d.item_count >= d.max_storage,
+        pickableSkills: d.skills.filter((x) => !equippedAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
+        pickableItems: d.items.filter((x) => !itemAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
         skillCount: `${d.skill_count} / ${d.max_storage}`, itemCount: `${d.item_count} / ${d.max_storage}`,
-        skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
-        items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier], slot: itemAt.get(i.id) ?? null })),
+        skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, name: displayName(s), pct: masteryPct(s.mastery), cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
+        items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, name: displayName(i), cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier], slot: itemAt.get(i.id) ?? null })),
         caps: Object.keys(STAT_LABEL).map((k) => ({ key: k, label: STAT_LABEL[k], cap: d.stat_caps?.[k] ?? d.stat_cap })),
     }
 }

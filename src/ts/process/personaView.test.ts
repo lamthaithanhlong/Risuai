@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, masteryPct, TIERS } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -119,4 +119,21 @@ describe('item slot grid', () => {
         expect([v.skillsFull, v.itemsFull]).toEqual([true, false])
         expect(reasonText('no_such_item')).toBe('Vật phẩm này không có trong kho')
     })
+})
+
+describe('display names and locked line', () => {
+    it('viName mirrors persona_store.vi_name; displayName replaces a missing/id-like name only', () => {
+        expect(viName('wall-vibration-listening')).toBe('Nghe rung tường')
+        expect(viName('zzz-rusty-knife')).toBe('Dao gỉ zzz')
+        expect(displayName({ id: 'wall-vibration-listening', name: 'wall-vibration-listening' })).toBe('Nghe rung tường')
+        expect(displayName({ id: 'a-b', name: '' })).toBe('B a')
+        expect(displayName({ id: 'a-b', name: 'Tên riêng' })).toBe('Tên riêng')
+        expect(displayName({ id: 'x-y', name: 'foo-bar' })).toBe('Y x')
+    })
+    it('lockedLine: next unlock at Lv 10*rank+1, none at 11 open, owner limit wording', () => {
+        expect(lockedLine(2, 1)).toBe('🔒 Mở thêm 1 slot ở Lv 11 (còn 9 slot khoá)')
+        expect(lockedLine(11, 10)).toBeNull()
+        expect(lockedLine(4, 3, 4)).toBe('🔒 Đang giới hạn ở 4 slot (còn 7 slot khoá)')
+    })
+    it('masteryPct', () => { expect([masteryPct(2500), masteryPct(99999), masteryPct(undefined)]).toEqual([25, 100, 0]) })
 })
