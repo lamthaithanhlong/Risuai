@@ -3,7 +3,7 @@
     // resting point. Numbers come from the persona's global store (fetchCurrent); the open chat fills what the store lacks.
     import { DBState } from 'src/ts/stores.svelte'
     import { getCurrentChat } from 'src/ts/storage/database.svelte'
-    import { fetchCurrent, type Current } from 'src/ts/storage/statsSave'
+    import { fetchCurrent, fetchLedger, type Current } from 'src/ts/storage/statsSave'
     import { personaIdOf } from 'src/ts/process/statsGlue'
     import { buildView, fetchFindNames, type FindNames } from 'src/ts/process/personaStats'
     import { checkPersonaBinded } from 'src/ts/util'
@@ -14,6 +14,7 @@
         : { title: 'Stats & Skills', stats: 'Stats', slots: 'Skill slots', skills: 'Skills', none: 'No stats yet: they grow while playing a story that has the growth rules.', noSkills: 'No skills yet.', equipped: 'equipped', cap: 'cap', hint: 'Stats grow through use in the story. Change skills with a chat command at a resting point.', store: "From the persona's global store", chat: 'From the open chat' })
 
     let current: Current | null = $state(null)
+    let ledgerSkills: Record<string, number> | null = $state(null)   // the persona's event ledger's mastery (GET /api/persona/state), null when it has none
     let names: FindNames = $state({})
     let tick = $state(0)
 
@@ -23,18 +24,19 @@
         const id = persona
         let live = true
         fetchCurrent(id).then((c) => { if (live) current = c })
+        fetchLedger(id).then((l) => { if (live) ledgerSkills = l && l.event_count > 0 ? l.skills ?? null : null })
         fetchFindNames().then((n) => { if (live) names = n })
         return () => { live = false }
     })
 
     // the chat's own values refresh when the page is shown again
-    const view = $derived.by(() => { tick; return buildView(current, getCurrentChat()?.scriptstate, names) })
+    const view = $derived.by(() => { tick; return buildView(current, getCurrentChat()?.scriptstate, names, ledgerSkills) })
 </script>
 
 <div class="mt-4 w-full max-w-full rounded-md border border-darkborderc p-4" data-risu-persona-stats>
     <div class="flex items-center justify-between flex-wrap gap-2">
         <h3 class="text-xl font-bold">{L.title}</h3>
-        <button class="text-xs text-textcolor2 hover:text-green-500" onclick={() => { tick++; fetchCurrent(persona).then((c) => { current = c }) }}>↻</button>
+        <button class="text-xs text-textcolor2 hover:text-green-500" onclick={() => { tick++; fetchCurrent(persona).then((c) => { current = c }); fetchLedger(persona).then((l) => { ledgerSkills = l && l.event_count > 0 ? l.skills ?? null : null }) }}>↻</button>
     </div>
     <p class="text-xs text-textcolor2 mb-2">{L.hint}{#if view.source !== 'none'} · {view.source === 'store' ? L.store : L.chat}{/if}</p>
 

@@ -4,7 +4,7 @@
 import { fetchPersona, type Deps as PersonaDeps } from '../storage/personaStore'
 import { levelOf } from './findDrop'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
-import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
+import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldSkills, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
 
 export const LOAD_WAIT_MS = 1500
 type Vars = Record<string, string | number | boolean>
@@ -96,10 +96,13 @@ export async function statsBeforeRequest(chat: ChatLike, deps: StatsDeps, waitMs
         const [cur, led] = await Promise.all([deps.current(persona), deps.ledger && !waiting ? deps.ledger(persona) : null])
         const fold = foldVars(led)
         const merged = mergeCurrent(chat.scriptstate, cur)
-        if (fold) {
-            Object.assign((chat.scriptstate ??= {}), fold)
-            if (merged) chat.scriptstate.$skills = merged.$skills   // skill mastery is not in the ledger: it still comes from the store's merge
-        } else if (merged) Object.assign((chat.scriptstate ??= {}), merged)
+        // skill mastery from the fold (L1 2026-11-06 item (e)); without it (no event yet, a turn waiting, no `skills` from the server) the old merge, as for the stats
+        const skills = foldSkills(chat.scriptstate, led)
+        const ledgerSkills = !!(led && led.event_count > 0 && led.skills)
+        if (fold) Object.assign((chat.scriptstate ??= {}), fold)
+        else if (merged) (chat.scriptstate ??= {}).$stats = merged.$stats
+        if (skills) (chat.scriptstate ??= {}).$skills = skills
+        else if (merged && !ledgerSkills) (chat.scriptstate ??= {}).$skills = merged.$skills
     })().catch(() => {})
     let timer: ReturnType<typeof setTimeout> | undefined
     await Promise.race([work, new Promise<void>((r) => { timer = setTimeout(r, waitMs) })])

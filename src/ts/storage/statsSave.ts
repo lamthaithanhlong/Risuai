@@ -146,15 +146,23 @@ export function mergeCurrent(vars: Record<string, unknown> | undefined, cur: Cur
 // the ledger's events of (chat, turn), so a regenerated reply sends the same (chat, turn) again and counts once. Before each request the persona's Level,
 // EXP and stats are the FOLD of the ledger (GET /api/persona/state) and are written into the chat as they are, not max'ed with the chat. While a turn
 // could not be sent it waits in `$exp_pending` (one entry per (chat, turn), the newest wins) and the chat is not overwritten from the fold.
-export type TurnEvent = { kind: string, idx: number | string, level: number, stats: Record<string, number> }
+// SKILL MASTERY (L1 2026-11-06 item (e)): an event also carries `skills` = {skill id: mastery gain the Lua AWARDED (hundredths)}; the fold sums them (cap 10000) and
+// GET /api/persona/state returns `skills` = {id: min(10000, the persona store's loot mastery + the fold's gains)}. Before each request the chat's $skills takes
+// that mastery (foldSkills), keeping its own eq / link / name, instead of the old max-merge, which stays the fallback exactly as for the stats.
+export type TurnEvent = { kind: string, idx: number | string, level: number, stats: Record<string, number>, skills?: Record<string, number> }
 export type TurnBody = { persona: string, chat: string, turn: number, events: TurnEvent[], base?: { lvl: { l: number, e: number }, stats: Record<string, number>, stat_exp?: Record<string, number> } }
-export type LedgerState = { level: number, exp: number, stats: Record<string, number>, stat_exp: Record<string, number>, event_count: number }
+export type LedgerState = { level: number, exp: number, stats: Record<string, number>, stat_exp: Record<string, number>, event_count: number, skills?: Record<string, number> | null }
 
 export const TURN_EVENTS_KEY = '$exp_turn_events'
 export const EXP_PENDING_KEY = '$exp_pending'
 export const MAX_EXP_PENDING = 50
 const CHAT_RE = /^[A-Za-z0-9_.-]{1,64}$/
-const KINDS = ['train', 'kill', 'mission', 'act']
+const KINDS = ['train', 'kill', 'mission', 'act', 'find']
+const SKILL_ID_RE = /^[^\s|"\\\x00-\x1f]{1,80}$/     // event_ledger.py IDX_RE (persona_store ID_RE)
+export const MAX_MASTERY = 10000
+/** {skill id: int 0..10000} of an object, anything else dropped (an empty Lua table may arrive as []). */
+const masteryMap = (o: unknown, dropZero = false): Record<string, number> => (o && typeof o === 'object' && !Array.isArray(o))
+    ? Object.fromEntries(Object.entries(o as Record<string, unknown>).filter(([k, v]) => SKILL_ID_RE.test(k) && isInt(v) && v >= (dropZero ? 1 : 0) && v <= MAX_MASTERY)) as Record<string, number> : {}
 
 const parseJson = (text: unknown): unknown => { try { return JSON.parse(String(text ?? '')) } catch { return undefined } }
 const intMap = (o: unknown): Record<string, number> => (o && typeof o === 'object' && !Array.isArray(o))
@@ -165,9 +173,10 @@ function cleanEvents(list: unknown): TurnEvent[] | null {
     const out: TurnEvent[] = []
     for (const e of list) {
         if (!e || typeof e !== 'object' || !KINDS.includes((e as any).kind)) return null
-        const { kind, idx, level, stats } = e as any
+        const { kind, idx, level, stats, skills } = e as any
         if (!(isInt(idx) || typeof idx === 'string') || !isInt(level) || level < 0) return null
-        out.push({ kind, idx, level, stats: intMap(stats) })
+        const sk = masteryMap(skills, true)
+        out.push(Object.keys(sk).length ? { kind, idx, level, stats: intMap(stats), skills: sk } : { kind, idx, level, stats: intMap(stats) })
     }
     return out
 }
@@ -228,7 +237,9 @@ export async function fetchLedger(persona: string, deps: { fetch?: typeof fetch,
         if (!j || !isInt(j.level) || j.level < 1 || !isInt(j.exp) || j.exp < 0 || !isInt(j.event_count)) return null
         const stats = intMap(j.stats), stat_exp = intMap(j.stat_exp)
         if (STAT_KEYS.some((k) => !(k in stats) || !(k in stat_exp))) return null
-        return { level: j.level, exp: j.exp, stats, stat_exp, event_count: j.event_count }
+        // skills: absent (an older asset manager) or null (the persona store could not be read) means no mastery from the ledger: the old merge for $skills
+        const skills = j.skills && typeof j.skills === 'object' && !Array.isArray(j.skills) ? masteryMap(j.skills) : null
+        return { level: j.level, exp: j.exp, stats, stat_exp, event_count: j.event_count, skills }
     } catch { return null }
 }
 
@@ -238,4 +249,23 @@ export function foldVars(s: LedgerState | null): { $lvl: string, $stats: string,
     if (!s || s.event_count <= 0) return null
     const stats = JSON.stringify(Object.fromEntries(STAT_KEYS.map((k) => [k, s.stats[k]])))
     return { $lvl: JSON.stringify({ e: s.exp, l: s.level }), $stats: stats, $stat_exp: JSON.stringify(Object.fromEntries(STAT_KEYS.map((k) => [k, s.stat_exp[k]]))), $stat_exp_sig: stats }
+}
+
+/** The chat's $skills with the fold's mastery: a skill the chat has keeps its eq / link / name and takes the fold's `m` (as it is, not max'ed: a regenerated
+ *  reply's mastery goes); a skill only the fold knows joins at that mastery, unequipped unless `$store_slots` (the persona's slots) has it; a skill only the
+ *  chat has stays as it is. null when the ledger has no event yet or no mastery (the old merge applies then) or nothing changes. (pure) */
+export function foldSkills(vars: Record<string, unknown> | undefined, s: LedgerState | null): string | null {
+    if (!s || s.event_count <= 0 || !s.skills) return null
+    const have = obj(vars?.$skills)
+    const slots = parseJson(vars?.$store_slots)
+    const equipped = new Set(Array.isArray(slots) ? slots.filter((x): x is string => typeof x === 'string') : [])
+    const out: Record<string, any> = { ...have }
+    let changed = false
+    for (const [id, m] of Object.entries(s.skills)) {
+        const h = have[id]
+        if (h && typeof h === 'object' && !Array.isArray(h)) {
+            if (h.m !== m) { out[id] = { ...h, m }; changed = true }
+        } else { out[id] = { m, eq: equipped.has(id) ? 1 : 0 }; changed = true }
+    }
+    return changed ? JSON.stringify(out) : null
 }

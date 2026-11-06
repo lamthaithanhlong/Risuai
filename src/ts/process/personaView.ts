@@ -67,6 +67,14 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
 }
 export type Inventory = ReturnType<typeof buildInventory>
 
+/** The store's skills with the mastery of the persona's event ledger (GET /api/persona/state `skills` = loot base + the fold's gains, L1 2026-11-06 item (e)):
+ *  a skill the ledger names shows that mastery; without ledger skills (down, older server) the store's own mastery stays. (pure) */
+export function withLedgerMastery(d: PersonaData, skills: Record<string, number> | null | undefined): PersonaData {
+    if (!skills) return d
+    const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10000
+    return { ...d, skills: d.skills.map((s) => ok(skills[s.id]) ? { ...s, mastery: skills[s.id] } : s) }
+}
+
 /** The confirmation text for Xoá. */
 export function deleteWarning(name: string, slot: number | null): string {
     return slot === null ? `Xoá "${name}" khỏi kho? Không hoàn lại được.` : `Xoá "${name}" khỏi kho? Kỹ năng đang gắn ở slot ${slot + 1}, sẽ được gỡ ra trước. Không hoàn lại được.`

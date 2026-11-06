@@ -11,9 +11,10 @@
 //   POST /api/persona/delete   {persona, kind, id, level?}               200 {ok:true, unequipped: slot|null, view?} | {ok:false, reason:'not_found'}
 //   POST /api/persona/equip    {persona, slot, skillId, level}           200 {ok:true, slot, replaced, view} | {ok:false, reason:'slot_locked'|'no_such_skill'|'already_equipped'}
 //   POST /api/persona/unequip  {persona, slot, level?}                   200 {ok:true, slot, was, view?}
-//   GET  /api/persona/state?persona=       -> 200 {persona, level, exp, rank, stats: {stat: hundredths}, stat_exp: {stat: e}, event_count}: the FOLD of the
+//   GET  /api/persona/state?persona=       -> 200 {persona, level, exp, rank, stats: {stat: hundredths}, stat_exp: {stat: e}, event_count, skills: {id: mastery} | null,
+//                                              skill_gain: {id: summed gain}}: skills = min(10000, persona store loot mastery + the ledger's gains); the FOLD of the
 //        persona's event ledger (event_ledger.py; owner/L1 2026-11-06 "fold theo event id; regen thay cùng id; bỏ last-value-wins")
-//   POST /api/events/turn  {persona, chat, turn, events: [{kind, idx, level, stats}], base?}   the events of (chat, turn) become exactly this list
+//   POST /api/events/turn  {persona, chat, turn, events: [{kind, idx, level, stats, skills?}], base?}   kind train|kill|mission|act|find; skills = {id: awarded gain}   the events of (chat, turn) become exactly this list
 //        (a regenerated reply replaces its turn; [] removes it) -> 200 {ok:true, written, state}
 //   400 {error}  the store refused the request as malformed (the page drops it)   502/504  the asset manager is down or slow (the page may retry)
 // Only the fields listed above go on (anything else is cut), and only persona and level go on from a GET's query. Logs name the route and the

@@ -81,8 +81,10 @@ const obj = (text: unknown): Record<string, any> => {
 /**
  * What the page shows. The store (the persona's global history) is the source; the open chat's `$stats` / `$skills` fill what the store
  * lacks and carry what only the chat knows (equipped flag, link, name). A value is the larger of the two: growth only goes up.
+ * `ledgerSkills` (GET /api/persona/state `skills`, L1 2026-11-06 item (e)): a skill's mastery from the persona's event ledger, used as it is (a regenerated
+ * reply's mastery is taken back, so no max with the old store); a skill it does not name keeps the old rule.
  */
-export function buildView(store: StoreCurrent, vars: Record<string, unknown> | undefined, finds: FindNames = {}): View {
+export function buildView(store: StoreCurrent, vars: Record<string, unknown> | undefined, finds: FindNames = {}, ledgerSkills: Record<string, number> | null = null): View {
     const cs = obj(vars?.$stats)
     const ck = obj(vars?.$skills)
     const stats: Record<string, number> = {}
@@ -93,11 +95,11 @@ export function buildView(store: StoreCurrent, vars: Record<string, unknown> | u
         if (a !== undefined || b !== undefined) any = true
         stats[r.key] = clamp(Math.max(a ?? START_VALUE, b ?? 0))
     }
-    const ids = new Set<string>([...Object.keys(ck), ...Object.keys(store?.skills ?? {})])
+    const ids = new Set<string>([...Object.keys(ck), ...Object.keys(store?.skills ?? {}), ...Object.keys(ledgerSkills ?? {})])
     if (ids.size) any = true
     const skills: SkillRow[] = [...ids].map((id) => {
         const c = ck[id] && typeof ck[id] === 'object' ? ck[id] : {}
-        const m = clamp(Math.max(isInt(c.m) ? c.m : 0, store && isInt(store.skills[id]) ? store.skills[id] : 0))
+        const m = ledgerSkills && isInt(ledgerSkills[id]) ? clamp(ledgerSkills[id]) : clamp(Math.max(isInt(c.m) ? c.m : 0, store && isInt(store.skills[id]) ? store.skills[id] : 0))
         const cap = skillCap(Array.isArray(c.link) ? c.link.filter((x: unknown) => typeof x === 'string') : undefined, stats)
         const name = (typeof c.name === 'string' && c.name) || finds[id]?.vi || finds[id]?.en || id
         return { id, name, m, pct: fmtPct(m), tier: tierOf(m), equipped: c.eq === 1, cap, capPct: fmtPct(cap), capped: m >= cap }

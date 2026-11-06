@@ -7,7 +7,8 @@
     import { personaIdOf } from 'src/ts/process/statsGlue'
     import { checkPersonaBinded } from 'src/ts/util'
     import { fetchPersona, deleteEntry, equipSkill, unequipSkill, type PersonaData } from 'src/ts/storage/personaStore'
-    import { buildInventory, parseLvl, reasonText, deleteWarning, deletePlan, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
+    import { buildInventory, parseLvl, reasonText, deleteWarning, deletePlan, withLedgerMastery, TIERS, TIER_LABEL, TIER_CLASS, type Filter } from 'src/ts/process/personaView'
+    import { fetchLedger } from 'src/ts/storage/statsSave'
 
     let data: PersonaData | null = $state(null)
     let error = $state('')
@@ -22,8 +23,11 @@
     const inv = $derived(data ? buildInventory(data, lvl, filter) : null)
 
     async function reload() {
+        // the mastery shown is the persona's event ledger (loot base + the gains of every reply, a regenerated one counted once); the store's own if it is down
+        const ask = fetchLedger(persona)
         const r = await fetchPersona(persona, lvl.level)
-        if (r.ok) { data = r.data; error = '' } else { data = null; error = reasonText(r.reason) }
+        const led = await ask
+        if (r.ok) { data = withLedgerMastery(r.data, led?.skills); error = '' } else { data = null; error = reasonText(r.reason) }
     }
     $effect(() => { persona; lvl.level; reload() })
 

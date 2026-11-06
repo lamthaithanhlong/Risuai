@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, TIERS } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -72,5 +72,15 @@ describe('messages and delete flow', () => {
         expect(deletePlan('skill', 3)).toEqual(['unequip', 'delete'])
         expect(deletePlan('skill', null)).toEqual(['delete'])
         expect(deletePlan('item', null)).toEqual(['delete'])
+    })
+})
+
+describe('withLedgerMastery (Kho & Slot shows the ledger mastery, L1 2026-11-06 item (e))', () => {
+    it('replaces the mastery of a skill the ledger names, keeps the rest; nothing from a missing ledger', () => {
+        const d = data()
+        expect(withLedgerMastery(d, { a: 4321, z: 5, b: -1 }).skills.map((s) => s.mastery)).toEqual([4321, 1])
+        expect(withLedgerMastery(d, null)).toBe(d)
+        expect(withLedgerMastery(d, undefined).skills).toEqual(d.skills)
+        expect(buildInventory(withLedgerMastery(d, { a: 777 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.mastery).toBe(777)
     })
 })
