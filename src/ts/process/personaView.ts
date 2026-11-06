@@ -185,11 +185,23 @@ export const TIER_MOD: Record<Tier, number> = { bronze: 0, silver: 1, gold: 2, p
 export const skillMod = (tier: Tier, level: number) => (TIER_MOD[tier] ?? 0) + Math.floor(Math.max(1, Math.floor(Number(level) || 1)) / 3)
 export const modLine = (mod: number) => `Xúc xắc +${mod} khi dùng`
 export const ITEM_SLOT_SENTENCE = 'Chỉ có tác dụng khi gắn vào slot trang bị; không gắn thì nằm trong kho, không ảnh hưởng lượt chơi.'
-/** The text of "Công dụng": the row's own effect, else the client fallback (skill: the mod sentence; item: the slot sentence). */
+/** TIER LADDER (owner 2026-11-06: the higher the tier, the more miraculous the effect). ONE table; twins: skill_exp.py TIER_POWER, loadout.lua CONFIG.skill.tier_power.
+ *  word = the tier's name, scale = what class of effect it may produce, cost = what platinum / diamond must state with it. */
+export const TIER_POWER: Record<Tier, { word: string, scale: string, cost: string }> = {
+    bronze: { word: 'Thông thường', scale: 'một mẹo nhỏ thực dụng, hợp lý đời thường: một thủ thuật, một sở trường', cost: '' },
+    silver: { word: 'Tinh luyện', scale: 'rõ ràng hơn người thường (chính xác, bền bỉ, nhanh hơn hẳn) nhưng hoàn toàn tự nhiên', cost: '' },
+    gold: { word: 'Phi thường', scale: 'làm được điều người giỏi nhất cũng khó, khiến người chứng kiến kinh ngạc, vẫn nằm trong những gì thân thể và kỹ năng con người có thể làm', cost: '' },
+    platinum: { word: 'Siêu phàm', scale: 'phá luật thường trong một phạm vi hẹp, hiệu ứng siêu nhiên và kỳ dị đầu tiên', cost: 'phải kèm cái giá hoặc điều kiện rõ ràng (tốn Hơi sức, hoặc chỉ khi một điều kiện xảy ra)' },
+    diamond: { word: 'Huyền thoại', scale: 'bẻ cong luật của thế giới, một kỳ tích hay phép màu tầm câu chuyện', cost: 'luôn kèm cái giá hoặc điều kiện rõ ràng (tốn Hơi sức, nghỉ vài cảnh mới dùng lại, hoặc cần một điều kiện kích hoạt) để truyện không vỡ' },
+}
+/** "Tầng Siêu phàm — <scale>; <cost>." (an unknown tier counts as bronze). */
+export const tierPowerLine = (tier: Tier) => { const p = TIER_POWER[tier] ?? TIER_POWER.bronze; return `Tầng ${p.word} — ${p.scale}${p.cost ? `; ${p.cost}` : ''}.` }
+/** The text of "Công dụng": the row's own effect, else the client fallback (skill: the mod sentence + the tier line; item: the slot sentence + the tier line). */
 export function effectOf(kind: 'skill' | 'item', e: { tier: Tier, effect?: unknown, exp?: unknown, mastery?: unknown }): string {
     const own = typeof e.effect === 'string' ? e.effect.trim() : ''
     if (own) return own
-    return kind === 'skill' ? `Cộng +${skillMod(e.tier, skillProgress(e as any).level)} vào xúc xắc mỗi khi dùng kỹ năng này.` : ITEM_SLOT_SENTENCE
+    const tier = tierPowerLine(e.tier)
+    return kind === 'skill' ? `Cộng +${skillMod(e.tier, skillProgress(e as any).level)} vào xúc xắc mỗi khi dùng kỹ năng này. ${tier}` : `${ITEM_SLOT_SENTENCE} ${tier}`
 }
 export type EntryDetail = { kind: 'skill' | 'item', id: string, name: string, tier: Tier, tierLabel: string, cls: string, stat: string, rule: string, effect: string, conditions: string }
 /** The detail block of one skill / item (null when the id is not in the view). Equipped = its slot in the view, whatever the tier filter hides. */

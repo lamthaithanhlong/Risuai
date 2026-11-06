@@ -127,17 +127,17 @@ export async function pageDeps(): Promise<StatsDeps> {
     return { persona, send: (b) => sendStats(b), current: (p) => fetchCurrent(p), sendTurn: (b) => sendTurn(b), ledger: (p) => fetchLedger(p) }
 }
 
-/** {id: {name, effect, conditions}} for the equipped skills and items; effect falls back to the client sentence so it is never empty. */
-export function equippedEffects(d: PersonaData): Record<string, { name: string, effect: string, conditions: string }> {
-    const out: Record<string, { name: string, effect: string, conditions: string }> = {}
+/** {id: {name, effect, conditions, tier}} for the equipped skills and items (tier: what the narrator's tier ladder keys on); effect falls back to the client sentence so it is never empty. */
+export function equippedEffects(d: PersonaData): Record<string, { name: string, effect: string, conditions: string, tier: string }> {
+    const out: Record<string, { name: string, effect: string, conditions: string, tier: string }> = {}
     const skills = new Map(d.skills.map((s) => [s.id, s])), items = new Map(d.items.map((i) => [i.id, i]))
     for (const id of d.slots) {
         const s = typeof id === 'string' ? skills.get(id) : undefined
-        if (s) out[s.id] = { name: displayName(s), effect: effectOf('skill', s), conditions: typeof s.conditions === 'string' ? s.conditions.trim() : '' }
+        if (s) out[s.id] = { name: displayName(s), effect: effectOf('skill', s), conditions: typeof s.conditions === 'string' ? s.conditions.trim() : '', tier: s.tier }
     }
     for (const id of itemSlotsOf(d)) {
         const i = id ? items.get(id) : undefined
-        if (i) out[i.id] = { name: displayName(i), effect: effectOf('item', i), conditions: typeof i.conditions === 'string' ? i.conditions.trim() : '' }
+        if (i) out[i.id] = { name: displayName(i), effect: effectOf('item', i), conditions: typeof i.conditions === 'string' ? i.conditions.trim() : '', tier: i.tier }
     }
     return out
 }

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, skillNeed, skillCum, skillLevelOf, skillExpIn, expFromMastery, skillProgress, levelFacts, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, skillNeed, skillCum, skillLevelOf, skillExpIn, expFromMastery, skillProgress, levelFacts, TIERS, TIER_POWER, tierPowerLine, effectOf } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -201,5 +201,32 @@ describe('effect show/hide prefs', () => {
         expect(effectShown(setEffectMode(q, 'skill', 'none'), 'skill', 'a', 1)).toBe(false)
         expect(parseEffectPrefs('{nope')).toEqual(defaultEffectPrefs())
         expect(parseEffectPrefs(JSON.stringify(q))).toEqual(q)
+    })
+})
+
+describe('tier ladder fallback (owner 2026-11-06: higher tier, more miraculous)', () => {
+    const row = (tier: any, o: object = {}) => ({ tier, exp: 60, ...o })
+    it('each tier reads differently, for a skill and for an item, in ladder order', () => {
+        for (const kind of ['skill', 'item'] as const) {
+            const t = TIERS.map((x) => effectOf(kind, row(x)))
+            expect(new Set(t).size).toBe(5)
+            TIERS.forEach((x, i) => expect(t[i]).toContain('Tầng ' + TIER_POWER[x].word))
+        }
+        expect(TIERS.map((x) => TIER_POWER[x].word)).toEqual(['Thông thường', 'Tinh luyện', 'Phi thường', 'Siêu phàm', 'Huyền thoại'])
+        const lens = TIERS.map((x) => tierPowerLine(x).length)
+        expect(lens).toEqual([...lens].sort((a, b) => a - b))
+    })
+    it('platinum and diamond state a cost or condition; the lower three do not', () => {
+        for (const x of ['platinum', 'diamond'] as const) for (const kind of ['skill', 'item'] as const) expect(effectOf(kind, row(x))).toMatch(/Hơi sức/)
+        for (const x of ['bronze', 'silver', 'gold'] as const) expect(effectOf('skill', row(x))).not.toMatch(/Hơi sức/)
+    })
+    it('keeps the real mod / slot rule before the tier line, no kebab id', () => {
+        expect(effectOf('skill', row('gold'))).toMatch(/^Cộng \+\d+ vào xúc xắc mỗi khi dùng kỹ năng này\. Tầng Phi thường/)
+        expect(effectOf('item', row('diamond'))).toMatch(/^Chỉ có tác dụng khi gắn vào slot trang bị.* Tầng Huyền thoại/)
+        for (const x of TIERS) expect(effectOf('skill', row(x, { id: 'wall-vibration-listening' }))).not.toMatch(/[a-z]+-[a-z]+/)
+    })
+    it('a stored effect wins, untouched; blank counts as missing', () => {
+        for (const x of TIERS) expect(effectOf('skill', row(x, { effect: ' Bắn trúng không cần ngắm ' }))).toBe('Bắn trúng không cần ngắm')
+        expect(effectOf('item', row('gold', { effect: '   ' }))).toContain('Tầng Phi thường')
     })
 })
