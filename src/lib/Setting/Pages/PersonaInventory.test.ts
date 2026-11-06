@@ -13,7 +13,7 @@ const view = {
         { id: 'old-laptop', name: 'old-laptop', tier: 'silver', qty: 1 },
     ],
     slots: ['wall-vibration-listening', null, null, null, null, null, null, null, null, null, null],
-    skill_count: 105, item_count: 2,
+    skill_count: 180, item_count: 2,
     item_slots: [null, 'rusty-knife', ...Array(9).fill(null)], item_slots_open: 3, item_slots_limit: null, item_slots_default: 3,
 }
 vi.mock('src/ts/stores.svelte', () => ({ DBState: { db: { personas: [{}], selectedPersona: 0 } } }))
