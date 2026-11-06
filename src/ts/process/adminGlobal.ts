@@ -350,6 +350,14 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
     persona?: { id: string; chat?: { scriptstate?: Record<string, unknown> } }): Promise<T[]> {
     const id = adminCardOf(card) || 'cha-unknown'
     const { payload } = await resolveAdmin(id, deps)
+    // the global Admin engine module (a Lua module that runs for every card) reads these two chat variables: it stands down when Admin is off or
+    // locked for the card ($admin_off), and $admin_card says which card this is
+    if (persona?.chat) {
+        const vars = (persona.chat.scriptstate ??= {})
+        vars.$admin_off = (!payload || payload.enabled === false || payload.locked === true) ? '1' : ''
+        vars.$admin_card = id
+        vars.$admin_engine = /\[\[ACT\|/.test((card as { desc?: string } | undefined)?.desc ?? '') ? '1' : ''   // the card's own Lua counts growth: the module stands down
+    }
     if (!payload) return formated
     const p = dedupeOwn(payload, card)
     if (!p.assets.length) return formated   // the card carries every part word for word already: Admin is in the prompt once

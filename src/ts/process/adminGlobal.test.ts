@@ -529,3 +529,32 @@ describe('off seen once: fail-closed', () => {
         fs.rmSync(dir, { recursive: true, force: true })
     })
 })
+
+
+describe('adminBeforeRequest tells the global Admin engine module whether it may run (owner 2026-11-05)', () => {
+    const card = { chaId: 'aa7f021d-0000', type: 'character' } as never
+    const run = async (p: object | null) => {
+        resetAdminCache()
+        const chat = { scriptstate: {} as Record<string, unknown> }
+        const deps = { fetch: (async () => ({ ok: !!p, status: p ? 200 : 503, json: async () => p ?? {} })) as never, auth: () => 'x', storage: { getItem: () => null, setItem: () => {} } }
+        await adminBeforeRequest([{ role: 'user', content: 'hi' }], card, [], 'Kenji', deps as never, { id: 'p1', chat })
+        return chat.scriptstate
+    }
+    const ok = { card: 'mailman', assets: [{ id: 'a', title: 'A', body: 'x' }], guide: '', text: 't' }
+    it('Admin on: $admin_off is empty and $admin_card names the card', async () => {
+        expect(await run(ok)).toMatchObject({ $admin_off: '', $admin_card: 'mailman' })
+    })
+    it('a card whose description teaches [[ACT| has its own engine: $admin_engine is 1, else empty', async () => {
+        expect((await run(ok)).$admin_engine).toBe('')
+        const withAct = { chaId: 'fc27f53b-0000', type: 'character', desc: 'rule [[ACT|id|stat|normal|]]' } as never
+        resetAdminCache()
+        const chat = { scriptstate: {} as Record<string, unknown> }
+        const deps = { fetch: (async () => ({ ok: true, status: 200, json: async () => ({ ...ok, card: 'zombie' }) })) as never, auth: () => 'x', storage: { getItem: () => null, setItem: () => {} } }
+        await adminBeforeRequest([{ role: 'user', content: 'hi' }], withAct, [], 'Kenji', deps as never, { id: 'p1', chat })
+        expect(chat.scriptstate.$admin_engine).toBe('1')
+    })
+    it('Admin off, locked, or no answer for a card never seen off still lets the module run only when on', async () => {
+        expect((await run({ ...ok, enabled: false })).$admin_off).toBe('1')
+        expect((await run({ ...ok, locked: true })).$admin_off).toBe('1')
+    })
+})
