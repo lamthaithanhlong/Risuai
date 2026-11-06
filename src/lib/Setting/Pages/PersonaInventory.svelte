@@ -121,7 +121,7 @@
 
         <h4 class="mt-3 mb-1 font-bold">Trần chỉ số ở {inv.rankName.split(' ')[0]}</h4>
         <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr))">
-            {#each inv.caps as c (c.key)}<div class="rounded-md bg-darkbg p-2 text-sm flex justify-between"><span>{c.label}</span><span class="font-mono">{c.cap}%</span></div>{/each}
+            {#each inv.caps as c (c.key)}<div class="rounded-md bg-darkbg p-2 text-sm flex justify-between"><span>{c.label}</span><span class="font-mono">{c.cap}</span></div>{/each}
         </div>
     {:else}
         <p class="text-sm text-textcolor2 mt-2">Đang tải…</p>

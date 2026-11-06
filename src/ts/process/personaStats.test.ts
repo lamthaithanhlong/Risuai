@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The persona page's stats section (personaStats.ts): formatting, the bar, slots, tiers, the skill cap, and what the page shows.
 import { describe, expect, it } from 'vitest'
-import { buildView, fetchFindNames, fmtPct, skillCap, slotsFor, tierOf, toNext } from './personaStats'
+import { buildView, fetchFindNames, fmtPct, fmtStat, skillCap, slotsFor, tierOf, toNext } from './personaStats'
 
 describe('fmtPct / toNext', () => {
     it('shows hundredths exactly, two decimals', () => {
@@ -60,7 +60,7 @@ describe('buildView', () => {
     it('without data says none and still lists the six stats at the start value', () => {
         const v = buildView(null, {})
         expect(v.source).toBe('none')
-        expect(v.stats.map((s) => s.pct)).toEqual(Array(6).fill('10.00%'))
+        expect(v.stats.map((s) => s.pct)).toEqual(Array(6).fill('10 (EXP 0/20)'))
         expect(v.slots).toEqual({ used: 0, total: 1 })
         expect(v.skills).toEqual([])
     })
@@ -72,8 +72,8 @@ describe('buildView', () => {
         }
         const v = buildView(store, vars, { 'door-sense': { vi: 'Linh cảm cửa', en: 'Door sense' } })
         expect(v.source).toBe('store')
-        expect(v.stats.find((s) => s.key === 'suc_manh')!.pct).toBe('23.47%')
-        expect(v.stats.find((s) => s.key === 'nhanh_nhen')!.pct).toBe('15.00%')
+        expect(v.stats.find((s) => s.key === 'suc_manh')!.pct).toBe('23 (EXP 70/150)')
+        expect(v.stats.find((s) => s.key === 'nhanh_nhen')!.pct).toBe('15 (EXP 0/70)')
         expect(v.slots).toEqual({ used: 1, total: 2 })
         const [first, second] = v.skills
         expect(first).toMatchObject({ id: 'stair-ear', name: 'Nghe rung tường', pct: '6.10%', equipped: true, capped: false })
@@ -102,5 +102,21 @@ describe('fetchFindNames', () => {
     it('is empty on errors', async () => {
         expect(await fetchFindNames({ fetch: ok({}, 502), auth: async () => 't' })).toEqual({})
         expect(await fetchFindNames({ fetch: (async () => { throw new Error('x') }) as any, auth: async () => 't' })).toEqual({})
+    })
+})
+
+
+describe('fmtStat: a stat is a whole point with its EXP, never a percent (owner 2026-11-06)', () => {
+    it('reads "11 (EXP 5/30)" from the stored hundredths', () => {
+        expect(fmtStat(1000)).toBe('10 (EXP 0/20)')
+        expect(fmtStat(1100)).toBe('11 (EXP 0/30)')
+        expect(fmtStat(1116)).toBe('11 (EXP 4/30)')   // 16 hundredths of 30 = 4.8, rounded down
+        expect(fmtStat(1550)).toBe('15 (EXP 35/70)')
+        expect(fmtStat(NaN)).toBe('0 (EXP 0/20)')
+    })
+    it('no stat value anywhere in the persona view carries a % sign', () => {
+        for (let v = 0; v <= 10000; v += 37) expect(fmtStat(v)).not.toContain('%')
+        const view = buildView({ stats: { suc_manh: 2347, nhanh_nhen: 1500, the_luc: 1000, tinh_than: 4001, cam_nhan: 5, y_chi: 10000 }, skills: {} }, {})
+        for (const s of view.stats) expect(s.pct).not.toContain('%')
     })
 })

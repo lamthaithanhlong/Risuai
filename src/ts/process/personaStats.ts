@@ -36,6 +36,15 @@ export function fmtPct(v: number): string {
     return `${Math.floor(n / 100)}.${String(n % 100).padStart(2, '0')}%`
 }
 
+/** A stat as the player reads it: the whole point and its EXP, "11 (EXP 5/30)" (owner 2026-11-06: stats are integers with EXP; no percent sign). The store keeps
+ *  hundredths of a point, so the EXP is the decimal part's share of the need, rounded down (the same split stats.lua makes when it reads an old $stats). */
+export function fmtStat(v: number): string {
+    const n = isInt(v) ? clamp(v) : 0
+    const s = Math.floor(n / 100)
+    const need = 20 + 10 * (Math.max(10, s) - 10)
+    return `${s} (EXP ${Math.floor(((n % 100) * need) / 100)}/${need})`
+}
+
 export function toNext(v: number): number {
     const n = isInt(v) ? clamp(v) : 0
     return n >= HARD_CAP ? 1 : (n % 100) / 100
@@ -96,7 +105,7 @@ export function buildView(store: StoreCurrent, vars: Record<string, unknown> | u
     const total = slotsFor(stats.y_chi)
     return {
         source: !any ? 'none' : store && (Object.keys(store.stats).length || Object.keys(store.skills).length) ? 'store' : 'chat',
-        stats: STAT_ROWS.map((r) => ({ key: r.key, vi: r.vi, en: r.en, value: stats[r.key], pct: fmtPct(stats[r.key]), bar: toNext(stats[r.key]) })),
+        stats: STAT_ROWS.map((r) => ({ key: r.key, vi: r.vi, en: r.en, value: stats[r.key], pct: fmtStat(stats[r.key]), bar: toNext(stats[r.key]) })),
         slots: { used: skills.filter((s) => s.equipped).length, total },
         skills,
     }
