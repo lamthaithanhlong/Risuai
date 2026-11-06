@@ -145,70 +145,162 @@ describe('known names', () => {
     })
 })
 
-describe('loot to the persona store', () => {
-    // a fake fetch that stands for the persona bridge: the real lootPersona and its POST body
-    const bridge = (status: number, body: unknown) => {
+describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
+    // a fake fetch standing for the persona bridge: the real sendLootTurn and its POST body; answers come from `answer`
+    const bridge = (answer: (body: any, n: number) => { status: number, body?: unknown } | 'throw') => {
         const calls: { url: string, body: any }[] = []
-        const f = (async (url: string, init: any) => { calls.push({ url, body: JSON.parse(init.body) }); return { status, json: async () => body } }) as any
+        const f = (async (url: string, init: any) => {
+            const body = JSON.parse(init.body); calls.push({ url, body })
+            const a = answer(body, calls.length)
+            if (a === 'throw') throw new Error('down')
+            return { status: a.status, json: async () => a.body }
+        }) as any
         return { f, calls }
     }
-    const wire = async (chat: Chat, fetchLike: any, sent: FindRecord[]) => {
-        const { lootPersona } = await import('../storage/personaStore')
-        return findHandler({
-            chatOf: () => chat, send: async (r) => { sent.push(r); return 'saved' }, persona: () => 'nhan-vat',
-            loot: (id, kind, entry, level) => lootPersona(id, kind, entry, level, { fetch: fetchLike, auth: async () => 't' }),
-        })
+    // the server's rule in small: per (chat, turn) the loots REPLACE the earlier ones; same list again = kept
+    const store = () => {
+        const turns = new Map<string, string>()
+        const qty = new Map<string, number>()
+        const answer = (b: any) => {
+            const key = `${b.chat}|${b.turn}`
+            const was = turns.get(key)
+            const now = JSON.stringify(b.loots)
+            if (was === now) return { status: 200, body: { ok: true, written: false, results: b.loots.map((_: unknown, idx: number) => ({ idx, ok: true, added: 'kept' })) } }
+            for (const l of JSON.parse(was ?? '[]')) qty.set(l.entry.id, (qty.get(l.entry.id) ?? 0) - 1)
+            for (const l of b.loots) qty.set(l.entry.id, (qty.get(l.entry.id) ?? 0) + 1)
+            turns.set(key, now)
+            return { status: 200, body: { ok: true, written: true, results: b.loots.map((_: unknown, idx: number) => ({ idx, ok: true, added: 'new' })) } }
+        }
+        return { answer, qty }
     }
-    test('a skill goes with mastery 0, the Vietnamese name, the tier, the card slug as source and the Level from $lvl; the find is saved too', async () => {
-        const chat: Chat = { scriptstate: { $lvl: '{"l":23,"e":5}' } }
-        const { f, calls } = bridge(200, { ok: true })
-        const sent: FindRecord[] = []
-        ;(await wire(chat, f, sent))({ ...rec(), rarity: 'gold' }, ctx)
-        await tick(); await tick(); await tick()
+    const msgs = (n: number) => Array.from({ length: n }, (_, i) => ({ role: i % 2 ? 'char' : 'user', data: '' }))
+    type LChat = { id: string, scriptstate: Record<string, any>, message: unknown[] }
+    const mk = (extra: Record<string, any> = {}): LChat => ({ id: 'chat-1', scriptstate: { $lvl: '{"l":23,"e":5}', ...extra }, message: msgs(6) })
+    const run = async (chat: LChat, f: any, saved: FindRecord[] = []) => {
+        const { sendLootTurn } = await import('../storage/personaStore')
+        const { lootAfterReply } = await import('./findGlue')
+        await lootAfterReply(chat as never, { persona: () => 'nhan-vat', sendLoot: (b) => sendLootTurn(b, { fetch: f, auth: async () => 't' }), send: async (r) => { saved.push(r); return 'saved' } })
+        await tick(); await tick()
+    }
+    const find = (chat: LChat, r = rec()) => findHandler({ chatOf: () => chat as never, send: async () => 'saved', recordLoot: true })(r, ctx)
+
+    test('the handler only records the loot on the chat; nothing is posted until after the reply', async () => {
+        const chat = mk()
+        find(chat, { ...rec(), rarity: 'gold' })
+        await tick()
+        const pending = JSON.parse(chat.scriptstate.$loot_pending)
+        expect(pending).toHaveLength(1)
+        expect(pending[0]).toMatchObject({ kind: 'skill', at: 6, entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', mastery: 0 } })
+        expect(pending[0].find.source.card).toBe('zombie')
+    })
+
+    test('success: one POST for (chat, turn) with the loot and the Level; the find is saved; $loot_pending cleared', async () => {
+        const chat = mk()
+        find(chat)
+        const { f, calls } = bridge(() => ({ status: 200, body: { ok: true, results: [{ idx: 0, ok: true, added: 'new' }] } }))
+        const saved: FindRecord[] = []
+        await run(chat, f, saved)
         expect(calls).toHaveLength(1)
-        expect(calls[0].url).toBe('/api/persona/loot')
-        expect(calls[0].body).toEqual({ persona: 'nhan-vat', kind: 'skill', level: 23, entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', mastery: 0 } })
-        expect(sent).toHaveLength(1)
-        expect(chat.scriptstate.$find_line).toBeUndefined()
+        expect(calls[0].url).toBe('/api/persona/loot/turn')
+        expect(calls[0].body).toEqual({ persona: 'nhan-vat', chat: 'chat-1', turn: 6, level: 23,
+            loots: [{ kind: 'skill', entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'silver', source: 'zombie', mastery: 0 } }] })
+        expect(saved.map((r) => r.id)).toEqual(['muffled-footsteps'])
+        expect(chat.scriptstate.$loot_pending).toBe('')
+        expect(chat.scriptstate.$loot_turn_pending).toBeFalsy()
     })
-    test('an item goes with qty 1 and no mastery; a legacy word is sent as the new tier', async () => {
-        const chat: Chat = { scriptstate: {} }
-        const { f, calls } = bridge(200, { ok: true })
-        ;(await wire(chat, f, []))({ ...rec('Torch'), kind: 'item', rarity: 'rare' as never }, ctx)
-        await tick(); await tick(); await tick()
-        expect(calls[0].body.kind).toBe('item'); expect(calls[0].body.level).toBe(1)
-        expect(calls[0].body.entry).toEqual({ id: 'torch', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', qty: 1 })
+
+    test('an item goes with qty 1 and a legacy word as the new tier', async () => {
+        const chat = mk()
+        find(chat, { ...rec('Torch'), kind: 'item', rarity: 'rare' as never })
+        const { f, calls } = bridge(() => ({ status: 200, body: { ok: true, results: [{ idx: 0, ok: true, added: 'new' }] } }))
+        await run(chat, f)
+        expect(calls[0].body.loots[0]).toEqual({ kind: 'item', entry: { id: 'torch', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', qty: 1 } })
     })
-    test("a full store (ok:false, reason 'full'): the line says so, the find is not saved or queued, nothing is deleted", async () => {
-        const chat: Chat = { scriptstate: { $find_line: '🎲 d20 14 vs 11: OK — nhận Nghe bước chân' } }
-        const { f, calls } = bridge(200, { ok: false, reason: 'full', max_storage: 100, count: 100 })
-        const sent: FindRecord[] = []
-        ;(await wire(chat, f, sent))(rec(), ctx)
-        await tick(); await tick(); await tick()
+
+    test('a regenerated reply with other loot replaces the turn: same (chat, turn), the old loot is gone from the store', async () => {
+        const s = store()
+        const { f, calls } = bridge((b) => s.answer(b))
+        const chat = mk()
+        find(chat, rec('Muffled Footsteps'))
+        await run(chat, f)
+        find(chat, rec('Iron Pipe'))          // the same reply regenerated: same message count
+        await run(chat, f)
+        expect(calls.map((c) => [c.body.turn, c.body.loots.map((l: any) => l.entry.id)])).toEqual([[6, ['muffled-footsteps']], [6, ['iron-pipe']]])
+        expect(s.qty.get('muffled-footsteps')).toBe(0)
+        expect(s.qty.get('iron-pipe')).toBe(1)
+    })
+
+    test('a regenerated reply with no find sends [] for the turn, which takes the earlier loot back', async () => {
+        const s = store()
+        const { f, calls } = bridge((b) => s.answer(b))
+        const chat = mk()
+        find(chat)
+        await run(chat, f)
+        await run(chat, f)                    // regenerated, no find
+        expect(calls[1].body).toMatchObject({ chat: 'chat-1', turn: 6, loots: [] })
+        expect(s.qty.get('muffled-footsteps')).toBe(0)
+    })
+
+    test('a replay (same loot again) is kept by the store: counted once, the find is not saved twice', async () => {
+        const s = store()
+        const { f, calls } = bridge((b) => s.answer(b))
+        const saved: FindRecord[] = []
+        const chat = mk()
+        find(chat); await run(chat, f, saved)
+        find(chat); await run(chat, f, saved)
+        expect(calls).toHaveLength(2)
+        expect(s.qty.get('muffled-footsteps')).toBe(1)
+        expect(saved).toHaveLength(1)
+    })
+
+    test("full: the panel line says so and the find is not saved", async () => {
+        const chat = mk({ $find_line: '🎲 d20 14 vs 11: OK — nhận Nghe bước chân' })
+        find(chat)
+        const { f } = bridge(() => ({ status: 200, body: { ok: true, results: [{ idx: 0, ok: false, reason: 'full' }] } }))
+        const saved: FindRecord[] = []
+        await run(chat, f, saved)
         expect(chat.scriptstate.$find_line).toBe('Kho đầy: không nhận được Nghe bước chân')
-        expect(sent).toHaveLength(0)
+        expect(saved).toHaveLength(0)
         expect(chat.scriptstate[PENDING_KEY]).toBeUndefined()
-        expect(calls.every((c) => c.url === '/api/persona/loot')).toBe(true)
     })
-    test('a network failure of the persona store never blocks: the find is still saved and the line is left alone', async () => {
-        const chat: Chat = { scriptstate: { $find_line: 'giữ' } }
+
+    test('network failure: the turn waits in $loot_turn_pending (newest per turn wins) and is sent before the next one', async () => {
+        const chat = mk()
+        find(chat)
+        let down = true
+        const { f, calls } = bridge(() => down ? 'throw' : { status: 200, body: { ok: true, results: [] } })
+        await run(chat, f)
+        find(chat, rec('Iron Pipe'))          // regenerated while the store is down: replaces the waiting turn
+        await run(chat, f)
+        let q = JSON.parse(chat.scriptstate.$loot_turn_pending)
+        expect(q).toHaveLength(1)
+        expect(q[0].loots.map((l: any) => l.entry.id)).toEqual(['iron-pipe'])
+        expect(chat.scriptstate.$find_line).toBeUndefined()
+        down = false
+        chat.message = msgs(8)                // the next reply
+        calls.length = 0
+        await run(chat, f)
+        expect(calls.map((c) => [c.body.turn, c.body.loots.length])).toEqual([[6, 1], [8, 0]])
+        expect(chat.scriptstate.$loot_turn_pending).toBe('')
+    })
+
+    test('a 400 drops the turn; a stale loot of an earlier reply is never sent under a later turn', async () => {
+        const chat = mk()
+        find(chat)
+        chat.message = msgs(8)
+        const { f, calls } = bridge(() => ({ status: 400, body: { error: 'x' } }))
+        await run(chat, f)
+        expect(calls[0].body.turn).toBe(8)
+        expect(calls[0].body.loots).toEqual([])
+        expect(chat.scriptstate.$loot_turn_pending).toBeFalsy()
+    })
+
+    test('without recordLoot the find is saved at once (no persona store)', async () => {
+        const chat = mk()
         const sent: FindRecord[] = []
-        ;(await wire(chat, (async () => { throw new Error('down') }) as any, sent))(rec(), ctx)
-        await tick(); await tick(); await tick()
+        findHandler({ chatOf: () => chat as never, send: async (r) => { sent.push(r); return 'saved' } })(rec(), ctx)
+        await tick()
         expect(sent).toHaveLength(1)
-        expect(chat.scriptstate.$find_line).toBe('giữ')
-        // and a loot dep that throws outright
-        const sent2: FindRecord[] = []
-        findHandler({ chatOf: () => chat, send: async (r) => { sent2.push(r); return 'saved' }, persona: () => { throw new Error('x') }, loot: async () => ({ ok: true }) })(rec(), ctx)
-        await tick(); await tick(); await tick()
-        expect(sent2).toHaveLength(1)
-    })
-    test('a card that is not a saving card still loots to the persona but does not save the find', async () => {
-        const chat: Chat = { scriptstate: {} }
-        const { f, calls } = bridge(200, { ok: true })
-        const sent: FindRecord[] = []
-        ;(await wire(chat, f, sent))(rec(), { ...ctx, card: 'zzzz-other' })
-        await tick(); await tick(); await tick()
-        expect(calls).toHaveLength(1); expect(calls[0].body.entry.source).toBe('zzzz-other'); expect(sent).toHaveLength(0)
+        expect(chat.scriptstate.$loot_pending).toBeUndefined()
     })
 })

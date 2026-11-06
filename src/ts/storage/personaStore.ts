@@ -51,3 +51,52 @@ export const equipSkill = (persona: string, slot: number, skillId: string, level
     post('equip', { persona, slot, skillId, level }, deps)
 export const unequipSkill = (persona: string, slot: number, level: number, deps: Deps = {}) =>
     post('unequip', { persona, slot, level }, deps)
+
+// ---- the loot of a reply as an event with an id (chat, turn, 'loot', idx): POST /api/persona/loot/turn (persona_store.loot_turn) ----------
+// The turn's loot REPLACES what that (chat, turn) had: a regenerated reply takes the earlier loot back, [] takes it all back, a replay adds nothing.
+export type LootItem = { kind: 'skill' | 'item', entry: Record<string, unknown>, find?: unknown }
+export type LootTurnBody = { persona: string, chat: string, turn: number, level: number, loots: LootItem[] }
+export type LootResult = { idx: number, ok: boolean, reason?: string, added?: 'new' | 'merged' | 'kept' }
+export type LootSend = { status: 'saved', results: LootResult[] } | { status: 'queue' } | { status: 'drop' }
+
+/** The chat variable with this reply's loot (findGlue's handler writes it; the after-reply step sends it and clears it). */
+export const LOOT_PENDING_KEY = '$loot_pending'
+/** Loot turns that could not be sent, newest per (persona, chat, turn). */
+export const LOOT_TURN_PENDING_KEY = '$loot_turn_pending'
+export const MAX_LOOT_PENDING = 50
+const PERSONA_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const CHAT_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v)
+const parseJson = (text: unknown): unknown => { try { return JSON.parse(String(text ?? '')) } catch { return undefined } }
+
+const isLoot = (l: unknown): l is LootItem => !!l && typeof l === 'object' && ((l as LootItem).kind === 'skill' || (l as LootItem).kind === 'item')
+    && !!(l as LootItem).entry && typeof (l as LootItem).entry === 'object'
+
+export function parsePendingLootTurns(text: string | null | undefined): LootTurnBody[] {
+    const v = parseJson(text)
+    return Array.isArray(v) ? v.filter((b) => b && typeof b === 'object' && PERSONA_RE.test(b.persona) && CHAT_RE.test(b.chat) && isInt(b.turn) && b.turn >= 0
+        && isInt(b.level) && Array.isArray(b.loots) && b.loots.every(isLoot)) : []
+}
+
+/** The queue with `body` in place of any earlier body of the same (persona, chat, turn): the newest reply of a turn wins. */
+export function enqueueLootTurn(pending: string | null | undefined, body: LootTurnBody): string {
+    const list = parsePendingLootTurns(pending).filter((b) => !(b.persona === body.persona && b.chat === body.chat && b.turn === body.turn))
+    list.push(body)
+    return JSON.stringify(list.slice(-MAX_LOOT_PENDING))
+}
+
+/** One POST /api/persona/loot/turn (only {kind, entry} of each loot goes). 200 -> saved with the results; 400 -> drop; anything else -> queue. */
+export async function sendLootTurn(body: LootTurnBody, deps: Deps = {}): Promise<LootSend> {
+    try {
+        const auth = await (deps.auth ?? defaultAuth)()
+        const wire = { persona: body.persona, chat: body.chat, turn: body.turn, level: body.level, loots: body.loots.map((l) => ({ kind: l.kind, entry: l.entry })) }
+        const r = await (deps.fetch ?? globalThis.fetch.bind(globalThis))('/api/persona/loot/turn', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'risu-auth': auth }, body: JSON.stringify(wire),
+        })
+        if (r.status === 400) return { status: 'drop' }
+        if (r.status !== 200) return { status: 'queue' }
+        const j = await r.json()
+        if (!j || typeof j !== 'object' || j.ok !== true || !Array.isArray(j.results)) return { status: 'queue' }
+        return { status: 'saved', results: j.results as LootResult[] }
+    } catch { return { status: 'queue' } }
+}

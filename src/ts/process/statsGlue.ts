@@ -142,6 +142,8 @@ export async function statsBeforeRequestPage(card: { desc?: string, type?: strin
     } catch { /* never blocks */ }
 }
 export async function statsAfterReplyPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
+    // the turn's loot by loot id (findGlue.lootAfterReply): any card that teaches finds, whether or not it counts growth
+    try { await (await import('./findGlue')).lootAfterReplyPage(card as never, chat as never) } catch { /* never blocks */ }
     if (!hasStatsRule(card) && !moduleCounts(chat)) return
     try { await statsAfterReply(chat, await pageDeps()) } catch { /* never blocks */ }
 }

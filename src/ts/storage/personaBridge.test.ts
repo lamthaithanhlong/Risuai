@@ -65,7 +65,7 @@ describe('GET /api/persona (bridge)', () => {
 describe('POST /api/persona/* (bridge)', () => {
     it('every write route needs risu-auth', async () => {
         const b = await bridge(json({ ok: true }))
-        for (const route of ['loot', 'delete', 'equip', 'unequip']) {
+        for (const route of ['loot', 'loot/turn', 'delete', 'equip', 'unequip']) {
             expect((await b.post(route, { persona: 'k' }, '')).status, route).toBe(400)
             expect((await b.post(route, { persona: 'k' }, 'bad')).status, route).toBe(400)
         }
@@ -89,6 +89,14 @@ describe('POST /api/persona/* (bridge)', () => {
             ['/api/persona/equip', ['level', 'persona', 'skillId', 'slot']],
             ['/api/persona/unequip', ['level', 'persona', 'slot']],
         ])
+    })
+    it('loot/turn forwards {persona, chat, turn, loots, level} only, to the same route', async () => {
+        const b = await bridge(json({ ok: true, written: true, results: [{ idx: 0, ok: true, added: 'new' }] }))
+        const r = await b.post('loot/turn', { persona: 'k', chat: 'c1', turn: 6, loots: [{ kind: 'skill', entry: skill }], level: 2, kind: 'x', entry: skill, admin: 1 })
+        expect(r.status).toBe(200)
+        expect((await r.json()).results[0].added).toBe('new')
+        expect(b.seen[0].url).toBe('/api/persona/loot/turn')
+        expect(JSON.parse(b.seen[0].body)).toEqual({ persona: 'k', chat: 'c1', turn: 6, loots: [{ kind: 'skill', entry: skill }], level: 2 })
     })
     it('a rule failure (ok:false) is passed through as 200', async () => {
         const b = await bridge(json({ ok: false, reason: 'full', max_storage: 105, count: 105 }))

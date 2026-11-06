@@ -5,6 +5,9 @@
 //   GET  /api/persona?persona=&level=     -> 200 {persona, level, rank, slots_open, max_storage, stat_cap, stat_caps, skills, items, slots, skill_count, item_count}
 //   POST /api/persona/loot     {persona, kind: skill|item, entry, level}   entry: {id, name, tier, source?, mastery? (skill) | qty? (item)}
 //        200 {ok:true, added:'new'|'merged', entry, view} | {ok:false, reason:'full', max_storage, count}  (a full store is unchanged)
+//   POST /api/persona/loot/turn {persona, chat, turn, loots: [{kind, entry}], level}   the loot of one reply by loot id (chat, turn, 'loot', idx):
+//        replaces what that (chat, turn) had (a regenerated reply takes the old loot back, [] takes it all back, a replay adds nothing)
+//        200 {ok:true, written, results: [{idx, ok, reason?:'full', added?:'new'|'merged'|'kept'}], view}
 //   POST /api/persona/delete   {persona, kind, id, level?}               200 {ok:true, unequipped: slot|null, view?} | {ok:false, reason:'not_found'}
 //   POST /api/persona/equip    {persona, slot, skillId, level}           200 {ok:true, slot, replaced, view} | {ok:false, reason:'slot_locked'|'no_such_skill'|'already_equipped'}
 //   POST /api/persona/unequip  {persona, slot, level?}                   200 {ok:true, slot, was, view?}
@@ -20,6 +23,7 @@ const TIMEOUT_MS = 3000
 
 const FIELDS = {
     loot: ['persona', 'kind', 'entry', 'level'],
+    'loot/turn': ['persona', 'chat', 'turn', 'loots', 'level'],
     delete: ['persona', 'kind', 'id', 'level'],
     equip: ['persona', 'slot', 'skillId', 'level'],
     unequip: ['persona', 'slot', 'level'],

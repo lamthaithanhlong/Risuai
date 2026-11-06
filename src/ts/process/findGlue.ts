@@ -2,8 +2,8 @@
 // card slug, given the story's day and place, saved to the asset manager, and queued on the chat ($find_pending) when the save cannot
 // be done; every request first retries what waits. The names already in the global store come from the asset manager's finds list
 // (cached 60 s; a failure is "no names", never a wait). Nothing here blocks a reply.
-import { LEGACY_RARITY, levelOf, setFindKnownProvider, setFindParsedHandler, type FindContext, type FindRecord } from './findDrop'
-import { lootPersona, type ActResult } from '../storage/personaStore'
+import { LEGACY_RARITY, hasFindRule, levelOf, setFindKnownProvider, setFindParsedHandler, type FindContext, type FindRecord } from './findDrop'
+import { LOOT_PENDING_KEY, LOOT_TURN_PENDING_KEY, enqueueLootTurn, parsePendingLootTurns, sendLootTurn, type LootItem, type LootSend, type LootTurnBody } from '../storage/personaStore'
 import { PENDING_KEY, drain, enqueue, parsePending, saveFind, type SendResult } from '../storage/findsSave'
 
 /** chaId (prefix) of a card -> the slug the asset manager knows it by (tools/assets/cards.json). Only these cards save finds. */
@@ -23,13 +23,14 @@ export function chapterOf(vars: Vars): string {
     return [str(vars?.$st_day), str(vars?.$st_place)].filter(Boolean).join(', ').slice(0, 120)
 }
 
+type GlueChat = { scriptstate?: Record<string, string | number | boolean>, message?: unknown[], id?: string }
 export type GlueDeps = {
     /** the chat a find came from */
-    chatOf: (chatId: string) => { scriptstate?: Record<string, string | number | boolean> } | undefined
+    chatOf: (chatId: string) => GlueChat | undefined
     send: (r: FindRecord) => Promise<SendResult>
-    /** the persona (its store id) the loot goes to; with no `loot` dep nothing goes to the persona store */
-    persona?: () => string | Promise<string>
-    loot?: (persona: string, kind: 'skill' | 'item', entry: Record<string, unknown>, level: number) => Promise<ActResult>
+    /** true: the find is the reply's LOOT: it waits on the chat ($loot_pending) and the after-reply step sends the turn's loot by loot id
+     *  (lootAfterReply); false/absent: no persona store, the find is only saved */
+    recordLoot?: boolean
 }
 
 /** The text of the panel line when the persona's storage is full. */
@@ -49,28 +50,114 @@ export function withSource(rec: FindRecord, ctx: FindContext, vars: Vars): FindR
     return { ...rec, source: { card: slug, chapter: chapterOf(vars) || rec.source.chapter || `Lượt ${ctx.turn}` } }
 }
 
-/** The handler for findDrop's setFindParsedHandler: save now; on 'queue' keep it on the chat for the next request. */
+/** A pending loot: {kind, entry} for the persona store, the find record to save once the loot is counted, and the reply it belongs to
+ *  (the chat's message count: a loot left from an earlier reply is never sent under a later turn). */
+export type PendingLoot = LootItem & { at: number }
+
+export function parseLootPending(text: unknown): PendingLoot[] {
+    try {
+        const v = JSON.parse(String(text ?? ''))
+        return Array.isArray(v) ? v.filter((l) => l && typeof l === 'object' && (l.kind === 'skill' || l.kind === 'item') && l.entry && typeof l.entry === 'object' && Number.isInteger(l.at)) : []
+    } catch { return [] }
+}
+
+/** The handler for findDrop's setFindParsedHandler: with recordLoot the find waits on the chat as this reply's loot; else it is saved now (on
+ *  'queue' kept on the chat for the next request). */
 export function findHandler(deps: GlueDeps) {
     return (rec: FindRecord, ctx: FindContext): void => {
         const chat = deps.chatOf(ctx.chatId)
         const out = withSource(rec, ctx, chat?.scriptstate)
-        const queue = (r: FindRecord) => void deps.send(r).catch((): SendResult => 'queue').then((res) => {
-            if (res !== 'queue' || !chat) return
-            const vars = (chat.scriptstate ??= {})
-            vars[PENDING_KEY] = enqueue(String(vars[PENDING_KEY] ?? ''), r)
-        })
-        if (!deps.loot || !deps.persona) { if (out) queue(out); return }
-        // loot goes to the persona's store first (any card: the persona carries it); a full store keeps the find out of the carried list
-        const level = levelOf(chat?.scriptstate)
+        if (!deps.recordLoot) { if (out) queueFind(chat, out, deps.send); return }
+        if (!chat) return
+        // the loot goes to the persona's store with the turn (any card: the persona carries it); the find is saved only once the loot counted
         const source = out?.source.card || ctx.card || rec.source.card
-        void Promise.resolve().then(() => Promise.resolve(deps.persona!()).then((id) => deps.loot!(id, rec.kind, lootEntry(rec, source), level))).catch((): ActResult => ({ ok: false, reason: 'network' })).then((res) => {
-            if (!res.ok && res.reason === 'full') {
-                if (chat) (chat.scriptstate ??= {}).$find_line = fullLine(rec.name.vi)   // $find_known already has the name: it is not offered again
-                return
-            }
-            if (out) queue(out)
-        })
+        const vars = (chat.scriptstate ??= {})
+        const at = Array.isArray(chat.message) ? chat.message.length : 0
+        const list = parseLootPending(vars[LOOT_PENDING_KEY]).filter((l) => l.at === at)
+        list.push({ kind: rec.kind, entry: lootEntry(rec, source), ...(out ? { find: out } : {}), at })
+        vars[LOOT_PENDING_KEY] = JSON.stringify(list)
     }
+}
+
+/** Save a find now; 'queue' (or a throw) keeps it on the chat for the next request. */
+function queueFind(chat: GlueChat | undefined, r: FindRecord, send: (r: FindRecord) => Promise<SendResult>): void {
+    void Promise.resolve().then(() => send(r)).catch((): SendResult => 'queue').then((res) => {
+        if (res !== 'queue' || !chat) return
+        const vars = (chat.scriptstate ??= {})
+        vars[PENDING_KEY] = enqueue(String(vars[PENDING_KEY] ?? ''), r)
+    })
+}
+
+// ---- the loot of a reply, by loot id (persona_store.loot_turn) -----------------------------------------------------------------
+
+export type LootDeps = {
+    persona: () => string | Promise<string>
+    sendLoot: (body: LootTurnBody) => Promise<LootSend>
+    send: (r: FindRecord) => Promise<SendResult>
+}
+
+/** What a saved loot turn means on the chat: each counted loot (new or merged; 'kept' was counted before) saves its find; a full store
+ *  writes the panel line when `line` (the reply just made), and the find is not saved (its name stays known, it is not offered again). */
+function afterSaved(chat: GlueChat, body: LootTurnBody, results: LootSend & { status: 'saved' }, deps: LootDeps, line: boolean): void {
+    for (const r of results.results) {
+        const l = body.loots[r.idx]
+        if (!l) continue
+        if (r.ok && (r.added === 'new' || r.added === 'merged') && l.find) queueFind(chat, l.find as FindRecord, deps.send)
+        if (!r.ok && r.reason === 'full' && line) (chat.scriptstate ??= {}).$find_line = fullLine(String(l.entry.name ?? ''))
+    }
+}
+
+/** Sends the loot turns waiting on the chat, in order; the first one answered 'queue' and everything after it stay (a body replaced while
+ *  sending is a new one and stays). */
+export async function drainLootTurns(chat: GlueChat | undefined, deps: LootDeps): Promise<void> {
+    if (!chat) return
+    const was = parsePendingLootTurns(String(chat.scriptstate?.[LOOT_TURN_PENDING_KEY] ?? ''))
+    if (!was.length) return
+    let at = 0
+    for (; at < was.length; at++) {
+        let r: LootSend
+        try { r = await deps.sendLoot(was[at]) } catch { r = { status: 'queue' } }
+        if (r.status === 'queue') break
+        if (r.status === 'saved') afterSaved(chat, was[at], r, deps, false)
+    }
+    const sent = new Set(was.slice(0, at).map((b) => JSON.stringify(b)))
+    const left = parsePendingLootTurns(String(chat.scriptstate?.[LOOT_TURN_PENDING_KEY] ?? '')).filter((b) => !sent.has(JSON.stringify(b)))
+    ;(chat.scriptstate ??= {})[LOOT_TURN_PENDING_KEY] = left.length ? JSON.stringify(left) : ''
+}
+
+/** After a reply: this turn's loot ($loot_pending, or [] when the reply found nothing: a regenerated reply's earlier loot is taken back) goes
+ *  to the persona's store for (chat, turn = the chat's message count), then $loot_pending is cleared. Network trouble queues it
+ *  ($loot_turn_pending, newest per turn); everything waiting goes first. Never throws. */
+export async function lootAfterReply(chat: GlueChat | undefined, deps: LootDeps): Promise<void> {
+    try {
+        if (!chat || !Array.isArray(chat.message)) return
+        const vars = (chat.scriptstate ??= {})
+        const turn = chat.message.length
+        const loots = parseLootPending(vars[LOOT_PENDING_KEY]).filter((l) => l.at === turn).map(({ at: _at, ...l }) => l as LootItem)
+        vars[LOOT_PENDING_KEY] = ''
+        const chatId = String(chat.id ?? '')
+        const persona = await deps.persona()
+        if (!/^[A-Za-z0-9_.-]{1,64}$/.test(chatId) || !/^[A-Za-z0-9_.-]{1,64}$/.test(persona)) return
+        const body: LootTurnBody = { persona, chat: chatId, turn, level: levelOf(vars), loots }
+        await drainLootTurns(chat, deps)
+        const waiting = parsePendingLootTurns(String(vars[LOOT_TURN_PENDING_KEY] ?? '')).length > 0
+        let r: LootSend = { status: 'queue' }
+        if (!waiting) { try { r = await deps.sendLoot(body) } catch { r = { status: 'queue' } } }   // keep the order: never overtake a waiting turn
+        if (r.status === 'saved') afterSaved(chat, body, r, deps, true)
+        else if (r.status === 'queue') vars[LOOT_TURN_PENDING_KEY] = enqueueLootTurn(String(vars[LOOT_TURN_PENDING_KEY] ?? ''), body)
+    } catch { /* the reply is never held by this */ }
+}
+
+/** index.svelte.ts (through statsAfterReplyPage): only a card that teaches finds, or a chat with loot waiting. */
+export async function lootAfterReplyPage(card: Parameters<typeof hasFindRule>[0], chat: GlueChat | undefined): Promise<void> {
+    if (!chat) return
+    const waiting = parseLootPending(chat.scriptstate?.[LOOT_PENDING_KEY]).length > 0 || !!String(chat.scriptstate?.[LOOT_TURN_PENDING_KEY] ?? '')
+    if (!waiting && !hasFindRule(card)) return
+    try {
+        const { pageDeps } = await import('./statsGlue')
+        const d = await pageDeps()
+        await lootAfterReply(chat, { persona: d.persona, sendLoot: (b) => sendLootTurn(b), send: (r) => saveFind(r) })
+    } catch { /* never blocks */ }
 }
 
 /**
@@ -133,12 +220,12 @@ export async function installFinds(): Promise<void> {
         for (const c of getDatabase().characters ?? []) for (const ch of (c as { chats?: { id?: string }[] }).chats ?? []) if (ch.id === id) return ch as never
         return undefined
     }
-    const persona = async () => (await (await import('./statsGlue')).pageDeps()).persona()   // asked at each find: the selected persona can change
-    setFindParsedHandler(findHandler({ chatOf, send: (r) => saveFind(r), persona, loot: (id, kind, entry, level) => lootPersona(id, kind, entry, level) }))
+    setFindParsedHandler(findHandler({ chatOf, send: (r) => saveFind(r), recordLoot: true }))
     setFindKnownProvider(knownProvider(() => fetchKnownNames()))
 }
 
 /** Call at the start of every request (not awaited by the reply): installs the glue once and retries the waiting finds. */
 export function findsBeforeRequest(chat: { scriptstate?: Record<string, string | number | boolean> } | undefined): void {
-    void installFinds().then(() => drainPending(chat, (r) => saveFind(r))).catch(() => {})
+    void installFinds().then(() => Promise.all([drainPending(chat, (r) => saveFind(r)),
+        drainLootTurns(chat as GlueChat | undefined, { persona: () => '', sendLoot: (b) => sendLootTurn(b), send: (r) => saveFind(r) })])).catch(() => {})
 }
