@@ -188,7 +188,8 @@ test('act tags: counted per run from the raw reply; a tag left in the shown or s
     assert.deepEqual(actLeaks(clean), [])
     assert.equal(actChecks(clean)[0].status, 'PASS')
     for (const bad of [{ raw: 'a ' + tag, shown: 'a ' + tag, reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a ' + tag }, { raw: 'a', shown: 'a [[ACT|bẻ-khó', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[BREAK|cam_nhan]]' },
-        { raw: 'a [[TRAIN|the_luc|manh]]', shown: 'a [[TRAIN|the_luc|manh]]', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[TRAIN|the_luc|manh]]' }, { raw: 'a', shown: 'a [[TRAIN|the_l', reply: 'a' }, { raw: 'a', shown: 'a [[TRA', reply: 'a' }]) {
+        { raw: 'a [[TRAIN|the_luc|manh]]', shown: 'a [[TRAIN|the_luc|manh]]', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[TRAIN|the_luc|manh]]' }, { raw: 'a', shown: 'a [[TRAIN|the_l', reply: 'a' }, { raw: 'a', shown: 'a [[TRA', reply: 'a' },
+        { raw: 'a', shown: 'a [[KILL|vừa]]', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[KILL|khó]]' }, { raw: 'a', shown: 'a [[KIL', reply: 'a' }]) {
         const r = actChecks([{ turns: [bad] }])
         assert.equal(r[0].status, 'FAIL', JSON.stringify(bad))
         if (/TRAIN|TRA/.test(JSON.stringify(bad).replace(/BREAK/g, ''))) assert.equal(r.find((c) => c.id === 'gate.trainHidden').status, 'FAIL', 'trainHidden: ' + JSON.stringify(bad))

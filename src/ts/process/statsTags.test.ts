@@ -106,6 +106,7 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
         PROSE[1],
         PROSE[2] + ' [[ACT|nâng-cửa|suc_manh+the_luc|hard|]]',
         '[[TRAIN|the_luc+nhanh_nhen|manh]]',
+        '[[KILL|rất khó]]',
         '[[BREAK|the_luc]]',
         PROSE[3],
         '[[QUEST|progress|nuoc-sach|2]]',
@@ -113,7 +114,7 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
         '[[QUEST|fail|gia-co-cua]]',
         '[[FIND|skill|Mở khóa|Lockpick|mở khóa nhanh|common|có dụng cụ|yes]]',
     ].join('\n')
-    const PAYLOAD = ['nhanh_nhen', '|manh', 'ban-cong', 'thuốc hạ', 'vết cắn', 'suc_manh', 'the_luc', 'nâng-cửa', 'nuoc-sach', 'gia-co-cua', 'progress', 'Lockpick', 'Mở khóa']
+    const PAYLOAD = ['rất khó', 'nhanh_nhen', '|manh', 'ban-cong', 'thuốc hạ', 'vết cắn', 'suc_manh', 'the_luc', 'nâng-cửa', 'nuoc-sach', 'gia-co-cua', 'progress', 'Lockpick', 'Mở khóa']
     const screen = (t: string) => tidyDisplay(stripStatTags(stripFind(t)))
     const stored = (t: string) => tidyReply(stripFind(t))
     it('the finished reply keeps only the prose, on the screen and in the stored text', () => {
@@ -140,6 +141,14 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
         }
         for (const tail of ['[[T', '[[TR', '[[TRA', '[[TRAI', '[[TRAIN', '[[TRAIN|the_l']) expect(stripStatTags('Anh chạy.\n' + tail)).toBe('Anh chạy.')
         expect(stripStatTags('Anh chạy. [[TRAINING|x]] [[TRAINER]]')).toBe('Anh chạy. [[TRAINING|x]] [[TRAINER]]')
+    })
+    it('hides a KILL tag as the narrator may write it, finished, malformed or cut anywhere', () => {
+        for (const tag of ['[[KILL|dễ]]', '[[KILL vừa]]', '[[ kill|khó]]', '[[Kill|rất khó]]', '[[KILL|vua]', '[[KILL|rat_kho']) {
+            expect(stripStatTags('Gã gục xuống.\n' + tag)).toBe('Gã gục xuống.')
+            expect(stripStatTags('Gã gục xuống.\n' + tag + '\nAnh thở dốc.')).toBe('Gã gục xuống.\nAnh thở dốc.')
+        }
+        for (const tail of ['[[K', '[[KI', '[[KIL', '[[KILL', '[[KILL|rất']) expect(stripStatTags('Gã gục xuống.\n' + tail)).toBe('Gã gục xuống.')
+        expect(stripStatTags('Anh bị [[KILLER]] đuổi [[KILLING|x]]')).toBe('Anh bị [[KILLER]] đuổi [[KILLING|x]]')
     })
     it('still leaves look-alike words and other blocks alone', () => {
         const t = 'Nắng lên. [[img: a balcony]] [[QUESTION|x]] [[NPCS]] [[ACTION|y]] [[BREAKFAST]]\n[[STATUS\nday: 2\n]]'
