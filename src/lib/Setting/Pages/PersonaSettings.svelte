@@ -15,6 +15,9 @@
     import { DBState } from 'src/ts/stores.svelte';
     import { v4 } from "uuid"
     import PersonaStats from "./PersonaStats.svelte";
+    import PersonaInventory from "./PersonaInventory.svelte";
+
+    let personaTab: 'stats' | 'inventory' = $state('stats')
 
     let stb: Sortable = null
     let ele: HTMLDivElement = $state()
@@ -167,4 +170,12 @@
     </div>
 </div>
 
-<PersonaStats />
+<div class="mt-4 flex gap-2">
+    <button class="px-3 py-1 rounded-md border border-darkborderc {personaTab === 'stats' ? 'bg-darkbg font-bold' : 'text-textcolor2'}" onclick={() => personaTab = 'stats'}>Chỉ số & Kỹ năng</button>
+    <button class="px-3 py-1 rounded-md border border-darkborderc {personaTab === 'inventory' ? 'bg-darkbg font-bold' : 'text-textcolor2'}" onclick={() => personaTab = 'inventory'}>Kho & Slot</button>
+</div>
+{#if personaTab === 'stats'}
+    <PersonaStats />
+{:else}
+    <PersonaInventory />
+{/if}
