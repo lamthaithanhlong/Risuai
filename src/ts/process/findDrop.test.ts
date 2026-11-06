@@ -9,7 +9,7 @@ import {
     onFindParsed, parseFind, sceneKindOf, setFindKnownProvider, setFindParsedHandler, stripFind, type FindRecord, type SceneKind,
 } from './findDrop'
 
-const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân qua tường mỏng trong 10 m; phải im lặng.|uncommon|Cần yên tĩnh; mệt thêm sau mỗi lần dùng|yes]]'
+const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân qua tường mỏng trong 10 m; phải im lặng.|silver|Cần yên tĩnh; mệt thêm sau mỗi lần dùng|yes]]'
 
 /** a whole simulated run: the narrator writes a block whenever one is due (the worst case for the cap) */
 function simulate(seed: string, turns: number, scene: (t: number) => SceneKind = () => 'quiet') {
@@ -83,7 +83,7 @@ describe('findDue', () => {
         expect(r.note).toContain('[[FIND|' + r.kind + '|')
         expect(r.note).toContain('Bạn nhận được')   // named only to forbid it
         expect(r.note).toMatch(/write nothing/)
-        expect(r.rarity).toMatch(/^(common|uncommon|rare|epic)$/)
+        expect(r.rarity).toMatch(/^(common|silver|gold|epic)$/)
         expect(findDue({ turn: 40, lastFindTurn: null, sceneKind: 'quiet', seed: 'n' }).note).not.toContain('none of these')
     })
 })
@@ -94,40 +94,40 @@ describe('parseFind', () => {
         expect(r).toEqual({
             id: 'muffled-footsteps', kind: 'skill', name: { vi: 'Nghe tiếng bước chân', en: 'Muffled Footsteps' },
             source: { card: 'zombie', chapter: 'Ngày 2' }, effect: 'Nghe bước chân qua tường mỏng trong 10 m; phải im lặng.',
-            rarity: 'uncommon', conditions: 'Cần yên tĩnh; mệt thêm sau mỗi lần dùng', portable: true,
+            rarity: 'silver', conditions: 'Cần yên tĩnh; mệt thêm sau mỗi lần dùng', portable: true,
         })
     })
 
     test('an item, portable no, case of the enums does not matter', () => {
         const r = parseFind('[[FIND| Item |Kính nhìn đêm|Night Vision Goggles|Thấy trong tối 20 m.|RARE|Pin 3 giờ|No]]')
-        expect(r?.kind).toBe('item'); expect(r?.rarity).toBe('rare'); expect(r?.portable).toBe(false)
+        expect(r?.kind).toBe('item'); expect(r?.rarity).toBe('gold'); expect(r?.portable).toBe(false)
         expect(r?.id).toBe('night-vision-goggles')
     })
 
     test('bad blocks give null', () => {
         const bad = [
             '', 'không có gì', '[[FIND]]', '[[FIND|skill|A|B]]',
-            '[[FIND|power|Tên|Name|effect|rare|cond|yes]]',
+            '[[FIND|power|Tên|Name|effect|gold|cond|yes]]',
             '[[FIND|skill|Tên|Name|effect|legendary|cond|yes]]',
-            '[[FIND|skill|Tên|Name|effect|rare|cond|maybe]]',
-            '[[FIND|skill|Tên|Name||rare|cond|yes]]',
-            '[[FIND|skill||Name|effect|rare|cond|yes]]',
-            '[[FIND|skill|Tên|Name|effect|rare||yes]]',
-            `[[FIND|skill|${'x'.repeat(61)}|Name|effect|rare|cond|yes]]`,
-            `[[FIND|skill|Tên|Name|${'e'.repeat(401)}|rare|cond|yes]]`,
-            '[[FIND|skill|Tên|!!!|effect|rare|cond|yes]]',
-            '[[FIND|skill|Tên|Name|effect|rare|cond|yes',   // unclosed
+            '[[FIND|skill|Tên|Name|effect|gold|cond|maybe]]',
+            '[[FIND|skill|Tên|Name||gold|cond|yes]]',
+            '[[FIND|skill||Name|effect|gold|cond|yes]]',
+            '[[FIND|skill|Tên|Name|effect|gold||yes]]',
+            `[[FIND|skill|${'x'.repeat(61)}|Name|effect|gold|cond|yes]]`,
+            `[[FIND|skill|Tên|Name|${'e'.repeat(401)}|gold|cond|yes]]`,
+            '[[FIND|skill|Tên|!!!|effect|gold|cond|yes]]',
+            '[[FIND|skill|Tên|Name|effect|gold|cond|yes',   // unclosed
         ]
         for (const b of bad) expect(parseFind(b), b).toBeNull()
     })
 
     test('a pipe inside a field is not allowed (too many fields)', () => {
-        expect(parseFind('[[FIND|skill|Tên|Name|hiệu ứng | thêm|rare|cond|yes]]')).toBeNull()
-        expect(parseFind('[[FIND|skill|Tên|Name|effect|rare|cond|yes|extra]]')).toBeNull()
+        expect(parseFind('[[FIND|skill|Tên|Name|hiệu ứng | thêm|gold|cond|yes]]')).toBeNull()
+        expect(parseFind('[[FIND|skill|Tên|Name|effect|gold|cond|yes|extra]]')).toBeNull()
     })
 
     test('two blocks: the first only', () => {
-        const second = '[[FIND|item|Dao|Knife|Cắt.|common|Không|no]]'
+        const second = '[[FIND|item|Dao|Knife|Cắt.|bronze|Không|no]]'
         expect(parseFind(BLOCK + '\n' + second)?.id).toBe('muffled-footsteps')
         expect(parseFind(second + '\n' + BLOCK)?.id).toBe('knife')
         // a bad first block is not replaced by the second
@@ -174,7 +174,7 @@ function chatWith(n: number, extra: Partial<{ scriptstate: Record<string, string
         message.push({ role: 'char', data: i === n - 1 && extra.last ? extra.last : `Cảnh ${i}` })
         if (i < n - 1) message.push({ role: 'user', data: 'đi tiếp' })
     }
-    return { id: 'chat-1', message, scriptstate: { $find_roll: JSON.stringify({ turn: n, d20: 15, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'common', stat: 'tinh_than' }), ...(extra.scriptstate ?? {}) } } as never as { id: string; message: M[]; scriptstate: Record<string, string> }
+    return { id: 'chat-1', message, scriptstate: { $find_roll: JSON.stringify({ turn: n, d20: 15, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'bronze', stat: 'tinh_than' }), ...(extra.scriptstate ?? {}) } } as never as { id: string; message: M[]; scriptstate: Record<string, string> }
 }
 const withPlayer = (c: ReturnType<typeof chatWith>, text: string) => { c.message.push({ role: 'user', data: text }); return c }
 const asked = (c: unknown, k = card()) => { const out = findRequest([{ role: 'user', content: 'hi' }], k, c as never); return String(out.at(-1)?.content ?? '') }
@@ -252,11 +252,11 @@ describe('the chat wiring', () => {
     })
 
     test('an item panel line; a known find or a bad block is stripped but not counted', () => {
-        const item = chatWith(5, { last: 'Cô nhặt cái đèn.\n[[FIND|item|Đèn pin dây quấn|Hand-crank Torch|Sáng 5 m.|common|Quay tay 30 s|yes]]' })
+        const item = chatWith(5, { last: 'Cô nhặt cái đèn.\n[[FIND|item|Đèn pin dây quấn|Hand-crank Torch|Sáng 5 m.|bronze|Quay tay 30 s|yes]]' })
         noteFind(0, card(), item as never)
         expect(item.scriptstate.$find_line).toBe('🎲 d20 15 vs 8: OK — nhận Đèn pin dây quấn')
 
-        const dup = chatWith(9, { last: 'Lại nó.\n[[FIND|item|Đèn khác|the hand crank torch|Sáng.|common|x|yes]]', scriptstate: { $find_known: JSON.stringify(['Đèn pin dây quấn', 'Hand-crank Torch']), $find_turn: '5' } })
+        const dup = chatWith(9, { last: 'Lại nó.\n[[FIND|item|Đèn khác|the hand crank torch|Sáng.|bronze|x|yes]]', scriptstate: { $find_known: JSON.stringify(['Đèn pin dây quấn', 'Hand-crank Torch']), $find_turn: '5' } })
         expect(noteFind(0, card(), dup as never)).toBeNull()
         expect(dup.message.at(-1)!.data).toBe('Lại nó.')
         expect(dup.scriptstate.$find_turn).toBe('5')
@@ -296,7 +296,7 @@ describe('the chat wiring', () => {
 
 describe('a find that is the same kind as a known one (another English name for it)', () => {
     test('is stripped and not counted, with the chat\'s own names and the store\'s', () => {
-        const near = 'Lại tiếng đó.\n[[FIND|skill|Nhịp cầu thang|Stairwell Rhythm|Nghe nhịp bước chân ở cầu thang.|rare|Cần yên tĩnh|yes]]'
+        const near = 'Lại tiếng đó.\n[[FIND|skill|Nhịp cầu thang|Stairwell Rhythm|Nghe nhịp bước chân ở cầu thang.|gold|Cần yên tĩnh|yes]]'
         const c = chatWith(9, { last: near, scriptstate: { $find_known: JSON.stringify(['Nghe nhịp âm', 'Sound Rhythm']) } })
         expect(noteFind(0, card(), c as never)).toBeNull()
         expect(c.scriptstate.$find_turn).toBeUndefined()
@@ -328,24 +328,24 @@ describe('findNote wording (a real run: the narrator found the item in prose and
 
 
 describe('the dice: a find is an event that can fail (owner 2026-11-05)', () => {
-    const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân sau tường mỏng.|common|Cần yên tĩnh|yes]]'
-    const roll = (o: object) => JSON.stringify({ turn: 10, d20: 12, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'common', stat: 'tinh_than', ...o })
+    const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân sau tường mỏng.|bronze|Cần yên tĩnh|yes]]'
+    const roll = (o: object) => JSON.stringify({ turn: 10, d20: 12, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'bronze', stat: 'tinh_than', ...o })
     test('the schedule is an event every 6..10 turns', () => {
         expect(FIND_MIN_GAP).toBe(6)
         expect(FIND_DROUGHT).toBe(10)
     })
     test('the roll is a d20 seeded by (chat, turn): the same twice, 1..20, the DC by rarity', () => {
-        expect(FIND_DC).toEqual({ common: 8, uncommon: 12, rare: 16, epic: 19 })
+        expect(FIND_DC).toEqual({ bronze: 8, silver: 11, gold: 14, platinum: 17, diamond: 20 })
         const seen = new Set<number>()
         for (let t = 1; t <= 400; t++) {
-            const a = findRoll({ kind: 'skill', rarity: 'rare' }, t, 'chat-1', {})
-            expect(findRoll({ kind: 'skill', rarity: 'rare' }, t, 'chat-1', {})).toEqual(a)
+            const a = findRoll({ kind: 'skill', rarity: 'gold' }, t, 'chat-1', {})
+            expect(findRoll({ kind: 'skill', rarity: 'gold' }, t, 'chat-1', {})).toEqual(a)
             expect(a.d20).toBeGreaterThanOrEqual(1); expect(a.d20).toBeLessThanOrEqual(20)
-            expect(a.dc).toBe(16)
+            expect(a.dc).toBe(14)
             seen.add(a.d20)
         }
         expect(seen.size).toBe(20)
-        expect(findRoll({ kind: 'skill', rarity: 'rare' }, 7, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'rare' }, 7, 'chat-2', {}).d20 && findRoll({ kind: 'skill', rarity: 'rare' }, 8, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'rare' }, 8, 'chat-2', {}).d20).toBe(false)
+        expect(findRoll({ kind: 'skill', rarity: 'gold' }, 7, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'gold' }, 7, 'chat-2', {}).d20 && findRoll({ kind: 'skill', rarity: 'gold' }, 8, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'gold' }, 8, 'chat-2', {}).d20).toBe(false)
     })
     test('the bonus is the tier of the related stat: Tinh thần for a skill, the act\'s stat when known, Cảm nhận for an item', () => {
         const vars = { $stats: JSON.stringify({ suc_manh: 1600, tinh_than: 1300, cam_nhan: 1900 }) }
@@ -353,16 +353,16 @@ describe('the dice: a find is an event that can fail (owner 2026-11-05)', () => 
         expect(statTier(vars, 'suc_manh')).toBe(2)
         expect(statTier(vars, 'y_chi')).toBe(0)
         expect(statTier({ $stats: 'not json' }, 'tinh_than')).toBe(0)
-        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', vars)).toMatchObject({ stat: 'tinh_than', bonus: 1 })
-        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'suc_manh', bonus: 2 })
-        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'bogus' })).toMatchObject({ stat: 'tinh_than' })
-        expect(findRoll({ kind: 'item', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'cam_nhan', bonus: 3 })
+        expect(findRoll({ kind: 'skill', rarity: 'bronze' }, 5, 'c', vars)).toMatchObject({ stat: 'tinh_than', bonus: 1 })
+        expect(findRoll({ kind: 'skill', rarity: 'bronze' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'suc_manh', bonus: 2 })
+        expect(findRoll({ kind: 'skill', rarity: 'bronze' }, 5, 'c', { ...vars, $act_stat: 'bogus' })).toMatchObject({ stat: 'tinh_than' })
+        expect(findRoll({ kind: 'item', rarity: 'bronze' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'cam_nhan', bonus: 3 })
     })
     test('a higher tier turns a miss into a pass: stat 10 vs 13 on the same chat, turn and DC', () => {
         let found = 0
         for (let t = 1; t <= 300; t++) {
-            const lo = findRoll({ kind: 'item', rarity: 'uncommon' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1000 }) })
-            const hi = findRoll({ kind: 'item', rarity: 'uncommon' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1300 }) })
+            const lo = findRoll({ kind: 'item', rarity: 'silver' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1000 }) })
+            const hi = findRoll({ kind: 'item', rarity: 'silver' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1300 }) })
             expect(lo.d20).toBe(hi.d20)
             if (hi.ok && !lo.ok) found++
             if (lo.ok) expect(hi.ok).toBe(true)
@@ -370,8 +370,8 @@ describe('the dice: a find is an event that can fail (owner 2026-11-05)', () => 
         expect(found).toBeGreaterThan(0)
     })
     test('the panel line', () => {
-        expect(findDiceLine({ turn: 1, d20: 14, bonus: 1, dc: 12, ok: true, kind: 'skill', rarity: 'uncommon', stat: 'tinh_than' })).toBe('🎲 d20 14+1 vs 12: OK')
-        expect(findDiceLine({ turn: 1, d20: 3, bonus: 0, dc: 12, ok: false, kind: 'skill', rarity: 'uncommon', stat: 'tinh_than' })).toBe('🎲 d20 3 vs 12: hụt')
+        expect(findDiceLine({ turn: 1, d20: 14, bonus: 1, dc: 11, ok: true, kind: 'skill', rarity: 'silver', stat: 'tinh_than' })).toBe('🎲 d20 14+1 vs 11: OK')
+        expect(findDiceLine({ turn: 1, d20: 3, bonus: 0, dc: 11, ok: false, kind: 'skill', rarity: 'silver', stat: 'tinh_than' })).toBe('🎲 d20 3 vs 11: hụt')
     })
     // a due turn and the request it makes
     const dueChat = () => {

@@ -11,7 +11,7 @@ export type FindRecord = {
     name: { vi: string, en: string }
     source: { card: string, chapter: string }
     effect: string
-    rarity: 'common' | 'uncommon' | 'rare' | 'epic'
+    rarity: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'common' | 'uncommon' | 'rare' | 'epic'   // the last four: a find stored before the five tiers
     conditions: string
     portable: boolean
 }

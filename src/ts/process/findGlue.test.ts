@@ -9,7 +9,7 @@ import { PENDING_KEY, parsePending, type SendResult } from '../storage/findsSave
 
 const rec = (en = 'Muffled Footsteps'): FindRecord => ({
     id: en.toLowerCase().replace(/\s+/g, '-'), kind: 'skill', name: { vi: 'Nghe bước chân', en }, source: { card: 'fc27f53b-0000-4000', chapter: '' },
-    effect: 'Nghe bước chân qua tường mỏng.', rarity: 'uncommon', conditions: 'Cần yên tĩnh', portable: true,
+    effect: 'Nghe bước chân qua tường mỏng.', rarity: 'silver', conditions: 'Cần yên tĩnh', portable: true,
 })
 const ctx = { chatId: 'c1', card: 'fc27f53b-0000-4000', turn: 5 }
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -142,5 +142,73 @@ describe('known names', () => {
         const p = knownProvider(() => new Promise(() => {}))
         expect(p()).toEqual([])
         expect(p()).toEqual([])
+    })
+})
+
+describe('loot to the persona store', () => {
+    // a fake fetch that stands for the persona bridge: the real lootPersona and its POST body
+    const bridge = (status: number, body: unknown) => {
+        const calls: { url: string, body: any }[] = []
+        const f = (async (url: string, init: any) => { calls.push({ url, body: JSON.parse(init.body) }); return { status, json: async () => body } }) as any
+        return { f, calls }
+    }
+    const wire = async (chat: Chat, fetchLike: any, sent: FindRecord[]) => {
+        const { lootPersona } = await import('../storage/personaStore')
+        return findHandler({
+            chatOf: () => chat, send: async (r) => { sent.push(r); return 'saved' }, persona: () => 'nhan-vat',
+            loot: (id, kind, entry, level) => lootPersona(id, kind, entry, level, { fetch: fetchLike, auth: async () => 't' }),
+        })
+    }
+    test('a skill goes with mastery 0, the Vietnamese name, the tier, the card slug as source and the Level from $lvl; the find is saved too', async () => {
+        const chat: Chat = { scriptstate: { $lvl: '{"l":23,"e":5}' } }
+        const { f, calls } = bridge(200, { ok: true })
+        const sent: FindRecord[] = []
+        ;(await wire(chat, f, sent))({ ...rec(), rarity: 'gold' }, ctx)
+        await tick(); await tick(); await tick()
+        expect(calls).toHaveLength(1)
+        expect(calls[0].url).toBe('/api/persona/loot')
+        expect(calls[0].body).toEqual({ persona: 'nhan-vat', kind: 'skill', level: 23, entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', mastery: 0 } })
+        expect(sent).toHaveLength(1)
+        expect(chat.scriptstate.$find_line).toBeUndefined()
+    })
+    test('an item goes with qty 1 and no mastery; a legacy word is sent as the new tier', async () => {
+        const chat: Chat = { scriptstate: {} }
+        const { f, calls } = bridge(200, { ok: true })
+        ;(await wire(chat, f, []))({ ...rec('Torch'), kind: 'item', rarity: 'rare' as never }, ctx)
+        await tick(); await tick(); await tick()
+        expect(calls[0].body.kind).toBe('item'); expect(calls[0].body.level).toBe(1)
+        expect(calls[0].body.entry).toEqual({ id: 'torch', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', qty: 1 })
+    })
+    test("a full store (ok:false, reason 'full'): the line says so, the find is not saved or queued, nothing is deleted", async () => {
+        const chat: Chat = { scriptstate: { $find_line: '🎲 d20 14 vs 11: OK — nhận Nghe bước chân' } }
+        const { f, calls } = bridge(200, { ok: false, reason: 'full', max_storage: 100, count: 100 })
+        const sent: FindRecord[] = []
+        ;(await wire(chat, f, sent))(rec(), ctx)
+        await tick(); await tick(); await tick()
+        expect(chat.scriptstate.$find_line).toBe('Kho đầy: không nhận được Nghe bước chân')
+        expect(sent).toHaveLength(0)
+        expect(chat.scriptstate[PENDING_KEY]).toBeUndefined()
+        expect(calls.every((c) => c.url === '/api/persona/loot')).toBe(true)
+    })
+    test('a network failure of the persona store never blocks: the find is still saved and the line is left alone', async () => {
+        const chat: Chat = { scriptstate: { $find_line: 'giữ' } }
+        const sent: FindRecord[] = []
+        ;(await wire(chat, (async () => { throw new Error('down') }) as any, sent))(rec(), ctx)
+        await tick(); await tick(); await tick()
+        expect(sent).toHaveLength(1)
+        expect(chat.scriptstate.$find_line).toBe('giữ')
+        // and a loot dep that throws outright
+        const sent2: FindRecord[] = []
+        findHandler({ chatOf: () => chat, send: async (r) => { sent2.push(r); return 'saved' }, persona: () => { throw new Error('x') }, loot: async () => ({ ok: true }) })(rec(), ctx)
+        await tick(); await tick(); await tick()
+        expect(sent2).toHaveLength(1)
+    })
+    test('a card that is not a saving card still loots to the persona but does not save the find', async () => {
+        const chat: Chat = { scriptstate: {} }
+        const { f, calls } = bridge(200, { ok: true })
+        const sent: FindRecord[] = []
+        ;(await wire(chat, f, sent))(rec(), { ...ctx, card: 'zzzz-other' })
+        await tick(); await tick(); await tick()
+        expect(calls).toHaveLength(1); expect(calls[0].body.entry.source).toBe('zzzz-other'); expect(sent).toHaveLength(0)
     })
 })

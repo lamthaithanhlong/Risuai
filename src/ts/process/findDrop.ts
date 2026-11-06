@@ -21,7 +21,10 @@ const BASE_CHANCE = 0.25
 
 export type SceneKind = 'creation' | 'combat' | 'death' | 'quiet' | 'explore' | 'scavenge' | 'travel' | 'rest' | 'social' | 'other'
 export type FindKind = 'skill' | 'item'
-export type FindRarity = 'common' | 'uncommon' | 'rare' | 'epic'
+export type FindRarity = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond'
+export const TIERS: FindRarity[] = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
+/** The words before 2026-11-06: an old reply or an old stored find still parses (the tier it maps to). */
+export const LEGACY_RARITY: Record<string, FindRarity> = { common: 'bronze', uncommon: 'silver', rare: 'gold', epic: 'platinum' }
 export type FindDue = { due: boolean; kind: FindKind; rarity: FindRarity; note: string }
 
 /** A scene that cannot carry a find. */
@@ -50,10 +53,41 @@ export function findChance(since: number, scene: SceneKind): number {
     return Math.min(1, ramp * WEIGHT[scene])
 }
 
-const pick = <T,>(u: number, table: [T, number][]): T => {
+// ---- rank and the loot table (owner 2026-11-06; the twin of fate-simulator/stats.lua S.rank / S.loot_table / S.loot_pick, proved in tools/stats/formal/Loot.dfy) ----
+export const RANK_MAX = 10
+export const RANK_STEP = 10
+const LOOT_BASE = [50, 28, 14, 6, 2]
+const LOOT_CUM = [0, 4, 7, 9, 10]
+
+/** rank = min(10, 1 + floor((Level - 1) / 10)); Level below 1 or not a number = 1. */
+export function rankOfLevel(level: unknown): number {
+    const l = Math.max(1, Math.floor(Number(level)) || 1)
+    return Math.min(RANK_MAX, 1 + Math.floor((l - 1) / RANK_STEP))
+}
+
+/** The Level in the chat's `$lvl` ({"l":n,"e":n}); missing or broken = 1. */
+export function levelOf(vars: Record<string, unknown> | undefined): number {
+    try {
+        const v = vars?.$lvl
+        const o = typeof v === 'string' ? JSON.parse(v) : v
+        return Math.max(1, Math.floor(Number((o as { l?: unknown })?.l)) || 1)
+    } catch { return 1 }
+}
+
+/** The five loot percentages at a rank (bronze..diamond, integers summing to 100). */
+export function lootTable(rank: number): number[] {
+    const r = Math.max(1, Math.min(RANK_MAX, Math.floor(Number(rank)) || 1))
+    const moved = 2 * (r - 1)
+    return [LOOT_BASE[0] - moved, ...[1, 2, 3, 4].map((k) => LOOT_BASE[k] + Math.floor(moved * LOOT_CUM[k] / 10) - Math.floor(moved * LOOT_CUM[k - 1] / 10))]
+}
+
+/** The tier a roll (0..99) lands on at a rank: the roll walks the cumulative table. */
+export function lootPick(roll: number, rank: number): FindRarity {
+    const n = Math.max(0, Math.min(99, Math.floor(Number(roll)) || 0))
     let acc = 0
-    for (const [v, w] of table) { acc += w; if (u < acc) return v }
-    return table[table.length - 1][0]
+    const t = lootTable(rank)
+    for (let i = 0; i < 5; i++) { acc += t[i]; if (n < acc) return TIERS[i] }
+    return TIERS[4]
 }
 
 export type FindInput = {
@@ -65,19 +99,21 @@ export type FindInput = {
     seed: string | number
     /** names already saved, Vietnamese and English: the narrator must not repeat any */
     known?: string[]
+    /** the character's rank (1..10, from its Level); missing = 1 */
+    rank?: number
 }
 
 /** Whether a find is due on this turn, and what to ask the narrator for. Pure: the same input is always the same answer. */
 export function findDue(input: FindInput): FindDue {
     const { turn, sceneKind, seed } = input
-    const none: FindDue = { due: false, kind: 'item', rarity: 'common', note: '' }
+    const none: FindDue = { due: false, kind: 'item', rarity: 'bronze', note: '' }
     if (!Number.isFinite(turn) || turn < FIND_FIRST_TURN || BARRED.includes(sceneKind)) return none
     const last = input.lastFindTurn ?? null
     if (last !== null && turn - last < FIND_MIN_GAP) return none
     const since = turn - (last ?? 0)
     if (seededUnit(seed, turn, 'drop') >= findChance(since, sceneKind)) return none
     const kind: FindKind = seededUnit(seed, turn, 'kind') < (sceneKind === 'scavenge' ? 0.7 : 0.4) ? 'item' : 'skill'
-    const rarity = pick<FindRarity>(seededUnit(seed, turn, 'rarity'), [['common', 0.5], ['uncommon', 0.3], ['rare', 0.15], ['epic', 0.05]])
+    const rarity = lootPick(Math.floor(seededUnit(seed, turn, 'rarity') * 100), input.rank ?? 1)
     return { due: true, kind, rarity, note: findNote(kind, rarity, input.known ?? []) }
 }
 
@@ -86,7 +122,7 @@ export function findDue(input: FindInput): FindDue {
 // a skill uses the stat of the act the character just did ($act_stat, written by the card's stats script), else Tinh thần; an item uses Cảm nhận.
 // Against the DC of its rarity: pass = the narrator is asked for the [[FIND|..]] line as before; fail = the narrator is told it missed and why
 // it should read as scene detail, and writes NO line. A FIND line in a reply whose turn had no pass is dropped, never stored (NoFreeGrant).
-export const FIND_DC: Record<FindRarity, number> = { common: 8, uncommon: 12, rare: 16, epic: 19 }
+export const FIND_DC: Record<FindRarity, number> = { bronze: 8, silver: 11, gold: 14, platinum: 17, diamond: 20 }
 const STAT_NAMES: Record<string, string> = { suc_manh: 'Sức mạnh', nhanh_nhen: 'Nhanh nhẹn', the_luc: 'Thể lực', tinh_than: 'Tinh thần', cam_nhan: 'Cảm nhận', y_chi: 'Ý chí' }
 export type FindRoll = { turn: number; len?: number; d20: number; bonus: number; dc: number; ok: boolean; kind: FindKind; rarity: FindRarity; stat: string }
 
@@ -161,7 +197,6 @@ export function stripFind(text: string): string {
 }
 
 const KINDS: FindKind[] = ['skill', 'item']
-const RARITIES: FindRarity[] = ['common', 'uncommon', 'rare', 'epic']
 const NAME_MAX = 60
 const EFFECT_MAX = 400
 
@@ -192,9 +227,10 @@ export function parseFind(text: string, ctx: { card?: string; chapter?: string }
     if (f.length !== 7) return null
     const [kindRaw, vi, en, effect, rarityRaw, conditions, portableRaw] = f
     const kind = kindRaw.toLowerCase() as FindKind
-    const rarity = rarityRaw.toLowerCase() as FindRarity
+    const rarityWord = rarityRaw.toLowerCase()
+    const rarity = (LEGACY_RARITY[rarityWord] ?? rarityWord) as FindRarity
     const portable = /^(yes|true|có)$/i.test(portableRaw) ? true : /^(no|false|không)$/i.test(portableRaw) ? false : null
-    if (!KINDS.includes(kind) || !RARITIES.includes(rarity) || portable === null) return null
+    if (!KINDS.includes(kind) || !TIERS.includes(rarity) || portable === null) return null
     if (!vi || !en || vi.length > NAME_MAX || en.length > NAME_MAX) return null
     if (!effect || effect.length > EFFECT_MAX || !conditions || conditions.length > EFFECT_MAX) return null
     const id = findId(en)
@@ -287,7 +323,7 @@ export function findRequest<T extends { role: string; content: unknown }>(format
     const player = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
     const lastReply = [...messages].reverse().find((m) => m.role === 'char')?.data ?? ''
     const r = findDue({
-        turn, lastFindTurn: lastFindTurnOf(vars, turn), seed: chat.id ?? '', sceneKind: sceneKindOf(vars, player, lastReply),
+        turn, lastFindTurn: lastFindTurnOf(vars, turn), seed: chat.id ?? '', sceneKind: sceneKindOf(vars, player, lastReply), rank: rankOfLevel(levelOf(vars)),
         known: [...knownOf(vars), ...knownProvider()],
     })
     if (!r.due) { vars.$find_roll = ''; return formated }

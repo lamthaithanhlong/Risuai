@@ -2,7 +2,8 @@
 // card slug, given the story's day and place, saved to the asset manager, and queued on the chat ($find_pending) when the save cannot
 // be done; every request first retries what waits. The names already in the global store come from the asset manager's finds list
 // (cached 60 s; a failure is "no names", never a wait). Nothing here blocks a reply.
-import { setFindKnownProvider, setFindParsedHandler, type FindContext, type FindRecord } from './findDrop'
+import { LEGACY_RARITY, levelOf, setFindKnownProvider, setFindParsedHandler, type FindContext, type FindRecord } from './findDrop'
+import { lootPersona, type ActResult } from '../storage/personaStore'
 import { PENDING_KEY, drain, enqueue, parsePending, saveFind, type SendResult } from '../storage/findsSave'
 
 /** chaId (prefix) of a card -> the slug the asset manager knows it by (tools/assets/cards.json). Only these cards save finds. */
@@ -26,6 +27,19 @@ export type GlueDeps = {
     /** the chat a find came from */
     chatOf: (chatId: string) => { scriptstate?: Record<string, string | number | boolean> } | undefined
     send: (r: FindRecord) => Promise<SendResult>
+    /** the persona (its store id) the loot goes to; with no `loot` dep nothing goes to the persona store */
+    persona?: () => string | Promise<string>
+    loot?: (persona: string, kind: 'skill' | 'item', entry: Record<string, unknown>, level: number) => Promise<ActResult>
+}
+
+/** The text of the panel line when the persona's storage is full. */
+export const fullLine = (name: string) => `Kho đầy: không nhận được ${name}`
+
+/** The persona-store entry for a find: skill {id, name, tier, source, mastery 0}, item {id, name, tier, qty 1, source}; name = the Vietnamese one. */
+export function lootEntry(rec: FindRecord, source: string): Record<string, unknown> {
+    const tier = LEGACY_RARITY[rec.rarity] ?? rec.rarity
+    const base = { id: rec.id, name: rec.name.vi, tier, source }
+    return rec.kind === 'skill' ? { ...base, mastery: 0 } : { ...base, qty: 1 }
 }
 
 /** The record with its source card as a slug and its chapter filled from the chat; null when the card is not one that saves finds. */
@@ -40,11 +54,21 @@ export function findHandler(deps: GlueDeps) {
     return (rec: FindRecord, ctx: FindContext): void => {
         const chat = deps.chatOf(ctx.chatId)
         const out = withSource(rec, ctx, chat?.scriptstate)
-        if (!out) return
-        void deps.send(out).catch((): SendResult => 'queue').then((res) => {
+        const queue = (r: FindRecord) => void deps.send(r).catch((): SendResult => 'queue').then((res) => {
             if (res !== 'queue' || !chat) return
             const vars = (chat.scriptstate ??= {})
-            vars[PENDING_KEY] = enqueue(String(vars[PENDING_KEY] ?? ''), out)
+            vars[PENDING_KEY] = enqueue(String(vars[PENDING_KEY] ?? ''), r)
+        })
+        if (!deps.loot || !deps.persona) { if (out) queue(out); return }
+        // loot goes to the persona's store first (any card: the persona carries it); a full store keeps the find out of the carried list
+        const level = levelOf(chat?.scriptstate)
+        const source = out?.source.card || ctx.card || rec.source.card
+        void Promise.resolve().then(() => Promise.resolve(deps.persona!()).then((id) => deps.loot!(id, rec.kind, lootEntry(rec, source), level))).catch((): ActResult => ({ ok: false, reason: 'network' })).then((res) => {
+            if (!res.ok && res.reason === 'full') {
+                if (chat) (chat.scriptstate ??= {}).$find_line = fullLine(rec.name.vi)   // $find_known already has the name: it is not offered again
+                return
+            }
+            if (out) queue(out)
         })
     }
 }
@@ -109,7 +133,8 @@ export async function installFinds(): Promise<void> {
         for (const c of getDatabase().characters ?? []) for (const ch of (c as { chats?: { id?: string }[] }).chats ?? []) if (ch.id === id) return ch as never
         return undefined
     }
-    setFindParsedHandler(findHandler({ chatOf, send: (r) => saveFind(r) }))
+    const persona = async () => (await (await import('./statsGlue')).pageDeps()).persona()   // asked at each find: the selected persona can change
+    setFindParsedHandler(findHandler({ chatOf, send: (r) => saveFind(r), persona, loot: (id, kind, entry, level) => lootPersona(id, kind, entry, level) }))
     setFindKnownProvider(knownProvider(() => fetchKnownNames()))
 }
 

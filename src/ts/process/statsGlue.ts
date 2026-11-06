@@ -1,6 +1,8 @@
 // Connects the growth pieces on the client (storage/statsSave.ts sends and loads, statsTags.ts hides): after a reply the panel's
 // `$stat_export` goes to the global store stamped with the persona's id; at the start of a request the waiting entries are retried and the
 // persona's stored stats are merged into the chat. Nothing here blocks a reply for more than LOAD_WAIT_MS, and nothing here throws.
+import { fetchPersona, type Deps as PersonaDeps } from '../storage/personaStore'
+import { levelOf } from './findDrop'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
 import { EXPORT_KEY, PENDING_KEY, drain, enqueue, fetchCurrent, mergeCurrent, parseEntries, parsePending, sendStats, type Current, type SendResult, type StatEntry } from '../storage/statsSave'
 
@@ -78,10 +80,29 @@ export async function pageDeps(): Promise<StatsDeps> {
     return { persona, send: (b) => sendStats(b), current: (p) => fetchCurrent(p) }
 }
 
+/** The chat variable holding the equipped skill ids (a JSON list), written before each request from the persona's slots. */
+export const STORE_SLOTS_KEY = '$store_slots'
+
+/** Reads the persona's store and writes the equipped skill ids (the non-null slots) to `$store_slots`; a failed read leaves the old value. Never throws. */
+export async function syncStoreSlots(chat: ChatLike, persona: string, deps: PersonaDeps = {}): Promise<void> {
+    try {
+        if (!chat) return
+        const r = await fetchPersona(persona, levelOf(chat.scriptstate), deps)
+        if (!r.ok) return
+        ;(chat.scriptstate ??= {})[STORE_SLOTS_KEY] = JSON.stringify(r.data.slots.filter((x): x is string => typeof x === 'string' && x !== ''))
+    } catch { /* never blocks */ }
+}
+
 /** index.svelte.ts calls these two; both do nothing for a card without the rule. */
 export async function statsBeforeRequestPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
     if (!hasStatsRule(card) && !moduleCounts(chat)) return
-    try { await statsBeforeRequest(chat, await pageDeps()) } catch { /* never blocks */ }
+    try {
+        const d = await pageDeps()
+        await statsBeforeRequest(chat, d)   // first: the merged stats can carry the Level the slots depend on
+        let timer: ReturnType<typeof setTimeout> | undefined
+        await Promise.race([syncStoreSlots(chat, d.persona()), new Promise<void>((r) => { timer = setTimeout(r, LOAD_WAIT_MS) })])
+        clearTimeout(timer)
+    } catch { /* never blocks */ }
 }
 export async function statsAfterReplyPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
     if (!hasStatsRule(card) && !moduleCounts(chat)) return
