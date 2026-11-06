@@ -89,3 +89,13 @@ it('an empty slot "+ Gắn" opens a picker and picking equips; item row Gắn pi
     expect(store.equipItem).toHaveBeenCalledWith('k', 1, 'old-laptop', 12)
     q(t, 'item-slots-reset') // exists
 })
+
+it('the root never becomes a scroll container (it keeps its natural height in the settings column); one word, Gỡ, removes an equipped entry', async () => {
+    const t = await render()
+    const root = t.querySelector('[data-risu-persona-inventory]') as HTMLElement
+    expect(root.className).not.toContain('overflow-x-hidden')
+    expect(root.className).toContain('shrink-0')
+    expect(q(t, 'item-unequip-1')!.textContent).toBe('Gỡ')
+    expect(t.textContent).not.toContain('Bỏ gắn')
+    expect(q(t, 'stat-caps')!.getAttribute('style')).toContain('min(140px, 100%)')
+})

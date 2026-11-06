@@ -69,7 +69,7 @@
     }
 </script>
 
-<div class="mt-4 w-full max-w-full overflow-x-hidden rounded-md border border-darkborderc p-4" data-risu-persona-inventory>
+<div class="inv-root mt-4 w-full max-w-full shrink-0 rounded-md border border-darkborderc p-4" data-risu-persona-inventory>
     <div class="flex items-center justify-between flex-wrap gap-2">
         <h3 class="text-xl font-bold">Kho & Slot</h3>
         <button class="text-xs text-textcolor2 hover:text-green-500" onclick={() => { tick++; reload() }}>↻</button>
@@ -116,7 +116,7 @@
                         <div class="name">{c.name}</div>
                         {#if c.tier}<span class="tchip">{TIER_LABEL[c.tier]}</span>{/if}
                         <div class="text-xs">× {c.qty}</div>
-                        <button class="text-textcolor2 hover:text-red-500" disabled={busy} data-testid="item-unequip-{c.index}" onclick={() => unequipI(c.index)}>Bỏ gắn</button>
+                        <button class="text-textcolor2 hover:text-red-500" disabled={busy} data-testid="item-unequip-{c.index}" onclick={() => unequipI(c.index)}>Gỡ</button>
                     {:else}
                         <button class="hover:text-green-500" disabled={busy} data-testid="item-slot-add-{c.index}" onclick={() => slotPick = slotPick?.kind === 'item' && slotPick.slot === c.index ? null : { kind: 'item', slot: c.index }}>+ Gắn</button>
                     {/if}
@@ -208,8 +208,8 @@
         {/if}
 
         <h4 class="mt-3 mb-1 font-bold">Trần chỉ số ở {inv.rankName.split(' ')[0]}</h4>
-        <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr))">
-            {#each inv.caps as c (c.key)}<div class="rounded-md bg-darkbg p-2 text-sm flex justify-between"><span>{c.label}</span><span class="font-mono">{c.cap}</span></div>{/each}
+        <div class="grid gap-2" data-testid="stat-caps" style="grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr))">
+            {#each inv.caps as c (c.key)}<div class="rounded-md bg-darkbg p-2 text-sm flex justify-between flex-wrap gap-x-2 min-w-0"><span class="min-w-0 break-words">{c.label}</span><span class="font-mono">{c.cap}</span></div>{/each}
         </div>
     {:else}
         <p class="text-sm text-textcolor2 mt-2">Đang tải…</p>
@@ -217,6 +217,8 @@
 </div>
 
 <style>
+    /* clip, not hidden: `hidden` makes the root a scroll container, and a flex column then shrinks it to a few hundred px with its own scroll */
+    .inv-root { overflow-x: clip; flex-shrink: 0; min-height: auto }
     button, input { min-height: 44px; min-width: 44px }
     .cards { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)) }
     .card { border-radius: 0.375rem; padding: 0.5rem; font-size: 0.875rem; min-width: 0; min-height: 7.5rem; display: flex; flex-direction: column; gap: 0.25rem }
