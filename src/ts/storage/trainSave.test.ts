@@ -88,8 +88,11 @@ describe('trainAfterReply: only a card with no engine of its own posts, once, wi
     it('a card whose description teaches [[ACT| keeps its own count: nothing is posted', async () => {
         expect(await run({ desc: 'rule [[ACT|id|stat|normal|]]' }, chat, chat.message[2].data)).toEqual([])
     })
-    it('no tag, no card, a group, no card id, a bad chat id: nothing is posted, nothing throws', async () => {
-        expect(await run({ desc: '' }, chat, 'Gió lùa.')).toEqual([])
+    it('a reply with no tag posts stats [] (so a regenerated reply that lost its tag takes the earlier gain back)', async () => {
+        expect(await run({ desc: '' }, chat, 'Gió lùa.')).toEqual([{ persona: 'p1', card: 'mailman', chat: 'chat-1', turn: 3, stats: [] }])
+        expect(await run({ desc: 'rule [[ACT|id|stat|normal|]]' }, chat, 'Gió lùa.')).toEqual([])   // a card with its own engine still never posts
+    })
+    it('no card, a group, no card id, a bad chat id: nothing is posted, nothing throws', async () => {
         expect(await run(undefined, chat, chat.message[2].data)).toEqual([])
         expect(await run({ type: 'group' }, chat, chat.message[2].data)).toEqual([])
         expect(await run({ desc: '' }, chat, chat.message[2].data, '')).toEqual([])

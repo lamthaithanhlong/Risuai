@@ -101,16 +101,16 @@ export async function trainAfterReply(card: { desc?: string, type?: string } | u
     deps: { persona: () => string, cardId: () => string, send: (b: TrainBody) => Promise<string> }): Promise<void> {
     try {
         if (!card || card.type === 'group' || hasStatsRule(card)) return
-        const tag = parseTrain(raw)
+        const tag = parseTrain(raw)   // no tag: the store is still told (stats []), so a regenerated reply that lost its tag takes the earlier gain back
         const id = String(chat?.id ?? '')
         const cardId = deps.cardId()
-        if (!tag || !cardId || !/^[A-Za-z0-9_.-]{1,64}$/.test(id) || !Array.isArray(chat?.message)) return
+        if (!cardId || !/^[A-Za-z0-9_.-]{1,64}$/.test(id) || !Array.isArray(chat?.message)) return
         await deps.send(trainBody(tag, { persona: deps.persona(), card: cardId, chat: id, turn: chat!.message!.length }))
     } catch { /* the reply is never held by this */ }
 }
 
 export async function trainAfterReplyPage(card: { desc?: string, type?: string, chaId?: string } | undefined, chat: TrainChat, raw: string): Promise<void> {
-    if (!raw || !/\[\[\s*train/i.test(raw)) return
+    if (!raw) return
     try {
         const d = await pageDeps()
         const { adminCardOf } = await import('./adminGlobal')

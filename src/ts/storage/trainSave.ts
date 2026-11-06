@@ -7,7 +7,8 @@
 //   trainBody(tag, ctx)               -> the POST body
 //   sendTrain(body, deps)             -> 'saved' | 'skipped' | 'drop'     never throws; a tiny gain is not queued
 export type TrainTag = { stats: string[], level: 'nhe' | 'vua' | 'manh' | 'cuc' }
-export type TrainBody = { persona: string, card: string, chat: string, turn: number, stats: string[], level: TrainTag['level'] }
+/** level is absent when stats is empty: "this reply had no tag", which takes back an earlier application of the same turn (a regenerated reply) */
+export type TrainBody = { persona: string, card: string, chat: string, turn: number, stats: string[], level?: TrainTag['level'] }
 
 const STAT_IDS = ['suc_manh', 'nhanh_nhen', 'the_luc', 'tinh_than', 'cam_nhan', 'y_chi']
 const STAT_NAMES: Record<string, string> = { 'sức mạnh': 'suc_manh', 'nhanh nhẹn': 'nhanh_nhen', 'thể lực': 'the_luc', 'tinh thần': 'tinh_than', 'cảm nhận': 'cam_nhan', 'ý chí': 'y_chi' }
@@ -38,7 +39,8 @@ export function parseTrain(text: string | null | undefined): TrainTag | null {
     return stats.length && level ? { stats, level } : null
 }
 
-export function trainBody(tag: TrainTag, ctx: { persona: string, card: string, chat: string, turn: number }): TrainBody {
+export function trainBody(tag: TrainTag | null, ctx: { persona: string, card: string, chat: string, turn: number }): TrainBody {
+    if (!tag) return { persona: ctx.persona, card: ctx.card, chat: ctx.chat, turn: ctx.turn, stats: [] }
     return { persona: ctx.persona, card: ctx.card, chat: ctx.chat, turn: ctx.turn, stats: tag.stats, level: tag.level }
 }
 
