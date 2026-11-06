@@ -184,13 +184,18 @@ test('finds.saved agrees with the client: a block dropped as similar (never post
 test('act tags: counted per run from the raw reply; a tag left in the shown or stored text (finished or half-streamed) is red, a clean run is green', () => {
     const tag = '[[ACT|bẻ-khóa-cửa-kho|nhanh_nhen+cam_nhan|normal|giữ-im-lặng]]'
     const clean = [{ turns: [{ raw: 'a ' + tag, shown: 'a', reply: 'a' }, { raw: 'b', shown: 'b', reply: 'b' }] }, { turns: [{ raw: tag + tag, shown: 'x', reply: 'x' }] }]
-    assert.deepEqual(actCounts(clean), [{ turns: 2, tags: 1 }, { turns: 1, tags: 2 }])
+    assert.deepEqual(actCounts(clean), [{ turns: 2, tags: 1, train: 0 }, { turns: 1, tags: 2, train: 0 }])
     assert.deepEqual(actLeaks(clean), [])
     assert.equal(actChecks(clean)[0].status, 'PASS')
-    for (const bad of [{ raw: 'a ' + tag, shown: 'a ' + tag, reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a ' + tag }, { raw: 'a', shown: 'a [[ACT|bẻ-khó', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[BREAK|cam_nhan]]' }]) {
+    for (const bad of [{ raw: 'a ' + tag, shown: 'a ' + tag, reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a ' + tag }, { raw: 'a', shown: 'a [[ACT|bẻ-khó', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[BREAK|cam_nhan]]' },
+        { raw: 'a [[TRAIN|the_luc|manh]]', shown: 'a [[TRAIN|the_luc|manh]]', reply: 'a' }, { raw: 'a', shown: 'a', reply: 'a [[TRAIN|the_luc|manh]]' }, { raw: 'a', shown: 'a [[TRAIN|the_l', reply: 'a' }, { raw: 'a', shown: 'a [[TRA', reply: 'a' }]) {
         const r = actChecks([{ turns: [bad] }])
         assert.equal(r[0].status, 'FAIL', JSON.stringify(bad))
+        if (/TRAIN|TRA/.test(JSON.stringify(bad).replace(/BREAK/g, ''))) assert.equal(r.find((c) => c.id === 'gate.trainHidden').status, 'FAIL', 'trainHidden: ' + JSON.stringify(bad))
     }
+    const trainClean = [{ turns: [{ raw: 'a [[TRAIN|the_luc|manh]]', shown: 'a', reply: 'a' }] }]
+    assert.equal(actChecks(trainClean).find((c) => c.id === 'gate.trainHidden').status, 'PASS')
+    assert.equal(actCounts(trainClean)[0].train, 1)
     assert.equal(actChecks([])[0].status, 'FAIL')
 })
 

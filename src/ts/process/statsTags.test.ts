@@ -105,6 +105,7 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
         '[[NPC|ban-cong-704|thuốc hạ sốt|sợ, đau|vết cắn của chồng]]',
         PROSE[1],
         PROSE[2] + ' [[ACT|nâng-cửa|suc_manh+the_luc|hard|]]',
+        '[[TRAIN|the_luc+nhanh_nhen|manh]]',
         '[[BREAK|the_luc]]',
         PROSE[3],
         '[[QUEST|progress|nuoc-sach|2]]',
@@ -112,7 +113,7 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
         '[[QUEST|fail|gia-co-cua]]',
         '[[FIND|skill|Mở khóa|Lockpick|mở khóa nhanh|common|có dụng cụ|yes]]',
     ].join('\n')
-    const PAYLOAD = ['ban-cong', 'thuốc hạ', 'vết cắn', 'suc_manh', 'the_luc', 'nâng-cửa', 'nuoc-sach', 'gia-co-cua', 'progress', 'Lockpick', 'Mở khóa']
+    const PAYLOAD = ['nhanh_nhen', '|manh', 'ban-cong', 'thuốc hạ', 'vết cắn', 'suc_manh', 'the_luc', 'nâng-cửa', 'nuoc-sach', 'gia-co-cua', 'progress', 'Lockpick', 'Mở khóa']
     const screen = (t: string) => tidyDisplay(stripStatTags(stripFind(t)))
     const stored = (t: string) => tidyReply(stripFind(t))
     it('the finished reply keeps only the prose, on the screen and in the stored text', () => {
@@ -131,6 +132,14 @@ describe('stripStatTags: every hidden tag in one reply (release-2: quest-tag + n
                 for (const p of PAYLOAD) expect(out.includes(p), `${where} shows ${p}`).toBe(false)
             }
         }
+    })
+    it('hides a TRAIN tag as the narrator may write it: first pipe missing, spaces, case, the close missing, cut anywhere', () => {
+        for (const tag of ['[[TRAIN|the_luc|nhe]]', '[[TRAIN the_luc|nhe]]', '[[ train|the_luc|vua]]', '[[Train|the_luc+y_chi|cuc]]', '[[TRAIN|the_luc|manh]', '[[TRAIN|the_luc|manh']) {
+            expect(stripStatTags('Anh chạy.\n' + tag)).toBe('Anh chạy.')
+            expect(stripStatTags('Anh chạy.\n' + tag + '\nCô đứng dậy.')).toBe('Anh chạy.\nCô đứng dậy.')
+        }
+        for (const tail of ['[[T', '[[TR', '[[TRA', '[[TRAI', '[[TRAIN', '[[TRAIN|the_l']) expect(stripStatTags('Anh chạy.\n' + tail)).toBe('Anh chạy.')
+        expect(stripStatTags('Anh chạy. [[TRAINING|x]] [[TRAINER]]')).toBe('Anh chạy. [[TRAINING|x]] [[TRAINER]]')
     })
     it('still leaves look-alike words and other blocks alone', () => {
         const t = 'Nắng lên. [[img: a balcony]] [[QUESTION|x]] [[NPCS]] [[ACTION|y]] [[BREAKFAST]]\n[[STATUS\nday: 2\n]]'
