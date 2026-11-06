@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net'
 
 const require = createRequire(import.meta.url)
 const express = require('express')
-const { mountPersona, postPersona, getPersona, personaBodyOf } = require('../../../server/node/personaBridge.cjs')
+const { mountPersona, postPersona, getPersona, personaBodyOf, postEventsTurn, getPersonaState } = require('../../../server/node/personaBridge.cjs')
 
 const servers: http.Server[] = []
 const listen = (s: http.Server) => new Promise<number>((r) => { servers.push(s); s.listen(0, '127.0.0.1', () => r((s.address() as AddressInfo).port)) })
@@ -35,7 +35,7 @@ async function bridge(handler: http.RequestListener | null, timeoutMs = 3000) {
     const hdr = (token: string) => ({ 'content-type': 'application/json', ...(token ? { 'risu-auth': token } : {}) })
     const post = (route: string, body: unknown, token = 'good') => fetch(`${base}/${route}`, { method: 'POST', headers: hdr(token), body: JSON.stringify(body) })
     const get = (qs: string, token = 'good') => fetch(`${base}${qs}`, { headers: hdr(token) })
-    return { post, get, logs, seen }
+    return { post, get, logs, seen, root: `http://127.0.0.1:${port}`, hdr }
 }
 const json = (obj: unknown, status = 200): http.RequestListener => (_q, res) => { res.statusCode = status; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(obj)) }
 const skill = { id: 's1', name: 'Skill 1', tier: 'gold', mastery: 100, source: 'drop' }
@@ -128,5 +128,48 @@ describe('POST /api/persona/* (bridge)', () => {
         const o = { target: 'http://127.0.0.1:9', timeoutMs: 300 }
         expect((await getPersona({ persona: 'k', level: '1' }, o)).status).toBe(502)
         expect((await postPersona('loot', { persona: 'k' }, o)).status).toBe(502)
+    })
+})
+
+// The persona's EVENT LEDGER (event_ledger.py): GET /api/persona/state (the fold) and POST /api/events/turn (a turn's events replace the old ones)
+describe('the event ledger routes (bridge)', () => {
+    const turnBody = { persona: 'kenji', chat: 'c-1', turn: 7, events: [{ kind: 'train', idx: 1, level: 12, stats: { suc_manh: 12 } }], base: { lvl: { l: 1, e: 0 }, stats: {} } }
+    it('POST /api/events/turn forwards only its fields to the same route and returns the store answer', async () => {
+        const b = await bridge(json({ ok: true, written: 2, state: { level: 1, exp: 12 } }))
+        const r = await fetch(`${b.root}/api/events/turn`, { method: 'POST', headers: b.hdr('good'), body: JSON.stringify({ ...turnBody, admin: 1, level: 99 }) })
+        expect(r.status).toBe(200)
+        expect((await r.json()).state.exp).toBe(12)
+        expect(b.seen[0].url).toBe('/api/events/turn')
+        expect(JSON.parse(b.seen[0].body)).toEqual(turnBody)
+        expect(b.logs.join('\n')).toContain('[Persona] events ok')
+    })
+    it('GET /api/persona/state forwards only the persona (not routed to GET /api/persona)', async () => {
+        const b = await bridge(json({ persona: 'kenji', level: 3, event_count: 4 }))
+        const r = await fetch(`${b.root}/api/persona/state?persona=kenji&level=9&x=1`, { headers: b.hdr('good') })
+        expect([r.status, (await r.json()).level]).toEqual([200, 3])
+        expect(b.seen[0].url).toBe('/api/persona/state?persona=kenji')
+    })
+    it('both need risu-auth and forward nothing without it', async () => {
+        const b = await bridge(json({ ok: true }))
+        for (const token of ['', 'bad']) {
+            expect((await fetch(`${b.root}/api/events/turn`, { method: 'POST', headers: b.hdr(token), body: JSON.stringify(turnBody) })).status).toBe(400)
+            expect((await fetch(`${b.root}/api/persona/state?persona=kenji`, { headers: b.hdr(token) })).status).toBe(400)
+        }
+        expect(b.seen.length).toBe(0)
+    })
+    it('a refusal is 400 with the message; a dead or failing store is 502; a corrupt ledger (500) is 502', async () => {
+        const refuse = await bridge(json({ error: "kind: must be one of ('train', 'kill', 'mission', 'act')" }, 400))
+        const r = await fetch(`${refuse.root}/api/events/turn`, { method: 'POST', headers: refuse.hdr('good'), body: JSON.stringify(turnBody) })
+        expect([r.status, (await r.json()).error]).toEqual([400, "kind: must be one of ('train', 'kill', 'mission', 'act')"])
+        const corrupt = await bridge(json({ error: 'line 3: bad' }, 500))
+        expect((await fetch(`${corrupt.root}/api/persona/state?persona=k`, { headers: corrupt.hdr('good') })).status).toBe(502)
+        const o = { target: 'http://127.0.0.1:9', timeoutMs: 300 }
+        expect((await postEventsTurn(turnBody, o)).status).toBe(502)
+        expect((await getPersonaState({ persona: 'k' }, o)).status).toBe(502)
+    })
+    it('a body that is not an object is 400 and goes nowhere', async () => {
+        const b = await bridge(json({ ok: true }))
+        for (const bad of [[], 'x', 5, null]) expect((await postEventsTurn(bad, { target: b.root })).status).toBe(400)
+        expect(b.seen.length).toBe(0)
     })
 })

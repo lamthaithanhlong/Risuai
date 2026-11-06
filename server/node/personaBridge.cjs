@@ -8,6 +8,10 @@
 //   POST /api/persona/delete   {persona, kind, id, level?}               200 {ok:true, unequipped: slot|null, view?} | {ok:false, reason:'not_found'}
 //   POST /api/persona/equip    {persona, slot, skillId, level}           200 {ok:true, slot, replaced, view} | {ok:false, reason:'slot_locked'|'no_such_skill'|'already_equipped'}
 //   POST /api/persona/unequip  {persona, slot, level?}                   200 {ok:true, slot, was, view?}
+//   GET  /api/persona/state?persona=       -> 200 {persona, level, exp, rank, stats: {stat: hundredths}, stat_exp: {stat: e}, event_count}: the FOLD of the
+//        persona's event ledger (event_ledger.py; owner/L1 2026-11-06 "fold theo event id; regen thay cùng id; bỏ last-value-wins")
+//   POST /api/events/turn  {persona, chat, turn, events: [{kind, idx, level, stats}], base?}   the events of (chat, turn) become exactly this list
+//        (a regenerated reply replaces its turn; [] removes it) -> 200 {ok:true, written, state}
 //   400 {error}  the store refused the request as malformed (the page drops it)   502/504  the asset manager is down or slow (the page may retry)
 // Only the fields listed above go on (anything else is cut), and only persona and level go on from a GET's query. Logs name the route and the
 // outcome, never ids or values.
@@ -49,6 +53,23 @@ async function relay(url, init, label, { fetch, timeoutMs, log }) {
     }
 }
 
+const EVENT_FIELDS = ['persona', 'chat', 'turn', 'events', 'base']
+
+/** POST /api/events/turn: only its fields go on. -> {status, body}. Never throws. */
+async function postEventsTurn(body, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} } = {}) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return { status: 400, body: { error: `send {${EVENT_FIELDS.join(', ')}}` } }
+    const clean = {}
+    for (const k of EVENT_FIELDS) if (body[k] !== undefined) clean[k] = body[k]
+    return relay(`${target}/api/events/turn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(clean) }, 'events', { fetch, timeoutMs, log })
+}
+
+/** GET /api/persona/state: the persona from the query, as text, nothing else. */
+async function getPersonaState(query, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} } = {}) {
+    const q = new URLSearchParams()
+    if (typeof query?.persona === 'string') q.set('persona', query.persona)
+    return relay(`${target}/api/persona/state?${q}`, { method: 'GET' }, 'state', { fetch, timeoutMs, log })
+}
+
 /** -> {status, body}. Never throws. */
 async function postPersona(route, body, { target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} } = {}) {
     const clean = personaBodyOf(route, body)
@@ -65,6 +86,14 @@ async function getPersona(query, { target = DEFAULT_TARGET, fetch = globalThis.f
 
 function mountPersona(app, { auth, limiter, target = DEFAULT_TARGET, fetch = globalThis.fetch, timeoutMs = TIMEOUT_MS, log = () => {} }) {
     const send = (res, { status, body }) => res.status(status).set('Cache-Control', 'no-store').send(body)
+    app.get('/api/persona/state', limiter, async (req, res) => {
+        if (!await auth(req, res)) return
+        send(res, await getPersonaState(req.query, { target, fetch, timeoutMs, log }))
+    })
+    app.post('/api/events/turn', limiter, async (req, res) => {
+        if (!await auth(req, res)) return
+        send(res, await postEventsTurn(req.body, { target, fetch, timeoutMs, log }))
+    })
     app.get('/api/persona', limiter, async (req, res) => {
         if (!await auth(req, res)) return
         send(res, await getPersona(req.query, { target, fetch, timeoutMs, log }))
@@ -77,4 +106,4 @@ function mountPersona(app, { auth, limiter, target = DEFAULT_TARGET, fetch = glo
     }
 }
 
-module.exports = { mountPersona, postPersona, getPersona, personaBodyOf, FIELDS, TIMEOUT_MS }
+module.exports = { mountPersona, postPersona, getPersona, postEventsTurn, getPersonaState, personaBodyOf, FIELDS, EVENT_FIELDS, TIMEOUT_MS }

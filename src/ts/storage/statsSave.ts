@@ -140,3 +140,102 @@ export function mergeCurrent(vars: Record<string, unknown> | undefined, cur: Cur
     if (!changed) return null
     return { $stats: JSON.stringify(outStats), $skills: JSON.stringify(outSkills) }
 }
+
+// ---- the persona's EVENT LEDGER (asset manager event_ledger.py; owner/L1 2026-11-06: "fold theo event id; regen thay cùng id; bỏ last-value-wins") -----------
+// After each reply the turn's EXP events (stats.lua $exp_out; the Admin module's $exp_turn_events = {turn, events}) go to POST /api/events/turn: they REPLACE
+// the ledger's events of (chat, turn), so a regenerated reply sends the same (chat, turn) again and counts once. Before each request the persona's Level,
+// EXP and stats are the FOLD of the ledger (GET /api/persona/state) and are written into the chat as they are, not max'ed with the chat. While a turn
+// could not be sent it waits in `$exp_pending` (one entry per (chat, turn), the newest wins) and the chat is not overwritten from the fold.
+export type TurnEvent = { kind: string, idx: number | string, level: number, stats: Record<string, number> }
+export type TurnBody = { persona: string, chat: string, turn: number, events: TurnEvent[], base?: { lvl: { l: number, e: number }, stats: Record<string, number>, stat_exp?: Record<string, number> } }
+export type LedgerState = { level: number, exp: number, stats: Record<string, number>, stat_exp: Record<string, number>, event_count: number }
+
+export const TURN_EVENTS_KEY = '$exp_turn_events'
+export const EXP_PENDING_KEY = '$exp_pending'
+export const MAX_EXP_PENDING = 50
+const CHAT_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const KINDS = ['train', 'kill', 'mission', 'act']
+
+const parseJson = (text: unknown): unknown => { try { return JSON.parse(String(text ?? '')) } catch { return undefined } }
+const intMap = (o: unknown): Record<string, number> => (o && typeof o === 'object' && !Array.isArray(o))
+    ? Object.fromEntries(Object.entries(o as Record<string, unknown>).filter(([k, v]) => STAT_KEYS.includes(k) && isInt(v) && v >= 0)) as Record<string, number> : {}
+
+function cleanEvents(list: unknown): TurnEvent[] | null {
+    if (!Array.isArray(list)) return null
+    const out: TurnEvent[] = []
+    for (const e of list) {
+        if (!e || typeof e !== 'object' || !KINDS.includes((e as any).kind)) return null
+        const { kind, idx, level, stats } = e as any
+        if (!(isInt(idx) || typeof idx === 'string') || !isInt(level) || level < 0) return null
+        out.push({ kind, idx, level, stats: intMap(stats) })
+    }
+    return out
+}
+
+/** The turn's events and the state the turn started from, read from the chat's variables -> the body for POST /api/events/turn, or null. (pure) */
+export function turnEventsOf(vars: Record<string, unknown> | undefined, chatId: string, persona: string): TurnBody | null {
+    if (!vars || !CHAT_RE.test(chatId) || !PERSONA_RE.test(persona)) return null
+    let turn: unknown, events: TurnEvent[] | null = null
+    const t = parseJson(vars[TURN_EVENTS_KEY]) as { turn?: unknown, events?: unknown } | undefined
+    if (t && typeof t === 'object' && isInt(t.turn)) { turn = t.turn; events = cleanEvents(t.events) }
+    else {   // a card with its own engine (no Admin module): stats.lua's own list
+        turn = Number(vars.$exp_out_turn)
+        events = cleanEvents(parseJson(vars.$exp_out))
+    }
+    if (!isInt(turn) || turn < 0 || !events) return null
+    // the state before this turn's events: stats.lua notes it at the turn's first event ($exp_turn); with no event this turn it is the chat's state now
+    const et = parseJson(vars.$exp_turn) as Record<string, unknown> | undefined
+    const from = et && typeof et === 'object' && et.turn === turn ? { lvl: et.lvl, stats: et.stats, stat_exp: et.stat_exp } : { lvl: vars.$lvl, stats: vars.$stats, stat_exp: vars.$stat_exp_sig === vars.$stats ? vars.$stat_exp : undefined }
+    const lv = parseJson(from.lvl) as { l?: unknown, e?: unknown } | undefined
+    const base: TurnBody['base'] = { lvl: { l: isInt(lv?.l) ? lv!.l as number : 1, e: isInt(lv?.e) ? lv!.e as number : 0 }, stats: intMap(parseJson(from.stats)) }
+    const sx = parseJson(from.stat_exp)
+    if (sx && typeof sx === 'object') base.stat_exp = intMap(sx)
+    return { persona, chat: chatId, turn, events, base }
+}
+
+/** `$exp_pending` with `body` added; an entry of the same (persona, chat, turn) is replaced (a regenerated reply), the oldest go first past the cap. (pure) */
+export function enqueueTurn(pending: string | null | undefined, body: TurnBody): string {
+    const list = parsePendingTurns(pending).filter((b) => !(b.persona === body.persona && b.chat === body.chat && b.turn === body.turn))
+    list.push(body)
+    return JSON.stringify(list.slice(-MAX_EXP_PENDING))
+}
+
+export function parsePendingTurns(text: string | null | undefined): TurnBody[] {
+    const v = parseJson(text)
+    return Array.isArray(v) ? v.filter((b) => b && typeof b === 'object' && PERSONA_RE.test(b.persona) && CHAT_RE.test(b.chat) && isInt(b.turn) && Array.isArray(b.events)) : []
+}
+
+/** One POST /api/events/turn. Network trouble, 502, 504 and auth trouble mean 'queue'; only a 400 (the store refused) drops. */
+export async function sendTurn(body: TurnBody, deps: { fetch?: typeof fetch, auth?: () => Promise<string> } = {}): Promise<SendResult> {
+    try {
+        const auth = await (deps.auth ?? defaultAuth)()
+        const r = await (deps.fetch ?? globalThis.fetch.bind(globalThis))('/api/events/turn', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'risu-auth': auth }, body: JSON.stringify(body),
+        })
+        if (r.status === 200) return 'saved'
+        return r.status === 400 ? 'drop' : 'queue'
+    } catch { return 'queue' }
+}
+
+/** The fold of the persona's ledger, or null when it cannot be reached or answers something else. */
+export async function fetchLedger(persona: string, deps: { fetch?: typeof fetch, auth?: () => Promise<string> } = {}): Promise<LedgerState | null> {
+    if (!PERSONA_RE.test(persona)) return null
+    try {
+        const auth = await (deps.auth ?? defaultAuth)()
+        const r = await (deps.fetch ?? globalThis.fetch.bind(globalThis))(`/api/persona/state?persona=${encodeURIComponent(persona)}`, { headers: { 'risu-auth': auth } })
+        if (r.status !== 200) return null
+        const j = await r.json()
+        if (!j || !isInt(j.level) || j.level < 1 || !isInt(j.exp) || j.exp < 0 || !isInt(j.event_count)) return null
+        const stats = intMap(j.stats), stat_exp = intMap(j.stat_exp)
+        if (STAT_KEYS.some((k) => !(k in stats) || !(k in stat_exp))) return null
+        return { level: j.level, exp: j.exp, stats, stat_exp, event_count: j.event_count }
+    } catch { return null }
+}
+
+/** What the chat gets from the fold: $lvl, $stats, $stat_exp and $stat_exp_sig (= the same $stats text, so stats.lua takes $stat_exp as it is);
+ *  null when the ledger has no event yet (the old merge still applies then). (pure) */
+export function foldVars(s: LedgerState | null): { $lvl: string, $stats: string, $stat_exp: string, $stat_exp_sig: string } | null {
+    if (!s || s.event_count <= 0) return null
+    const stats = JSON.stringify(Object.fromEntries(STAT_KEYS.map((k) => [k, s.stats[k]])))
+    return { $lvl: JSON.stringify({ e: s.exp, l: s.level }), $stats: stats, $stat_exp: JSON.stringify(Object.fromEntries(STAT_KEYS.map((k) => [k, s.stat_exp[k]]))), $stat_exp_sig: stats }
+}

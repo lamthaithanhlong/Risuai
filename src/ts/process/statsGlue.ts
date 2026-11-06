@@ -4,11 +4,11 @@
 import { fetchPersona, type Deps as PersonaDeps } from '../storage/personaStore'
 import { levelOf } from './findDrop'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
-import { EXPORT_KEY, PENDING_KEY, drain, enqueue, fetchCurrent, mergeCurrent, parseEntries, parsePending, sendStats, type Current, type SendResult, type StatEntry } from '../storage/statsSave'
+import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
 
 export const LOAD_WAIT_MS = 1500
 type Vars = Record<string, string | number | boolean>
-type ChatLike = { scriptstate?: Vars } | undefined
+type ChatLike = { scriptstate?: Vars, id?: string } | undefined
 
 /** Only a card whose description teaches the tag takes part (the way hasFindRule asks for finds). */
 export function hasStatsRule(card: { desc?: string, type?: string } | undefined): boolean {
@@ -29,6 +29,28 @@ export type StatsDeps = {
     persona: () => string
     send: (batch: StatEntry[]) => Promise<SendResult>
     current: (persona: string) => Promise<Current | null>
+    /** the persona's event ledger (both absent: the old max(chat, store) merge only) */
+    sendTurn?: (body: TurnBody) => Promise<SendResult>
+    ledger?: (persona: string) => Promise<LedgerState | null>
+}
+
+/** Sends the turns waiting on the chat ($exp_pending), in order; the first one answered 'queue' (or that threw) and everything after it stay. A turn queued
+ *  while this ran (a regenerated reply) is kept, and replaces the one it supersedes. */
+export async function drainTurns(chat: ChatLike, sendTurn: NonNullable<StatsDeps['sendTurn']>): Promise<void> {
+    if (!chat) return
+    const was = parsePendingTurns(String(chat.scriptstate?.[EXP_PENDING_KEY] ?? ''))
+    if (!was.length) return
+    let at = 0
+    for (; at < was.length; at++) {
+        let r: SendResult
+        try { r = await sendTurn(was[at]) } catch { r = 'queue' }
+        if (r === 'queue') break
+    }
+    const now = parsePendingTurns(String(chat.scriptstate?.[EXP_PENDING_KEY] ?? ''))
+    // what is there now minus what was sent (compared by content: an entry replaced while sending is a new one and stays)
+    const sentKeys = new Set(was.slice(0, at).map((b) => JSON.stringify(b)))
+    const left = now.filter((b) => !sentKeys.has(JSON.stringify(b)))
+    ;(chat.scriptstate ??= {})[EXP_PENDING_KEY] = left.length ? JSON.stringify(left) : ''
 }
 
 /** Sends what waits on the chat. The remainder replaces the list, together with anything queued while this ran. */
@@ -44,15 +66,22 @@ export async function drainPending(chat: ChatLike, send: StatsDeps['send']): Pro
     vars[PENDING_KEY] = left.length ? JSON.stringify(left) : ''
 }
 
-/** After a reply: this turn's export is stamped with the persona and queued on the chat, then everything waiting is sent. */
-export async function statsAfterReply(chat: ChatLike, deps: Pick<StatsDeps, 'persona' | 'send'>): Promise<void> {
+/** After a reply: this turn's export is stamped with the persona and queued on the chat, then everything waiting is sent. The turn's EXP events go to the
+ *  persona's ledger the same way (queued per (chat, turn), so a regenerated reply replaces the turn, here and in the ledger). */
+export async function statsAfterReply(chat: ChatLike, deps: Pick<StatsDeps, 'persona' | 'send' | 'sendTurn'>): Promise<void> {
     if (!chat) return
     try {
         const vars = (chat.scriptstate ??= {})
         const fresh = parseEntries(String(vars[EXPORT_KEY] ?? ''))
         vars[EXPORT_KEY] = ''
         if (fresh.length) vars[PENDING_KEY] = enqueue(String(vars[PENDING_KEY] ?? ''), fresh, deps.persona())
-        await drainPending(chat, deps.send)
+        let turn: TurnBody | null = null
+        if (deps.sendTurn) {
+            turn = turnEventsOf(vars, String(chat.id ?? ''), deps.persona())
+            vars[TURN_EVENTS_KEY] = ''
+            if (turn) vars[EXP_PENDING_KEY] = enqueueTurn(String(vars[EXP_PENDING_KEY] ?? ''), turn)
+        }
+        await Promise.all([drainPending(chat, deps.send), deps.sendTurn ? drainTurns(chat, deps.sendTurn) : undefined])
     } catch { /* the reply is never held by this */ }
 }
 
@@ -60,9 +89,17 @@ export async function statsAfterReply(chat: ChatLike, deps: Pick<StatsDeps, 'per
 export async function statsBeforeRequest(chat: ChatLike, deps: StatsDeps, waitMs = LOAD_WAIT_MS): Promise<void> {
     if (!chat) return
     const work = (async () => {
-        await drainPending(chat, deps.send)
-        const merged = mergeCurrent(chat.scriptstate, await deps.current(deps.persona()))
-        if (merged) Object.assign((chat.scriptstate ??= {}), merged)
+        await Promise.all([drainPending(chat, deps.send), deps.sendTurn ? drainTurns(chat, deps.sendTurn) : undefined])
+        const persona = deps.persona()
+        // the ledger's fold is the persona's Level / EXP / stats; a turn of this chat still waiting means the fold lacks it: then the old merge, which never lowers
+        const waiting = parsePendingTurns(String(chat.scriptstate?.[EXP_PENDING_KEY] ?? '')).length > 0
+        const [cur, led] = await Promise.all([deps.current(persona), deps.ledger && !waiting ? deps.ledger(persona) : null])
+        const fold = foldVars(led)
+        const merged = mergeCurrent(chat.scriptstate, cur)
+        if (fold) {
+            Object.assign((chat.scriptstate ??= {}), fold)
+            if (merged) chat.scriptstate.$skills = merged.$skills   // skill mastery is not in the ledger: it still comes from the store's merge
+        } else if (merged) Object.assign((chat.scriptstate ??= {}), merged)
     })().catch(() => {})
     let timer: ReturnType<typeof setTimeout> | undefined
     await Promise.race([work, new Promise<void>((r) => { timer = setTimeout(r, waitMs) })])
@@ -77,7 +114,7 @@ export async function pageDeps(): Promise<StatsDeps> {
         const db = getDatabase()
         return personaIdOf(util.checkPersonaBinded() ?? db.personas?.[db.selectedPersona])
     }
-    return { persona, send: (b) => sendStats(b), current: (p) => fetchCurrent(p) }
+    return { persona, send: (b) => sendStats(b), current: (p) => fetchCurrent(p), sendTurn: (b) => sendTurn(b), ledger: (p) => fetchLedger(p) }
 }
 
 /** The chat variable holding the equipped skill ids (a JSON list), written before each request from the persona's slots. */
