@@ -59,6 +59,24 @@ export function withSource(rec: FindRecord, ctx: FindContext, vars: Vars): FindR
  *  (the chat's message count: a loot left from an earlier reply is never sent under a later turn). */
 export type PendingLoot = LootItem & { at: number }
 
+/** A find the chat's OWN Lua recorded for this reply (loadout.lua record_find: $find_last {id, turn, fresh} + the record in $find_store) when the client's
+ *  parser did not see it (a card that does not teach [[FIND| itself, Admin's module counting the chat): it is the reply's loot all the same, so the persona
+ *  store gets it under the same loot id. Never when the client already waits with its own loot for this reply (no double count). */
+export function luaFindLoot(vars: Record<string, string | number | boolean> | undefined, turn: number): PendingLoot[] {
+    try {
+        const last = JSON.parse(String(vars?.$find_last ?? ''))
+        if (!last || typeof last !== 'object' || last.fresh !== true || last.turn !== turn || typeof last.id !== 'string') return []
+        const store = JSON.parse(String(vars?.$find_store ?? ''))
+        const r = store?.[last.id]
+        if (!r || typeof r !== 'object' || (r.kind !== 'skill' && r.kind !== 'item') || !r.name || typeof r.name.vi !== 'string' || typeof r.name.en !== 'string') return []
+        const rec: FindRecord = {
+            id: last.id, kind: r.kind, name: { vi: r.name.vi, en: r.name.en }, source: { card: 'admin', chapter: chapterOf(vars as Vars) || `Lượt ${turn}` },
+            effect: str(r.effect), rarity: r.rarity, conditions: str(r.conditions), portable: r.portable === true,
+        }
+        return [{ kind: rec.kind, entry: lootEntry(rec, 'admin'), find: rec, at: turn } as PendingLoot]
+    } catch { return [] }
+}
+
 export function parseLootPending(text: unknown): PendingLoot[] {
     try {
         const v = JSON.parse(String(text ?? ''))
@@ -138,7 +156,8 @@ export async function lootAfterReply(chat: GlueChat | undefined, deps: LootDeps)
         if (!chat || !Array.isArray(chat.message)) return
         const vars = (chat.scriptstate ??= {})
         const turn = chat.message.length
-        const loots = parseLootPending(vars[LOOT_PENDING_KEY]).filter((l) => l.at === turn).map(({ at: _at, ...l }) => l as LootItem)
+        const mine = parseLootPending(vars[LOOT_PENDING_KEY]).filter((l) => l.at === turn)
+        const loots = (mine.length ? mine : luaFindLoot(vars, turn)).map(({ at: _at, ...l }) => l as LootItem)
         vars[LOOT_PENDING_KEY] = ''
         const chatId = String(chat.id ?? '')
         const persona = await deps.persona()
@@ -154,11 +173,17 @@ export async function lootAfterReply(chat: GlueChat | undefined, deps: LootDeps)
 }
 
 /** index.svelte.ts (through statsAfterReplyPage): only a card that teaches finds, or a chat with loot waiting. */
-export async function lootAfterReplyPage(card: Parameters<typeof hasFindRule>[0], chat: GlueChat | undefined): Promise<void> {
-    if (!chat) return
-    if (lastTurnIsAsk(chat.message)) return   // "@admin ..." is not a story turn: no loot for it (the module wrote none)
+/** Does the after-reply step have anything to do for this chat: loot waiting, a card that teaches finds, or a chat the Admin module counts
+ *  (its Lua may have recorded a find the client's parser never saw, and a regenerated reply must take its earlier loot back). */
+export function lootDue(card: Parameters<typeof hasFindRule>[0], chat: GlueChat | undefined): boolean {
+    if (!chat) return false
+    if (lastTurnIsAsk(chat.message)) return false   // "@admin ..." is not a story turn: no loot for it (the module wrote none)
     const waiting = parseLootPending(chat.scriptstate?.[LOOT_PENDING_KEY]).length > 0 || !!String(chat.scriptstate?.[LOOT_TURN_PENDING_KEY] ?? '')
-    if (!waiting && !hasFindRule(card)) return
+    return waiting || hasFindRule(card) || String(chat.scriptstate?.$admin_module ?? '') === '1'
+}
+
+export async function lootAfterReplyPage(card: Parameters<typeof hasFindRule>[0], chat: GlueChat | undefined): Promise<void> {
+    if (!chat || !lootDue(card, chat)) return
     try {
         const { pageDeps } = await import('./statsGlue')
         const d = await pageDeps()

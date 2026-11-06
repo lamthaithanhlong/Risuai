@@ -314,3 +314,49 @@ describe('lootEntry carries the find\'s effect and conditions', () => {
         expect(e).toMatchObject({ exp: 0, effect: 'Cắt dây' }); expect('conditions' in e).toBe(false)
     })
 })
+
+
+describe('a find the chat\'s own Lua recorded (the Admin module counts the chat; the card does not teach [[FIND|)', () => {
+    const REC = { 'input-rhythm-reading': { kind: 'skill', name: { vi: 'Nhận nhịp thao tác', en: 'Input Rhythm Reading' }, rarity: 'bronze', effect: 'Nhận ra nhịp lặp lại.', conditions: 'quan sát vài lượt', portable: false } }
+    const chat = (extra: Record<string, unknown> = {}, n = 10) => ({ id: 'chat-1', message: Array.from({ length: n }, () => ({ role: 'char', data: '' })), scriptstate: { $admin_module: '1', $lvl: '{"l":1,"e":0}', $find_store: JSON.stringify(REC), $find_last: JSON.stringify({ fresh: true, id: 'input-rhythm-reading', turn: 10 }), ...extra } as Record<string, any> })
+    const run = async (c: ReturnType<typeof chat>) => {
+        const bodies: any[] = []
+        const { lootAfterReply } = await import('./findGlue')
+        await lootAfterReply(c as never, { persona: () => 'nhan-vat', sendLoot: async (b) => { bodies.push(b); return { status: 'saved', results: b.loots.map((_: unknown, idx: number) => ({ idx, ok: true, added: 'new' })) } as never }, send: async () => 'saved' })
+        return bodies
+    }
+    test('luaFindLoot: the fresh find of this very reply is one skill loot with its effect, under the chat length as turn', async () => {
+        const { luaFindLoot } = await import('./findGlue')
+        const l = luaFindLoot(chat().scriptstate, 10)
+        expect(l).toHaveLength(1)
+        expect(l[0]).toMatchObject({ kind: 'skill', at: 10, entry: { id: 'input-rhythm-reading', name: 'Nhận nhịp thao tác', tier: 'bronze', exp: 0, effect: 'Nhận ra nhịp lặp lại.' } })
+    })
+    test('not for another turn, not when not fresh, not for a bad record', async () => {
+        const { luaFindLoot } = await import('./findGlue')
+        expect(luaFindLoot(chat().scriptstate, 11)).toEqual([])
+        expect(luaFindLoot(chat({ $find_last: JSON.stringify({ fresh: false, id: 'input-rhythm-reading', turn: 10 }) }).scriptstate, 10)).toEqual([])
+        expect(luaFindLoot(chat({ $find_store: '{}' }).scriptstate, 10)).toEqual([])
+        expect(luaFindLoot(chat({ $find_store: 'oops' }).scriptstate, 10)).toEqual([])
+    })
+    test('REPRO: the after-reply step posts the Lua find to the persona store, though the card has no find rule', async () => {
+        const bodies = await run(chat())
+        expect(bodies).toHaveLength(1)
+        expect(bodies[0]).toMatchObject({ chat: 'chat-1', turn: 10, loots: [{ kind: 'skill', entry: { id: 'input-rhythm-reading' } }] })
+    })
+    test('lootDue: a chat the module counts is due even with no rule and nothing pending; one it does not count is not', async () => {
+        const { lootDue } = await import('./findGlue')
+        expect(lootDue({ desc: 'no find rule' } as never, chat() as never)).toBe(true)
+        expect(lootDue({ desc: 'no find rule' } as never, chat({ $admin_module: '' }) as never)).toBe(false)
+    })
+    test('the client\'s own pending loot for this reply wins: the Lua find is not sent twice', async () => {
+        const own = [{ kind: 'skill', entry: { id: 'other-skill', name: 'Khác', tier: 'bronze', source: 'x', exp: 0 }, at: 10 }]
+        const bodies = await run(chat({ $loot_pending: JSON.stringify(own) }))
+        expect(bodies).toHaveLength(1)
+        expect(bodies[0].loots.map((l: any) => l.entry.id)).toEqual(['other-skill'])
+    })
+    test('a regenerated reply with no Lua find sends an empty list (takes the earlier loot of this turn back)', async () => {
+        const bodies = await run(chat({ $find_last: '' }))
+        expect(bodies).toHaveLength(1)
+        expect(bodies[0].loots).toEqual([])
+    })
+})
