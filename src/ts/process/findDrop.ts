@@ -8,7 +8,6 @@
 import type { Chat, character, groupChat } from '../storage/database.svelte'
 import { gmRequest, hasCreationStep, yesAt } from './gameMaster'
 import { similar } from './findSimilar.mjs'
-import { adminActive } from './adminGlobal'
 
 // ---- the drop schedule --------------------------------------------------------------------------------------------------------
 
@@ -229,8 +228,12 @@ type Msg = { role: string; data?: string; chatId?: string }
 export function hasFindRule(card: Room | undefined): boolean {
     if (!card || card.type === 'group') return false
     // the card teaches the block itself, or Admin (global, on for this card) does: finds are Admin's events in every story (owner 2026-11-05)
-    return /\[\[FIND\|/.test((card as character).desc ?? '') || adminActive(card as never)
+    return /\[\[FIND\|/.test((card as character).desc ?? '') || adminProbe(card)
 }
+
+// Whether Admin is on for a card, asked through a probe adminGlobal.ts registers when it loads (this file stays light: the Lua tests bundle it alone)
+let adminProbe: (card: Room) => boolean = () => false
+export function setAdminActiveProbe(fn: ((card: Room) => boolean) | null): void { adminProbe = fn ?? (() => false) }
 
 /** The number of story replies since the character was locked (all replies on a card with no creation step), `Initialization` included. */
 export function storyTurns(card: Room | undefined, messages: Msg[]): number {

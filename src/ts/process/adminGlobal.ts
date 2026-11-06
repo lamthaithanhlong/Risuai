@@ -22,6 +22,7 @@
 
 import { buildView, fetchFindNames, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
+import { setAdminActiveProbe } from './findDrop'
 import { FALLBACK_PAYLOAD } from './adminFallback'
 
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
@@ -258,6 +259,8 @@ export function adminActive(card: CardLike, deps: { storage?: OffSeenStorage } =
     if (hit) return hit.payload.enabled !== false && hit.payload.locked !== true
     return !readOffSeen(deps as AdminDeps).has(id)
 }
+
+setAdminActiveProbe((card) => adminActive(card as never))   // finds are Admin's events: findDrop.hasFindRule asks this
 
 // ---- the on/off switch in the character settings (CharConfig.svelte) ------------------------------------------------------------
 // Reads GET /api/admin?card=<id> (enabled, locked) without touching the request cache; writes POST /api/admin/switch {card, off}
