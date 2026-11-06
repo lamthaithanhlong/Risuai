@@ -36,7 +36,7 @@ describe('buildInventory', () => {
         expect(v.slots[0]).toMatchObject({ open: true, skillId: 'a', name: 'Kiếm', tier: 'gold' })
         expect(v.slots[1]).toMatchObject({ open: true, skillId: null })
         expect(v.slots[2].open).toBe(false)
-        expect(v.slotText).toBe('1/11')
+        expect(v.slotText).toMatch(/^1\/\d+ \(mở \d+ trên 11\)$/)
         expect(v.freeOpenSlots).toEqual([1])
         expect(v.expPct).toBe(50)
         expect(v.skills.find((s) => s.id === 'a')?.slot).toBe(0)

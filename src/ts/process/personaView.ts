@@ -58,7 +58,7 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     return {
         rank: d.rank, rankName: rankName(d.rank),
         level: lvl.level, exp: lvl.exp, need, expPct: Math.min(100, Math.round((lvl.exp / need) * 100)),
-        slots, slotText: `${used}/${SLOT_TOTAL}`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
+        slots, slotText: `${used}/${d.slots_open} (mở ${d.slots_open} trên ${SLOT_TOTAL})`, freeOpenSlots: slots.filter((c) => c.open && !c.skillId).map((c) => c.index),
         skillCount: `${d.skill_count} / ${d.max_storage}`, itemCount: `${d.item_count} / ${d.max_storage}`,
         skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
         items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier] })),
