@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, masteryPct, levelFacts, TIERS } from './personaView'
+import { buildInventory, needExp, rankOf, rankName, parseLvl, filterTier, reasonText, deleteWarning, deletePlan, withLedgerMastery, itemEquipBlock, parseItemSlotsLimit, viName, displayName, lockedLine, skillNeed, skillCum, skillLevelOf, skillExpIn, expFromMastery, skillProgress, levelFacts, TIERS } from './personaView'
 import type { PersonaData } from '../storage/personaStore'
 
 const data = (o: Partial<PersonaData> = {}): PersonaData => ({
@@ -81,7 +81,7 @@ describe('withLedgerMastery (Kho & Slot shows the ledger mastery, L1 2026-11-06 
         expect(withLedgerMastery(d, { a: 4321, z: 5, b: -1 }).skills.map((s) => s.mastery)).toEqual([4321, 1])
         expect(withLedgerMastery(d, null)).toBe(d)
         expect(withLedgerMastery(d, undefined).skills).toEqual(d.skills)
-        expect(buildInventory(withLedgerMastery(d, { a: 777 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.mastery).toBe(777)
+        expect(buildInventory(withLedgerMastery(d, { a: 777 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.prog.exp).toBe(expFromMastery(777))
     })
 })
 
@@ -135,7 +135,6 @@ describe('display names and locked line', () => {
         expect(lockedLine(11, 10)).toBeNull()
         expect(lockedLine(4, 3, 4)).toBe('🔒 Đang giới hạn ở 4 slot (còn 7 slot khoá)')
     })
-    it('masteryPct', () => { expect([masteryPct(2500), masteryPct(99999), masteryPct(undefined)]).toEqual([25, 100, 0]) })
 })
 
 describe('everything level-derived comes from the ONE page Level, never the server view', () => {
@@ -165,5 +164,26 @@ describe('everything level-derived comes from the ONE page Level, never the serv
     })
     it('the owner item-slot limit is the only item-slot number taken from the server', () => {
         expect(buildInventory(wrong({ item_slots_limit: 4 }), { level: 1, exp: 0 }).itemSlotsOpen).toBe(4)
+    })
+})
+
+describe('skill level + EXP derivation', () => {
+    it('need/cum tables for all 10 levels', () => {
+        expect([1,2,3,4,5,6,7,8,9,10].map(skillNeed)).toEqual([20,30,40,50,60,70,80,90,100,110])
+        expect([1,2,3,4,5,6,7,8,9,10].map(skillCum)).toEqual([0,20,50,90,140,200,270,350,440,540])
+        for (let lv = 1; lv <= 10; lv++) { expect(skillLevelOf(skillCum(lv))).toBe(lv); expect(skillExpIn(skillCum(lv))).toBe(0) }
+    })
+    it('carry at the boundary and cap 540', () => {
+        expect([skillLevelOf(19), skillLevelOf(20), skillExpIn(19), skillExpIn(49), skillLevelOf(49), skillLevelOf(50)]).toEqual([1, 2, 19, 29, 2, 3])
+        expect([skillLevelOf(539), skillExpIn(539), skillLevelOf(540), skillLevelOf(99999), skillExpIn(99999), skillLevelOf(-5), skillLevelOf(undefined)]).toEqual([9, 99, 10, 10, 0, 1, 1])
+    })
+    it('old server mastery -> exp', () => {
+        expect([0, 4, 999, 1000, 1500, 9000, 9999, 10000].map(expFromMastery)).toEqual([0, 0, 19, 20, 35, 540, 540, 540])
+        const p = skillProgress({ mastery: 1500 }); expect([p.level, p.expIn, p.need, p.text]).toEqual([2, 15, 30, 'Lv 2 (EXP 15/30)'])
+    })
+    it('local derivation wins over the server numbers', () => {
+        const p = skillProgress({ exp: 62, level: 9, exp_in: 1, need: 5 } as any)
+        expect([p.level, p.expIn, p.need, p.text]).toEqual([3, 12, 40, 'Lv 3 (EXP 12/40)'])
+        expect(skillProgress({ exp: 540 }).text).toBe('Lv 10 (tối đa)')
     })
 })

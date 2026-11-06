@@ -37,11 +37,11 @@ export type GlueDeps = {
 /** The text of the panel line when the persona's storage is full. */
 export const fullLine = (name: string) => `Kho đầy: không nhận được ${name}`
 
-/** The persona-store entry for a find: skill {id, name, tier, source, mastery 0}, item {id, name, tier, qty 1, source}; name = the Vietnamese one. */
+/** The persona-store entry for a find: skill {id, name, tier, source, exp 0}, item {id, name, tier, qty 1, source}; name = the Vietnamese one. */
 export function lootEntry(rec: FindRecord, source: string): Record<string, unknown> {
     const tier = LEGACY_RARITY[rec.rarity] ?? rec.rarity
     const base = { id: rec.id, name: rec.name.vi, tier, source }
-    return rec.kind === 'skill' ? { ...base, mastery: 0 } : { ...base, qty: 1 }
+    return rec.kind === 'skill' ? { ...base, exp: 0 } : { ...base, qty: 1 }
 }
 
 /** The record with its source card as a slug and its chapter filled from the chat; null when the card is not one that saves finds. */

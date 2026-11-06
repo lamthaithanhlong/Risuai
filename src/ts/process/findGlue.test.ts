@@ -190,7 +190,7 @@ describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
         await tick()
         const pending = JSON.parse(chat.scriptstate.$loot_pending)
         expect(pending).toHaveLength(1)
-        expect(pending[0]).toMatchObject({ kind: 'skill', at: 6, entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', mastery: 0 } })
+        expect(pending[0]).toMatchObject({ kind: 'skill', at: 6, entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'gold', source: 'zombie', exp: 0 } })
         expect(pending[0].find.source.card).toBe('zombie')
     })
 
@@ -203,7 +203,7 @@ describe('loot of a reply by loot id (chat, turn) to the persona store', () => {
         expect(calls).toHaveLength(1)
         expect(calls[0].url).toBe('/api/persona/loot/turn')
         expect(calls[0].body).toEqual({ persona: 'nhan-vat', chat: 'chat-1', turn: 6, level: 23,
-            loots: [{ kind: 'skill', entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'silver', source: 'zombie', mastery: 0 } }] })
+            loots: [{ kind: 'skill', entry: { id: 'muffled-footsteps', name: 'Nghe bước chân', tier: 'silver', source: 'zombie', exp: 0 } }] })
         expect(saved.map((r) => r.id)).toEqual(['muffled-footsteps'])
         expect(chat.scriptstate.$loot_pending).toBe('')
         expect(chat.scriptstate.$loot_turn_pending).toBeFalsy()

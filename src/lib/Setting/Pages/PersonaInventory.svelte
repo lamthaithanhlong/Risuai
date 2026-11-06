@@ -90,8 +90,8 @@
                     {#if c.skillId}
                         <div class="name">{c.name}</div>
                         {#if c.tier}<span class="tchip">{TIER_LABEL[c.tier]}</span>{/if}
-                        <div class="bar" title="Thành thạo {c.pct}%"><div style="width: {c.pct}%"></div></div>
-                        <div class="text-xs">{c.pct}%</div>
+                        <div class="bar" data-testid="skill-expbar-{c.skillId}"><div style="width: {c.prog?.barPct ?? 0}%"></div></div>
+                        <div class="text-xs" data-testid="skill-level-{c.skillId}">{c.prog?.text ?? ''}</div>
                         <button class="text-textcolor2 hover:text-red-500" disabled={busy} onclick={() => unequip(c.index)}>Gỡ</button>
                     {:else}
                         <button class="hover:text-green-500" disabled={busy} data-testid="skill-slot-add-{c.index}" onclick={() => slotPick = slotPick?.kind === 'skill' && slotPick.slot === c.index ? null : { kind: 'skill', slot: c.index }}>+ Gắn</button>
@@ -102,7 +102,7 @@
         {#if slotPick?.kind === 'skill'}
             <div class="flex gap-1 flex-wrap mt-1 text-xs" data-testid="skill-slot-picker">
                 {#if inv.pickableSkills.length === 0}<span class="text-textcolor2">Không còn kỹ năng nào để gắn</span>{/if}
-                {#each inv.pickableSkills as k (k.id)}<button class="chip on" disabled={busy} data-testid="slot-pick-skill-{k.id}" onclick={() => equip(k.id, (slotPick as any).slot)}>{k.name} · {k.label}</button>{/each}
+                {#each inv.pickableSkills as k (k.id)}<button class="chip on" disabled={busy} data-testid="slot-pick-skill-{k.id}" onclick={() => equip(k.id, (slotPick as any).slot)}>{k.text}</button>{/each}
             </div>
         {/if}
         {#if inv.skillLockedLine}<p class="text-sm text-textcolor2 mt-1" data-testid="skill-locked-line">{inv.skillLockedLine}</p>{/if}
@@ -157,7 +157,7 @@
             {#each inv.skills as k (k.id)}
                 <li class="rounded-md bg-darkbg p-2 text-sm">
                     <div class="flex justify-between flex-wrap gap-1">
-                        <span class="{k.cls} min-w-0 break-words">{k.name} · {k.label} · {k.pct}%{#if k.slot !== null} <span class="text-green-500">· slot {k.slot + 1}</span>{/if}</span>
+                        <div class="{k.cls} min-w-0 break-words"><span data-testid="skill-level-{k.id}">{k.text}</span><div class="bar" data-testid="skill-expbar-{k.id}"><div style="width: {k.prog.barPct}%"></div></div>{#if k.slot !== null} <span class="text-green-500">· slot {k.slot + 1}</span>{/if}</div>
                         <span class="flex gap-2">
                             {#if k.slot === null}<button class="hover:text-green-500" disabled={busy} onclick={() => picking = picking === k.id ? null : k.id}>Gắn</button>
                             {:else}<button class="hover:text-green-500" disabled={busy} onclick={() => unequip(k.slot as number)}>Gỡ</button>{/if}

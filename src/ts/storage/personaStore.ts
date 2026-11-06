@@ -2,7 +2,7 @@
 // Every function returns a value and never throws: a rule failure is {ok:false, reason}, trouble reaching the server is reason 'network'.
 // Nothing is kept here: the page asks the server again after each action.
 export type Tier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond'
-export type SkillEntry = { id: string, name: string, tier: Tier, mastery: number, source?: string }
+export type SkillEntry = { id: string, name: string, tier: Tier, exp: number, level?: number, exp_in?: number, need?: number, source?: string, mastery?: number /* OLD server only */ }
 export type ItemEntry = { id: string, name: string, tier: Tier, qty: number, source?: string }
 export type PersonaData = {
     persona: string, level: number, rank: number, slots_open: number, max_storage: number, stat_cap: number,

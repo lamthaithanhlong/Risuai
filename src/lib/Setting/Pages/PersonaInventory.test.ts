@@ -4,9 +4,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 const view = {
     persona: 'k', level: 12, rank: 2, slots_open: 3, max_storage: 3, stat_cap: 28, stat_caps: {},
     skills: [
-        { id: 'wall-vibration-listening', name: 'wall-vibration-listening', tier: 'gold', mastery: 2500 },
-        { id: 'rhythm-separation', name: 'Tách nhịp', tier: 'bronze', mastery: 100 },
-        { id: 'void-eye-scan', name: '', tier: 'silver', mastery: 0 },
+        { id: 'wall-vibration-listening', name: 'wall-vibration-listening', tier: 'gold', exp: 62 },
+        { id: 'rhythm-separation', name: 'Tách nhịp', tier: 'bronze', exp: 540 },
+        { id: 'void-eye-scan', name: '', tier: 'silver', exp: 0 },
     ],
     items: [
         { id: 'rusty-knife', name: 'rusty-knife', tier: 'bronze', qty: 2 },
@@ -98,4 +98,19 @@ it('the root never becomes a scroll container (it keeps its natural height in th
     expect(q(t, 'item-unequip-1')!.textContent).toBe('Gỡ')
     expect(t.textContent).not.toContain('Bỏ gắn')
     expect(q(t, 'stat-caps')!.getAttribute('style')).toContain('min(140px, 100%)')
+})
+
+it('skill label is "<name> · <tier> · Lv 3 (EXP 12/40)" with an EXP bar, Lv 10 is tối đa, no mastery %', async () => {
+    await render()
+    const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement
+    expect(q('skill-level-wall-vibration-listening').textContent!.trim()).toBe('Lv 3 (EXP 12/40)')
+    expect((q('skill-expbar-wall-vibration-listening').firstElementChild as HTMLElement).style.width).toBe('30%')
+    expect(q('skill-level-rhythm-separation').textContent!.trim()).toBe('Tách nhịp · Đồng · Lv 10 (tối đa)')
+    expect((q('skill-expbar-rhythm-separation').firstElementChild as HTMLElement).style.width).toBe('100%')
+    expect(q('skill-level-void-eye-scan').textContent!.trim()).toMatch(/Bạc · Lv 1 \(EXP 0\/20\)$/)
+    const text = document.body.textContent!
+    expect(text).toContain('Tách nhịp · Đồng · Lv 10 (tối đa)')
+    expect(text).toContain('Bạc · Lv 1 (EXP 0/20)')
+    expect(text).not.toMatch(/\d+\s*%/)
+    expect(text).not.toContain('Thành thạo')
 })

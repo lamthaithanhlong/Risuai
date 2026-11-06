@@ -53,8 +53,37 @@ export function displayName(e: { id: string, name?: string | null }): string {
     const n = typeof e.name === 'string' ? e.name.trim() : ''
     return !n || n === e.id || KEBAB.test(n) ? viName(e.id) : n
 }
-/** Mastery 0..10000 -> a whole percent for the bar. */
-export const masteryPct = (m: unknown) => Math.max(0, Math.min(100, Math.round((Number(m) || 0) / 100)))
+// SKILL LEVEL + EXP (one source for the page; the server's level/exp_in/need are never trusted when they disagree, same principle as levelFacts).
+export const SKILL_MAX_LEVEL = 10
+export const SKILL_EXP_CAP = 540
+/** EXP to leave skill level lv: 20 + 10*(lv-1). */
+export const skillNeed = (lv: number) => 20 + 10 * (Math.max(1, Math.floor(Number(lv) || 1)) - 1)
+/** Total EXP at which level lv starts: cum(1) = 0, cum(L) = sum need(1..L-1). */
+export const skillCum = (lv: number) => { let t = 0; for (let i = 1; i < Math.min(SKILL_MAX_LEVEL, Math.max(1, Math.floor(Number(lv) || 1))); i++) t += skillNeed(i); return t }
+const clampExp = (e: unknown) => Math.max(0, Math.min(SKILL_EXP_CAP, Math.floor(Number(e) || 0)))
+export function skillLevelOf(exp: unknown): number {
+    const e = clampExp(exp)
+    let lv = 1
+    while (lv < SKILL_MAX_LEVEL && e >= skillCum(lv + 1)) lv++
+    return lv
+}
+/** EXP inside the current level (0 at the top level). */
+export const skillExpIn = (exp: unknown) => { const e = clampExp(exp), lv = skillLevelOf(e); return lv >= SKILL_MAX_LEVEL ? 0 : e - skillCum(lv) }
+/** An OLD server's mastery (hundredths 0..10000) -> total EXP. */
+export function expFromMastery(m: unknown): number {
+    const v = Math.max(0, Math.min(10000, Math.floor(Number(m) || 0)))
+    const lv = Math.min(SKILL_MAX_LEVEL, 1 + Math.floor(v / 1000))
+    return lv >= SKILL_MAX_LEVEL ? SKILL_EXP_CAP : skillCum(lv) + Math.floor((v % 1000) * skillNeed(lv) / 1000)
+}
+/** A skill entry of a view -> {exp, level, expIn, need, max, barPct, text}; exp is total EXP (or an old server's mastery), everything else derived here. */
+export function skillProgress(s: { exp?: unknown, mastery?: unknown }) {
+    const exp = clampExp(typeof s.exp === 'number' ? s.exp : expFromMastery(s.mastery))
+    const level = skillLevelOf(exp), max = level >= SKILL_MAX_LEVEL
+    const expIn = skillExpIn(exp), need = max ? 0 : skillNeed(level)
+    return { exp, level, expIn, need, max, barPct: max ? 100 : Math.round(expIn * 100 / need), text: max ? `Lv ${level} (tối đa)` : `Lv ${level} (EXP ${expIn}/${need})` }
+}
+/** "<name> · <Bạc> · Lv 3 (EXP 12/40)". */
+export const skillLabel = (name: string, tier: Tier, p: { text: string }) => `${name} · ${TIER_LABEL[tier]} · ${p.text}`
 
 /** "🔒 Mở thêm 1 slot ở Lv N (còn K slot khoá)" or null when every slot is open. Rank steps every 10 levels: the next unlock is at Lv 10*rank+1. */
 export function lockedLine(open: number, rank: number, limit: number | null = null): string | null {
@@ -87,7 +116,7 @@ export function parseLvl(text: unknown): Lvl {
     } catch { return { level: 1, exp: 0 } }
 }
 
-export type SlotCell = { index: number, open: boolean, skillId: string | null, name: string | null, tier: Tier | null, pct: number }
+export type SlotCell = { index: number, open: boolean, skillId: string | null, name: string | null, tier: Tier | null, prog: ReturnType<typeof skillProgress> | null }
 export type ItemSlotCell = { index: number, open: boolean, itemId: string | null, name: string | null, tier: Tier | null, qty: number }
 export type Filter = Tier | 'all'
 
@@ -100,7 +129,7 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
     const slots: SlotCell[] = Array.from({ length: SLOT_TOTAL }, (_, i) => {
         const id = d.slots[i] ?? null
         const s = id ? byId.get(id) : undefined
-        return { index: i, open: i < f.slotsOpen, skillId: id, name: id ? (s ? displayName(s) : viName(id)) : null, tier: s?.tier ?? null, pct: masteryPct(s?.mastery) }
+        return { index: i, open: i < f.slotsOpen, skillId: id, name: id ? (s ? displayName(s) : viName(id)) : null, tier: s?.tier ?? null, prog: s ? skillProgress(s) : null }
     })
     const equippedAt = new Map<string, number>()
     slots.forEach((c) => { if (c.skillId) equippedAt.set(c.skillId, c.index) })
@@ -126,10 +155,10 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
         itemSlots, itemSlotText: `${itemUsed}/${itemOpen} (mở ${itemOpen} trên ${SLOT_TOTAL})`, freeOpenItemSlots: itemSlots.filter((c) => c.open).map((c) => c.index),
         itemSlotsLimit: limit, itemSlotsDefault: itemDefault, itemSlotsOpen: itemOpen,
         skillsFull: d.skill_count >= f.maxStorage, itemsFull: d.item_count >= f.maxStorage,
-        pickableSkills: d.skills.filter((x) => !equippedAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
+        pickableSkills: d.skills.filter((x) => !equippedAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier], text: skillLabel(displayName(x), x.tier, skillProgress(x)) })),
         pickableItems: d.items.filter((x) => !itemAt.has(x.id)).map((x) => ({ id: x.id, name: displayName(x), label: TIER_LABEL[x.tier] })),
         skillCount: `${d.skill_count} / ${f.maxStorage}`, itemCount: `${d.item_count} / ${f.maxStorage}`,
-        skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, name: displayName(s), pct: masteryPct(s.mastery), cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
+        skills: filterTier(d.skills, filter).map((s: SkillEntry) => ({ ...s, name: displayName(s), prog: skillProgress(s), text: skillLabel(displayName(s), s.tier, skillProgress(s)), cls: TIER_CLASS[s.tier], label: TIER_LABEL[s.tier], slot: equippedAt.get(s.id) ?? null })),
         items: filterTier(d.items, filter).map((i: ItemEntry) => ({ ...i, name: displayName(i), cls: TIER_CLASS[i.tier], label: TIER_LABEL[i.tier], slot: itemAt.get(i.id) ?? null })),
         caps: Object.keys(STAT_LABEL).map((k) => ({ key: k, label: STAT_LABEL[k], cap: f.statCap })),
     }
@@ -141,7 +170,7 @@ export type Inventory = ReturnType<typeof buildInventory>
 export function withLedgerMastery(d: PersonaData, skills: Record<string, number> | null | undefined): PersonaData {
     if (!skills) return d
     const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10000
-    return { ...d, skills: d.skills.map((s) => ok(skills[s.id]) ? { ...s, mastery: skills[s.id] } : s) }
+    return { ...d, skills: d.skills.map((s) => ok(skills[s.id]) ? { ...s, mastery: skills[s.id], exp: expFromMastery(skills[s.id]) } : s) }
 }
 
 /** Why Gắn is disabled for an item, or null when it can be gắn. */
