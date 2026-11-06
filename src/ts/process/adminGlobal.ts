@@ -70,7 +70,7 @@ export function dedupeOwn(p: AdminPayload, card: CardLike): AdminPayload {
 }
 
 /** ~3000 tokens. */
-export const ADMIN_BUDGET = 12000
+export const ADMIN_BUDGET = 14000
 
 const isRole = (a: AdminAsset) => a.id.startsWith('_roles/')
 const protectedHeading = (h: string) => /^##\s*Connecting\b/i.test(h)
