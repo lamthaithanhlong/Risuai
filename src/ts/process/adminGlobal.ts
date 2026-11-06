@@ -25,7 +25,7 @@ import { fetchCurrent } from '../storage/statsSave'
 import { FALLBACK_PAYLOAD } from './adminFallback'
 
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
-export type AdminPayload = { card: string; enabled?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
+export type AdminPayload = { card: string; enabled?: boolean; locked?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
 
 type CardLike = { chaId?: string; type?: string; extentions?: Record<string, unknown>; globalLore?: { comment?: string; content?: string }[] } | undefined
 
@@ -244,6 +244,19 @@ export async function resolveAdmin(card: string, deps: AdminDeps): Promise<{ pay
     lastSource = { card, source }
     deps.log?.(`[Admin] ${card}: source=${source}${note}`)
     return { payload: source === 'off' ? null : p, source }
+}
+
+/**
+ * Is Admin on for this card, as far as the page can tell without asking (sync: find events are decided in the request path)? The server's last
+ * answer in memory wins (enabled, not locked); with none, a card once seen off stays off (fail-closed), and a card never seen off is on, as Admin
+ * is on by default. A locked card gets no find events: its switch cannot be flipped and Admin is not offered there.
+ */
+export function adminActive(card: CardLike, deps: { storage?: OffSeenStorage } = {}): boolean {
+    const id = adminCardOf(card)
+    if (!id) return false
+    const hit = cache.get(id)
+    if (hit) return hit.payload.enabled !== false && hit.payload.locked !== true
+    return !readOffSeen(deps as AdminDeps).has(id)
 }
 
 // ---- the on/off switch in the character settings (CharConfig.svelte) ------------------------------------------------------------

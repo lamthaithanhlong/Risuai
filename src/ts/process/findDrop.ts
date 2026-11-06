@@ -8,6 +8,7 @@
 import type { Chat, character, groupChat } from '../storage/database.svelte'
 import { gmRequest, hasCreationStep, yesAt } from './gameMaster'
 import { similar } from './findSimilar.mjs'
+import { adminActive } from './adminGlobal'
 
 // ---- the drop schedule --------------------------------------------------------------------------------------------------------
 
@@ -226,7 +227,9 @@ type Msg = { role: string; data?: string; chatId?: string }
 
 /** The card teaches the block (its description has the rule), so only such a card is asked for finds. */
 export function hasFindRule(card: Room | undefined): boolean {
-    return !!card && card.type !== 'group' && /\[\[FIND\|/.test((card as character).desc ?? '')
+    if (!card || card.type === 'group') return false
+    // the card teaches the block itself, or Admin (global, on for this card) does: finds are Admin's events in every story (owner 2026-11-05)
+    return /\[\[FIND\|/.test((card as character).desc ?? '') || adminActive(card as never)
 }
 
 /** The number of story replies since the character was locked (all replies on a card with no creation step), `Initialization` included. */

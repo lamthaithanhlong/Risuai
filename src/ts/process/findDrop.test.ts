@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, test, vi } from 'vitest'
+import { adminActive, fetchAdmin, resetAdminCache } from './adminGlobal'
 
 vi.mock('../storage/database.svelte', () => ({ getDatabase: vi.fn(() => ({})) }))
 
@@ -178,12 +179,26 @@ function chatWith(n: number, extra: Partial<{ scriptstate: Record<string, string
 const withPlayer = (c: ReturnType<typeof chatWith>, text: string) => { c.message.push({ role: 'user', data: text }); return c }
 const asked = (c: unknown, k = card()) => { const out = findRequest([{ role: 'user', content: 'hi' }], k, c as never); return String(out.at(-1)?.content ?? '') }
 
+const memStore = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) } } }
+/** the server's answer for a card, taken the way the page takes it (fetchAdmin fills the cache adminActive reads) */
+const seedAdmin = async (id: string, p: { enabled?: boolean; locked?: boolean }) => {
+    resetAdminCache()
+    await fetchAdmin(id, { fetch: (async () => ({ ok: true, status: 200, json: async () => ({ card: id, assets: [], guide: '', text: 't', ...p }) })) as never, auth: () => 'x', storage: memStore() })
+}
+
 describe('the chat wiring', () => {
-    test('only a card whose description teaches the block is asked', () => {
+    test('a card whose description teaches the block is asked; one without it only while Admin is on for it', async () => {
+        resetAdminCache()
         expect(hasFindRule(card())).toBe(true)
+        // Admin on (the default): the card needs no rule of its own (owner 2026-11-05: finds are Admin's events in every story)
+        expect(hasFindRule(card('no rule here'))).toBe(true)
+        // Admin switched off for it: no rule of its own, no finds
+        await seedAdmin('zombie', { enabled: false })
         expect(hasFindRule(card('no rule here'))).toBe(false)
         const c = withPlayer(chatWith(30, { scriptstate: { $find_turn: '1' } }), 'nhìn quanh')
         expect(asked(c, card('no rule here'))).toBe('hi')
+        expect(hasFindRule(card())).toBe(true)   // its own rule still counts
+        resetAdminCache()
     })
 
     test('no note in the first story turns or before the yes; a note when due', () => {
@@ -418,5 +433,39 @@ describe('the dice: a find is an event that can fail (owner 2026-11-05)', () => 
     test('the fail note names the kind and never asks for a line', () => {
         expect(findFailNote('item')).toContain('item')
         expect(findFailNote('item')).toContain('Do NOT write a [[FIND')
+    })
+})
+
+
+describe('find events are Admin\'s, in every story (owner 2026-11-05)', () => {
+    const mailman = () => ({ type: 'character', chaId: 'aa7f021d-0000', desc: 'The Post Office story. No find rule here.', firstMessage: '' }) as never
+    const due = (id: string) => {
+        for (let n = 6; n < 60; n++) for (let k = 0; k < 40; k++) {
+            const c = chatWith(n, { scriptstate: { $find_roll: '' } }); (c as { id: string }).id = `${id}${k}`
+            const text = asked(c, mailman())
+            if (text.includes('Find (hidden')) return { c, text }
+        }
+        return null
+    }
+    test('Mailman with Admin on gets a roll and a note; with Admin off or locked, none', async () => {
+        await seedAdmin('mailman', { enabled: true })
+        const on = due('a')
+        expect(on).not.toBeNull()
+        expect(JSON.parse(on!.c.scriptstate.$find_roll).turn).toBeGreaterThan(0)
+        for (const p of [{ enabled: false }, { enabled: true, locked: true }, { enabled: false, locked: true }]) {
+            await seedAdmin('mailman', p)
+            const c = chatWith(14, { scriptstate: { $find_roll: '' } })
+            expect(asked(withPlayer(c, 'nhìn quanh'), mailman())).toBe('hi')
+            expect(c.scriptstate.$find_roll ?? '').toBe('')
+            expect(due('b')).toBeNull()
+        }
+        resetAdminCache()
+    })
+    test('with nothing known a card never seen off is on; one once seen off stays off (fail-closed)', async () => {
+        resetAdminCache()
+        expect(adminActive(mailman(), { storage: memStore() })).toBe(true)
+        const seen = memStore(); seen.setItem('risu-admin-off-seen', JSON.stringify(['mailman']))
+        expect(adminActive(mailman(), { storage: seen })).toBe(false)
+        expect(adminActive({ type: 'character', desc: '' } as never)).toBe(false)   // no card id, no Admin
     })
 })
