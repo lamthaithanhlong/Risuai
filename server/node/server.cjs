@@ -1490,6 +1490,8 @@ require('./assetsProxy.cjs').mountAssets(app, { auth: (req, res) => checkAuth(re
 require('./findsBridge.cjs').mountFinds(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
 // the stat and skill gains the card's panel exported ($stat_export) go to the same store's history (statsBridge.cjs): POST /api/stats, risu-auth required
 require('./statsBridge.cjs').mountStats(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
+// the persona's skill and item storage and skill slots, global like the stats (personaBridge.cjs): GET and POST /api/persona/*, risu-auth required on all
+require('./personaBridge.cjs').mountPersona(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
 // the global Admin (shared/characters/admin.md, CARDS: global) for one card, from the asset manager, last good copy kept beside the save (adminBridge.cjs): GET /api/admin, risu-auth required
 require('./adminBridge.cjs').mountAdmin(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, cacheDir: savePath + '.admin-cache', log: (m) => console.log(m) });
 
