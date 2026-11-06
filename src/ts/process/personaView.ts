@@ -75,6 +75,11 @@ export function expFromMastery(m: unknown): number {
     const lv = Math.min(SKILL_MAX_LEVEL, 1 + Math.floor(v / 1000))
     return lv >= SKILL_MAX_LEVEL ? SKILL_EXP_CAP : skillCum(lv) + Math.floor((v % 1000) * skillNeed(lv) / 1000)
 }
+/** Total EXP -> mastery hundredths (the old stats page's unit): 1000 per level, the rest in proportion of that level's need; 10000 at the cap. */
+export function masteryFromExp(exp: unknown): number {
+    const e = clampExp(exp), lv = skillLevelOf(e)
+    return lv >= SKILL_MAX_LEVEL ? 10000 : (lv - 1) * 1000 + Math.floor(skillExpIn(e) * 1000 / skillNeed(lv))
+}
 /** A skill entry of a view -> {exp, level, expIn, need, max, barPct, text}; exp is total EXP (or an old server's mastery), everything else derived here. */
 export function skillProgress(s: { exp?: unknown, mastery?: unknown }) {
     const exp = clampExp(typeof s.exp === 'number' ? s.exp : expFromMastery(s.mastery))
@@ -165,12 +170,12 @@ export function buildInventory(d: PersonaData, lvl: Lvl, filter: Filter = 'all')
 }
 export type Inventory = ReturnType<typeof buildInventory>
 
-/** The store's skills with the mastery of the persona's event ledger (GET /api/persona/state `skills` = loot base + the fold's gains, L1 2026-11-06 item (e)):
- *  a skill the ledger names shows that mastery; without ledger skills (down, older server) the store's own mastery stays. (pure) */
+/** The store's skills with the EXP of the persona's event ledger (GET /api/persona/state `skill_exp` = loot EXP + the fold's awards, 0..540):
+ *  a skill the ledger names shows that EXP; without ledger skills (down, older server) the store's own stays. (pure) */
 export function withLedgerMastery(d: PersonaData, skills: Record<string, number> | null | undefined): PersonaData {
     if (!skills) return d
-    const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10000
-    return { ...d, skills: d.skills.map((s) => ok(skills[s.id]) ? { ...s, mastery: skills[s.id], exp: expFromMastery(skills[s.id]) } : s) }
+    const ok = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= SKILL_EXP_CAP
+    return { ...d, skills: d.skills.map((s) => { if (!ok(skills[s.id])) return s; const { mastery: _old, ...rest } = s; return { ...rest, exp: skills[s.id] } }) }
 }
 
 /** Why Gắn is disabled for an item, or null when it can be gắn. */

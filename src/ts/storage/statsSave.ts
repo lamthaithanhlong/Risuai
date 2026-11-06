@@ -13,6 +13,7 @@
 //   drain(pending, send)          -> {pending, saved, dropped}   sends in batches of 200, stops at the first batch that must retry
 //   sendStats(entries, deps)      -> 'saved' | 'queue' | 'drop'
 //   mergeCurrent(vars, current)   -> {$stats, $skills} to write, or null when the chat already has everything
+import { expFromMastery, SKILL_EXP_CAP } from '../process/personaView'
 export type StatEntry = { stat: string, value: number, turn: number, time: string, persona?: string }
 export type SendResult = 'saved' | 'queue' | 'drop'
 export type Current = { stats: Record<string, number>, skills: Record<string, number> }
@@ -131,7 +132,9 @@ export function mergeCurrent(vars: Record<string, unknown> | undefined, cur: Cur
         if (theirs > mine) changed = true
     }
     const outSkills: Record<string, any> = { ...skills }
-    for (const [id, m] of Object.entries(cur.skills)) {
+    const expChat = isExpChat(vars)   // the store's history holds hundredths; a chat that holds EXP is compared in EXP
+    for (const [id, m0] of Object.entries(cur.skills)) {
+        const m = expChat ? expFromMastery(m0) : m0
         const have = skills[id]
         if (have && typeof have === 'object') {
             if (m > (isInt(have.m) ? have.m : 0)) { outSkills[id] = { ...have, m }; changed = true }
@@ -146,9 +149,10 @@ export function mergeCurrent(vars: Record<string, unknown> | undefined, cur: Cur
 // the ledger's events of (chat, turn), so a regenerated reply sends the same (chat, turn) again and counts once. Before each request the persona's Level,
 // EXP and stats are the FOLD of the ledger (GET /api/persona/state) and are written into the chat as they are, not max'ed with the chat. While a turn
 // could not be sent it waits in `$exp_pending` (one entry per (chat, turn), the newest wins) and the chat is not overwritten from the fold.
-// SKILL MASTERY (L1 2026-11-06 item (e)): an event also carries `skills` = {skill id: mastery gain the Lua AWARDED (hundredths)}; the fold sums them (cap 10000) and
-// GET /api/persona/state returns `skills` = {id: min(10000, the persona store's loot mastery + the fold's gains)}. Before each request the chat's $skills takes
-// that mastery (foldSkills), keeping its own eq / link / name, instead of the old max-merge, which stays the fallback exactly as for the stats.
+// SKILL EXP (owner 2026-11-06, replaces the mastery %): an event also carries `skills` = {skill id: skill EXP the Lua AWARDED} (on the wire still `skills`, now EXP);
+// the fold sums them (cap 540) and GET /api/persona/state returns `skill_exp` = {id: min(540, the persona store's loot EXP + the fold's awards)}. Before each
+// request the chat's $skills takes that EXP as `m` (foldSkills; the chat's marker $skill_exp = "1" says its m are EXP), keeping its own eq / link / name, instead
+// of the old max-merge, which stays the fallback exactly as for the stats. An OLD server answers `skills` = {id: mastery hundredths}: converted by expFromMastery.
 export type TurnEvent = { kind: string, idx: number | string, level: number, stats: Record<string, number>, skills?: Record<string, number> }
 export type TurnBody = { persona: string, chat: string, turn: number, events: TurnEvent[], base?: { lvl: { l: number, e: number }, stats: Record<string, number>, stat_exp?: Record<string, number> } }
 export type LedgerState = { level: number, exp: number, stats: Record<string, number>, stat_exp: Record<string, number>, event_count: number, skills?: Record<string, number> | null }
@@ -159,8 +163,9 @@ export const MAX_EXP_PENDING = 50
 const CHAT_RE = /^[A-Za-z0-9_.-]{1,64}$/
 const KINDS = ['train', 'kill', 'mission', 'act', 'find']
 const SKILL_ID_RE = /^[^\s|"\\\x00-\x1f]{1,80}$/     // event_ledger.py IDX_RE (persona_store ID_RE)
-export const MAX_MASTERY = 10000
-/** {skill id: int 0..10000} of an object, anything else dropped (an empty Lua table may arrive as []). */
+export const MAX_MASTERY = SKILL_EXP_CAP
+export const SKILL_EXP_MARKER = '$skill_exp'
+/** {skill id: int 0..540 (skill EXP)} of an object, anything else dropped (an empty Lua table may arrive as []). */
 const masteryMap = (o: unknown, dropZero = false): Record<string, number> => (o && typeof o === 'object' && !Array.isArray(o))
     ? Object.fromEntries(Object.entries(o as Record<string, unknown>).filter(([k, v]) => SKILL_ID_RE.test(k) && isInt(v) && v >= (dropZero ? 1 : 0) && v <= MAX_MASTERY)) as Record<string, number> : {}
 
@@ -238,7 +243,11 @@ export async function fetchLedger(persona: string, deps: { fetch?: typeof fetch,
         const stats = intMap(j.stats), stat_exp = intMap(j.stat_exp)
         if (STAT_KEYS.some((k) => !(k in stats) || !(k in stat_exp))) return null
         // skills: absent (an older asset manager) or null (the persona store could not be read) means no mastery from the ledger: the old merge for $skills
-        const skills = j.skills && typeof j.skills === 'object' && !Array.isArray(j.skills) ? masteryMap(j.skills) : null
+        // skill_exp = {id: EXP}; an older server sends only `skills` = {id: mastery hundredths} (the new one sends rows as an array there)
+        const rawExp = j.skill_exp && typeof j.skill_exp === 'object' && !Array.isArray(j.skill_exp) ? j.skill_exp : null
+        const legacy = !rawExp && j.skills && typeof j.skills === 'object' && !Array.isArray(j.skills) ? j.skills : null
+        const skills = rawExp ? masteryMap(rawExp)
+            : legacy ? Object.fromEntries(Object.entries(legacy as Record<string, unknown>).filter(([k, v]) => SKILL_ID_RE.test(k) && isInt(v) && v >= 0 && v <= 10000).map(([k, v]) => [k, expFromMastery(v)])) as Record<string, number> : null
         return { level: j.level, exp: j.exp, stats, stat_exp, event_count: j.event_count, skills }
     } catch { return null }
 }
@@ -260,12 +269,25 @@ export function foldSkills(vars: Record<string, unknown> | undefined, s: LedgerS
     const slots = parseJson(vars?.$store_slots)
     const equipped = new Set(Array.isArray(slots) ? slots.filter((x): x is string => typeof x === 'string') : [])
     const out: Record<string, any> = { ...have }
-    let changed = false
+    // the chat is about to be marked EXP ($skill_exp = "1"): a skill it holds that the fold does not name still has mastery hundredths, converted here (as S.skill_exp_migrate)
+    let changed = !isExpChat(vars)
+    if (!isExpChat(vars)) for (const [id, h] of Object.entries(have)) if (h && typeof h === 'object' && h.m !== undefined) out[id] = { ...h, m: expFromMastery(h.m) }
     for (const [id, m] of Object.entries(s.skills)) {
-        const h = have[id]
+        const h = out[id]
         if (h && typeof h === 'object' && !Array.isArray(h)) {
             if (h.m !== m) { out[id] = { ...h, m }; changed = true }
         } else { out[id] = { m, eq: equipped.has(id) ? 1 : 0 }; changed = true }
     }
     return changed ? JSON.stringify(out) : null
+}
+/** Does the chat's $skills hold EXP (marker $skill_exp = "1") rather than old mastery hundredths? */
+export const isExpChat = (vars: Record<string, unknown> | undefined) => String(vars?.[SKILL_EXP_MARKER] ?? '') === '1'
+
+/** The turn note ($exp_turn) with its `sk` {id: mastery} converted to EXP (S.skill_exp_migrate); null when there is no `sk` to convert. (pure) */
+export function migrateTurnNote(text: unknown): string | null {
+    const t = parseJson(text) as { sk?: unknown } | undefined
+    if (!t || typeof t !== 'object' || !t.sk || typeof t.sk !== 'object' || Array.isArray(t.sk)) return null
+    const sk: Record<string, unknown> = {}
+    for (const [k, m] of Object.entries(t.sk as Record<string, unknown>)) sk[k] = expFromMastery(m)
+    return JSON.stringify({ ...t, sk })
 }

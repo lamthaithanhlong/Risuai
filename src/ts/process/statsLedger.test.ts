@@ -5,7 +5,7 @@
 // fallback when the ledger answers nothing or fails. All through a fake fetch, the real sendTurn / fetchLedger / fetchCurrent.
 import { describe, expect, test } from 'vitest'
 import { statsAfterReply, statsBeforeRequest, type StatsDeps } from './statsGlue'
-import { EXP_PENDING_KEY, TURN_EVENTS_KEY, fetchCurrent, fetchLedger, foldSkills, foldVars, sendTurn, turnEventsOf } from '../storage/statsSave'
+import { EXP_PENDING_KEY, TURN_EVENTS_KEY, fetchCurrent, fetchLedger, foldSkills, foldVars, migrateTurnNote, sendTurn, turnEventsOf } from '../storage/statsSave'
 
 const STATS = ['suc_manh', 'nhanh_nhen', 'the_luc', 'tinh_than', 'cam_nhan', 'y_chi']
 const all = (v: number) => Object.fromEntries(STATS.map((k) => [k, v]))
@@ -142,17 +142,18 @@ describe('before a request: the chat starts from the fold', () => {
         expect(Date.now() - t).toBeLessThan(1000)
     })
     test('skill mastery comes from the fold: the chat keeps eq / link / name and takes m as it is (lower too); a skill only the fold knows joins', async () => {
-        const { deps } = server({ '/api/persona/state': { status: 200, body: fold({ skills: { axe: 1210, 'stair-ear': 40, rope: 0 } }) }, '/api/assets/stats': { status: 200, body: { stats: {}, skills: { axe: 5000, ghost: 700 } } } })
+        const { deps } = server({ '/api/persona/state': { status: 200, body: fold({ skill_exp: { axe: 121, 'stair-ear': 40, rope: 0 }, skills: [] }) }, '/api/assets/stats': { status: 200, body: { stats: {}, skills: { axe: 5000, ghost: 700 } } } })
         const chat = { id: 'chat-1', scriptstate: {
             $skills: JSON.stringify({ axe: { m: 1300, eq: 1, link: ['suc_manh'], name: 'Rìu' }, knot: { m: 90, eq: 0 } }),
             $store_slots: JSON.stringify(['stair-ear']) } as Record<string, any> }
         await statsBeforeRequest(chat, deps)
         expect(JSON.parse(chat.scriptstate.$skills)).toEqual({
-            axe: { m: 1210, eq: 1, link: ['suc_manh'], name: 'Rìu' },   // the fold, not max(1300, 5000): a regenerated reply's mastery stays taken back
-            knot: { m: 90, eq: 0 },                                     // only the chat knows it: untouched
+            axe: { m: 121, eq: 1, link: ['suc_manh'], name: 'Rìu' },   // the fold's EXP, not max(chat, store): a regenerated reply's EXP stays taken back
+            knot: { m: 1, eq: 0 },                                      // only the chat knows it: its old mastery 90 converted once to EXP
             'stair-ear': { m: 40, eq: 1 },                              // joins, equipped because the persona's slots hold it
             rope: { m: 0, eq: 0 },                                      // joins unequipped
         })                                                              // 'ghost' (the old store only) does not come back through the merge
+        expect(chat.scriptstate.$skill_exp).toBe('1')   // the marker stats.lua reads: m are EXP now
     })
     test('skill mastery falls back to the old max-merge: no event yet, no skills from the server (older asset manager, unreadable persona store), a turn waiting', async () => {
         const cases: [string, Record<string, any>, Record<string, any>][] = [
@@ -170,16 +171,16 @@ describe('before a request: the chat starts from the fold', () => {
         }
     })
     test('the fold with skills and nothing to change leaves $skills as it was (no rewrite)', async () => {
-        const { deps } = server({ '/api/persona/state': { status: 200, body: fold({ skills: { axe: 1300 } }) }, '/api/assets/stats': { status: 200, body: { stats: {}, skills: { axe: 9000 } } } })
-        const text = '{"axe":{"eq":1,"m":1300}}'
-        const chat = { id: 'chat-1', scriptstate: { $skills: text } as Record<string, any> }
+        const { deps } = server({ '/api/persona/state': { status: 200, body: fold({ skill_exp: { axe: 130 } }) }, '/api/assets/stats': { status: 200, body: { stats: {}, skills: { axe: 9000 } } } })
+        const text = '{"axe":{"eq":1,"m":130}}'
+        const chat = { id: 'chat-1', scriptstate: { $skills: text, $skill_exp: '1' } as Record<string, any> }
         await statsBeforeRequest(chat, deps)
         expect(chat.scriptstate.$skills).toBe(text)
     })
     test('after a reply: the events carry the awarded mastery (kind find too); bad or zero gains are dropped, an empty Lua table [] is none', async () => {
         const { calls, deps } = server({ '/api/events/turn': { status: 200, body: { ok: true } } })
         const chat = { id: 'chat-1', scriptstate: { [TURN_EVENTS_KEY]: turnEvents(9, [
-            { kind: 'act', idx: 1, level: 2, stats: { suc_manh: 2 }, skills: { axe: 1, 'bad id': 3, neg: -1, zero: 0, big: 10001, frac: 1.5 } },
+            { kind: 'act', idx: 1, level: 2, stats: { suc_manh: 2 }, skills: { axe: 1, 'bad id': 3, neg: -1, zero: 0, big: 541, frac: 1.5 } },
             { kind: 'mission', idx: 'q', level: 50, stats: [], skills: [] },
             { kind: 'find', idx: 1, level: 0, stats: {}, skills: { axe: 100 } }]), $exp_turn: expTurn(9) } as Record<string, any> }
         await statsAfterReply(chat, deps)
@@ -188,13 +189,21 @@ describe('before a request: the chat starts from the fold', () => {
             { kind: 'mission', idx: 'q', level: 50, stats: {} },
             { kind: 'find', idx: 1, level: 0, stats: {}, skills: { axe: 100 } }])
     })
-    test('fetchLedger reads skills (ints 0..10000 by skill id), null when absent or not an object', async () => {
+    test('fetchLedger reads skill_exp (EXP ints 0..540 by skill id); an old server `skills` map is mastery hundredths and converted; null when absent', async () => {
         const read = async (body: unknown) => fetchLedger('kenji', { fetch: (async () => ({ status: 200, json: async () => body })) as unknown as typeof fetch, auth: async () => 'tok' })
-        expect((await read(fold({ skills: { axe: 10, x: 'y', 'a b': 1, big: 20000 } })))!.skills).toEqual({ axe: 10 })
+        expect((await read(fold({ skill_exp: { axe: 10, x: 'y', 'a b': 1, big: 541 }, skills: [{ id: 'axe' }] })))!.skills).toEqual({ axe: 10 })
+        expect((await read(fold({ skills: { axe: 1500, x: 'y', big: 20000 } })))!.skills).toEqual({ axe: 35 })
         expect((await read(fold()))!.skills).toBeNull()
         expect((await read(fold({ skills: [] })))!.skills).toBeNull()
+        expect((await read(fold({ skills: [{ id: 'axe', exp: 5 }] })))!.skills).toBeNull()
         expect(foldSkills({}, null)).toBeNull()
-        expect(foldSkills({ $skills: '{}' }, { level: 1, exp: 0, stats: all(1000), stat_exp: all(0), event_count: 2, skills: {} })).toBeNull()
+        expect(foldSkills({ $skills: '{}', $skill_exp: '1' }, { level: 1, exp: 0, stats: all(1000), stat_exp: all(0), event_count: 2, skills: {} })).toBeNull()
+    })
+    test('a chat not yet marked $skill_exp: foldSkills converts every held m once (and the turn note sk), sets nothing twice', () => {
+        const led = { level: 1, exp: 0, stats: all(1000), stat_exp: all(0), event_count: 2, skills: { axe: 50 } }
+        expect(JSON.parse(foldSkills({ $skills: '{"axe":{"m":9000,"eq":1},"rope":{"m":1500,"eq":0}}' }, led)!)).toEqual({ axe: { m: 50, eq: 1 }, rope: { m: 35, eq: 0 } })
+        expect(migrateTurnNote('{"turn":3,"sk":{"axe":1500}}')).toBe('{"turn":3,"sk":{"axe":35}}')
+        expect(migrateTurnNote('{"turn":3}')).toBeNull()
     })
     test('foldVars: nothing for an empty ledger; the texts stats.lua writes', () => {
         expect(foldVars(null)).toBeNull()

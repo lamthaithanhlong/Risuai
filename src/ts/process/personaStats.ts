@@ -68,6 +68,7 @@ export function skillCap(link: string[] | undefined, stats: Record<string, numbe
     return Math.min(linked + LINK_MARGIN, HARD_CAP)
 }
 
+import { masteryFromExp } from './personaView'
 export type StoreCurrent = { stats: Record<string, number>, skills: Record<string, number> } | null
 export type FindNames = Record<string, { vi?: string, en?: string }>
 export type StatRow = { key: string, vi: string, en: string, value: number, pct: string, bar: number }
@@ -99,7 +100,8 @@ export function buildView(store: StoreCurrent, vars: Record<string, unknown> | u
     if (ids.size) any = true
     const skills: SkillRow[] = [...ids].map((id) => {
         const c = ck[id] && typeof ck[id] === 'object' ? ck[id] : {}
-        const m = ledgerSkills && isInt(ledgerSkills[id]) ? clamp(ledgerSkills[id]) : clamp(Math.max(isInt(c.m) ? c.m : 0, store && isInt(store.skills[id]) ? store.skills[id] : 0))
+        const chatM = isInt(c.m) ? (String(vars?.$skill_exp ?? '') === '1' ? masteryFromExp(c.m) : c.m) : 0   // a chat marked $skill_exp = 1 holds EXP; this page shows the 0..10000 scale
+        const m = ledgerSkills && isInt(ledgerSkills[id]) ? masteryFromExp(ledgerSkills[id]) : clamp(Math.max(chatM, store && isInt(store.skills[id]) ? store.skills[id] : 0))
         const cap = skillCap(Array.isArray(c.link) ? c.link.filter((x: unknown) => typeof x === 'string') : undefined, stats)
         const name = (typeof c.name === 'string' && c.name) || finds[id]?.vi || finds[id]?.en || id
         return { id, name, m, pct: fmtPct(m), tier: tierOf(m), equipped: c.eq === 1, cap, capPct: fmtPct(cap), capped: m >= cap }

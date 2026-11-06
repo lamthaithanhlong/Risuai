@@ -78,10 +78,10 @@ describe('messages and delete flow', () => {
 describe('withLedgerMastery (Kho & Slot shows the ledger mastery, L1 2026-11-06 item (e))', () => {
     it('replaces the mastery of a skill the ledger names, keeps the rest; nothing from a missing ledger', () => {
         const d = data()
-        expect(withLedgerMastery(d, { a: 4321, z: 5, b: -1 }).skills.map((s) => s.mastery)).toEqual([4321, 1])
+        expect(withLedgerMastery(d, { a: 321, z: 5, b: -1 }).skills.map((s: any) => s.exp)).toEqual([321, undefined])
         expect(withLedgerMastery(d, null)).toBe(d)
         expect(withLedgerMastery(d, undefined).skills).toEqual(d.skills)
-        expect(buildInventory(withLedgerMastery(d, { a: 777 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.prog.exp).toBe(expFromMastery(777))
+        expect(buildInventory(withLedgerMastery(d, { a: 77 }), parseLvl('{"l":1,"e":0}')).skills.find((s) => s.id === 'a')!.prog.exp).toBe(77)
     })
 })
 

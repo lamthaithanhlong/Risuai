@@ -5,7 +5,7 @@ import { fetchPersona, itemSlotsOf, type Deps as PersonaDeps } from '../storage/
 import { levelOf } from './findDrop'
 import { lastTurnIsAsk } from './adminAsk'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
-import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldSkills, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
+import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldSkills, foldVars, isExpChat, migrateTurnNote, SKILL_EXP_MARKER, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
 
 export const LOAD_WAIT_MS = 1500
 type Vars = Record<string, string | number | boolean>
@@ -102,7 +102,12 @@ export async function statsBeforeRequest(chat: ChatLike, deps: StatsDeps, waitMs
         const ledgerSkills = !!(led && led.event_count > 0 && led.skills)
         if (fold) Object.assign((chat.scriptstate ??= {}), fold)
         else if (merged) (chat.scriptstate ??= {}).$stats = merged.$stats
-        if (skills) (chat.scriptstate ??= {}).$skills = skills
+        if (skills) {
+            const vars = (chat.scriptstate ??= {})
+            if (!isExpChat(vars)) { const t = migrateTurnNote(vars.$exp_turn); if (t) vars.$exp_turn = t }   // as S.skill_exp_migrate: the note's `sk` goes with $skills
+            vars.$skills = skills
+            vars[SKILL_EXP_MARKER] = '1'
+        }
         else if (merged && !ledgerSkills) (chat.scriptstate ??= {}).$skills = merged.$skills
     })().catch(() => {})
     let timer: ReturnType<typeof setTimeout> | undefined

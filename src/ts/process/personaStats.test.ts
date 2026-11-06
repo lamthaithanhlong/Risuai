@@ -123,9 +123,9 @@ describe('fmtStat: a stat is a whole point with its EXP, never a percent (owner 
 
 describe('mastery from the persona event ledger (L1 2026-11-06 item (e))', () => {
     it('a skill the ledger names shows its mastery as it is, lower than the old store or the chat too; the others keep the old max', () => {
-        const v = buildView({ stats: {}, skills: { axe: 5000, rope: 300 } }, { $skills: JSON.stringify({ axe: { m: 1300, eq: 1 }, rope: { m: 100, eq: 0 } }) }, {}, { axe: 1210, knot: 40 })
+        const v = buildView({ stats: {}, skills: { axe: 5000, rope: 300 } }, { $skills: JSON.stringify({ axe: { m: 1300, eq: 1 }, rope: { m: 100, eq: 0 } }) }, {}, { axe: 540, knot: 30 })   // EXP: Lv 10 = 10000 on this page's scale, 30 = Lv 2 + 10/30
         const m = Object.fromEntries(v.skills.map((s) => [s.id, s.m]))
-        expect(m).toEqual({ axe: 1210, rope: 300, knot: 40 })
+        expect(m).toEqual({ axe: 10000, rope: 300, knot: 1333 })
         expect(v.skills.find((s) => s.id === 'axe')!.equipped).toBe(true)
     })
     it('no ledger skills: the old rule', () => {
