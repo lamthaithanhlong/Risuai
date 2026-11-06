@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest'
 vi.mock('../storage/database.svelte', () => ({ getDatabase: vi.fn(() => ({})) }))
 
 import {
-    FIND_DROUGHT, FIND_FIRST_TURN, FIND_MIN_GAP, findDue, findNote, findFingerprint, findId, findRequest, hasFindRule, lastFindTurnOf, noteFind,
+    FIND_DC, FIND_DROUGHT, FIND_FIRST_TURN, FIND_MIN_GAP, findDiceLine, findFailNote, findRoll, statTier, findDue, findNote, findFingerprint, findId, findRequest, hasFindRule, lastFindTurnOf, noteFind,
     onFindParsed, parseFind, sceneKindOf, setFindKnownProvider, setFindParsedHandler, stripFind, type FindRecord, type SceneKind,
 } from './findDrop'
 
@@ -173,7 +173,7 @@ function chatWith(n: number, extra: Partial<{ scriptstate: Record<string, string
         message.push({ role: 'char', data: i === n - 1 && extra.last ? extra.last : `Cảnh ${i}` })
         if (i < n - 1) message.push({ role: 'user', data: 'đi tiếp' })
     }
-    return { id: 'chat-1', message, scriptstate: { ...(extra.scriptstate ?? {}) } } as never as { id: string; message: M[]; scriptstate: Record<string, string> }
+    return { id: 'chat-1', message, scriptstate: { $find_roll: JSON.stringify({ turn: n, d20: 15, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'common', stat: 'tinh_than' }), ...(extra.scriptstate ?? {}) } } as never as { id: string; message: M[]; scriptstate: Record<string, string> }
 }
 const withPlayer = (c: ReturnType<typeof chatWith>, text: string) => { c.message.push({ role: 'user', data: text }); return c }
 const asked = (c: unknown, k = card()) => { const out = findRequest([{ role: 'user', content: 'hi' }], k, c as never); return String(out.at(-1)?.content ?? '') }
@@ -220,7 +220,7 @@ describe('the chat wiring', () => {
             expect(rec?.source.card).toBe('fc27f53b')
             expect(c.message.at(-1)!.data).toBe('Cô nghe tiếng bước chân sau tường.')
             expect(c.scriptstate.$find_turn).toBe('6')
-            expect(c.scriptstate.$find_line).toBe('+ Skill mới: Nghe tiếng bước chân')
+            expect(c.scriptstate.$find_line).toBe('🎲 d20 15 vs 8: OK — nhận Nghe tiếng bước chân')
             expect(JSON.parse(c.scriptstate.$find_known)).toEqual(['Nghe tiếng bước chân', 'Muffled Footsteps'])
             expect(seen).toHaveLength(1); expect(seen[0][1]).toBe(6)
 
@@ -239,7 +239,7 @@ describe('the chat wiring', () => {
     test('an item panel line; a known find or a bad block is stripped but not counted', () => {
         const item = chatWith(5, { last: 'Cô nhặt cái đèn.\n[[FIND|item|Đèn pin dây quấn|Hand-crank Torch|Sáng 5 m.|common|Quay tay 30 s|yes]]' })
         noteFind(0, card(), item as never)
-        expect(item.scriptstate.$find_line).toBe('+ Item mới: Đèn pin dây quấn')
+        expect(item.scriptstate.$find_line).toBe('🎲 d20 15 vs 8: OK — nhận Đèn pin dây quấn')
 
         const dup = chatWith(9, { last: 'Lại nó.\n[[FIND|item|Đèn khác|the hand crank torch|Sáng.|common|x|yes]]', scriptstate: { $find_known: JSON.stringify(['Đèn pin dây quấn', 'Hand-crank Torch']), $find_turn: '5' } })
         expect(noteFind(0, card(), dup as never)).toBeNull()
@@ -308,5 +308,115 @@ describe('findNote wording (a real run: the narrator found the item in prose and
         expect(n).toContain('rare item')
         expect(n).toContain('Muffled Footsteps')
         expect(n).toMatch(/Only if this scene truly cannot carry a find/)
+    })
+})
+
+
+describe('the dice: a find is an event that can fail (owner 2026-11-05)', () => {
+    const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân sau tường mỏng.|common|Cần yên tĩnh|yes]]'
+    const roll = (o: object) => JSON.stringify({ turn: 10, d20: 12, bonus: 0, dc: 8, ok: true, kind: 'skill', rarity: 'common', stat: 'tinh_than', ...o })
+    test('the schedule is an event every 6..10 turns', () => {
+        expect(FIND_MIN_GAP).toBe(6)
+        expect(FIND_DROUGHT).toBe(10)
+    })
+    test('the roll is a d20 seeded by (chat, turn): the same twice, 1..20, the DC by rarity', () => {
+        expect(FIND_DC).toEqual({ common: 8, uncommon: 12, rare: 16, epic: 19 })
+        const seen = new Set<number>()
+        for (let t = 1; t <= 400; t++) {
+            const a = findRoll({ kind: 'skill', rarity: 'rare' }, t, 'chat-1', {})
+            expect(findRoll({ kind: 'skill', rarity: 'rare' }, t, 'chat-1', {})).toEqual(a)
+            expect(a.d20).toBeGreaterThanOrEqual(1); expect(a.d20).toBeLessThanOrEqual(20)
+            expect(a.dc).toBe(16)
+            seen.add(a.d20)
+        }
+        expect(seen.size).toBe(20)
+        expect(findRoll({ kind: 'skill', rarity: 'rare' }, 7, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'rare' }, 7, 'chat-2', {}).d20 && findRoll({ kind: 'skill', rarity: 'rare' }, 8, 'chat-1', {}).d20 === findRoll({ kind: 'skill', rarity: 'rare' }, 8, 'chat-2', {}).d20).toBe(false)
+    })
+    test('the bonus is the tier of the related stat: Tinh thần for a skill, the act\'s stat when known, Cảm nhận for an item', () => {
+        const vars = { $stats: JSON.stringify({ suc_manh: 1600, tinh_than: 1300, cam_nhan: 1900 }) }
+        expect(statTier(vars, 'tinh_than')).toBe(1)
+        expect(statTier(vars, 'suc_manh')).toBe(2)
+        expect(statTier(vars, 'y_chi')).toBe(0)
+        expect(statTier({ $stats: 'not json' }, 'tinh_than')).toBe(0)
+        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', vars)).toMatchObject({ stat: 'tinh_than', bonus: 1 })
+        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'suc_manh', bonus: 2 })
+        expect(findRoll({ kind: 'skill', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'bogus' })).toMatchObject({ stat: 'tinh_than' })
+        expect(findRoll({ kind: 'item', rarity: 'common' }, 5, 'c', { ...vars, $act_stat: 'suc_manh' })).toMatchObject({ stat: 'cam_nhan', bonus: 3 })
+    })
+    test('a higher tier turns a miss into a pass: stat 10 vs 13 on the same chat, turn and DC', () => {
+        let found = 0
+        for (let t = 1; t <= 300; t++) {
+            const lo = findRoll({ kind: 'item', rarity: 'uncommon' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1000 }) })
+            const hi = findRoll({ kind: 'item', rarity: 'uncommon' }, t, 'chat-9', { $stats: JSON.stringify({ cam_nhan: 1300 }) })
+            expect(lo.d20).toBe(hi.d20)
+            if (hi.ok && !lo.ok) found++
+            if (lo.ok) expect(hi.ok).toBe(true)
+        }
+        expect(found).toBeGreaterThan(0)
+    })
+    test('the panel line', () => {
+        expect(findDiceLine({ turn: 1, d20: 14, bonus: 1, dc: 12, ok: true, kind: 'skill', rarity: 'uncommon', stat: 'tinh_than' })).toBe('🎲 d20 14+1 vs 12: OK')
+        expect(findDiceLine({ turn: 1, d20: 3, bonus: 0, dc: 12, ok: false, kind: 'skill', rarity: 'uncommon', stat: 'tinh_than' })).toBe('🎲 d20 3 vs 12: hụt')
+    })
+    // a due turn and the request it makes
+    const dueChat = () => {
+        for (let n = 8; n < 40; n++) for (let id = 0; id < 40; id++) {
+            const c = chatWith(n, { scriptstate: { $find_roll: '' } }); (c as { id: string }).id = `c${id}`
+            const before = asked(c)
+            if (before.includes('is due in this reply') || before.includes('did not get it this time')) return { c, n }
+        }
+        throw new Error('no due turn found')
+    }
+    test('a due turn writes the roll and the dice line; pass asks for the line, fail says it missed and forbids it', () => {
+        let pass = 0, fail = 0
+        for (let n = 6; n < 60 && (!pass || !fail); n++) for (let id = 0; id < 60; id++) {
+            const c = chatWith(n, { scriptstate: { $find_roll: '' } }); (c as { id: string }).id = `p${id}`
+            const text = asked(c)
+            if (!text.includes('Find (hidden')) continue
+            const r = JSON.parse(c.scriptstate.$find_roll)
+            expect(r.turn).toBe(n + 1)
+            expect(c.scriptstate.$find_line).toBe(findDiceLine(r))
+            if (r.ok) { pass++; expect(text).toContain('is due in this reply'); expect(text).not.toContain('did not get it this time') }
+            else { fail++; expect(text).toContain('Do NOT write a [[FIND'); expect(text).not.toContain('is due in this reply') }
+        }
+        expect(pass).toBeGreaterThan(0)
+        expect(fail).toBeGreaterThan(0)
+    })
+    test('a miss still spends the event (the cap mark moves), and asking again for the same turn gives the same roll and keeps one mark', () => {
+        for (let id = 0; id < 400; id++) {
+            const c = chatWith(12, { scriptstate: { $find_roll: '' } }); (c as { id: string }).id = `m${id}`
+            const text = asked(c)
+            if (!text.includes('did not get it this time')) continue
+            const roll1 = c.scriptstate.$find_roll
+            expect(c.scriptstate.$find_turn).toBe('13')
+            asked(c)   // a regenerated reply: the same request again
+            expect(c.scriptstate.$find_roll).toBe(roll1)
+            expect(c.scriptstate.$find_turn).toBe('13')
+            expect(asked(c)).toContain('did not get it this time')
+            return
+        }
+        throw new Error('no miss found')
+    })
+    test('NoFreeGrant: a FIND line with no roll, a missed roll or a roll of another turn is stripped and saves nothing', () => {
+        for (const ss of [{ $find_roll: '' }, { $find_roll: roll({ ok: false, d20: 2 }) }, { $find_roll: roll({ turn: 9 }) }, { $find_roll: 'garbage' }]) {
+            const c = chatWith(10, { last: `Cảnh.\n${BLOCK}`, scriptstate: ss })
+            const seen: unknown[] = []
+            setFindParsedHandler((r) => seen.push(r))
+            try { expect(noteFind(0, card(), c as never)).toBeNull() } finally { setFindParsedHandler(null) }
+            expect(seen).toEqual([])
+            expect(c.message.at(-1)?.data).not.toContain('[[FIND')
+            expect(c.scriptstate.$find_turn).toBeUndefined()
+        }
+        const c = chatWith(10, { last: `Cảnh.\n${BLOCK}`, scriptstate: { $find_roll: roll({}) } })
+        expect(noteFind(0, card(), c as never)?.id).toBe('muffled-footsteps')
+        expect(c.scriptstate.$find_turn).toBe('10')
+    })
+    test('when Lua decides the drop ($finds_by_lua=1) the client does not gate on its own roll', () => {
+        const c = chatWith(10, { last: `Cảnh.\n${BLOCK}`, scriptstate: { $find_roll: '', $finds_by_lua: '1' } })
+        expect(noteFind(0, card(), c as never)?.id).toBe('muffled-footsteps')
+    })
+    test('the fail note names the kind and never asks for a line', () => {
+        expect(findFailNote('item')).toContain('item')
+        expect(findFailNote('item')).toContain('Do NOT write a [[FIND')
     })
 })

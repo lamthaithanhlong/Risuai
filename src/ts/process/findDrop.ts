@@ -13,10 +13,10 @@ import { similar } from './findSimilar.mjs'
 
 /** never in the first story turns after the character is locked */
 export const FIND_FIRST_TURN = 4
-/** at most one find in any window of this many story turns */
-export const FIND_MIN_GAP = 8
+/** at most one find event in any window of this many story turns (owner 2026-11-05: an event every 6..10 turns: gap 6, certain by 10) */
+export const FIND_MIN_GAP = 6
 /** by this many turns since the last find (or the start) one is certain, in any scene that can carry it */
-export const FIND_DROUGHT = 14
+export const FIND_DROUGHT = 10
 const BASE_CHANCE = 0.25
 
 export type SceneKind = 'creation' | 'combat' | 'death' | 'quiet' | 'explore' | 'scavenge' | 'travel' | 'rest' | 'social' | 'other'
@@ -79,6 +79,47 @@ export function findDue(input: FindInput): FindDue {
     const kind: FindKind = seededUnit(seed, turn, 'kind') < (sceneKind === 'scavenge' ? 0.7 : 0.4) ? 'item' : 'skill'
     const rarity = pick<FindRarity>(seededUnit(seed, turn, 'rarity'), [['common', 0.5], ['uncommon', 0.3], ['rare', 0.15], ['epic', 0.05]])
     return { due: true, kind, rarity, note: findNote(kind, rarity, input.known ?? []) }
+}
+
+// ---- the dice: a find is an EVENT that can fail (owner 2026-11-05) -----------------------------------------------------------------
+// When a find is due, a d20 seeded by (chat, turn) is rolled (a regenerated reply gets the same roll) and the tier of the related stat is added:
+// a skill uses the stat of the act the character just did ($act_stat, written by the card's stats script), else Tinh thần; an item uses Cảm nhận.
+// Against the DC of its rarity: pass = the narrator is asked for the [[FIND|..]] line as before; fail = the narrator is told it missed and why
+// it should read as scene detail, and writes NO line. A FIND line in a reply whose turn had no pass is dropped, never stored (NoFreeGrant).
+export const FIND_DC: Record<FindRarity, number> = { common: 8, uncommon: 12, rare: 16, epic: 19 }
+const STAT_NAMES: Record<string, string> = { suc_manh: 'Sức mạnh', nhanh_nhen: 'Nhanh nhẹn', the_luc: 'Thể lực', tinh_than: 'Tinh thần', cam_nhan: 'Cảm nhận', y_chi: 'Ý chí' }
+export type FindRoll = { turn: number; len?: number; d20: number; bonus: number; dc: number; ok: boolean; kind: FindKind; rarity: FindRarity; stat: string }
+
+/** The tier of a stat in the chat's `$stats` (hundredths; every 3.00 above the start 10.00 is one tier). */
+export function statTier(vars: Record<string, unknown> | undefined, stat: string): number {
+    try {
+        const v = Number(JSON.parse(String(vars?.$stats ?? '{}'))?.[stat])
+        return Number.isFinite(v) && v > 1000 ? Math.floor((v - 1000) / 300) : 0
+    } catch { return 0 }
+}
+
+/** Pure: the same (seed, turn, kind, rarity, vars) is always the same roll. */
+export function findRoll(due: { kind: FindKind; rarity: FindRarity }, turn: number, seed: string | number, vars: Record<string, unknown> | undefined): FindRoll {
+    const act = String(vars?.$act_stat ?? '')
+    const stat = due.kind === 'item' ? 'cam_nhan' : (act in STAT_NAMES ? act : 'tinh_than')
+    const d20 = 1 + Math.floor(seededUnit(seed, turn, 'd20') * 20)
+    const bonus = statTier(vars, stat)
+    const dc = FIND_DC[due.rarity]
+    return { turn, d20, bonus, dc, ok: d20 + bonus >= dc, kind: due.kind, rarity: due.rarity, stat }
+}
+
+/** The hidden note when the roll failed: nothing is gained, and the narrator says why in the scene's own terms. */
+export function findFailNote(kind: FindKind): string {
+    return `\n\n[Find (hidden, never named): the chance of a ${kind} came up in this scene and the character did not get it this time. In prose, inside the scene's own events, show why it slipped away (it was missed, it broke, it was not understood, someone else took it), a detail of the scene and not an announcement. Do NOT write a [[FIND|..]] line, give no skill and no item, and do not mention this note.]`
+}
+
+/** The panel line for a roll: "🎲 d20 14+1 vs 12: OK" (the find's name is added once it is saved), or "… hụt". */
+export function findDiceLine(r: FindRoll): string {
+    return `🎲 d20 ${r.d20}${r.bonus ? `+${r.bonus}` : ''} vs ${r.dc}: ${r.ok ? 'OK' : 'hụt'}`
+}
+
+const parseRoll = (raw: unknown): FindRoll | null => {
+    try { const r = JSON.parse(String(raw ?? '')); return r && typeof r === 'object' && Number.isFinite(r.turn) ? r as FindRoll : null } catch { return null }
 }
 
 const KNOWN_MAX = 80
@@ -243,7 +284,16 @@ export function findRequest<T extends { role: string; content: unknown }>(format
         turn, lastFindTurn: lastFindTurnOf(vars, turn), seed: chat.id ?? '', sceneKind: sceneKindOf(vars, player, lastReply),
         known: [...knownOf(vars), ...knownProvider()],
     })
-    return r.due ? gmRequest(formated, r.note) : formated
+    if (!r.due) { vars.$find_roll = ''; return formated }
+    const roll: FindRoll = { ...findRoll(r, turn, chat.id ?? '', vars), len: messages.length + 1 }   // len: the chat length once the reply is in (the card's Lua matches on it)
+    vars.$find_roll = JSON.stringify(roll)
+    vars.$find_line = findDiceLine(roll)
+    if (roll.ok) return gmRequest(formated, r.note)
+    // a miss still spends the event: the next one is 6..10 turns away, whatever the narrator does (a reroll of this reply looks at the mark before)
+    const was = num(vars.$find_turn)
+    vars.$find_prev = was !== null && was < turn ? String(was) : String(vars.$find_prev ?? '')
+    vars.$find_turn = String(turn)
+    return gmRequest(formated, findFailNote(r.kind))
 }
 
 /**
@@ -262,13 +312,19 @@ export function noteFind(charIndex: number, card: Room | undefined, chat: Chat |
     const turn = storyTurns(card, chat.message)
     const rec = parseFind(reply.data ?? '', { card: String((card as character).chaId ?? ''), chapter: '' })
     if (!rec || turn < 1) return null
+    // NoFreeGrant: only a reply whose turn rolled a pass may give something (when Lua decides the drop, $finds_by_lua=1, it owns the roll)
+    if (String(vars.$finds_by_lua ?? '') !== '1') {
+        const roll = parseRoll(vars.$find_roll)
+        if (!roll || roll.turn !== turn || !roll.ok) return null
+    }
     const known = [...knownOf(vars), ...knownProvider()].map(findFingerprint)
     if (known.includes(findFingerprint(rec.name.en)) || known.includes(findFingerprint(rec.name.vi))) return null
     if ([...knownOf(vars), ...knownProvider()].some((k) => similar(k, rec.name.en))) return null
     const was = num(vars.$find_turn)
     vars.$find_prev = was !== null && was < turn ? String(was) : String(vars.$find_prev ?? '')
     vars.$find_turn = String(turn)
-    vars.$find_line = `+ ${rec.kind === 'skill' ? 'Skill' : 'Item'} mới: ${rec.name.vi}`
+    const dice = parseRoll(vars.$find_roll)
+    vars.$find_line = `${dice && dice.turn === turn ? findDiceLine(dice) + ' — nhận ' : '+ ' + (rec.kind === 'skill' ? 'Skill' : 'Item') + ' mới: '}${rec.name.vi}`
     vars.$find_known = JSON.stringify([...knownOf(vars), rec.name.vi, rec.name.en].slice(-KNOWN_MAX * 2))
     onFindParsed(rec, { chatId: chat.id ?? '', card: rec.source.card, turn })
     return rec
