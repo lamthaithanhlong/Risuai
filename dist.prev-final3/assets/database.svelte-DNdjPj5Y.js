@@ -1,0 +1,1 @@
+import{d as e}from"./database.svelte--zwyZHz2.js";export{e as getDatabase};

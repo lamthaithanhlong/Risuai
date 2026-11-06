@@ -1,0 +1,1 @@
+var e=new Map;function t(t,n){let r=t.id??``,i=n.catch(()=>void 0).finally(()=>{e.get(r)===i&&e.delete(r)});e.set(r,i)}var n=t=>e.get(t??``);async function r(e,t){let r=n(e);if(!r)return!0;let i,a=await Promise.race([r.then(()=>!0),new Promise(e=>{i=setTimeout(()=>e(!1),t)})]);return clearTimeout(i),a}export{n,t as r,r as t};

@@ -1,0 +1,1 @@
+var e=(()=>{try{return new URLSearchParams(globalThis.location?.search??``).has(`turnWorker`)}catch{return!1}})(),t=null,n=[];function r(e,r){t={key:e,inputId:r,keyTaken:!1},n.length=0}function i(){t=null}function a(){return[...n]}function o(e){t&&n.push(String(e?.message??e).slice(0,500))}export{a,o as i,i as n,e as r,r as t};

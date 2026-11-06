@@ -1,0 +1,1 @@
+import{n as e,t}from"./typescript-DuBw22Av.js";export{t as conf,e as language};

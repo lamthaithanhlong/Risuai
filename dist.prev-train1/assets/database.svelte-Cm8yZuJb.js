@@ -1,0 +1,1 @@
+import{d as e}from"./database.svelte-BIYZAGeM.js";export{e as getDatabase};

@@ -1,0 +1,1 @@
+import{Fi as e}from"./database.svelte-BIYZAGeM.js";export{e as changeChar};

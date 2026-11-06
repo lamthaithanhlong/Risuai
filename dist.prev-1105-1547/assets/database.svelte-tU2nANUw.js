@@ -1,0 +1,1 @@
+import{d as e}from"./database.svelte-BPbO5kHZ.js";export{e as getDatabase};

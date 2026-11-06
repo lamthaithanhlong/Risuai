@@ -1,0 +1,1 @@
+import{Fi as e}from"./database.svelte-BPbO5kHZ.js";export{e as changeChar};

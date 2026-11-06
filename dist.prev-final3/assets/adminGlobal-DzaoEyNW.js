@@ -1,0 +1,1 @@
+import{p as e}from"./adminGlobal-BUiJqv_d.js";export{e as adminCardOf};
