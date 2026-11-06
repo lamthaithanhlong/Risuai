@@ -4,6 +4,7 @@
 // (cached 60 s; a failure is "no names", never a wait). Nothing here blocks a reply.
 import { LEGACY_RARITY, hasFindRule, levelOf, setFindKnownProvider, setFindParsedHandler, type FindContext, type FindRecord } from './findDrop'
 import { LOOT_PENDING_KEY, LOOT_TURN_PENDING_KEY, enqueueLootTurn, parsePendingLootTurns, sendLootTurn, type LootItem, type LootSend, type LootTurnBody } from '../storage/personaStore'
+import { lastTurnIsAsk } from './adminAsk'
 import { PENDING_KEY, drain, enqueue, parsePending, saveFind, type SendResult } from '../storage/findsSave'
 
 /** chaId (prefix) of a card -> the slug the asset manager knows it by (tools/assets/cards.json). Only these cards save finds. */
@@ -151,6 +152,7 @@ export async function lootAfterReply(chat: GlueChat | undefined, deps: LootDeps)
 /** index.svelte.ts (through statsAfterReplyPage): only a card that teaches finds, or a chat with loot waiting. */
 export async function lootAfterReplyPage(card: Parameters<typeof hasFindRule>[0], chat: GlueChat | undefined): Promise<void> {
     if (!chat) return
+    if (lastTurnIsAsk(chat.message)) return   // "@admin ..." is not a story turn: no loot for it (the module wrote none)
     const waiting = parseLootPending(chat.scriptstate?.[LOOT_PENDING_KEY]).length > 0 || !!String(chat.scriptstate?.[LOOT_TURN_PENDING_KEY] ?? '')
     if (!waiting && !hasFindRule(card)) return
     try {

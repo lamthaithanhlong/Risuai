@@ -1494,6 +1494,8 @@ require('./statsBridge.cjs').mountStats(app, { auth: (req, res) => checkAuth(req
 require('./personaBridge.cjs').mountPersona(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
 // the global Admin (shared/characters/admin.md, CARDS: global) for one card, from the asset manager, last good copy kept beside the save (adminBridge.cjs): GET /api/admin, risu-auth required
 require('./adminBridge.cjs').mountAdmin(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, cacheDir: savePath + '.admin-cache', log: (m) => console.log(m) });
+// what the Admin module reported (a bug the persona wrote with "@admin bug: ..." or one Admin detected) goes to the asset manager's shared/_roles/admin_reports.jsonl (adminReportBridge.cjs): POST /api/admin/report, risu-auth required
+require('./adminReportBridge.cjs').mountAdminReport(app, { auth: (req, res) => checkAuth(req, res), limiter: authenticatedRouteLimiter, log: (m) => console.log(m) });
 
 app.post('/api/image-jobs', authenticatedRouteLimiter, async (req, res) => {
     if (!await checkAuth(req, res)) return;

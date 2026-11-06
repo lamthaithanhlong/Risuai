@@ -8,6 +8,7 @@
 import type { Chat, character, groupChat } from '../storage/database.svelte'
 import { gmRequest, hasCreationStep, yesAt } from './gameMaster'
 import { similar } from './findSimilar.mjs'
+import { isAskAnswer, lastTurnIsAsk } from './adminAsk'
 
 // ---- the drop schedule --------------------------------------------------------------------------------------------------------
 
@@ -276,7 +277,8 @@ export function storyTurns(card: Room | undefined, messages: Msg[]): number {
     const yes = yesAt(messages as never)
     const creation = hasCreationStep(card as never)
     if (creation && yes < 0) return 0
-    return messages.slice(yes + 1).filter((m) => m.role === 'char').length
+    // an answer to "@admin ..." is not a story turn (adminAsk.ts)
+    return messages.reduce((n, m, i) => (i > yes && m.role === 'char' && !isAskAnswer(messages as never, i) ? n + 1 : n), 0)
 }
 
 const SCAVENGE = /(?<![\p{L}\p{N}])(lục|lục soát|lục lọi|tìm kiếm|tìm đồ|nhặt|thu gom|kiếm đồ|scavenge|search|loot|rummage)(?![\p{L}\p{N}])/iu
@@ -318,6 +320,8 @@ export function findRequest<T extends { role: string; content: unknown }>(format
     const vars = (chat.scriptstate ??= {})
     // the panel line is for the turn that carried the find only
     vars.$find_line = ''
+    // "@admin ..." is out of the story: no roll, no find due, nothing spent (adminAsk.ts)
+    if (lastTurnIsAsk(chat.message)) { vars.$find_roll = ''; return formated }
     const messages = chat.message ?? []
     const turn = storyTurns(card, messages) + 1
     const player = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
@@ -349,6 +353,7 @@ export function noteFind(charIndex: number, card: Room | undefined, chat: Chat |
     const reply = chat.message[at]
     if (!reply || reply.role !== 'char' || !/\[\[F/.test(reply.data ?? '')) return null
     chat.message[at] = { ...reply, data: stripFind(reply.data ?? '') }
+    if (isAskAnswer(chat.message, at)) return null   // Admin's answer to an ask gives no find
     if (!hasFindRule(card)) return null
     const vars = (chat.scriptstate ??= {})
     const turn = storyTurns(card, chat.message)

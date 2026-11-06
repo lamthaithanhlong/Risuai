@@ -22,7 +22,7 @@ import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
 import { adminBeforeRequest } from "./adminGlobal";
-import { lastReplyRaw, personaIdOf, statsAfterReplyPage, statsBeforeRequestPage, trainAfterReplyPage } from "./statsGlue";
+import { adminReportAfterReplyPage, lastReplyRaw, personaIdOf, statsAfterReplyPage, statsBeforeRequestPage, trainAfterReplyPage } from "./statsGlue";
 import { askSubmodel, creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -2033,7 +2033,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         const rawReply = lastReplyRaw(currentChat)   // the hidden tags still in it: tidyLastReply takes them out of the stored text
         tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
-        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat); void trainAfterReplyPage(currentChar, currentChat, rawReply) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
+        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat); void trainAfterReplyPage(currentChar, currentChat, rawReply); void adminReportAfterReplyPage(currentChar, currentChat as never) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
         noteScenePicture(sel.char, currentChat)
         const inlayMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)
         const outputMessage = currentChat.message[inlayMessageIndex]
@@ -2150,7 +2150,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         const rawReply = lastReplyRaw(currentChat)   // the hidden tags still in it: tidyLastReply takes them out of the stored text
         tidyLastReply(currentChat)
         noteGameMaster(sel.char, currentChat)
-        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat); void trainAfterReplyPage(currentChar, currentChat, rawReply) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
+        if(isNodeServer){ void statsAfterReplyPage(currentChar, currentChat); void trainAfterReplyPage(currentChar, currentChat, rawReply); void adminReportAfterReplyPage(currentChar, currentChat as never) }   // this turn's growth ($stat_export) to the persona's global store; never waited for
         noteScenePicture(sel.char, currentChat)
         if(outputMessageId){
             outputMessageIndex = findMessageIndexByChatId(currentChat, outputMessageId)

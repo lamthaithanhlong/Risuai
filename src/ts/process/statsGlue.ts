@@ -3,6 +3,7 @@
 // persona's stored stats are merged into the chat. Nothing here blocks a reply for more than LOAD_WAIT_MS, and nothing here throws.
 import { fetchPersona, itemSlotsOf, type Deps as PersonaDeps } from '../storage/personaStore'
 import { levelOf } from './findDrop'
+import { lastTurnIsAsk } from './adminAsk'
 import { parseTrain, sendTrain, trainBody, type TrainBody } from '../storage/trainSave'
 import { EXPORT_KEY, EXP_PENDING_KEY, PENDING_KEY, TURN_EVENTS_KEY, drain, enqueue, enqueueTurn, fetchCurrent, fetchLedger, foldSkills, foldVars, mergeCurrent, parseEntries, parsePending, parsePendingTurns, sendStats, sendTurn, turnEventsOf, type Current, type LedgerState, type SendResult, type StatEntry, type TurnBody } from '../storage/statsSave'
 
@@ -173,6 +174,7 @@ export async function trainAfterReply(card: { desc?: string, type?: string } | u
     deps: { persona: () => string, cardId: () => string, send: (b: TrainBody) => Promise<string> }): Promise<void> {
     try {
         if (!card || card.type === 'group' || hasStatsRule(card) || moduleCounts(chat as ChatLike)) return   // the module (or the card's Lua) counts it: no second count
+        if (lastTurnIsAsk(chat?.message)) return   // "@admin ..." is not a story turn: no training for it
         const tag = parseTrain(raw)   // no tag: the store is still told (stats []), so a regenerated reply that lost its tag takes the earlier gain back
         const id = String(chat?.id ?? '')
         const cardId = deps.cardId()
@@ -187,5 +189,15 @@ export async function trainAfterReplyPage(card: { desc?: string, type?: string, 
         const d = await pageDeps()
         const { adminCardOf } = await import('./adminGlobal')
         await trainAfterReply(card, chat, raw, { persona: d.persona, cardId: () => adminCardOf(card as never), send: (b) => sendTrain(b) })
+    } catch { /* never blocks */ }
+}
+
+/** After a reply: what the Admin module exported for the Game Master ($admin_report) goes to the asset manager's reports file (storage/adminReport.ts). */
+export async function adminReportAfterReplyPage(card: { type?: string, chaId?: string } | undefined, chat: (TrainChat & { scriptstate?: Record<string, unknown> }) | undefined): Promise<void> {
+    try {
+        if (!card || card.type === 'group' || !chat?.scriptstate?.['$admin_report']) return
+        const { adminCardOf } = await import('./adminGlobal')
+        const { reportAfterReply } = await import('../storage/adminReport')
+        await reportAfterReply(chat as never, adminCardOf(card as never))
     } catch { /* never blocks */ }
 }
