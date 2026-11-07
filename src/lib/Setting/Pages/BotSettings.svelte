@@ -6,7 +6,8 @@
     
     import { DBState } from 'src/ts/stores.svelte';
     import { customProviderStore } from "src/ts/plugins/plugins.svelte";
-    import { downloadFile } from "src/ts/globalApi.svelte";
+    import { downloadFile, globalFetch } from "src/ts/globalApi.svelte";
+    import { alertNormal, alertError } from "src/ts/alert";
     import { isTauri } from "src/ts/platform"
     import { tokenizeAccurate, tokenizerList } from "src/ts/tokenizer";
     import ModelList from "src/lib/UI/ModelList.svelte";
@@ -113,6 +114,32 @@
 
 
     let submenu = $state(DBState.db.useLegacyGUI ? -1 : 0)
+
+    let ollamaUnloading = $state(false)
+    async function unloadOllamaModel() {
+        const url = (DBState.db.ollamaURL || '').replace(/\/+$/, '')
+        const model = DBState.db.ollamaModel
+        if (!url) { alertError('Chưa đặt Ollama URL'); return }
+        if (!model) { alertError('Chưa đặt Ollama Model'); return }
+        ollamaUnloading = true
+        try {
+            const res = await globalFetch(`${url}/api/generate`, {
+                method: 'POST',
+                body: { model, keep_alive: 0 },
+                requestTimeoutMs: 15000
+            })
+            if (res.ok) {
+                alertNormal(`Đã xả model khỏi RAM: ${model}`)
+            } else {
+                alertError(`Không xả được (status ${res.status}): ${JSON.stringify(res.data).slice(0, 200)}`)
+            }
+        } catch (e) {
+            alertError(e)
+        } finally {
+            ollamaUnloading = false
+        }
+    }
+
     let modelInfo = $derived(getModelInfo(DBState.db.aiModel))
     let subModelInfo = $derived(getModelInfo(DBState.db.subModel))
     let nanogptInputMode = $state<'list' | 'manual'>(DBState.db.nanogptRequestModel && !DBState.db.nanogptRequestModelName ? 'manual' : 'list')
@@ -318,6 +345,9 @@
         {#if usesOllamaLocal}
         <span class="text-textcolor mt-4">Ollama Model</span>
         <TextInput marginBottom={false} size={"sm"} bind:value={DBState.db.ollamaModel} placeholder="Model" oninput={() => { DBState.db.ollamaModelSource = 'local'; DBState.db.ollamaModelName = '' }} />
+        <Button onclick={unloadOllamaModel} size="sm" className="mt-2" disabled={ollamaUnloading}>
+            {ollamaUnloading ? 'Đang xả…' : 'Tắt Ollama (xả model khỏi RAM)'}
+        </Button>
         {/if}
 
         {#if usesOllamaLocal || (usesOllamaCloud && DBState.db.ollamaRequestFormat === LLMFormat.Ollama)}

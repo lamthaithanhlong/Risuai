@@ -1347,6 +1347,10 @@ export interface Database{
         style?: string
         /** Comma-separated models tried in order when the model above fails to draw. */
         fallbackModels?: string
+        /** grok-imagine (spicy) extras: sent to the image endpoint only when set. */
+        promptExtend?: boolean
+        watermark?: boolean
+        imageDetail?: string
     }
     additionalParamsForTranslate: [string, string][]
     chatTokenSaverOffMigrated?: boolean

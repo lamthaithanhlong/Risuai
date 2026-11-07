@@ -48,6 +48,14 @@ export const advancedSettingsItems: SettingItem[] = [
         helpKey: 'requestretrys', options: { min: 0, max: 20 }
     },
     {
+        id: 'adv.localNetMode', type: 'check', fallbackLabel: 'Local Network Mode (route local models like Ollama via server; fixes timeout/CORS)', bindKey: 'localNetworkMode',
+        classes: 'mt-4'
+    },
+    {
+        id: 'adv.localNetTimeout', type: 'number', fallbackLabel: 'Local Network Timeout (seconds)', bindKey: 'localNetworkTimeoutSec',
+        options: { min: 1, max: 3600 }
+    },
+    {
         id: 'adv.genTime', type: 'number', labelKey: 'genTimes', bindKey: 'genTime',
         helpKey: 'genTimes', options: { min: 0, max: 4096 }
     },

@@ -42,17 +42,52 @@
         const st = id ? pictureWatch.byMessage[id]?.state : undefined
         return st === 'drawing' || st === 'retrying'
     })
-    const canIllustrate = $derived.by(() => {
+    const hasIllustrateScript = $derived.by(() => {
         const c = DBState.db.characters[selIdState.selId]
         if(!c || c.type === 'group') return false
         return (c.triggerscript ?? []).some((t) => t?.effect?.[0]?.type === 'triggerlua' && ((t.effect[0] as { code?: string }).code ?? '').includes('illustrate:'))
+    })
+    // Show the draw button on EVERY story (not just ones with an illustrate: script), as long as an image provider is set.
+    // Stories with the script run it; the rest fall back to drawing a scene picture from the reply's own text.
+    const canIllustrate = $derived.by(() => {
+        const c = DBState.db.characters[selIdState.selId]
+        if(!c || c.type === 'group') return false
+        return hasIllustrateScript || !!DBState.db.sdProvider
     })
     async function illustrate() {
         if(illustrating || pictureBusy || idx < 0) return
         illustrating = true
         try {
-            const result = await withIllustrating(() => runLuaButtonTrigger(getCurrentCharacter(), 'illustrate:' + idx))
-            if(result?.chat) setCurrentChat(result.chat)
+            if(hasIllustrateScript){
+                const result = await withIllustrating(() => runLuaButtonTrigger(getCurrentCharacter(), 'illustrate:' + idx))
+                if(result?.chat) setCurrentChat(result.chat)
+            } else {
+                const c = getCurrentCharacter()
+                const chat = getCurrentChat()
+                const reply = chat?.message?.[idx]
+                if(chat && reply){
+                    const [{ drawScenePicture }, { SCENE_NEGATIVE }, { storyStyle }, { placePicture }] = await Promise.all([
+                        import('src/ts/process/scenePictureDraw'),
+                        import('src/ts/process/scenePictures'),
+                        import('src/ts/process/portraits'),
+                        import('src/ts/process/imageJobClient'),
+                    ])
+                    const prompt = (reply.data || '')
+                        .replace(/\{\{[^}]*\}\}/g, '')
+                        .replace(/\[\[[^\]]*\]\]/g, '')
+                        .trim()
+                        .slice(0, 400)
+                    const result = await withIllustrating(() => drawScenePicture(c as any, chat, storyStyle(c as any) + prompt, SCENE_NEGATIVE, idx, { redraw: hasPicture }))
+                    const m = /^\{\{inlay::([^}]+)\}\}/.exec(result ?? '')
+                    if(m){
+                        const live = getCurrentChat()
+                        if(live?.message?.[idx]){
+                            live.message[idx] = { ...live.message[idx], data: placePicture(live.message[idx].data, m[1]) }
+                            setCurrentChat(live)
+                        }
+                    }
+                }
+            }
             ReloadChatPointer.update((v) => {
                 v[idx] = (v[idx] ?? 0) + 1
                 return v

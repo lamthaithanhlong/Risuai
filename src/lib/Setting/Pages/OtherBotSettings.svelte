@@ -826,6 +826,16 @@
             <TextInput size="sm" marginBottom placeholder="sk-..." hideText={DBState.db.hideApiKey} bind:value={DBState.db.openaiCompatImage.key}/>
 
             <span class="text-textcolor">Model</span>
+            <SelectInput className="mb-2" bind:value={DBState.db.openaiCompatImage.model}>
+                <OptionInput value="xai/grok-imagine-image" >xai/grok-imagine-image (spicy)</OptionInput>
+                <OptionInput value="cx/gpt-5.6-luna-image" >cx/gpt-5.6-luna-image</OptionInput>
+                <OptionInput value="cx/gpt-5.6-terra-image" >cx/gpt-5.6-terra-image</OptionInput>
+                <OptionInput value="cx/gpt-5.6-sol-image" >cx/gpt-5.6-sol-image</OptionInput>
+                {#if DBState.db.openaiCompatImage.model && !['xai/grok-imagine-image','cx/gpt-5.6-luna-image','cx/gpt-5.6-terra-image','cx/gpt-5.6-sol-image'].includes(DBState.db.openaiCompatImage.model)}
+                    <OptionInput value={DBState.db.openaiCompatImage.model} >{DBState.db.openaiCompatImage.model}</OptionInput>
+                {/if}
+            </SelectInput>
+            <span class="text-textcolor2 text-xs">hoặc gõ model khác:</span>
             <TextInput size="sm" marginBottom placeholder="dall-e-3" bind:value={DBState.db.openaiCompatImage.model}/>
 
             <span class="text-textcolor">{language.imageFallbackModels}</span>
@@ -849,6 +859,19 @@
                 <OptionInput value="low" >Low</OptionInput>
                 <OptionInput value="medium" >Medium</OptionInput>
                 <OptionInput value="high" >High</OptionInput>
+            </SelectInput>
+
+            <span class="text-textcolor">Grok Imagine (ảnh spicy)</span>
+            <span class="text-textcolor2 text-xs mb-2">Chỉ dùng cho model xai/grok-imagine-image. Bỏ qua với model ảnh khác.</span>
+            <div class="mb-2 flex flex-col gap-1">
+                <Check check={DBState.db.openaiCompatImage.promptExtend === true} onChange={(v) => { DBState.db.openaiCompatImage.promptExtend = v }} name="Prompt Extend (grok tự mở rộng mô tả)"/>
+                <Check check={DBState.db.openaiCompatImage.watermark === true} onChange={(v) => { DBState.db.openaiCompatImage.watermark = v }} name="Watermark"/>
+            </div>
+            <span class="text-textcolor">Image Detail</span>
+            <SelectInput className="mb-4" bind:value={DBState.db.openaiCompatImage.imageDetail}>
+                <OptionInput value="" >(không gửi)</OptionInput>
+                <OptionInput value="high" >High</OptionInput>
+                <OptionInput value="low" >Low</OptionInput>
             </SelectInput>
         {/if}
 

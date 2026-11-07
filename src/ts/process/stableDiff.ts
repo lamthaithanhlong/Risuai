@@ -78,6 +78,16 @@ export function openaiCompatImageRequest(genPrompt: string, images: string[] = [
         "size": config.size || "1024x1024",
         "quality": config.quality || "auto"
     }
+    // grok-imagine (spicy) extras: only added when enabled, so other image models are untouched
+    if(config.promptExtend){
+        body.prompt_extend = true
+    }
+    if(typeof config.watermark === 'boolean'){
+        body.watermark = config.watermark
+    }
+    if(config.imageDetail){
+        body.image_detail = config.imageDetail
+    }
     // the characters' portraits (portraitsPage.ts): 9router draws an edit from them, so a character looks the same in every scene
     if(images.length){
         body.images = images
