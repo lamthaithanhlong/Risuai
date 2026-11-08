@@ -40,6 +40,13 @@ describe('reported: the opening of a Vietnamese story read wrong (no speaker, "m
         expect(r).toContain('không viết kiểu "Tiếng Anh (tiếng Việt)" trong lời kể')  // "Aspirant (Ứng viên)!"
         expect(r).toContain('người nhân vật chính đã quen (trong persona hay đã gặp) thì là người quen')
     })
+    it('reported 2026-11-08 Mailman Naru: lock the address pair and one beat from the player\'s act', () => {
+        const r = viProseReminder('Kenji Park')
+        expect(r).toContain('giữ đúng cặp đã lập')
+        expect(r).toContain('không đột ngột gọi em hay hỏi thầy đang đợi em')
+        expect(r).toContain('không bịa thêm việc ngoài')
+        expect(r).toContain('một lượt một mạch')
+    })
 })
 
 describe('the gate (docs/specs/ProseGate.tla): the opening reply of a card with an English first message', () => {

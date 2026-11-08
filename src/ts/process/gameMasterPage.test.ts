@@ -155,6 +155,26 @@ const panelCard = { ...card, globalLore: [{ content: 'Module 01' }, { content: M
 const RECORD = 'Tên: Kenji\nĐược chưa? Sửa dòng nào cứ nói'
 const settle = () => new Promise((r) => setTimeout(r, 20))
 
+it('keeps a plain card\'s scene in chat state, prompts with it, and rolls it back on reroll', async () => {
+    const plain = { ...card, desc: '' }
+    db.characters = [plain]
+    db.gameMaster = false
+    db.gmBookkeeper = undefined
+    asks.length = 0
+    const c = { ...chatOf([{ role: 'char', data: 'Buổi tập bắt đầu.', chatId: 'r1' }, { role: 'user', data: 'Tôi bơi đến cuối làn.' }]), id: 'scene-chat' }
+    storyNotesRequest(req(), plain as never, c as never)
+    c.message.push({ role: 'char', data: 'Thầy chờ ở mép hồ.', chatId: 'r2' })
+    answer.text = '[[SCENE\nplace: mép hồ\nplace_source: mép hồ\n]]'
+    noteGameMaster(0, c as never)
+    await vi.waitFor(() => expect(c.scriptstate.$scene_place).toBe('mép hồ'))
+    expect(asks.at(-1)).toContain('SCENE MEMORY FOR THIS CHAT')
+    c.message.push({ role: 'user', data: 'Tôi nhìn thầy.' })
+    expect(storyNotesRequest(req(), plain as never, c as never)[1].content).toContain('current location: mép hồ')
+    c.message.splice(-2, 1)
+    settlePanel(c as never)
+    expect(c.scriptstate.$scene_place).toBe('')
+})
+
 describe('the status panel kept by the same bookkeeper call (measured: gpt-6-luna wrote STATUS in 4 of 21 replies)', () => {
     beforeEach(() => { db.gameMaster = undefined; db.gmBookkeeper = undefined; db.characters = [panelCard]; asks.length = 0 })
 

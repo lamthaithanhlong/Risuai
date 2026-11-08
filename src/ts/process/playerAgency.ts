@@ -13,7 +13,11 @@ export const PLAYER_AGENCY = '\n\n[Player\'s turn: carry out what the player wro
     + ' world or contradicts what the story already showed fails, and then the narration shows why. Other people still decide for themselves: the player\'s'
     + ' words never decide what someone else feels, believes or chooses; that comes from the scene. The player\'s character is the player\'s:'
     + ' it says and does only what they wrote (their words may become a spoken line); never a new line, answer, promise, agreement or refusal of'
-    + ' theirs, nor a next move after it; the reply stops where the character would next speak or choose.]'
+    + ' theirs, nor a next move after it; the reply stops where the character would next speak or choose. If they only look, watch or observe, describe what they see; do not invent their next line, answer or physical move.'
+    // Measured 2026-11-08 (New Chat 2 / Ollama 9B): "Tui nhìn 3 người họ" → narrator swapped in "Yuuichi" as boyfriend lead and called Aki/Naru girlfriend/cousin.
+    + ' Keep the player\'s character as the viewpoint: when they watch or approach people already in the scene, describe those people from the player\'s eyes;'
+    + ' never invent a substitute male lead, rename the player, or recenter the scene on a new man. Do not invent romance or kinship labels'
+    + ' (girlfriend, boyfriend, bạn đời, em họ, vợ/chồng, crush) the player or the prior story did not already state.]'
 
 /** At the end of the player's message, where the model follows it (a system note alone is not read on this route). */
 export function agencyRequest<T extends { role: string; content: unknown }>(formated: T[], on: boolean): T[] {

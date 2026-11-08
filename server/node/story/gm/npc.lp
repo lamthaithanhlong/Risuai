@@ -15,6 +15,10 @@
 %   recent(P, Tag, Q)     an act of the last 3 turns that touched a person in the scene
 % Answer out: social_action(P, A), demeanor(P, D), wants(P, A), may_silent(P)
 %
+% recent(P, Tag, "player") also feeds wants (and one hard rule): the ledger's last acts are what P just did to the player, but
+% appraisal only moves how the player sees P, so without this a refuse left social_action on small_talk and Subtext empty
+% (Zombie Mina 2026-11-08: led_soc refuse x2, npc_state still small_talk/neutral).
+%
 % HARD rules say what a person never does; SOFT rules (level 2, below core.lp's level 3 on the arc, above its level 1 dice) say what they
 % would rather do. Every hard rule has a test that takes it out and finds the bad answer valid (gmSolver.test.ts).
 
@@ -43,6 +47,8 @@ sopt(P, A) :- npc(P), present(P), act(A).
 :- social_action(P, forgive), rel(P, "player", grudge, G), G >= 70.
 :- social_action(P, reconcile), recent(_, betray, P).
 :- social_action(P, forgive), recent(_, betray, P).
+% a person who just refused the player does not turn around and help the same breath (Mina: refuse in led_soc, help from debt/companion)
+:- social_action(P, help), recent(P, refuse, "player").
 
 % ---- volitions (deterministic: what they feel like doing) ------------------------------------------------------------------------------
 wants(P, reconcile)    :- rel(P, "player", affection, A), A >= 50, rel(P, "player", grudge, G), G >= 20, G < 70.
@@ -63,6 +69,17 @@ wants(P, conceal_affection) :- rel(P, "player", affection, A), A >= 60, rel(P, "
 wants(P, conceal_affection) :- rel(P, "player", affection, A), A >= 60, trait(P, extra, E), E < 40.
 % a small, fading grudge in a good mood lets go
 wants(P, forgive)      :- rel(P, "player", grudge, G), G > 0, G < 40, mood(P, M), M >= 3.
+% the ledger's last acts of P toward the player (appraisal does not move rel(P -> player) for those, so wants must)
+wants(P, refuse)       :- recent(P, refuse, "player").
+wants(P, help)         :- recent(P, help, "player"), not hostile(P).
+wants(P, help)         :- recent(P, gift, "player"), not hostile(P).
+wants(P, help)         :- recent(P, save, "player"), not hostile(P).
+wants(P, insult)       :- recent(P, insult, "player").
+wants(P, threaten)     :- recent(P, threaten, "player").
+wants(P, confide)      :- recent(P, confide, "player").
+wants(P, flirt)        :- recent(P, flirt, "player").
+wants(P, reconcile)    :- recent(P, reconcile, "player").
+wants(P, keep_distance):- recent(P, ignore, "player").
 
 % ---- SOFT at level 2 (core.lp: the arc and hostility 3, the dice 1-2): an unwanted act costs 3, small talk over a wanted act 1 ----------
 :~ social_action(P, A), A != small_talk, not wants(P, A). [3@2, P, A]

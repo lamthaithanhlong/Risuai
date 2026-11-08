@@ -5,7 +5,10 @@ import { getDatabase, type Chat, type character, type groupChat } from '../stora
 import { appendSocial, applyBookkeep, BOOK_KEYS, bookkeepPrompt, cardDice, cardEvent, gmWorld, prevNewOf, creationNote, companionNote, hasFuturePlan, hasPersonaRule, INIT_STORY, PERSONA_STORY, VOICE_STORY, PLAN_STORY, GM_KEYS, gmNote, hasCreationStep, hasPanel, markAdvance, gmPhase, gmRequest, gmStateOf, parseBookkeep, rollGm, settleGm, socialOf, takeGm, worldFlavour, yesAt, type GmState } from './gameMaster'
 // @ts-ignore plain JS module (npcCheck.d.mts)
 import { appendNpcLines, npcCardsNote, npcOpsOf } from './npcCheck.mjs'
+// @ts-ignore plain JS module (npcVoices.d.mts)
+import { namesNamedIn } from './npcVoices.mjs'
 import { applyStatus, narratorWrites, paidNote, panelOf, parseStatus, statusPrompt, statusSpec, type StatusSpec } from './statusBook'
+import { parseScene, SCENE_VARS, sceneAsk, sceneNote } from './sceneMemory'
 import { storyShape } from './replyFormat'
 import { getPersonaPrompt } from '../util'
 import { FORWARD_VAR, parseShelvesLine, shelvesAsk, withForward, type Shelf } from './loreIndex'
@@ -53,7 +56,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
     const note = gmNote(phase, state, dice, worldFlavour(card))
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
-    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) + npcCardsNote(String(chat.scriptstate?.$led_npc ?? ''), replies.length + 1) : '') + (held ? CARD_HELD : ''))
+    return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) + npcVoiceNote(String(chat.scriptstate?.$led_npc ?? ''), replies.length + 1, card, messages) : '') + (held ? CARD_HELD : ''))
 }
 
 /**
@@ -101,10 +104,27 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
     }
     vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
     const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line)
-    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) + npcCardsNote(String(vars.$led_npc ?? ''), n + 1) : ''))
+    return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) + npcVoiceNote(String(vars.$led_npc ?? ''), n + 1, card, messages) : ''))
 }
 
 const CARD_HELD = '\n\n[Card fate die (hidden, never named): the last reply already brought something new; nothing new surfaces in this one, whatever the card\'s die says.]'
+
+/** Portrait names that already show up in the recent chat — seeds [[SAY|]] when $led_npc is still empty. */
+function voiceExtras(card: Room | undefined, messages: Chat['message'] | undefined): string[] {
+    const portraits = (card as { extentions?: { vjPortraits?: Record<string, { name?: string }> } } | undefined)?.extentions?.vjPortraits ?? {}
+    const names = Object.values(portraits).map((e) => e?.name).filter((n): n is string => !!n)
+    const recent = (messages ?? []).slice(-6).map((m) => m.data ?? '').join('\n')
+    // also the card's Additional Assets that look like character names (Aki, Naru) when portraits are empty
+    for (const [name] of (card as { additionalAssets?: [string, string, string][] } | undefined)?.additionalAssets ?? []) {
+        if (name && !/^(\.\.\.|img|bg|portrait)/i.test(name)) names.push(name)
+    }
+    return namesNamedIn(recent, names)
+}
+
+/** NPC cards in the narrator note. On unless npcVoiceBots is false: the narrator leaves [[SAY|id]] for npcVoices.mjs. */
+function npcVoiceNote(ledger: string, n: number, card?: Room, messages?: Chat['message']): string {
+    return npcCardsNote(ledger, n, getDatabase().npcVoiceBots !== false, voiceExtras(card, messages))
+}
 
 /**
  * Whether this request tells the card's NEW event (cardEvent), kept on the chat: the cards' Module 10 says "never two new
@@ -144,7 +164,8 @@ export function storyNotesRequest<T extends { role: string; content: unknown }>(
     const yes = yesAt(messages)
     const initializing = yes >= 0 && !messages.slice(yes + 1).some((m) => m.role === 'char')
     const out = gmRequest(formated, (ours && initializing ? INIT_STORY : '') + (hasPersona() && ours ? PERSONA_STORY : '')
-        + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : '') + (initializing ? '' : paid))
+        + (ours && !initializing ? VOICE_STORY : '') + (hasFuturePlan(card) ? PLAN_STORY : '')
+        + (initializing ? '' : paid + (statusSpec(card) ? '' : sceneNote(chat.scriptstate))))
     // a find (a skill or an item by chance) when one is due: seeded, capped, never while the character is made or in a fight (findDrop.ts)
     return initializing ? out : findRequest(out, card, chat)
 }
@@ -157,17 +178,17 @@ const panelLastRequest = new Map<string, { at: number; panel: Record<string, str
 
 function notePanelAtRequest(card: character, chat: Chat): string {
     const spec = statusSpec(card)
-    if (!spec || !chat.id) return ''
-    const now = panelOf(spec, chat.scriptstate)
+    if (!chat.id) return ''
+    const now = spec ? panelOf(spec, chat.scriptstate) : {}
     const at = chat.message?.length ?? 0
     const vars: Record<string, string> = {}
     for (const [k, v] of Object.entries(now)) vars['$st_' + k] = v
-    for (const k of LEDGER_VARS) vars[k] = chat.scriptstate?.[k] === undefined ? '' : String(chat.scriptstate[k])
+    for (const k of [...(spec ? LEDGER_VARS : []), ...SCENE_VARS]) vars[k] = chat.scriptstate?.[k] === undefined ? '' : String(chat.scriptstate[k])
     panelAtRequest.set(chat.id, { panel: now, vars })
     const last = panelLastRequest.get(chat.id)
     // a reroll or a retry asks again at the same place: the same reply in between, the same note
     if (last && last.at === at) return last.note
-    const note = paidNote(last?.panel, now)
+    const note = spec ? paidNote(last?.panel, now) : ''
     panelLastRequest.set(chat.id, { at, panel: now, note })
     return note
 }
@@ -280,7 +301,7 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
         if (Object.keys(w.unpaid).length) applyStatus(chat.scriptstate ??= {}, w.unpaid)
     }
     // the panel and ledger before this reply, for a reroll or a delete of it (settlePanel); the helper's writes go with it too
-    if (spec && atRequest && reply.chatId && chat.scriptstate) {
+    if (atRequest && reply.chatId && chat.scriptstate) {
         const log = panelLog(chat.scriptstate).filter(([id]) => id !== reply.chatId)
         log.push([reply.chatId, atRequest.vars])
         chat.scriptstate.$panel_log = JSON.stringify(log.slice(-PANEL_LOG_MAX))
@@ -290,7 +311,9 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     if (getDatabase().gmBookkeeper === false) return
     const gm = gmOn && gmPhase(card, chat.message, chat.scriptstate, gmStateOf(chat.scriptstate), storyLike()) !== 'silent'
     const status = spec && statusConfirmed(card, chat.message, chat.scriptstate) ? spec : null
-    if (!gm && !status) return
+    const scene = !spec && (yesAt(chat.message) >= 0 || !!gmStateOf(chat.scriptstate).gm_arc || !!gmStateOf(chat.scriptstate).gm_past
+        || (!hasCreationStep(card) && replies > 0))
+    if (!gm && !status && !scene) return
     // the chat is read again when the answer comes: it may have been replaced meanwhile (as scenePicturesPage does)
     const live = () => getDatabase().characters[charIndex]?.chats?.find((c) => c === chat || (!!chat.id && c.id === chat.id)) ?? chat
     const redraw = () => { const c = getDatabase().characters[charIndex]; if (c) c.reloadKeys = (c.reloadKeys ?? 0) + 1 }
@@ -298,7 +321,7 @@ export function noteGameMaster(charIndex: number, chat: Chat | undefined): void 
     // is tracked so the next turn waits for it rather than asking the shelf question itself
     const ask = forwardAsk(card)
     const lore = ask ? { ...ask, prefetch: () => prefetchBooks(card, live()) } : undefined
-    const run = bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, redraw, written, lore, social: getDatabase().npcPsych !== false })
+    const run = bookkeep(live, chat.message[at], replies, worldFlavour(card), undefined, { gm, status, scene, redraw, written, lore, social: getDatabase().npcPsych !== false })
     trackForward(chat, run)
     void run.catch((e) => console.warn('[game master] bookkeeper failed', e))
 }
@@ -310,7 +333,7 @@ const BOOKKEEP_TIMEOUT_MS = 60_000
  * while that reply is still the chat's last one. True when anything was written.
  */
 export async function bookkeep(live: () => Chat, reply: { data: string; chatId?: string }, replies: number, flavour: string,
-    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; redraw?: () => void; written?: Record<string, string>
+    ask?: (prompt: string) => Promise<string | null>, opts: { gm?: boolean; status?: StatusSpec | null; scene?: boolean; redraw?: () => void; written?: Record<string, string>
         lore?: { shelves: Shelf[]; indexLength: number; prefetch?: () => Promise<void> }; social?: boolean } = {}): Promise<boolean> {
     const wantGm = opts.gm !== false
     // the social acts of the reply (NPC psychology) are asked with the GM's notes, never for the status-only call
@@ -321,7 +344,9 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
     const said = before.message.filter((m) => m.role === 'char')
     const previous = (said.at(-1)?.data === reply.data || (!!reply.chatId && said.at(-1)?.chatId === reply.chatId) ? said.at(-2) : said.at(-1))?.data ?? ''
     const written = opts.written ?? {}
-    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour, opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : '', opts.lore ? shelvesAsk(opts.lore.shelves) : '', { social: wantSocial, npc: wantSocial })
+    const prompt = bookkeepPrompt(wantGm ? gmStateOf(before.scriptstate) : null, player, reply.data ?? '', flavour,
+        opts.status ? statusPrompt(opts.status, before.scriptstate, { previous, written }) : opts.scene ? sceneAsk(before.scriptstate) : '',
+        opts.lore ? shelvesAsk(opts.lore.shelves) : '', { social: wantSocial, npc: wantSocial })
     const answer = await (ask ?? askSubmodel)(prompt)
     const chat = live()
     const last = chat.message[chat.message.length - 1]
@@ -349,6 +374,14 @@ export async function bookkeep(live: () => Chat, reply: { data: string; chatId?:
         if (Object.keys(updates).length) {
             chat.scriptstate ??= {}
             applyStatus(chat.scriptstate, updates)
+            opts.redraw?.()
+            wrote = true
+        }
+    }
+    if (opts.scene) {
+        const updates = parseScene(answer, player + '\n' + (reply.data ?? ''), chat.scriptstate)
+        if (Object.keys(updates).length) {
+            Object.assign(chat.scriptstate ??= {}, updates)
             opts.redraw?.()
             wrote = true
         }

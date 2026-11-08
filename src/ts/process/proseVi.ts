@@ -44,7 +44,11 @@ export function viProseReminder(player = 'nhân vật chính'): string {
         + "nhìn thấy được: ông ta nhăn mặt); chưa rõ nguồn thì tả cái nghe thấy (\"tiếng gõ\", \"một giọng gọi\"), không khẳng định \"có người\" hay "
         + "\"ai đó\"; giữ đúng chỗ đứng và đồ vật đã kể; người nhân vật chính đã quen (trong persona hay đã gặp) thì là người quen, lần đầu họ xuất "
         + "hiện trong truyện thì một vế câu cho biết họ là ai với nhân vật chính; người lạ mới gặp lần đầu thì phản ứng như người lạ (giật mình, "
-        + "đề phòng, hỏi là ai, không tin ngay), không tự kể đời mình hay nhờ vả như người quen, trừ khi truyện đã cho họ quen nhau.]"
+        + "đề phòng, hỏi là ai, không tin ngay), không tự kể đời mình hay nhờ vả như người quen, trừ khi truyện đã cho họ quen nhau; "
+        // Ollama 9B / weak local models (Mailman Naru 2026-11-08): keep the address pair already on stage, one beat from the player's last act.
+        + "xưng hô giữa hai người đã nói với nhau thì giữ đúng cặp đã lập trong vài lượt gần (cậu/tớ với nhau thì không đột ngột gọi em hay hỏi thầy đang đợi em; "
+        + "anh–em thì không nhảy sang mày–tao), trừ khi cảnh vừa đổi quan hệ rõ ràng; một lượt một mạch: làm đúng việc nhân vật chính vừa làm hoặc vừa nói, "
+        + "không bịa thêm việc ngoài (hồ sơ, thầy gọi, bạn đời, điện thoại…) nếu player không đưa vào và cảnh trước chưa có.]"
 }
 
 const VI_LETTERS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỷỹỵ]/gi

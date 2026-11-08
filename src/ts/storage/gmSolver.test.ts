@@ -217,6 +217,21 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology: story/gm/npc.lp', () => {
         expect(acts(await solve(person([50, 30, 0, 45])))).toEqual(['marek:refuse'])
         expect(acts(await solve(person([60, 60, 0, 30])))).toEqual(['marek:reconcile'])
     })
+    // Zombie Mina 2026-11-08: led_soc refuse x2, rel still mild (appraisal moves player->mina only) -> used to be small_talk / empty Subtext
+    test('recent acts toward the player drive wants: refuse stays refuse, help stays help, even with mild rel', async () => {
+        const mild = [42, 40, 0, 10] as [number, number, number, number]
+        expect(acts(await solve(person(mild)))).toEqual(['marek:small_talk'])
+        const refused = await solve(person(mild, 'recent("marek", refuse, "player").'))
+        expect(wants(refused)).toContain('refuse')
+        expect(acts(refused)).toEqual(['marek:refuse'])
+        const helped = await solve(person(mild, 'recent("marek", help, "player").'))
+        expect(wants(helped)).toContain('help')
+        expect(acts(helped)).toEqual(['marek:help'])
+        // refuse in the last turns beats a debt that would otherwise help
+        const both = await solve(person([42, 40, 45, 10], 'recent("marek", refuse, "player"). recent("marek", help, "player").'))
+        expect(acts(both)).toEqual(['marek:refuse'])
+        expect(acts(both)).not.toContain('marek:help')
+    })
     test('conceal_affection beats forgive: both wanted, the guarded heart hides its affection (affection 70, trust 45, grudge 25, mood 4)', async () => {
         const f = person([45, 70, 0, 25]).replace('mood("marek",0)', 'mood("marek",4)')
         const r = await solve(f)
@@ -267,6 +282,8 @@ describe.skipIf(!HAS_CLINGO)('NPC psychology: story/gm/npc.lp', () => {
         test('GRUDGE-FORGIVE: not at grudge 70', () => keepsOut('no-grudge-forgive.lp', ':- social_action(P, forgive), rel(P, "player", grudge, G), G >= 70.', person([50, 50, 0, 75]), 'forgive'))
         test('BETRAYED-RECONCILE: not the turn after a betrayal', () => keepsOut('no-betrayed-reconcile.lp', ':- social_action(P, reconcile), recent(_, betray, P).', person([50, 50, 0, 30], 'recent("player", betray, "marek").'), 'reconcile'))
         test('BETRAYED-FORGIVE: not the turn after a betrayal', () => keepsOut('no-betrayed-forgive.lp', ':- social_action(P, forgive), recent(_, betray, P).', person([50, 50, 0, 30], 'recent("player", betray, "marek").'), 'forgive'))
+        test('RECENT-REFUSE-HELP: no help the turns after refusing the player', () =>
+            keepsOut('no-recent-refuse-help.lp', ':- social_action(P, help), recent(P, refuse, "player").', person([50, 50, 45, 0], 'recent("marek", refuse, "player").'), 'help'))
     })
 })
 

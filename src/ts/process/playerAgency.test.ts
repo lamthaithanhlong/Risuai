@@ -20,6 +20,11 @@ describe('the player\'s turn is carried out (measured: the stalactite plan 0/6 -
         // carrying out the turn stays first: the new rule must not read as a reason to cut the player's own action short
         expect(PLAYER_AGENCY.indexOf('carry out what the player wrote')).toBeLessThan(PLAYER_AGENCY.indexOf('only what they wrote'))
     })
+    it('keeps the player as viewpoint: no substitute lead or invented romance labels (New Chat 2 / Yuuichi, 2026-11-08)', () => {
+        expect(PLAYER_AGENCY).toContain('never invent a substitute male lead')
+        expect(PLAYER_AGENCY).toContain('Do not invent romance or kinship labels')
+        expect(PLAYER_AGENCY).toContain('bạn đời')
+    })
     it('is the text that was measured', () => {
         const f = '/private/tmp/claude-501/proseeval/agency1b.py'
         if (!existsSync(f)) return

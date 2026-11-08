@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'vitest'
 import fs from 'fs'
 import path from 'path'
-import { accept, appendNpcLines, parseInner, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, stepNpc } from './npcCheck.mjs'
+import { accept, addressPairHits, appendNpcLines, parseInner, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, stepNpc } from './npcCheck.mjs'
 
 const fx = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../tests/acceptance/fixtures/owner-chats/npc-dialogue-704.json'), 'utf8'))
 // the balcony woman's ledger as the bookkeeper would write it up to the owner's turn 11 (painkillers pulled over, fever medicine needed)
@@ -110,6 +110,13 @@ describe('extractor and hits on the owner\'s lines', () => {
         expect(say('Còn nhiều thuốc không?')).toEqual(['npc-address'])
         expect(say('Anh còn thuốc không, cho em xin ít?')).toEqual([])
         expect(say('Anh còn thuốc giảm đau không? Tay tôi đau lắm.')).toEqual([])
+    })
+    test('reported 2026-11-08: em+thầy or cậu+em in one speech is npc-address-pair; cho em xin is not', () => {
+        expect(addressPairHits('Có phải em quên mang hồ sơ chưa? Hay là thầy đang đợi em ở đây?').map((h) => h.rule)).toEqual(['npc-address-pair'])
+        expect(addressPairHits('Cậu đi đâu vậy? Em quên hồ sơ rồi à?').map((h) => h.rule)).toEqual(['npc-address-pair'])
+        expect(addressPairHits('Anh còn thuốc không, cho em xin ít?')).toEqual([])
+        expect(rules(npcHits('Naru hỏi: “Có phải em quên mang hồ sơ chưa? Hay là thầy đang đợi em ở đây?”', P))).toContain('npc-address-pair')
+        expect(npcRewriteNote(npcHits('Naru hỏi: “Có phải em quên mang hồ sơ chưa? Hay là thầy đang đợi em ở đây?”', P))).toContain('npc-address-pair')
     })
     test('class 4: unprompted motive is npc-exposition; asked "tại sao", it is not', () => {
         const line = 'Cô quay đi. “Tôi không biết ngoài kia chuyện gì xảy ra hơn anh đâu. Tôi chỉ đang cố giữ cánh tay này khỏi nhiễm trùng.”'

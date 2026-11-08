@@ -933,6 +933,8 @@ export interface Database{
     npcPsych?: boolean
     /** the model judge of NPC lines in the reply check (npcCheck.mjs judgePrompt): off unless set true (2026-11-05, L1) */
     npcJudge?: boolean
+    /** On-stage NPCs each speak from their own short request (npcVoices.mjs); the narrator leaves [[SAY|id]]. On unless false. */
+    npcVoiceBots?: boolean
     /** The bookkeeper names the shelves the next reply needs and the books are asked then, so the librarian waits in the chat instead of
      *  asking before the narrator (loreIndex.ts "the GM asks the librarian"); on unless false. */
     loreForward?: boolean

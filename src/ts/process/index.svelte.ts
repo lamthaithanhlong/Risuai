@@ -16,6 +16,7 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
+import { agencyHits, agencyNote } from "./agencyGate";
 import { settleReply, type NpcCheckOpts } from "./replyRegen";
 // @ts-ignore plain JS module (npcCheck.d.mts)
 import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs";
@@ -24,6 +25,13 @@ import { findsBeforeRequest } from "./findGlue";
 import { adminBeforeRequest } from "./adminGlobal";
 import { adminReportAfterReplyPage, lastReplyRaw, personaIdOf, statsAfterReplyPage, statsBeforeRequestPage, trainAfterReplyPage } from "./statsGlue";
 import { askSubmodel, creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
+// @ts-ignore plain JS module (npcVoices.d.mts)
+import { fillNpcVoices, speakingNamesIn } from "./npcVoices.mjs";
+import { seedScene } from "./sceneMemory";
+import { statusSpec } from "./statusBook";
+import { hasCreationStep, yesAt } from "./gameMaster";
+import { lastTurnIsAsk } from "./adminAsk";
+import { continuityHits, continuityNote } from "./continuityGate";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
@@ -1621,19 +1629,27 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)
     // on the Node server (unless Settings turns it off) the solver decides this turn's event and NPC intents (gmSolver.ts)
-    if(DBState.db.gmSolver !== false && isNodeServer){
-        const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
-        formated = await brTimed('gm solver', () => gameMasterRequestSolved(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat, (input) => fetchGmDecision(input, { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth })), 0)
-    } else {
-        formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+    // Admin asks ("@admin" / "Admin hỏi…") are out of story: no GM pressure, no scene seed (measured 2026-11-08).
+    const askTurn = lastTurnIsAsk(currentChat?.message)
+    if(!askTurn){
+        if(DBState.db.gmSolver !== false && isNodeServer){
+            const { getNodeServerProxyAuth } = await import('../storage/nodeStorage')
+            formated = await brTimed('gm solver', () => gameMasterRequestSolved(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat, (input) => fetchGmDecision(input, { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth })), 0)
+        } else {
+            formated = gameMasterRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
+        }
+        if(!arg.previewPrompt && DBState.db.gmBookkeeper !== false && currentChar?.type === 'character' && !statusSpec(currentChar)
+            && (!hasCreationStep(currentChar) || yesAt(currentChat?.message ?? []) >= 0)){
+            await brTimed('scene memory', () => seedScene(currentChat, askSubmodel), 0)
+        }
     }
     // the persona is the character sheet and the card's Future Plan line is asked for, with the GM on or off (gameMasterPage.ts)
     formated = storyNotesRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
     // while the character is being made (the card's "Được chưa?" step): only the creation step is answered, no story yet
     const beforeCreation = formated
     formated = creationRequest(formated, DBState.db.characters[sel.char] ?? currentChar, currentChat)
-    // a story turn (not the creation step, not the opening, not a continue) gets its finished reply checked once (replyRegen.ts)
-    const checkReply = formated === beforeCreation && !arg.continue && !arg.previewPrompt && nowChatroom.type === 'character' && gameMasterOn(DBState.db.characters[sel.char] ?? currentChar) && !isOpening(currentChat?.message)
+    // a story turn (not the creation step, not the opening, not a continue, not an Admin ask) gets its finished reply checked once (replyRegen.ts)
+    const checkReply = formated === beforeCreation && !arg.continue && !arg.previewPrompt && nowChatroom.type === 'character' && gameMasterOn(DBState.db.characters[sel.char] ?? currentChar) && !isOpening(currentChat?.message) && !askTurn
     const previousReplies = (currentChat?.message ?? []).filter((m) => m.role === 'char').map((m) => m.data)
     const lastUserText = [...(currentChat?.message ?? [])].reverse().find((m) => m.role === 'user')?.data ?? ''
 
@@ -1971,29 +1987,31 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【ADMIN】 / 【HỆ THỐNG】 line gets ONE
         // more draft (replyCheck.mjs / replyRegen.ts). The second draft replaces the first and is kept even if it still has hits.
         const firstChunkKey0 = Object.keys(lastResponseChunk)[0]
+        const redoFromNote = async (note: string) => {
+            formated = gmRequest(formated, note)
+            const req2 = await requestModelOnce()
+            if(req2.type === 'success'){
+                return String(req2.result)
+            }
+            if(req2.type !== 'streaming'){
+                return null
+            }
+            const r2 = req2.result.getReader()
+            let text = ''
+            while(!abortSignal.aborted){
+                const got = await r2.read()
+                if(got.value){
+                    text = got.value[Object.keys(got.value)[0]] ?? text
+                }
+                if(got.done){
+                    break
+                }
+            }
+            return abortSignal.aborted ? null : text
+        }
+        let draft = result
         if(checkReply && receivedStreamingResult && firstChunkKey0 !== undefined){
-            const settled = await settleReply(result, previousReplies, async (note) => {
-                formated = gmRequest(formated, note)
-                const req2 = await requestModelOnce()
-                if(req2.type === 'success'){
-                    return String(req2.result)
-                }
-                if(req2.type !== 'streaming'){
-                    return null
-                }
-                const r2 = req2.result.getReader()
-                let text = ''
-                while(!abortSignal.aborted){
-                    const got = await r2.read()
-                    if(got.value){
-                        text = got.value[Object.keys(got.value)[0]] ?? text
-                    }
-                    if(got.done){
-                        break
-                    }
-                }
-                return abortSignal.aborted ? null : text
-            }, (m) => brLog(m), (rec) => {
+            draft = await settleReply(draft, previousReplies, redoFromNote, (m) => brLog(m), (rec) => {
                 // one record per regenerated reply, kept in the chat's script state so the acceptance run can count them (summary.md)
                 const chat = DBState.db.characters[sel.char].chats[sel.chat]
                 chat.scriptstate = chat.scriptstate ?? {}
@@ -2002,14 +2020,45 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 log.push({ at: msgIndex, ...rec })
                 chat.scriptstate['$reply_regen'] = JSON.stringify(log)
             }, npcCheckOpts(DBState.db.characters[sel.char].chats[sel.chat], previousReplies.length + 1, getUserName(), lastUserText))
-            if(settled !== result){
-                result = settled
-                lastResponseChunk = { ...lastResponseChunk, [firstChunkKey0]: settled }
-                const redone = await processScriptFull(nowChatroom, reformatContent(prefix + result), 'editoutput', msgIndex)
-                DBState.db.characters[sel.char].chats[sel.chat].message[msgIndex].data = redone.data
-                emoChanged = redone.emoChanged
-                DBState.db.characters[sel.char].reloadKeys += 1
+            // Continuity gate (New Chat 2 / Yuuichi, 2026-11-08): invented kinship or viewpoint off the player → one more rewrite.
+            const cont = continuityHits(draft, lastUserText, previousReplies, getUserName())
+            if(cont.length){
+                const contDraft = await redoFromNote(continuityNote(cont))
+                if(contDraft && contDraft.trim()){
+                    brLog(`continuity gate: rewrote for ${cont.map((h) => h.rule).join(',')}`)
+                    draft = contDraft
+                }
             }
+            // Observe-only agency gate: the player may look, but gets no invented speech or next move.
+            const ag = agencyHits(draft, lastUserText, getUserName())
+            if(ag.length){
+                const agDraft = await redoFromNote(agencyNote(ag))
+                if(agDraft && agDraft.trim()){
+                    brLog(`agency gate: rewrote for ${ag.map((h) => h.rule).join(',')}`)
+                    draft = agDraft
+                }
+            }
+        }
+        // NPC voice fill runs for every finished character story reply (not only the settleReply branch; not Admin asks).
+        if(!askTurn && receivedStreamingResult && firstChunkKey0 !== undefined && nowChatroom.type === 'character' && DBState.db.npcVoiceBots !== false){
+            const voiceChat = DBState.db.characters[sel.char].chats[sel.chat]
+            const voiceCard = DBState.db.characters[sel.char]
+            const voiceNames = Object.values((voiceCard as { extentions?: { vjPortraits?: Record<string, { name?: string }> } })?.extentions?.vjPortraits ?? {})
+                .map((e) => e?.name).filter((n): n is string => !!n)
+            for (const [name] of (voiceCard as { additionalAssets?: [string, string, string][] }).additionalAssets ?? []) {
+                if (name && !/^(\.\.\.|img|bg|portrait)/i.test(name)) voiceNames.push(name)
+            }
+            // Only people who speak in THIS reply — not every portrait named in the last six turns.
+            const voiceExtras = speakingNamesIn(draft, voiceNames)
+            draft = await fillNpcVoices(draft, String(voiceChat.scriptstate?.['$led_npc'] ?? ''), previousReplies.length + 1, askSubmodel, voiceExtras)
+        }
+        if(draft !== result && firstChunkKey0 !== undefined){
+            result = draft
+            lastResponseChunk = { ...lastResponseChunk, [firstChunkKey0]: draft }
+            const redone = await processScriptFull(nowChatroom, reformatContent(prefix + result), 'editoutput', msgIndex)
+            DBState.db.characters[sel.char].chats[sel.chat].message[msgIndex].data = redone.data
+            emoChanged = redone.emoChanged
+            DBState.db.characters[sel.char].reloadKeys += 1
         }
 
         addRerolls(generationId, Object.values(lastResponseChunk))

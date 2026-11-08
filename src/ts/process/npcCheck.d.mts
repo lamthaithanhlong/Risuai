@@ -19,7 +19,7 @@ export function foldNpc(ledger: string, beforeN?: number): Map<string, NpcCard>
 export function appendNpcLines(ledger: string, n: number, ops: NpcOp[], max?: number): { ledger: string; added: number }
 export function npcOpsOf(bodies: string[]): NpcOp[]
 export function cardLine(c: NpcCard): string
-export function npcCardsNote(ledger: string, n: number): string
+export function npcCardsNote(ledger: string, n: number, voices?: boolean, extras?: string[]): string
 export function npcLines(reply: string, opts?: { player?: string }): { line: string; para: string; at: number }[]
 export function sentencesOfLine(line: string): string[]
 export function extractFacts(reply: string, cards: Map<string, NpcCard>, ctx?: { player?: string; playerText?: string; lastItem?: string }): Map<string, { card: NpcCard | null; lines: string[]; facts: NpcFacts }>

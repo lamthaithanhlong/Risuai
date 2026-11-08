@@ -103,6 +103,18 @@ describe('sync', () => {
             ['gm_path', 2, 'Song clan | servant | low', 'Nephis\'s cohort | newcomer | distrusted'],
         ])
     })
+    test('the current scene and its changes are indexed per chat', () => {
+        const s = fresh()
+        s.sync(saveOf([card([chat1({ scene_date: 'Ngày 1, sáng', scene_place: 'mép hồ' }, 'k1'), chat1({ scene_place: 'lớp học' }, 'k2')])]), 1)
+        expect(s.story('k1').state).toMatchObject({ scene_date: 'Ngày 1, sáng', scene_place: 'mép hồ' })
+        expect(s.story('k2').state.scene_place).toBe('lớp học')
+        s.sync(saveOf([card([chat1({ scene_date: 'Ngày 1, trưa', scene_place: 'phòng thay đồ' }, 'k1'), chat1({ scene_place: 'lớp học' }, 'k2')])]), 2)
+        expect(s.history('k1').filter((x: any) => x.key.startsWith('scene_')).map((x: any) => [x.key, x.old_value, x.new_value])).toEqual([
+            ['scene_date', 'Ngày 1, sáng', 'Ngày 1, trưa'],
+            ['scene_place', 'mép hồ', 'phòng thay đồ'],
+        ])
+        expect(s.history('k2')).toEqual([])
+    })
     test('a chat deleted from the save is archived (deleted_at, deleted_rev) and comes back if the save has it again', () => {
         const s = fresh()
         s.sync(saveOf([card([chat1(), chat1({}, 'k2')])]), 10)

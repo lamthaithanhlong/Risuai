@@ -2,6 +2,7 @@ import { getGenerationModel } from "../generationKey";
 import { Ollama } from 'ollama/dist/browser.mjs';
 import { language } from "../../../lang";
 import { fetchNative, globalFetch } from "../../globalApi.svelte";
+import { isNodeServer } from "../../platform";
 import { getModelInfo, LLMFlags, LLMFormat, type LLMModel } from "../../model/modellist";
 import { risuChatParser, risuEscape, risuUnescape } from "../../parser/parser.svelte";
 import { pluginProcess, pluginV2 } from "../../plugins/plugins.svelte";
@@ -1169,7 +1170,8 @@ async function requestOllama(arg:RequestDataArgumentExtended):Promise<requestDat
         model: ollamaModel,
         messages: messages,
         stream: arg.useStreaming,
-        think: ollamaThinkMode
+        think: ollamaThinkMode,
+        options: { num_predict: arg.maxTokens }
     }
 
     requestBody = applyAdditionalParameters(requestBody, customHeaders, getAdditionalParameters(arg.aiModel))
@@ -1192,7 +1194,7 @@ async function requestOllama(arg:RequestDataArgumentExtended):Promise<requestDat
     const ollama = new Ollama({
         host: isCloud ? 'https://ollama.com' : db.ollamaURL,
         headers: Object.keys(customHeaders).length > 0 ? customHeaders : undefined,
-        fetch: isCloud ? ollamaCloudFetch : undefined
+        fetch: isCloud || isNodeServer ? ollamaCloudFetch : undefined
     })
 
     if(!arg.useStreaming){

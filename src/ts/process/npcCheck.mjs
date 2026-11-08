@@ -221,10 +221,34 @@ export function cardLine(c) {
 /** The inner-line rule (always in the GM note): before a person other than the player speaks, one hidden line, stripped from the screen. */
 export const NPC_INNER_RULE = '\n\n[NPC inner line (hidden, never named): right before the first words a person other than the player\'s character says in this reply, write one line [[NPC|<their id, e.g. ban-cong-704>|<what they want right now>|<what they feel>|<what they hold back>]]; their words follow from it: they never refuse what they want right now without saying why, never say what they hold back, and mention only what they saw or were told.]'
 
-/** The hidden note with the cards of the NPCs active in the last 3 replies (at most 3); the inner-line rule alone when none. */
-export function npcCardsNote(ledger, n) {
-    const cards = [...foldNpc(ledger, n).values()].filter((c) => !c.isAdmin && c.id !== EVENTS_ID && c.lastTurn >= n - 3).sort((a, b) => b.lastTurn - a.lastTurn).slice(0, 3)
+/** Thin cards from display names when the ledger has nobody yet (first turns / New Chat). */
+function cardsFromExtraNames(names, n) {
+    const out = []
+    const seen = new Set()
+    for (const raw of names ?? []) {
+        const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)
+        const id = slug(name)
+        if (!name || !id || seen.has(id)) continue
+        seen.add(id)
+        const c = blankNpc(id, name)
+        c.lastTurn = n
+        out.push(c)
+        if (out.length >= 3) break
+    }
+    return out
+}
+
+/** The hidden note with the cards of the NPCs active in the last 3 replies (at most 3); the inner-line rule alone when none.
+ *  `voices`: the narrator leaves [[SAY|id]] and does not write their words (npcVoices.mjs fills each marker).
+ *  `extras`: portrait names on stage when $led_npc is still empty (Ollama New Chat 2, 2026-11-08). */
+export function npcCardsNote(ledger, n, voices = false, extras = []) {
+    let cards = [...foldNpc(ledger, n).values()].filter((c) => !c.isAdmin && c.id !== EVENTS_ID && c.lastTurn >= n - 3).sort((a, b) => b.lastTurn - a.lastTurn).slice(0, 3)
+    if (!cards.length) cards = cardsFromExtraNames(extras, n)
     if (!cards.length) return NPC_INNER_RULE
+    if (voices) {
+        const marks = cards.map((c) => `${c.name} → [[SAY|${c.id}]]`).join('; ')
+        return `\n\n[NPC voices (hidden, never named): ${cards.map(cardLine).join(' ')} Do not write the spoken words of these people. Where one of them speaks, write exactly one marker on its own line and keep the scene around it: ${marks}. At most one marker per person. Never put their words inside “…” yourself — only the marker. Their words are filled in afterwards, each by their own voice, and each hears the ones who spoke before them in this reply.]`
+    }
     return NPC_INNER_RULE + `\n\n[NPC cards (hidden, never named): ${cards.map(cardLine).join(' ')} Each of them says one or two whole sentences built from this card, as a real person: what she needs, holds and knows, asked with the address term on the card; she never refuses what she needs unless she distrusts the player and says why, never asks for what she already holds, never hands out an errand, a place to go or an "if you do X I will Y" (tasks come only from Admin).]`
 }
 
@@ -396,10 +420,30 @@ export function grammarHits(line) {
     return out
 }
 
+// Wrong address *pair* in one speech (Mailman Naru 2026-11-08: "Có phải em quên…? Hay là thầy đang đợi em?").
+// Outside Dafny Accept — same pattern as grammarHits. Peer 2nd-person vs junior 2nd-person, or junior + thầy/cô giáo.
+const PEER_YOU = W('cậu|bạn|mày')
+const JUNIOR_YOU = W('em')
+// "cho em xin" / "em xin" = self as em, not addressing the player — strip those before the junior-you test
+const EM_AS_SELF = /(?<!\p{L})(?:cho em(?: xin)?|(?:tôi|tớ|mình)?\s*em (?:xin|cần|chỉ)|em (?:xin|cần|đang|bị|sợ|đói|đau))(?!\p{L})/gu
+const TEACHER = W('thầy|cô giáo')
+/** [{rule, why}] when one quote mixes incompatible address forms toward the player. */
+export function addressPairHits(line) {
+    const raw = String(line ?? '')
+    const stripped = raw.replace(EM_AS_SELF, ' ')
+    const out = []
+    const peer = PEER_YOU.test(stripped)
+    const junior = JUNIOR_YOU.test(stripped)
+    const teacher = TEACHER.test(raw)
+    if (junior && teacher) out.push({ rule: 'npc-address-pair', why: 'em + thầy/cô giáo trong cùng lời' })
+    if (peer && junior) out.push({ rule: 'npc-address-pair', why: 'cậu/bạn/mày và em trong cùng lời' })
+    return out
+}
+
 // ---- the post-check of one reply --------------------------------------------------------------------------------------------
 /** rules a sentence cut may fix when the redo still has them (never the state rules) */
 export const CUT_RULES = ['npc-quest-hook', 'npc-exposition', 'npc-long', 'npc-voice', 'npc-unwitnessed']
-export const HARD_RULES = ['npc-grammar', 'npc-address', 'npc-quest-hook', 'npc-contradicts-need', 'npc-phantom-item', 'npc-exposition', 'npc-long', 'npc-inner', 'npc-voice', 'npc-unwitnessed']
+export const HARD_RULES = ['npc-grammar', 'npc-address', 'npc-address-pair', 'npc-quest-hook', 'npc-contradicts-need', 'npc-phantom-item', 'npc-exposition', 'npc-long', 'npc-inner', 'npc-voice', 'npc-unwitnessed']
 
 /**
  * Every NPC hit of a reply: [{rule, text, npc, soft?, why?}]. ctx: { ledger ($led_npc), n (this reply's number: the state is the
@@ -419,14 +463,17 @@ export function npcHits(reply, ctx = {}) {
             const keys = h.rule === 'npc-unwitnessed' ? (h.items ?? []).flatMap((e) => ev.get(e) ?? []) : h.rule === 'npc-voice' ? (h.items ?? []) : undefined
             out.push({ rule: h.rule, text: quote, npc: name, why: h.why ?? (h.items?.length ? h.items.map(itemLabel).join(', ') : h.n ? `${h.n} ${h.rule === 'npc-voice' ? 'chữ' : 'câu'}` : ''), ...(keys ? { keys } : {}) })
         }
-        for (const l of g.lines) for (const h of grammarHits(l)) out.push({ ...h, text: l, npc: name })
+        for (const l of g.lines) {
+            for (const h of grammarHits(l)) out.push({ ...h, text: l, npc: name })
+            for (const h of addressPairHits(l)) out.push({ ...h, text: l, npc: name })
+        }
         void key
     }
     return out
 }
 
 const VI_RULE = {
-    'npc-grammar': 'câu cụt hoặc thiếu động từ', 'npc-address': 'câu hỏi/nhờ thiếu từ xưng hô', 'npc-quest-hook': 'NPC không giao việc, không chỉ đi nơi khác, không mặc cả kiểu nhiệm vụ',
+    'npc-grammar': 'câu cụt hoặc thiếu động từ', 'npc-address': 'câu hỏi/nhờ thiếu từ xưng hô', 'npc-address-pair': 'xưng hô loạn cặp trong cùng lời (em+thầy, hoặc cậu/bạn lẫn em)', 'npc-quest-hook': 'NPC không giao việc, không chỉ đi nơi khác, không mặc cả kiểu nhiệm vụ',
     'npc-contradicts-need': 'trái với điều cô ấy đang cần/đang giữ', 'npc-phantom-item': 'đưa/đặt món cô ấy không có', 'npc-exposition': 'tự giải thích động cơ khi không ai hỏi',
     'npc-long': 'quá 2 câu', 'npc-bare-request': 'nhờ trống không, không có gì neo',
     'npc-inner': 'trái với dòng nội tâm ẩn (từ chối điều đang muốn, hoặc nói ra điều đang giấu)', 'npc-voice': 'sai giọng của NPC (từ cấm hoặc câu dài hơn giọng)', 'npc-unwitnessed': 'nhắc việc cô ấy không có mặt và chưa ai kể',

@@ -15,6 +15,8 @@ describe('parseAdminAsk', () => {
         ['@admin tui làm gì', 'ask', 'tui làm gì'], ['  /ADMIN, đi đâu', 'ask', 'đi đâu'], ['hỏi admin: luật gì', 'ask', 'luật gì'], ['HỎI ADMIN: x', 'ask', 'x'],
         ['  Hỏi Admin : x', 'ask', 'x'], ['@admin bug: lặp mãi', 'bug', 'lặp mãi'], ['@Admin BUG nút hỏng', 'bug', 'nút hỏng'], ['@admin', 'ask', ''],
         ['hỏi admin: x'.normalize('NFD'), 'ask', 'x'],
+        ['Admin hỏi tí truyện này 3 người đó biết tui ko', 'ask', 'tí truyện này 3 người đó biết tui ko'],
+        ['admin hỏi: họ quen tui chưa', 'ask', 'họ quen tui chưa'],
     ])('%j is %s', (text, kind, body) => { expect(parseAdminAsk(text)).toEqual({ kind, body }) })
     test.each(['@administrator xin chào', 'tôi hỏi admin: x', 'admin ơi', 'tôi mở hộp', '@adminơ', '', null, undefined])('%j is not an ask', (text) => { expect(parseAdminAsk(text as never)).toBeNull() })
     test('"bugs" is an ask about bugs, not a bug report', () => { expect(parseAdminAsk('@admin bugs là gì')).toEqual({ kind: 'ask', body: 'bugs là gì' }) })

@@ -444,7 +444,10 @@ async function getFileSrcCached(path:string){
         return cached
     }
     const src = await getFileSrc(path)
-    fileSrcCache.set(path, src)
+    // an empty miss must not stick: a portrait just written, or a race before forage returns, used to leave src="" forever
+    if(src){
+        fileSrcCache.set(path, src)
+    }
     return src
 }
 
@@ -490,8 +493,11 @@ const videoExtensions = ['mp4', 'webm', 'avi', 'm4p', 'm4v']
 async function parseAdditionalAssets(data:string, char:simpleCharacterArgument|character, mode:'normal'|'back', arg:{ch:number}){
     const assetWidthString = (DBState.db.assetWidth && DBState.db.assetWidth !== -1 || DBState.db.assetWidth === 0) ? `max-width:${DBState.db.assetWidth}rem;` : ''
 
-    if (char.type === 'character' && (!assetsCache || !emoAssetsCache)) {
-        resetAssetsCache(char.additionalAssets ?? [], char.emotionImages, getModuleAssets())
+    // Chat passes createSimpleCharacter (type "simple"). The old gate only rebuilt for type "character", so when
+    // assetsCache was still null (effect not run yet) or stale after a new Additional Asset, {{path::Name}} became
+    // src="" and the portrait strip showed only its round border (reported 2026-11-08: asset already there).
+    if (char.type === 'character' || char.type === 'simple') {
+        resetAssetsCache(char.additionalAssets ?? [], char.emotionImages ?? [], getModuleAssets())
     }
 
     const assetPaths = assetsCache ?? {}
