@@ -32,6 +32,7 @@ import { statusSpec } from "./statusBook";
 import { hasCreationStep, yesAt } from "./gameMaster";
 import { lastTurnIsAsk } from "./adminAsk";
 import { continuityHits, continuityNote, leadHits, scrubKinship, scrubLead } from "./continuityGate";
+import { stripMarkers } from "./replyMarkers";
 import { allowedCast, castHits, castNote, rosterNames, scrubCast } from "./castGate";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -2063,6 +2064,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 draft = scrubAgency(draft, lastUserText, getUserName())
                 brLog(`agency gate: scrubbed leftover agency`)
             }
+            // Fail-close: scrub lead then strip markers after agency redo
+            draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
+            draft = stripMarkers(draft)
             // Fail-close: scrub leftover lead after agency redo (catches leadHits introduced by agency scrub)
             const leadAfter = leadHits(draft, lastUserText, getUserName(), previousReplies)
             if(leadAfter.length){
@@ -2104,6 +2108,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
                 brLog(`continuity gate: scrubbed leftover lead`)
             }
+            // Final fail-close: kinship + lead scrub then strip markers
+            draft = scrubKinship(draft, lastUserText, previousReplies)
+            draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
+            draft = stripMarkers(draft)
             const roomCard = DBState.db.characters[sel.char]
             const assetNames = new Set([
                 ...((roomCard as { additionalAssets?: [string, string, string][] })?.additionalAssets ?? []).map(([name]) => name),

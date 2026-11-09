@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, existsSync } from 'fs'
-import { agencyHits, agencyNote, observeOnly, scrubAgency } from './agencyGate'
+import { agencyHits, agencyNote, observeOnly, scrubAgency, weakAct } from './agencyGate'
 import { leadHits, scrubLead } from './continuityGate'
 
 const PLAYER = 'Tui nhìn 3 người họ'
@@ -56,9 +56,12 @@ describe('agencyGate', () => {
         expect(agencyHits(CLEAN, PLAYER, 'Kenji Park')).toEqual([])
     })
 
-    it('does not apply observe rules when the player asks a question', () => {
+    it('applies weak-act agency detection when the player asks a question', () => {
         expect(observeOnly('Tui hỏi Naru tên cô ấy')).toBe(false)
-        expect(agencyHits(BAD_FALLBACK, 'Tui hỏi Naru tên cô ấy', 'Kenji Park')).toEqual([])
+        expect(weakAct('Tui hỏi Naru tên cô ấy')).toBe(true)
+        // Weak act: agency detection runs, catches invented PC speech/advance
+        const hits = agencyHits(BAD_FALLBACK, 'Tui hỏi Naru tên cô ấy', 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toEqual(expect.arrayContaining(['pc-speech', 'pc-advance']))
     })
 
     it('scrubs New Chat 2-style Kenji speech and advance sentences', () => {
@@ -76,9 +79,10 @@ describe('agencyGate', () => {
         expect(agencyHits(scrubbed, PLAYER, 'Kenji Park')).toEqual([])
     })
 
-    it('leaves non-observe replies unchanged', () => {
+    it('leaves strong player acts unchanged', () => {
         const reply = BAD_FALLBACK
-        expect(scrubAgency(reply, 'Tui hỏi Naru tên cô ấy', 'Kenji Park')).toBe(reply)
+        // Strong act: player explicitly initiates intimate contact
+        expect(scrubAgency(reply, 'Tui ôm Aki', 'Kenji Park')).toBe(reply)
     })
 
     it('builds a hidden rewrite note mentioning no PC drag', () => {
@@ -86,5 +90,97 @@ describe('agencyGate', () => {
         expect(note).toContain('hidden, never named')
         expect(note).toContain('NPC-initiated actions toward the player may remain')
         expect(note).toContain('do not have an NPC drag')
+    })
+
+    it('detects PC will/hesitation on observe-only turns (Anh không dám cử động)', () => {
+        const reply = 'Kenji nhìn Aki. Anh không dám cử động. Naru im lặng.'
+        const hits = agencyHits(reply, PLAYER, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toContain('pc-will')
+        expect(hits.find((h) => h.rule === 'pc-will')?.text).toContain('Anh không dám cử động')
+        const scrubbed = scrubAgency(reply, PLAYER, 'Kenji Park')
+        expect(scrubbed).not.toContain('Anh không dám cử động')
+        expect(scrubbed).toContain('Naru im lặng.')
+    })
+
+    it('detects PC will with other hesitation phrases', () => {
+        const reply = 'Kenji Park ngồi yên. Tui không thể nói. Aki quay đi.'
+        const hits = agencyHits(reply, PLAYER, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toContain('pc-will')
+        const scrubbed = scrubAgency(reply, PLAYER, 'Kenji Park')
+        expect(scrubbed).not.toContain('Tui không thể nói')
+    })
+
+    it('weakAct detects walking and asking as weak acts', () => {
+        expect(weakAct('Tui đi theo Naru')).toBe(true)
+        expect(weakAct('Tui hỏi Naru tên cô ấy')).toBe(true)
+        expect(weakAct('Tui nhìn 3 người họ')).toBe(true)
+        expect(weakAct('Tui chạy đến đó')).toBe(true)
+        // Strong acts are not weak
+        expect(weakAct('Tui ôm Aki')).toBe(false)
+        expect(weakAct('Tui hôn Kenji')).toBe(false)
+    })
+
+    it('scrubs agency on weak player acts (walking, asking)', () => {
+        const weakPlayer = 'Tui đi theo Naru'
+        const reply = 'Kenji Park đáp lại, “Được thôi.” Anh vuốt tóc Aki. Naru cười.'
+        const hits = agencyHits(reply, weakPlayer, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toEqual(expect.arrayContaining(['pc-speech', 'pc-advance']))
+        const scrubbed = scrubAgency(reply, weakPlayer, 'Kenji Park')
+        expect(scrubbed).not.toContain('“Được thôi.”')
+        expect(scrubbed).not.toContain('vuốt tóc')
+        expect(agencyHits(scrubbed, weakPlayer, 'Kenji Park')).toEqual([])
+    })
+
+    it('preserves explicit strong player act on weak turns', () => {
+        const weakPlayer = 'Tui hỏi Naru tên cô ấy'
+        const reply = 'Naru trả lời, “Tên tôi là Naru.” Kenji Park nhìn chằm chằm.'
+        // The player explicitly asked - NPC answering is OK, PC speech is not invented
+        const hits = agencyHits(reply, weakPlayer, 'Kenji Park')
+        // Kenji Park didn't speak, so no pc-speech hit
+        expect(hits.map((hit) => hit.rule)).not.toContain('pc-speech')
+        const scrubbed = scrubAgency(reply, weakPlayer, 'Kenji Park')
+        expect(scrubbed).toContain('Naru trả lời')
+        expect(scrubbed).toContain('Kenji Park nhìn chằm chằm')
+    })
+
+    it('allows light sleeve tug as permissible (not an advance)', () => {
+        const reply = 'Aki kéo vạt áo Kenji Park. Kenji quay lại nhìn Aki.'
+        const hits = agencyHits(reply, PLAYER, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).not.toContain('pc-advance')
+        const scrubbed = scrubAgency(reply, PLAYER, 'Kenji Park')
+        expect(scrubbed).toContain('kéo vạt áo')
+        expect(agencyHits(scrubbed, PLAYER, 'Kenji Park')).toEqual([])
+    })
+
+    it('22:07-style snippet: observe-only with PC will and advance', () => {
+        // 22:07 style: player observes, reply invents PC will + advance
+        const reply = 'Kenji Park đứng yên. Anh không dám cử động. Sau đó anh đưa tay vuốt mái tóc Aki.'
+        const hits = agencyHits(reply, PLAYER, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toEqual(expect.arrayContaining(['pc-will', 'pc-advance']))
+        const scrubbed = scrubAgency(reply, PLAYER, 'Kenji Park')
+        expect(scrubbed).not.toContain('Anh không dám cử động')
+        expect(scrubbed).not.toContain('vuốt mái tóc')
+        expect(agencyHits(scrubbed, PLAYER, 'Kenji Park')).toEqual([])
+    })
+
+    it('later-turn case (turn > 1): weak act with dragging still scrubbed', () => {
+        // Simulate a later turn where player walks, reply drags PC
+        const weakPlayer = 'Tui đi vào phòng'
+        const reply = 'Yuuichi nắm tay Kenji Park kéo cậu vào đội hình. Naru theo sau.'
+        const hits = agencyHits(reply, weakPlayer, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toContain('pc-dragged')
+        const scrubbed = scrubAgency(reply, weakPlayer, 'Kenji Park')
+        expect(scrubbed).not.toContain('kéo cậu vào đội hình')
+        expect(agencyHits(scrubbed, weakPlayer, 'Kenji Park')).toEqual([])
+    })
+
+    it('later-turn case: observe-only with invented speech still scrubbed', () => {
+        const reply = 'Kenji Park thầm nghĩ, “Tôi phải bảo vệ họ.” Naru nhìn ra cửa sổ.'
+        const hits = agencyHits(reply, PLAYER, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toContain('pc-speech')
+        const scrubbed = scrubAgency(reply, PLAYER, 'Kenji Park')
+        expect(scrubbed).not.toContain('“Tôi phải bảo vệ họ.”')
+        expect(scrubbed).not.toContain('Kenji Park thầm nghĩ')
+        expect(agencyHits(scrubbed, PLAYER, 'Kenji Park')).toEqual([])
     })
 })

@@ -9,9 +9,9 @@ describe('continuityGate', () => {
         const hits = kinshipHits(BAD, 'Tui nhìn 3 người họ', ['Kenji Park bước chậm trong hành lang.'])
         expect(hits.map((h) => h.text.toLowerCase())).toEqual(expect.arrayContaining(['bạn gái', 'em họ']))
     })
-    test('allows a label already in the player turn or prior reply', () => {
+    test('allows labels already stated by the player', () => {
         expect(kinshipHits('Aki là bạn gái của Kenji.', 'Aki là bạn gái của tui', [])).toEqual([])
-        expect(kinshipHits('em họ Naru chạy theo.', 'đi', ['Naru, em họ của Aki, đứng đó.'])).toEqual([])
+        expect(kinshipHits('em họ Naru chạy theo.', 'Naru là em họ của Aki.', [])).toEqual([])
     })
     test('flags invented parent and child labels with empty prior', () => {
         expect(kinshipHits('Yuki, mẹ của Aki.', 'đi', []).map((h) => h.text.toLowerCase())).toContain('mẹ')
@@ -26,12 +26,15 @@ describe('continuityGate', () => {
         expect(scrubbed.toLowerCase()).not.toContain('người người')
         expect(kinshipHits(scrubbed, user, [])).toEqual([])
     })
-    test('preserves labels already present in a prior reply', () => {
-        const reply = 'Hai người bạn đời trẻ tuổi kia.'
-        expect(scrubKinship(reply, 'đi', ['Aki có bạn đời.'])).toBe(reply)
+    test('AI-only prior reply does not authorize a kinship label', () => {
+        expect(kinshipHits('Aki là bạn gái của Kenji.', 'đi', ['Aki có bạn gái.'])).toHaveLength(1)
     })
-    test('allows mẹ already present in a prior reply', () => {
-        expect(kinshipHits('Aki gọi mẹ.', 'đi', ['Yuki, mẹ của Aki.'])).toEqual([])
+    test('preserves labels stated by the player', () => {
+        const reply = 'Aki là bạn gái của Kenji.'
+        expect(scrubKinship(reply, 'Aki là bạn gái của tui', [])).toBe(reply)
+    })
+    test('allows mẹ already stated by the player', () => {
+        expect(kinshipHits('Aki gọi mẹ.', 'Yuki, mẹ của Aki.', [])).toEqual([])
     })
     test('viewpoint recognizes Vietnamese observation token boundaries', () => {
         expect(viewpointHits('Bạn đời của Aki bước qua.', 'Tui nhìn 3 người họ', 'Kenji')).toHaveLength(1)
@@ -59,12 +62,14 @@ describe('continuityGate', () => {
         expect(scrubbed).toContain('Yuuichi')
         expect(scrubbed).toContain('Aki')
         expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
-        expect(leadHits(LIVE, 'Tui nhìn 3 người họ', 'Kenji Park', ['Aki bám lấy Yuuichi. Điểm tựa của Aki là Yuuichi.'])).toEqual([])
+        expect(leadHits(LIVE, 'Aki bám lấy Yuuichi. Điểm tựa của Aki là Yuuichi.', 'Kenji Park', [])).toEqual([])
     })
     test('continuityNote names the hits', () => {
         const note = continuityNote(continuityHits(BAD, 'Tui nhìn 3 người họ', [], 'Kenji'))
         expect(note).toContain('bạn gái')
-        expect(note).toContain('Keep the player')
+        expect(note).toContain('Player-authored text is the only continuity canon')
+        expect(note).toContain('AI-only leads and kinship wording are void')
+        expect(note).toContain('Preserve player-stated labels such as bạn gái')
     })
 
     // --- New soft-lead patterns ---
@@ -85,9 +90,29 @@ describe('continuityGate', () => {
         expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
     })
 
-    test('allows "người cũ + ProperName" when already in prior context', () => {
+    test('AI-only người cũ from turn 1 is scrubbed again on turn 2', () => {
+        const turn1Reply = 'Người cũ Aki đứng gần cổng.'
+        const turn1 = scrubLead(turn1Reply, 'Tui nhìn 3 người họ', [], 'Kenji')
+        expect(turn1).not.toContain('người cũ')
+        const turn2Reply = 'Người cũ Aki quay lại nhìn Kenji.'
+        expect(leadHits(turn2Reply, 'Tui vẫn nhìn họ', 'Kenji', [turn1Reply])).toHaveLength(1)
+        expect(scrubLead(turn2Reply, 'Tui vẫn nhìn họ', [turn1Reply], 'Kenji')).not.toContain('người cũ')
+    })
+
+    test('does not allow AI-only "người cũ + ProperName" from prior context', () => {
         const reply = 'Người cũ Aki đứng gần cổng.'
-        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Người cũ Aki đã đến.'])).toEqual([])
+        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Người cũ Aki đã đến.'])).toHaveLength(1)
+    })
+
+    test('detects and scrubs soft contact with the PC arm or shoulder on observation turns', () => {
+        for (const reply of ['Aki chạm nhẹ tay Kenji.', 'Naru tựa vai Yuuichi.']) {
+            expect(leadHits(reply, 'Tui nhìn 3 người họ', 'Kenji', [])).toHaveLength(1)
+            const scrubbed = scrubLead(reply, 'Tui nhìn 3 người họ', [], 'Kenji')
+            expect(scrubbed).toContain('đứng cạnh')
+            expect(scrubbed).not.toMatch(/chạm nhẹ tay|tựa vai/u)
+            expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji', [])).toEqual([])
+        }
+        expect(leadHits('Aki chạm nhẹ tay Kenji.', 'Tui hỏi tên họ', 'Kenji', [])).toEqual([])
     })
 
     test('lead detects "siết … áo của + ProperName" on observation turns', () => {
@@ -110,7 +135,7 @@ describe('continuityGate', () => {
 
     test('allows "siết áo của" when already in prior context', () => {
         const reply = 'Naru siết áo của Yuuichi.'
-        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Naru siết áo của Yuuichi hôm qua.'])).toEqual([])
+        expect(leadHits(reply, 'Naru siết áo của Yuuichi hôm qua.', 'Kenji', [])).toEqual([])
     })
 
     test('lead detects "đi cùng hai cô gái / đi cùng 2 cô gái" on observation turns', () => {
@@ -136,7 +161,7 @@ describe('continuityGate', () => {
 
     test('allows "đi cùng hai cô gái" when already in prior context', () => {
         const reply = 'Yuuichi đi cùng hai cô gái.'
-        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Yuuichi đi cùng hai cô gái hôm qua.'])).toEqual([])
+        expect(leadHits(reply, 'Yuuichi đi cùng hai cô gái hôm qua.', 'Kenji', [])).toEqual([])
     })
 
     test('lead detects "đội hình cố định" near a named hub on observation turns', () => {
@@ -159,7 +184,7 @@ describe('continuityGate', () => {
 
     test('allows "đội hình cố định" when already in prior context', () => {
         const reply = 'Đội hình cố định Aki, Naru và Yuuichi.'
-        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Đội hình cố định Aki, Naru, Yuuichi từ trước.'])).toEqual([])
+        expect(leadHits(reply, 'Đội hình cố định Aki, Naru, Yuuichi từ trước.', 'Kenji', [])).toEqual([])
     })
 
     test('continuityNote reflects neutral-observation wording for new patterns', () => {
