@@ -11,7 +11,7 @@ const LIVE_STYLE_FULL = 'Tay vẫn siết chặt lấy áo của người cũ Yu
 
 const liveReply = existsSync('/tmp/risu-check/live-reply.txt')
     ? readFileSync('/tmp/risu-check/live-reply.txt', 'utf8')
-    : BAD_FALLBACK
+    : LIVE_STYLE_FULL + ' ' + BAD_FALLBACK
 
 describe('agencyGate', () => {
     it('detects invented speech and advances in the live-style reply', () => {
@@ -77,6 +77,27 @@ describe('agencyGate', () => {
         expect(scrubbed).not.toContain('“Cậu ổn chứ?”')
         expect(scrubbed).not.toContain('Kenji Park thầm nghĩ')
         expect(agencyHits(scrubbed, PLAYER, 'Kenji Park')).toEqual([])
+    })
+
+    it('detects and scrubs echoed player words and replayed movement', () => {
+        const player = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
+        const replay = 'Anh hơi nghiêng người về phía trước, bắt đầu sải bước nhanh để bắt kịp nhóm ba người đang tiến về phía trước.'
+        const reply = `${replay} “Cho tớ tham gia câu lạc bộ được không?” Yuuichi nói “Chào cậu, Kenji-kun.” Aki mỉm cười. Naru nhướn mày.`
+        const hits = agencyHits(reply, player, 'Kenji Park')
+        expect(hits.map((hit) => hit.rule)).toEqual(expect.arrayContaining(['pc-echo', 'pc-replay']))
+        expect(agencyHits(replay, player, 'Kenji Park').map((hit) => hit.rule)).toContain('pc-replay')
+        const scrubbed = scrubAgency(reply, player, 'Kenji Park')
+        expect(scrubbed).not.toContain('Cho tớ tham gia câu lạc bộ được không?')
+        expect(scrubbed).not.toContain(replay)
+        expect(scrubbed).toContain('Yuuichi nói “Chào cậu, Kenji-kun.”')
+        expect(scrubbed).toContain('Aki mỉm cười.')
+        expect(scrubbed).toContain('Naru nhướn mày.')
+        expect(agencyHits(scrubbed, player, 'Kenji Park')).toEqual([])
+        expect(agencyHits('Kenji Park khẽ nhướn mày.', 'Tui nhìn 3 người họ', 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(agencyHits('Aki chạy theo Kenji.', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(agencyHits('Aki nói “Kenji Park chạy theo họ.”', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-speech')
+        expect(scrubAgency('Aki nghe “cho tớ tham gia câu lạc bộ được ko” rồi mỉm cười.', player, 'Kenji Park')).toBe('Aki nghe  rồi mỉm cười.')
+        expect(scrubAgency(BAD_FALLBACK, 'Tui ôm Aki', 'Kenji Park')).toBe(BAD_FALLBACK)
     })
 
     it('leaves strong player acts unchanged', () => {

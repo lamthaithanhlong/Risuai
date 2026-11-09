@@ -1,7 +1,7 @@
 // Hard gate for observe-only turns: looking does not authorize a new PC act.
 // Measured 2026-11-08 New Chat 2: "Tui nhìn 3 người họ" → Kenji invented speech + vuốt tóc.
 
-export type AgencyHit = { rule: 'pc-speech' | 'pc-advance' | 'pc-dragged' | 'pc-will'; text: string }
+export type AgencyHit = { rule: 'pc-speech' | 'pc-advance' | 'pc-dragged' | 'pc-will' | 'pc-echo' | 'pc-replay'; text: string }
 
 const OBSERVE = /(?<![\p{L}\p{N}])(?:nhìn|quan\s*sát|ngó|liếc|theo\s*dõi|observe|watch|look\s+at)(?![\p{L}\p{N}])/iu
 const STRONGER_ACT = /(?<![\p{L}\p{N}])(?:ôm|hôn|vuốt|kéo|nắm|đánh|bắn|hug|kiss|stroke|pull|grab|hold|hit|shoot)(?![\p{L}\p{N}])/iu
@@ -38,6 +38,21 @@ function nameAlt(playerName: string): string {
     const first = full.split(/\s+/)[0] || ''
     const names = [full, first].filter((name, index, all) => name.length >= 2 && all.indexOf(name) === index)
     return names.map(escapeRegex).join('|')
+}
+
+function normalizeText(text: string): string {
+    return text.toLocaleLowerCase().replace(/[\p{P}\p{S}]/gu, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function hasEcho(quote: string, playerText: string): boolean {
+    const normalizedQuote = normalizeText(quote)
+    const normalizedPlayer = normalizeText(playerText)
+    for (let start = 0; start <= normalizedQuote.length - 18; start++) {
+        for (let end = normalizedQuote.length; end - start >= 18; end--) {
+            if (normalizedPlayer.includes(normalizedQuote.slice(start, end))) return true
+        }
+    }
+    return false
 }
 
 function findQuotes(text: string): { start: number; end: number; body: string }[] {
@@ -77,9 +92,20 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
         const clean = snippet.replace(/\s+/g, ' ').trim().slice(0, 120)
         if (clean && !hits.some((hit) => hit.rule === rule && hit.text === clean)) hits.push({ rule, text: clean })
     }
-    for (const q of findQuotes(text)) {
-        const before = text.slice(Math.max(0, q.start - 140), q.start)
-        const after = text.slice(q.end, q.end + 140)
+    const quotes = findQuotes(text)
+    for (const q of quotes) {
+        if (hasEcho(q.body, playerText)) {
+            const segments = text.split(/(?<=[.!?…])\s+/)
+            let offset = 0
+            const sentence = segments.find((segment) => {
+                const start = text.indexOf(segment, offset)
+                offset = start + segment.length
+                return q.start >= start && q.start < start + segment.length
+            })
+            if (sentence) add('pc-echo', sentence)
+        }
+        const before = text.slice(Math.max(0, q.start - 140), q.start).replace(/[^\n.!?]*["“][^"”]*["”]/gu, '')
+        const after = text.slice(q.end, q.end + 140).replace(/["“][^"”]*["”]/gu, '')
         if ((nameRe.test(before) && SPEECH.test(before)) || (nameRe.test(after) && SPEECH.test(after))) {
             add('pc-speech', text.slice(Math.max(0, q.start - 80), Math.min(text.length, q.end + 80)))
         }
@@ -87,6 +113,11 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
     const speechNearName = new RegExp(`(?:${alt})[^\\n.!?]{0,40}?${SPEECH.source}|${SPEECH.source}[^\\n.!?]{0,40}?(?:${alt})`, 'giu')
     for (const m of text.matchAll(speechNearName)) {
         const i = m.index ?? 0
+        const nameInMatch = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alt})(?![\\p{L}\\p{N}])`, 'giu')
+        const nameMatch = nameInMatch.exec(m[0])
+        const nameStart = i + (nameMatch?.index ?? 0)
+        const nameEnd = nameStart + (nameMatch?.[0].length ?? 0)
+        if (quotes.some((quote) => nameStart >= quote.start && nameEnd <= quote.end)) continue
         const win = text.slice(Math.max(0, i - 80), i + m[0].length + 80)
         if (/['"\u201C\u201D]/.test(win) && nameRe.test(m[0])) add('pc-speech', m[0])
     }
@@ -94,6 +125,14 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
         const i = m.index ?? 0
         const subject = text.slice(m.index! + m[0].length).match(/^\s*([\p{Lu}][\p{L}'-]*(?:\s+[\p{Lu}][\p{L}'-]*)*)/u)?.[1] ?? ''
         if (subject && nameRe.test(subject)) add('pc-speech', text.slice(i, Math.min(text.length, i + m[0].length + subject.length + 24)))
+    }
+    if (/(?<![\p{L}\p{N}])(?:chạy|đuổi|bước|đứng\s+dậy)(?![\p{L}\p{N}])/iu.test(playerText)) {
+        const replayPhrases = /(?:sải\s+bước|bắt\s+kịp|chạy\s+theo|đuổi\s+theo|bước\s+nhanh|chạy\s+tới|chạy\s+đến)/iu
+        const subject = new RegExp(`^\\s*(?:${alt}|Anh)(?![\\p{L}\\p{N}])`, 'iu')
+        const sentencePattern = /[^.!?\n]+(?:[.!?]|$)/gu
+        for (const match of text.matchAll(sentencePattern)) {
+            if (subject.test(match[0]) && replayPhrases.test(match[0])) add('pc-replay', match[0])
+        }
     }
     // PC advance detection — skip light sleeve tug
     const namedAdvance = new RegExp(`(?:${alt})[^\\n.!?]{0,100}?${ADVANCE.source}`, 'giu')
@@ -142,7 +181,11 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
 export function agencyNote(hits: AgencyHit[]): string {
     if (!hits.length) return ''
     const parts = hits.map((hit) => `${hit.rule} ("${hit.text}")`)
-    return `\n\n[Rewrite (hidden, never named): the last draft had ${parts.join(' / ')}. On this observe-only turn, the player only looked; do not invent PC speech, answers, or physical/social moves, and do not have an NPC drag, pull, lead, or grab the PC into following or a formation. NPC-initiated actions toward the player may remain; describe what the player sees and stop before the PC speaks or chooses.]`
+    const hasEchoOrReplay = hits.some((hit) => hit.rule === 'pc-echo' || hit.rule === 'pc-replay')
+    const guidance = hasEchoOrReplay
+        ? ' The player already did this action and said this line; do not replay their movement or put their words in the PC’s mouth. NPCs only react.'
+        : ''
+    return `\n\n[Rewrite (hidden, never named): the last draft had ${parts.join(' / ')}.${guidance} On this observe-only turn, the player only looked; do not invent PC speech, answers, or physical/social moves, and do not have an NPC drag, pull, lead, or grab the PC into following or a formation. NPC-initiated actions toward the player may remain; describe what the player sees and stop before the PC speaks or chooses.]`
 }
 
 export function scrubAgency(reply: string, playerText: string, playerName = ''): string {
@@ -155,7 +198,18 @@ export function scrubAgency(reply: string, playerText: string, playerName = ''):
         const hits = agencyHits(scrubbed, playerText, playerName)
         if (!hits.length) break
         const segments = scrubbed.split(/(?<=[.!?…])\s+/)
-        const next = segments.filter((sentence) => !agencyHits(sentence, playerText, playerName).length).join(' ').trim()
+        const next = segments.map((sentence) => {
+            const sentenceHits = agencyHits(sentence, playerText, playerName)
+            if (!sentenceHits.length) return sentence
+            if (sentenceHits.every((hit) => hit.rule === 'pc-echo')) {
+                let remainder = sentence
+                for (const quote of findQuotes(sentence).reverse()) {
+                    if (hasEcho(quote.body, playerText)) remainder = remainder.slice(0, quote.start) + remainder.slice(quote.end)
+                }
+                return remainder.trim()
+            }
+            return ''
+        }).filter(Boolean).join(' ').trim()
         if (next === scrubbed) break
         scrubbed = next
     }
