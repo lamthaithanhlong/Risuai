@@ -1,5 +1,15 @@
 const express = require('express');
 const app = express();
+// Node's fetch (undici) waits only 300 s for response headers, then fails with "fetch failed". A local model that reads a 30k-token prompt
+// (Gemma 4 12B: ~99 tok/s, measured 2026-11-08) sends no header until that is done, so the proxy cut it at 5m0s. Rebuild the global
+// dispatcher with the same Agent class and a longer wait. RISU_UPSTREAM_HEADERS_TIMEOUT_MS, default 15 min.
+try {
+    const UP_MS = Number(process.env.RISU_UPSTREAM_HEADERS_TIMEOUT_MS) > 0 ? Number(process.env.RISU_UPSTREAM_HEADERS_TIMEOUT_MS) : 15 * 60 * 1000;
+    const dispKey = Symbol.for('undici.globalDispatcher.1');
+    if (!globalThis[dispKey]) { fetch('http://127.0.0.1:9/').catch(() => {}); }
+    const Cur = globalThis[dispKey] && globalThis[dispKey].constructor;
+    if (Cur) { globalThis[dispKey] = new Cur({ headersTimeout: UP_MS, bodyTimeout: UP_MS }); }
+} catch (e) { console.error('[Server] upstream timeout patch skipped:', e && e.message); }
 // When the request arrived: checkAuth runs only after the body is in, and a 6 MB save on a slow link takes minutes to upload, so a token
 // is checked against this, not against the time the upload ended (Toxiproxy S4b, 2026-10-19: 330 s upload, Token Expired / 408).
 app.use((req, res, next) => { req.risuArrivedAt = Date.now(); next(); });
