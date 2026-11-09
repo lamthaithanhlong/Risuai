@@ -74,8 +74,10 @@ export function leadHits(reply: string, playerText: string, playerName = '', pre
     const playerFirst = player.split(/\s+/)[0] || ''
     const properName = String.raw`\p{Lu}[\p{L}'-]{1,30}`
     const hits: ContinuityHit[] = []
-    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:bám\\s+lấy|níu\\s+lấy|ôm\\s+lấy|dựa\\s+vào|bám\\s+vào)\\s+(${properName})(?![\\p{L}\\p{N}])`, 'giu')
-    for (const match of text.matchAll(pattern)) {
+
+    // 1. bám lấy / niu lấy / ôm lấy / dựa vào / bám vào + ProperName
+    const clingPattern = new RegExp(`(?<![\\p{L}\\p{N}])(?:bám\\s+lấy|níu\\s+lấy|ôm\\s+lấy|dựa\\s+vào|bám\\s+vào)\\s+(${properName})(?![\\p{L}\\p{N}])`, 'giu')
+    for (const match of text.matchAll(clingPattern)) {
         const name = match[1]
         const lowerName = name.toLowerCase()
         if (lowerName === player || lowerName === playerFirst) continue
@@ -83,6 +85,8 @@ export function leadHits(reply: string, playerText: string, playerName = '', pre
         if (prior.includes(exact) || prior.includes(`bám lấy ${lowerName}`)) continue
         hits.push({ rule: 'lead', text: match[0] })
     }
+
+    // 2. điểm tựa + nearby ProperName
     const support = /(?<![\p{L}\p{N}])điểm\s+tựa(?![\p{L}\p{N}])/giu
     for (const match of text.matchAll(support)) {
         const start = Math.max(0, match.index! - 40), end = Math.min(text.length, match.index! + match[0].length + 40)
@@ -90,6 +94,49 @@ export function leadHits(reply: string, playerText: string, playerName = '', pre
             .find((candidate) => candidate[1].toLowerCase() !== player && candidate[1].toLowerCase() !== playerFirst)
         if (nameMatch && !prior.includes(match[0].toLowerCase())) hits.push({ rule: 'lead', text: `${nameMatch[1]}: ${match[0]}` })
     }
+
+    // 3. người cũ + ProperName
+    const oldPattern = new RegExp(`(?<![\\p{L}\\p{N}])người\\s+cũ\\s+(${properName})(?![\\p{L}\\p{N}])`, 'giu')
+    for (const match of text.matchAll(oldPattern)) {
+        const name = match[1]
+        const lowerName = name.toLowerCase()
+        if (lowerName === player || lowerName === playerFirst) continue
+        const exact = match[0].replace(/\\s+/g, ' ').toLowerCase()
+        if (prior.includes(exact)) continue
+        hits.push({ rule: 'lead', text: match[0] })
+    }
+
+    // 4. siết … áo của … + ProperName
+    const gripPattern = new RegExp(`(?<![\\p{L}\\p{N}])siết\\s+[\\p{L}\\p{N}\\s]{0,20}áo\\s+của\\s+(${properName})(?![\\p{L}\\p{N}])`, 'giu')
+    for (const match of text.matchAll(gripPattern)) {
+        const name = match[1]
+        const lowerName = name.toLowerCase()
+        if (lowerName === player || lowerName === playerFirst) continue
+        const exact = match[0].replace(/\\s+/g, ' ').toLowerCase()
+        if (prior.includes(exact)) continue
+        hits.push({ rule: 'lead', text: match[0] })
+    }
+
+    // 5. đi cùng hai cô gái / đi cùng 2 cô gái
+    const walkPattern = /(?<![\p{L}\p{N}])đi\s+cùng\s+(?:hai|2)\s+cô\s+gái(?![\p{L}\p{N}])/giu
+    for (const match of text.matchAll(walkPattern)) {
+        const exact = match[0].replace(/\\s+/g, ' ').toLowerCase()
+        if (prior.includes(exact)) continue
+        hits.push({ rule: 'lead', text: match[0] })
+    }
+
+    // 6. đội hình cố định near a named hub (ProperName within ~60 chars after the phrase)
+    const lineupPattern = /(?<![\p{L}\p{N}])đội\s+hình\s+cố\s+định(?![\p{L}\p{N}])/giu
+    for (const match of text.matchAll(lineupPattern)) {
+        const start = match.index! + match[0].length
+        const end = Math.min(text.length, start + 80)
+        const nameMatch = [...text.slice(start, end).matchAll(new RegExp(`(?<![\\p{L}\\p{N}])(${properName})(?![\\p{L}\\p{N}])`, 'gu'))]
+            .find((candidate) => candidate[1].toLowerCase() !== player && candidate[1].toLowerCase() !== playerFirst)
+        if (nameMatch && !prior.includes(match[0].toLowerCase())) {
+            hits.push({ rule: 'lead', text: `${nameMatch[1]}: ${match[0]}` })
+        }
+    }
+
     return hits
 }
 
@@ -98,22 +145,82 @@ export function scrubLead(reply: string, playerText: string, previous: string[] 
     if (!leadHits(reply, playerText, playerName, previous).length) return String(reply ?? '')
     let scrubbed = String(reply ?? '')
     const properName = String.raw`\p{Lu}[\p{L}'-]{1,30}`
+    const player = String(playerName ?? '').trim().toLowerCase()
+    const playerFirst = player.split(/\s+/)[0] || ''
+    const prior = [playerText, ...previous.slice(-4)].join('\n').toLowerCase()
+
+    // 1. bám lấy / niu lấy / ôm lấy / dựa vào / bám vào + ProperName → đứng cạnh Name
     scrubbed = scrubbed.replace(
         new RegExp(String.raw`(?<![\p{L}\p{N}])(?:bám\s+lấy|níu\s+lấy|ôm\s+lấy|dựa\s+vào|bám\s+vào)\s+(${properName})(?![\p{L}\p{N}])`, 'giu'),
         (full, name) => {
             const lower = name.toLowerCase()
-            const player = String(playerName ?? '').trim().toLowerCase()
-            const first = player.split(/\s+/)[0] || ''
-            if (lower === player || lower === first) return full
+            if (lower === player || lower === playerFirst) return full
             const exact = full.replace(/\s+/g, ' ').toLowerCase()
-            const prior = [playerText, ...previous.slice(-4)].join('\n').toLowerCase()
             if (prior.includes(exact) || prior.includes(`bám lấy ${lower}`)) return full
             return `đứng cạnh ${name}`
         },
     )
+
+    // 2. điểm tựa → người cạnh bên (if still flagged)
     if (leadHits(scrubbed, playerText, playerName, previous).some((h) => h.text.includes('điểm'))) {
         scrubbed = scrubbed.replace(/(?<![\p{L}\p{N}])điểm\s+tựa(?![\p{L}\p{N}])/giu, 'người cạnh bên')
     }
+
+    // 3. người cũ + ProperName → just the name (neutral observation)
+    scrubbed = scrubbed.replace(
+        new RegExp(String.raw`(?<![\p{L}\p{N}])người\s+cũ\s+(${properName})(?![\p{L}\p{N}])`, 'giu'),
+        (full, name) => {
+            const lower = name.toLowerCase()
+            if (lower === player || lower === playerFirst) return full
+            const exact = full.replace(/\s+/g, ' ').toLowerCase()
+            if (prior.includes(exact)) return full
+            return name
+        },
+    )
+
+    // 4. siết … áo của + ProperName → nắm áo của Name (neutral observation)
+    scrubbed = scrubbed.replace(
+        new RegExp(`(?<![\\p{L}\\p{N}])siết\\s+[\\p{L}\\p{N}\\s]{0,20}áo\\s+của\\s+(${properName})(?![\\p{L}\\p{N}])`, 'giu'),
+        (full, name) => {
+            const lower = name.toLowerCase()
+            if (lower === player || lower === playerFirst) return full
+            const exact = full.replace(/\\s+/g, ' ').toLowerCase()
+            if (prior.includes(exact)) return full
+            return `nắm áo của ${name}`
+        },
+    )
+
+    // 5. đi cùng hai/2 cô gái → đi cùng hai người (neutral observation)
+    scrubbed = scrubbed.replace(
+        /(?<![\p{L}\p{N}])đi\s+cùng\s+(?:hai|2)\s+cô\s+gái(?![\p{L}\p{N}])/giu,
+        (full) => {
+            const exact = full.replace(/\s+/g, ' ').toLowerCase()
+            if (prior.includes(exact)) return full
+            return 'đi cùng hai người'
+        },
+    )
+
+    // 6. đội hình cố định near a named hub → nhóm Name (neutral observation)
+    const lineupPattern = /(?<![\p{L}\p{N}])đội\s+hình\s+cố\s+định(?![\p{L}\p{N}])/giu
+    let match
+    while ((match = lineupPattern.exec(scrubbed)) !== null) {
+        const start = match.index + match[0].length
+        const end = Math.min(scrubbed.length, start + 80)
+        const nameMatch = [...scrubbed.slice(start, end).matchAll(new RegExp(`(?<![\\p{L}\\p{N}])(${properName})(?![\\p{L}\\p{N}])`, 'gu'))]
+            .find((candidate) => candidate[1].toLowerCase() !== player && candidate[1].toLowerCase() !== playerFirst)
+        if (nameMatch && !prior.includes(match[0].toLowerCase())) {
+            const name = nameMatch[1]
+            const full = match[0]
+            const exact = full.toLowerCase()
+            if (!prior.includes(exact)) {
+                const before = scrubbed.slice(0, match.index)
+                const after = scrubbed.slice(match.index + match[0].length)
+                scrubbed = before + `nhóm ${name}` + after
+                lineupPattern.lastIndex = match.index + `nhóm ${name}`.length
+            }
+        }
+    }
+
     return scrubbed
 }
 
@@ -124,16 +231,22 @@ export function continuityHits(reply: string, playerText: string, previous: stri
 /** Hidden rewrite line for settleReply / one-shot redo. */
 export function continuityNote(hits: ContinuityHit[]): string {
     if (!hits.length) return ''
-    const parts = hits.map((h) =>
-        h.rule === 'kinship'
-            ? `invented kinship/romance label "${h.text}"`
-            : h.rule === 'lead'
-              ? `invented romantic/emotional hub framing "${h.text}"`
-              : `viewpoint left the player ("${h.text.slice(0, 80)}")`,
-    )
+    const parts = hits.map((h) => {
+        const t = h.text.toLowerCase()
+        if (h.rule === 'kinship') return `invented kinship/romance label "${h.text}"`
+        if (h.rule === 'lead') {
+            if (t.includes('người cũ')) return `invented "người cũ" framing "${h.text}"`
+            if (t.includes('siết') && t.includes('áo của')) return `invented cling-grip framing "${h.text}"`
+            if (t.includes('đi cùng') && t.includes('cô gái')) return `invented couple walk framing "${h.text}"`
+            if (t.includes('đội hình cố định')) return `invented fixed-lineup framing "${h.text}"`
+            return `invented romantic/emotional hub framing "${h.text}"`
+        }
+        return `viewpoint left the player ("${h.text.slice(0, 80)}")`
+    })
     return (
         `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. ` +
         'Keep the player\'s character as the eyes of the scene; do not invent bạn gái/bạn trai/bạn đời/em họ, parent or child labels, or a substitute male lead; ' +
-        'describe the people the player looked at from the player\'s view.]'
+        'do not frame observed people as "người cũ", gripping clothing, walking as a couple, or a fixed lineup around a named hub; ' +
+        'describe the people the player looked at from the player\'s view with neutral observation.]'
     )
 }

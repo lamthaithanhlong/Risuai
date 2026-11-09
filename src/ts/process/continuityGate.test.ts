@@ -66,4 +66,109 @@ describe('continuityGate', () => {
         expect(note).toContain('bạn gái')
         expect(note).toContain('Keep the player')
     })
+
+    // --- New soft-lead patterns ---
+
+    test('lead detects "người cũ + ProperName" on observation turns', () => {
+        const reply = 'Người cũ Aki đứng gần cổng, mắt không rời Kenji.'
+        const hits = leadHits(reply, 'Tui nhìn 3 người họ', 'Kenji Park', [])
+        expect(hits.length).toBeGreaterThan(0)
+        expect(hits.some((hit) => hit.text.toLowerCase().includes('người cũ aki'))).toBe(true)
+        expect(leadHits(reply, 'Tui hỏi thăm', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('lead scrubs "người cũ + ProperName" while preserving the name', () => {
+        const reply = 'Người cũ Aki đứng gần cổng, mắt không rời Kenji.'
+        const scrubbed = scrubLead(reply, 'Tui nhìn 3 người họ', [], 'Kenji Park')
+        expect(scrubbed).not.toContain('người cũ')
+        expect(scrubbed).toContain('Aki')
+        expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('allows "người cũ + ProperName" when already in prior context', () => {
+        const reply = 'Người cũ Aki đứng gần cổng.'
+        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Người cũ Aki đã đến.'])).toEqual([])
+    })
+
+    test('lead detects "siết … áo của + ProperName" on observation turns', () => {
+        const reply = 'Naru siết chặt áo của Yuuichi, run rẩy.'
+        const hits = leadHits(reply, 'Tui nhìn 3 người họ', 'Kenji Park', [])
+        expect(hits.length).toBeGreaterThan(0)
+        expect(hits.some((hit) => hit.text.toLowerCase().includes('siết') && hit.text.toLowerCase().includes('áo của yuuichi'))).toBe(true)
+        expect(leadHits(reply, 'Tui nói chuyện', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('lead scrubs "siết … áo của + ProperName" to neutral "nắm áo của" while preserving names', () => {
+        const reply = 'Naru siết chặt áo của Yuuichi, run rẩy.'
+        const scrubbed = scrubLead(reply, 'Tui nhìn 3 người họ', [], 'Kenji Park')
+        expect(scrubbed).not.toContain('siết')
+        expect(scrubbed).toContain('nắm áo của Yuuichi')
+        expect(scrubbed).toContain('Naru')
+        expect(scrubbed).toContain('Yuuichi')
+        expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('allows "siết áo của" when already in prior context', () => {
+        const reply = 'Naru siết áo của Yuuichi.'
+        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Naru siết áo của Yuuichi hôm qua.'])).toEqual([])
+    })
+
+    test('lead detects "đi cùng hai cô gái / đi cùng 2 cô gái" on observation turns', () => {
+        const reply1 = 'Yuuichi đi cùng hai cô gái qua hành lang.'
+        const reply2 = 'Yuuichi đi cùng 2 cô gái qua hành lang.'
+        const hits1 = leadHits(reply1, 'Tui nhìn 3 người họ', 'Kenji Park', [])
+        const hits2 = leadHits(reply2, 'Tui nhìn 3 người họ', 'Kenji Park', [])
+        expect(hits1.length).toBeGreaterThan(0)
+        expect(hits2.length).toBeGreaterThan(0)
+        expect(hits1.some((hit) => hit.text.toLowerCase().includes('đi cùng hai cô gái'))).toBe(true)
+        expect(hits2.some((hit) => hit.text.toLowerCase().includes('đi cùng 2 cô gái'))).toBe(true)
+        expect(leadHits(reply1, 'Tui hỏi tên', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('lead scrubs "đi cùng hai cô gái" to neutral "đi cùng hai người"', () => {
+        const reply = 'Yuuichi đi cùng hai cô gái qua hành lang.'
+        const scrubbed = scrubLead(reply, 'Tui nhìn 3 người họ', [], 'Kenji Park')
+        expect(scrubbed).not.toContain('cô gái')
+        expect(scrubbed).toContain('đi cùng hai người')
+        expect(scrubbed).toContain('Yuuichi')
+        expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('allows "đi cùng hai cô gái" when already in prior context', () => {
+        const reply = 'Yuuichi đi cùng hai cô gái.'
+        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Yuuichi đi cùng hai cô gái hôm qua.'])).toEqual([])
+    })
+
+    test('lead detects "đội hình cố định" near a named hub on observation turns', () => {
+        const reply = 'Đội hình cố định Aki, Naru và Yuuichi di chuyển cùng nhau.'
+        const hits = leadHits(reply, 'Tui nhìn 3 người họ', 'Kenji Park', [])
+        expect(hits.length).toBeGreaterThan(0)
+        expect(hits.some((hit) => hit.text.toLowerCase().includes('đội hình cố định') && hit.text.includes('Aki'))).toBe(true)
+        expect(leadHits(reply, 'Tui hỏi thăm', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('lead scrubs "đội hình cố định" near named hub to neutral "nhóm Name" while preserving names', () => {
+        const reply = 'Đội hình cố định Aki, Naru và Yuuichi di chuyển cùng nhau.'
+        const scrubbed = scrubLead(reply, 'Tui nhìn 3 người họ', [], 'Kenji Park')
+        expect(scrubbed).not.toContain('đội hình cố định')
+        expect(scrubbed).toContain('nhóm Aki')
+        expect(scrubbed).toContain('Naru')
+        expect(scrubbed).toContain('Yuuichi')
+        expect(leadHits(scrubbed, 'Tui nhìn 3 người họ', 'Kenji Park', [])).toEqual([])
+    })
+
+    test('allows "đội hình cố định" when already in prior context', () => {
+        const reply = 'Đội hình cố định Aki, Naru và Yuuichi.'
+        expect(leadHits(reply, 'Tui nhìn', 'Kenji', ['Đội hình cố định Aki, Naru, Yuuichi từ trước.'])).toEqual([])
+    })
+
+    test('continuityNote reflects neutral-observation wording for new patterns', () => {
+        const reply = 'Người cũ Aki siết áo của Naru. Đội hình cố định Yuuichi đi cùng hai cô gái.'
+        const note = continuityNote(continuityHits(reply, 'Tui nhìn 3 người họ', [], 'Kenji'))
+        expect(note).toContain('người cũ')
+        expect(note).toContain('cling-grip')
+        expect(note).toContain('fixed-lineup')
+        expect(note).toContain('couple walk')
+        expect(note).toContain('neutral observation')
+    })
 })

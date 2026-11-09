@@ -31,7 +31,7 @@ import { seedScene } from "./sceneMemory";
 import { statusSpec } from "./statusBook";
 import { hasCreationStep, yesAt } from "./gameMaster";
 import { lastTurnIsAsk } from "./adminAsk";
-import { continuityHits, continuityNote, scrubKinship, scrubLead } from "./continuityGate";
+import { continuityHits, continuityNote, leadHits, scrubKinship, scrubLead } from "./continuityGate";
 import { allowedCast, castHits, castNote, rosterNames, scrubCast } from "./castGate";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
@@ -2063,6 +2063,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 draft = scrubAgency(draft, lastUserText, getUserName())
                 brLog(`agency gate: scrubbed leftover agency`)
             }
+            // Fail-close: scrub leftover lead after agency redo (catches leadHits introduced by agency scrub)
+            const leadAfter = leadHits(draft, lastUserText, getUserName(), previousReplies)
+            if(leadAfter.length){
+                draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
+                brLog(`continuity gate: scrubbed leftover lead`)
+            }
             // Opening/prior cast: do not invent off-stage roster names (measured Sayaka on New Chat 2).
             {
                 const castCard = DBState.db.characters[sel.char]
@@ -2091,6 +2097,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             if(finalKinship.length){
                 draft = scrubKinship(draft, lastUserText, previousReplies)
                 brLog(`continuity gate: scrubbed leftover kinship`)
+            }
+            // Final fail-close gate: scrub residual lead before reply ships
+            const finalLead = finalCont.filter((h) => h.rule === 'lead')
+            if(finalLead.length){
+                draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
+                brLog(`continuity gate: scrubbed leftover lead`)
             }
             const roomCard = DBState.db.characters[sel.char]
             const assetNames = new Set([
