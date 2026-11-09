@@ -1094,6 +1094,9 @@ const reverseProxyFunc = async (req, res, next) => {
             header['authorization'] = `Bearer ${authCode}`
         }
     }
+    if (process.env.RISU_DUMP_CHAT_DIR && /\/api\/chat/.test(String(urlParam))) {
+        try { require('fs').writeFileSync(require('path').join(process.env.RISU_DUMP_CHAT_DIR, 'chat-' + Date.now() + '.json'), JSON.stringify(req.body)); } catch (e) { /* debug aid only */ }
+    }
     const timeoutMs = getRequestTimeoutMs(req.headers['risu-timeout-ms']);
     const timeout = createTimeoutController(timeoutMs);
     let originalResponse;
