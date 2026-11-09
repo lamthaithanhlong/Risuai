@@ -48,6 +48,19 @@ export function modelChain(primary: string, fallbacks: string | undefined): stri
     return out
 }
 
+/** Prefer configured Codex image models over Grok for stock image configurations. */
+export function preferCodexImageChain(primary: string, fallbacks: string): { model: string; fallbackModels: string } | null {
+    const chain = modelChain(primary, fallbacks)
+    const codexModels = ['cx/gpt-5.6-luna-image', 'cx/gpt-5.6-terra-image', 'cx/gpt-5.6-sol-image']
+    const grok = 'xai/grok-imagine-image'
+    const stockModels = new Set([...codexModels, grok])
+    if (chain.some((model) => !stockModels.has(model))) return null
+    const preferred = chain.filter((model) => codexModels.includes(model))
+    if (!preferred.length) preferred.push('cx/gpt-5.6-terra-image', 'cx/gpt-5.6-sol-image')
+    preferred.push(grok)
+    return { model: preferred[0], fallbackModels: preferred.slice(1).join(',') }
+}
+
 /** One line for the reader when every model failed: which models were tried and why each one failed. */
 export function failureSummary(failures: FallbackAttempt[]): string {
     return 'Image generation failed on every model: ' + failures.map((f) => `${f.model}: ${f.why.slice(0, 140)}`).join(' | ')

@@ -828,10 +828,10 @@
 
             <span class="text-textcolor">Model</span>
             <SelectInput className="mb-2" bind:value={DBState.db.openaiCompatImage.model}>
-                <OptionInput value="xai/grok-imagine-image" >xai/grok-imagine-image (spicy)</OptionInput>
-                <OptionInput value="cx/gpt-5.6-luna-image" >cx/gpt-5.6-luna-image</OptionInput>
                 <OptionInput value="cx/gpt-5.6-terra-image" >cx/gpt-5.6-terra-image</OptionInput>
                 <OptionInput value="cx/gpt-5.6-sol-image" >cx/gpt-5.6-sol-image</OptionInput>
+                <OptionInput value="cx/gpt-5.6-luna-image" >cx/gpt-5.6-luna-image</OptionInput>
+                <OptionInput value="xai/grok-imagine-image" >xai/grok-imagine-image (spicy)</OptionInput>
                 {#if DBState.db.openaiCompatImage.model && !['xai/grok-imagine-image','cx/gpt-5.6-luna-image','cx/gpt-5.6-terra-image','cx/gpt-5.6-sol-image'].includes(DBState.db.openaiCompatImage.model)}
                     <OptionInput value={DBState.db.openaiCompatImage.model} >{DBState.db.openaiCompatImage.model}</OptionInput>
                 {/if}

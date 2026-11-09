@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { failureSummary, hasPicture, imageErrorText, modelChain, requestWithFallback, retryDelayMs, type ImageResponse } from './imageRetry'
+import { failureSummary, hasPicture, imageErrorText, modelChain, preferCodexImageChain, requestWithFallback, retryDelayMs, type ImageResponse } from './imageRetry'
 
 const ok: ImageResponse = { ok: true, data: { data: [{ b64_json: 'AAAA' }] } }
 const terminated: ImageResponse = { ok: false, data: { error: { message: '[codex/gpt-5.6-luna-image] terminated (reset after 30s)' } } }
@@ -56,6 +56,40 @@ describe('modelChain', () => {
     test('with no primary the fallbacks still form a chain, and with nothing at all it is empty', () => {
         expect(modelChain('', 'b,c')).toEqual(['b', 'c'])
         expect(modelChain('', '')).toEqual([])
+    })
+})
+
+describe('preferCodexImageChain', () => {
+    test('moves Grok after configured Codex models', () => {
+        expect(preferCodexImageChain('xai/grok-imagine-image', 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image')).toEqual({
+            model: 'cx/gpt-5.6-terra-image',
+            fallbackModels: 'cx/gpt-5.6-sol-image,xai/grok-imagine-image',
+        })
+    })
+
+    test('works with an empty primary', () => {
+        expect(preferCodexImageChain('', 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image')).toEqual({
+            model: 'cx/gpt-5.6-terra-image',
+            fallbackModels: 'cx/gpt-5.6-sol-image,xai/grok-imagine-image',
+        })
+    })
+
+    test('keeps configured Codex order and appends Grok', () => {
+        expect(preferCodexImageChain('cx/gpt-5.6-luna-image', 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image')).toEqual({
+            model: 'cx/gpt-5.6-luna-image',
+            fallbackModels: 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image,xai/grok-imagine-image',
+        })
+    })
+
+    test('uses Terra and Sol when no Codex model is configured', () => {
+        expect(preferCodexImageChain('', '')).toEqual({
+            model: 'cx/gpt-5.6-terra-image',
+            fallbackModels: 'cx/gpt-5.6-sol-image,xai/grok-imagine-image',
+        })
+    })
+
+    test('leaves custom model chains untouched', () => {
+        expect(preferCodexImageChain('dall-e-3', '')).toBeNull()
     })
 })
 

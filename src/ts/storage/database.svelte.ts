@@ -1,4 +1,5 @@
 import { normalizeSlots, type ModelSlot } from "../model/modelSlots";
+import { preferCodexImageChain } from '../process/imageRetry';
 import { migrateStreamingDisplay, migrateTokenSaverOff } from "../process/request/modeParams";
 import { settleCharacterOnLoad } from "../process/emptyReply";
 import { get } from 'svelte/store';
@@ -717,7 +718,12 @@ export function setDatabase(data:Database){
     data.jevGuard.imageGate ??= true
     data.jevGuard.imageThreshold ??= 0.5
     data.openaiCompatImage.style ??= 'anime style illustration, cel shading, clean lineart, vibrant colors, expressive eyes, detailed anime art'
-    data.openaiCompatImage.fallbackModels ??= 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image'
+    data.openaiCompatImage.fallbackModels ??= 'cx/gpt-5.6-terra-image,cx/gpt-5.6-sol-image,xai/grok-imagine-image'
+    const preferredImageChain = preferCodexImageChain(data.openaiCompatImage.model, data.openaiCompatImage.fallbackModels)
+    if (preferredImageChain) {
+        data.openaiCompatImage.model = preferredImageChain.model
+        data.openaiCompatImage.fallbackModels = preferredImageChain.fallbackModels
+    }
     data.wavespeedImage ??= {
         key: '',
         model: '',
