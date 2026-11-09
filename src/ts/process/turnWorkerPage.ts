@@ -5,7 +5,7 @@
 import { get } from 'svelte/store'
 import { selectedCharID } from '../stores.svelte'
 import { getDatabase } from '../storage/database.svelte'
-import { planReroll, planSend, turnAnswered, turnInputId, type TurnKind } from './turnCore'
+import { continueGrew, planReroll, planSend, turnAnswered, turnInputId, type TurnKind } from './turnCore'
 import { visibleReply } from './emptyReply'
 
 /** how long a turn waits for the reply's bookkeeper before it saves (the helper answers in ~3-7 s, measured 2026-10-21) */
@@ -111,7 +111,7 @@ async function run(spec: TurnSpec): Promise<{ ok: boolean, error?: string, retry
         const c = chat()
         if (!c) return { ok: false, error: 'the chat is gone', retryable: false }
         const { flushSave } = await import('../globalApi.svelte')
-        if (errors.length || !turnAnswered(c.message, from, visibleReply)) {
+        if (errors.length || !turnAnswered(c.message, from, visibleReply) || (spec.kind === 'continue' && !continueGrew(lastBefore, c.message.at(-1)?.data, visibleReply))) {
             undo()
             await flushSave(30000)
             return { ok: false, error: errors[0] ?? 'no reply came back', retryable: true }

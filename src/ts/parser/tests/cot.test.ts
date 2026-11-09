@@ -73,6 +73,8 @@ describe('splitCoT', () => {
         // but not when a thought was already found, and a stray </Thoughts> stays text
         expect(splitCoT('a<think>b</think>c</think>d').main).toBe('acd')
         expect(splitCoT('x</Thoughts>y').main).toBe('x</Thoughts>y')
+        expect(splitCoT('Đoạn cũ.</think>')).toMatchObject({ main: 'Đoạn cũ.', thoughts: [] })
+        expect(splitCoT('<Thoughts>\nnghĩ\n</Thoughts>\n*Khang cười*').main).toBe('\n*Khang cười*')
     })
 
     test('property: nothing is lost, thoughts never leak into main', () => {

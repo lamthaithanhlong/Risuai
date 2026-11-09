@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { finalOf, newTurnKey, planReroll, planSend, prunePending, sseText, turnAnswered, turnInputId } from './turnCore'
+import { continueGrew, finalOf, newTurnKey, planReroll, planSend, prunePending, sseText, turnAnswered, turnInputId } from './turnCore'
 
 const m = (role: string, chatId: string, data = 'x') => ({ role, data, chatId })
 
@@ -32,6 +32,12 @@ describe('turnCore', () => {
         expect(turnAnswered([m('user', 'u'), m('char', 'r', 'hello')], 1, vis)).toBe(true)
         expect(turnAnswered([m('user', 'u'), m('char', 'r', '<b></b>')], 1, vis)).toBe(false)
         expect(turnAnswered([m('user', 'u')], 1, vis)).toBe(false)
+    })
+
+    it('continueGrew requires new visible words', () => {
+        expect(continueGrew('Đoạn cũ.', 'Đoạn cũ. Câu mới.', (s) => s)).toBe(true)
+        expect(continueGrew('Đoạn cũ.', 'Đoạn cũ.', (s) => s)).toBe(false)
+        expect(continueGrew('Đoạn cũ.', '<Thoughts>nghĩ</Thoughts>\nĐoạn cũ.', (s) => s.replace(/<Thoughts>[\s\S]*?<\/Thoughts>/g, '').trim())).toBe(false)
     })
 
     it('sseText reads the words of a stream, a line cut in two included', () => {

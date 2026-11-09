@@ -19,6 +19,7 @@ import { applyChatTemplate } from "../templates/chatTemplate";
 import { runTransformers } from "../transformers";
 import { runTrigger } from "../triggers";
 import { requestClaude } from './anthropic';
+import { ollamaNeedsProsePass } from './ollamaThink';
 import { requestGoogleCloudVertex } from './google';
 import { requestOpenAI, requestOpenAILegacyInstruct, requestOpenAIResponseAPI } from "./openAI/requests";
 import { applyAdditionalParameters, applyParameters, getAdditionalParameters, type ModelModeExtended } from './shared';
@@ -1200,8 +1201,15 @@ async function requestOllama(arg:RequestDataArgumentExtended):Promise<requestDat
     if(!arg.useStreaming){
         requestBody.stream = false
         const response: any = await ollama.chat(requestBody)
+        let content = response.message?.content ?? ''
+        const thinking = response.message?.thinking ?? ''
+        if (ollamaNeedsProsePass(content, thinking, response.done_reason)) {
+            const followupBody = { ...requestBody, stream: false, think: false, messages: [...messages, { role: 'assistant', content: '', thinking }] }
+            const followup: any = await ollama.chat(followupBody)
+            content += followup.message?.content ?? ''
+        }
 
-        const result = formatThinkingOutput(response.message?.thinking ?? '', response.message?.content ?? '')
+        const result = formatThinkingOutput(thinking, content)
         return {
             type: 'success',
             result: unstringlizeChat(result, formated, arg.currentChar?.name ?? ''),
@@ -1216,12 +1224,20 @@ async function requestOllama(arg:RequestDataArgumentExtended):Promise<requestDat
         async start(controller){
             let content = ''
             let thinking = ''
+            let doneReason: string | undefined
             for await(const chunk of response){
                 thinking += chunk.message?.thinking ?? ''
                 content += chunk.message?.content ?? ''
+                if (chunk.done) doneReason = chunk.done_reason
                 controller.enqueue({
                     "0": formatThinkingOutput(thinking, content)
                 })
+            }
+            if (ollamaNeedsProsePass(content, thinking, doneReason)) {
+                const followupBody = { ...requestBody, stream: false, think: false, messages: [...messages, { role: 'assistant', content: '', thinking }] }
+                const followup: any = await ollama.chat(followupBody)
+                content += followup.message?.content ?? ''
+                controller.enqueue({ "0": formatThinkingOutput(thinking, content) })
             }
             controller.close()
         }

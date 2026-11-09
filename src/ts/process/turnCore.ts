@@ -47,6 +47,10 @@ export function planReroll(messages: Msg[], target: string | undefined): 'reroll
 }
 
 /** The turn did what it was for: after `from` messages there is a reply with words in it. */
+export function continueGrew(before: string | null, after: string | undefined, visible: (data: string) => string): boolean {
+    return visible(after ?? '').trim().length > visible(before ?? '').trim().length
+}
+
 export function turnAnswered(messages: Msg[], from: number, visible: (data: string) => string): boolean {
     const last = messages.at(-1)
     return messages.length > from && last?.role === 'char' && visible(last.data ?? '').trim() !== ''

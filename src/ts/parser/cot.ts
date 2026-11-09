@@ -7,8 +7,8 @@
  *
  * Rules (one linear pass, no backtracking):
  *  - a block is the outermost <Thoughts> up to its matching </Thoughts>; tags inside it are part of the thought
- *  - a closing tag with no opening tag is ordinary text, except a </think> before any thought in the reply: some models leave the
- *    opening tag out and write "reasoning</think>reply", so the text before it is the thought
+ *  - a closing tag with no opening tag is ordinary text, except a </think> before any thought when non-whitespace reply text follows:
+ *    some models leave the opening tag out and write "reasoning</think>reply", so the text before it is the thought
  *  - an opening tag that is never closed starts a thought that is still being written: everything after it is the thought,
  *    `thinking` is true
  *  - while streaming, the end of the text may be half a tag ("<Thou"): from two characters on it is held back (`pending`) so it never
@@ -94,8 +94,8 @@ export function splitCoT(data: string): CoTSplit {
                 textStart = m.index + m[0].length
                 blockStart = -1
             }
-        } else if (m[0] !== '</Thoughts>' && thoughts.length === 0 && textStart === 0 && m.index > 0) {
-            // "reasoning</think>reply": the opening tag was left out, the thought starts at the beginning
+        } else if (m[0] !== '</Thoughts>' && thoughts.length === 0 && textStart === 0 && m.index > 0 && data.slice(m.index + m[0].length).replace(/<\/?(?:think|thinking)>/g, '').trim() !== '') {
+            // "reasoning</think>reply": only infer the thought when reply text follows the closing tag
             thoughts.push(data.slice(0, m.index))
             parts.push({ kind: 'thought', text: data.slice(0, m.index + m[0].length) })
             textStart = m.index + m[0].length
