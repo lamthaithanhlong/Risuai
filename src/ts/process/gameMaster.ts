@@ -9,7 +9,9 @@
 //   beat: 2 | what is happening | what is due next
 //   threat: name | progress in words | what happens when it fills       up to 3, merged by name ("threat: name | -" drops it)
 //   reward: what | when it is paid                    the whole list is replaced when any reward line is written ("reward: -")
-//   consequence: what | when it lands                 the same
+//   consequence: what | vui|sợ|đau|tức | when it lands; every major committed/refused/betrayed/confessed/publicly shaming choice records one emotion
+//                                                    every major choice that commits, refuses, betrays, confesses or publicly shames adds a consequence with one emotion; arcs never end before ~100 turns
+//                                                    the same
 //   canon: in-world date | what canon is doing off-screen
 //   path: faction or road | stage | standing         the side the player chose in the canon world, villains included;
 //                                                    a new name moves the old one to gm_left (they remember), "path: -" leaves it
@@ -25,8 +27,10 @@
 // rolled by the app (crypto), not by the model's whim. Before the character is confirmed (the card's "Được chưa?" step) the
 // GM says nothing, and the reply to the yes (the card's Initialization) is left to the card; the reply after it seeds the arc.
 
-export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past',
+export const GM_KEYS = ['gm_arc', 'gm_beat', 'gm_threats', 'gm_rewards_due', 'gm_consequences_due', 'gm_canon', 'gm_past', 'gm_ending',
     'gm_path', 'gm_enemies', 'gm_gained', 'gm_left'] as const
+
+import { canCloseArc, emotionOf, emotionToneHint, forceConsequenceDice, longArcGmBlurb, overdueConsequences, pickEnding, stampConsequence } from './gmLongArc'
 export type GmKey = (typeof GM_KEYS)[number]
 /** The page's bookkeeping next to the notes: when the beat moved, when a side was taken, the reply that last changed them
  *  and the state before it (rollback). */
@@ -145,7 +149,11 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 const closing = /^(done|resolved|xong|kết thúc)$/i.test(head.trim()) || isDash(value)
                 const arcValue = closing ? '' : value.split('|').map((x) => x.trim()).filter((x) => x && !ARC_LABEL.test(x)).join(' | ')
                 const isOpen = quest.matches({ quest: 'open' })
-                if (closing) { if (!move(key, { type: 'CLOSE' }, value)) continue }
+                if (closing) {
+                    if (!canCloseArc(charCount)) { console.warn(`[gm] arc close refused before 100 story turns`); continue }
+                    if (!move(key, { type: 'CLOSE' }, value)) continue
+                    next.gm_ending = pickEnding(next, clean(rest.join('|')))
+                }
                 else if (!isOpen) { if (!move(key, { type: 'SEED', step: null }, value)) continue }
                 else if (hookOf(arcValue) === hookOf(next.gm_arc)) { if (!move(key, { type: 'REVISE' }, value)) continue }
                 else if (takesSide) { move(key, { type: 'SET_ASIDE' }, value); if (!move(key, { type: 'SEED', step: null }, value)) continue }
@@ -186,7 +194,7 @@ export function applyGm(state: GmState, bodies: string[], charCount: number): Gm
                 else { rewards ??= []; if (!isDash(value)) rewards.push(value) }
             } else if (key === 'consequence' || key === 'consequences' || key === 'cost') {
                 if (isLanded(value)) costs = (costs ?? due(state.gm_consequences_due)).filter((c) => nameOf(c) !== nameOf(value))
-                else { costs ??= []; if (!isDash(value)) costs.push(value) }
+                else { costs ??= []; if (!isDash(value)) costs.push(stampConsequence(value, beatNum(next.gm_beat) ?? charCount)) }
             } else if (key === 'canon') {
                 if (value) next.gm_canon = isDash(value) ? '' : value
             } else if (key === 'path' || key === 'allegiance' || key === 'faction') {
@@ -578,7 +586,8 @@ export function rollGm(state: GmState, charCount: number, rng: () => number = cr
         ...lines(state.gm_enemies).map((e) => `the enemy "${e.split('|')[0].trim()}"`),
     ].filter(Boolean)
     let surface = threads.length ? threads[Math.floor(rng() * threads.length)] : 'the arc'
-    const consequence = !!lines(state.gm_consequences_due).length && rng() < 0.35
+    const consequenceRoll = !!lines(state.gm_consequences_due).length && rng() < 0.35
+    const consequence = consequenceRoll || forceConsequenceDice(state, { consequence: consequenceRoll })
     const canon = rng() < 0.25
     // a side just taken: its first order or test comes due at once, and it stays the focus for the next beats
     const age = sideAge(state, charCount)
@@ -608,6 +617,7 @@ export function worldFlavour(card: Card): string {
     if (/shadow slave|nô lệ bóng tối|nightmare engine|forgotten shore/i.test(text)) return 'a rival Sleeper, a clan\'s agent, a creature that marked them, a debt'
     if (/lord of (the )?myster|quỷ bí|beyonder potion|pathways and sequences/i.test(text)) return 'a hostile Beyonder, a secret order, a church inquiry, a debt'
     if (/infinite mailman|người đưa thư|delivery world|stamp book/i.test(text)) return 'a hostile recipient, a rival mailman, a broken delivery, a penalty'
+    if (/netori|네토리|고등학교|ntl_suiei|water polo|swimming club|school NTL/i.test(text)) return 'a rival club, a rumor, a teacher notice, a friendship fracture'
     if (/thảm họa zombie|hacker system|hệ thống hacker|outbreak engine/i.test(text)) return 'a variant that broke the pattern, a rival survivor group, a faction that wants the System, a debt'
     return 'a rival, a hunter, a debt, a secret'
 }
@@ -678,7 +688,7 @@ export const NEED_RULE = 'An NPC may only offer something for a need the player 
  * The note for this turn, or '' when the GM is silent. `decided`: the solver's decision for this turn (server/node/gmSolver.cjs),
  * one or two lines; it takes the place of the dice line, the card's NEW and the need rule, which it already applied.
  */
-export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string, decided = ''): string {
+export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: string, decided = '', charCount = Number(state.gm_beat_at) || beatNum(state.gm_beat) || 0): string {
     if (phase === 'silent') return ''
     const parts: string[] = []
     if (phase === 'seed') {
@@ -705,6 +715,9 @@ export function gmNote(phase: GmPhase, state: GmState, dice: GmDice, flavour: st
         }
     }
     if (phase === 'seed' && decided) parts.push(decided)
+    const overdue = overdueConsequences(state)
+    parts.push(longArcGmBlurb(charCount, overdue))
+    if (overdue.length) parts.push(`MUST LAND now: ${overdue.map((line) => `${line} — ${emotionToneHint(emotionOf(line) || 'đau')}`).join('; ')}`)
     parts.push(pathLine(state))
     parts.push(`Canon (${state.gm_canon ? short(state.gm_canon, 100) : 'set the in-world date'}): canon people live their own lives off-screen, heard as news or seen afar${dice.canon ? ' (some may come up now)' : ''}; met only when paths cross or the player seeks them, never forced; canon events still happen.`)
     // measured 2026-10-19 (DeepSeek v4.1 flash, 10 turns x 2 cards): "only changed lines" left the block out of 13 of 22
@@ -819,10 +832,10 @@ path: <side> | <stage> | <standing>
 enemy: <who> | <why they oppose the player>
 gained: <what a side or deed gave>
 reward: <what> | <when it is paid>   (paid in this reply: reward: <what> | done)
-consequence: <what> | <when it lands>   (landed in this reply: consequence: <what> | done)
+consequence: <what> | <vui|sợ|đau|tức> | <when it lands>   (landed in this reply: consequence: <what> | <emotion> | done)
 canon: <in-world date> | <what canon people are doing off-screen>
 ${opts.social ? SOCIAL_TEMPLATE : ''}${opts.npc ? NPC_TEMPLATE : ''}]]
-Rules: leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${opts.social ? SOCIAL_RULE : ''}${opts.npc ? NPC_RULE : ''}${status ? `\n\n${status}` : ''}${shelves}`
+Rules: every major player choice that commits, refuses, betrays, confesses or publicly shames MUST add one consequence with exactly one emotion (vui, sợ, đau, tức); never resolve the arc before about 100 story turns (do not write arc: done early). Leave out every line that did not change (never write "unchanged" or "no change"); always the beat line; each value a short fact, no questions or commentary. arc: only when there is none yet (invent one fitted to the character, an antagonist of their own such as ${flavour}, never a canon villain; when they have a side, from that side: its order or test, whom it is against or a rival inside it), or "arc: done | <how>" when this reply resolved it. path: only when the player joined, swore to, rose in or left a side in this reply: a faction, a group or crew, a person they now serve or work for, the villains' side included (never a place, a camp, a route, a job or a task they were given; "path: -" when they left one). enemy: someone who now opposes the player because of what they did. Write in the story's language. Never invent what the reply did not show, except a new arc.${opts.social ? SOCIAL_RULE : ''}${opts.npc ? NPC_RULE : ''}${status ? `\n\n${status}` : ''}${shelves}`
 }
 
 // ---- NPC psychology: who did what to whom (2026-10-21) ------------------------------------------------------------------------

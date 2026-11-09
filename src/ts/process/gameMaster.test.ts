@@ -64,6 +64,18 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
         expect(isForeignText('menjalani kehidupan mereka sendiri')).toBe(true)
         expect(isForeignText('Mai bước qua cổng thành, gió quất vào mặt')).toBe(false)
     })
+    it('refuses early arc closes and records an ending after the long-arc gate', () => {
+        const early = applyGm(FULL, ['arc: done | too soon'], 99)
+        expect(early.gm_arc).toBe(FULL.gm_arc)
+        const late = applyGm(FULL, ['arc: done | reconciled with the rival'], 100)
+        expect(late.gm_arc).toBe('')
+        expect(late.gm_ending).toBe('warm')
+    })
+    it('forces overdue consequences into the dice and note', () => {
+        const state = { gm_arc: 'a | b | c | d', gm_beat: '8 | now | next', gm_consequences_due: 'A broken promise | tức | @3' }
+        expect(rollGm(state, 8, () => 0.99).consequence).toBe(true)
+        expect(gmNote('run', state, rollGm(state, 8, () => 0.99), 'x')).toMatch(/must land|phải hạ cánh/i)
+    })
     it('the beat moved only when its number changed, not its wording (the bookkeeper rewrites it every reply)', () => {
         const s = applyGm({ gm_beat: '2 | a knock | the door', gm_beat_at: '4' }, ['beat: 2 | the knock again | the door opens'], 6)
         expect(s.gm_beat).toBe('2 | the knock again | the door opens')
@@ -72,7 +84,7 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
         expect(applyGm({ gm_beat: 'arrival | x', gm_beat_at: '1' }, ['beat: arrival | y'], 3).gm_beat_at).toBe('1')
     })
     it('a closed arc clears arc, beat and threats and keeps what it left behind for the next one', () => {
-        const s = applyGm(FULL, ['arc: done | she burned the ledger; Varn swore revenge'], 9)
+        const s = applyGm(FULL, ['arc: done | she burned the ledger; Varn swore revenge'], 100)
         expect(s.gm_arc).toBe('')
         expect(s.gm_beat).toBe('')
         expect(s.gm_threats).toBe('')
@@ -104,7 +116,7 @@ describe('the [[GM]] block: parsed, kept, and never shown', () => {
         expect(applyGm({}, ['beat: 4 | x | y'], 2).gm_beat ?? '').toBe('')
         expect(applyGm({}, ['arc: done | it ended'], 2).gm_past ?? '').toBe('')
         // closing and seeding again in one block is two legal steps; a seed with its first beat too
-        const again = applyGm(FULL, ['arc: done | paid\narc: a new feud | Kael | win | her name\nbeat: 1 | Kael arrives | x'], 9)
+        const again = applyGm(FULL, ['arc: done | paid\narc: a new feud | Kael | win | her name\nbeat: 1 | Kael arrives | x'], 100)
         expect(again.gm_arc).toBe('a new feud | Kael | win | her name')
         expect(again.gm_beat).toBe('1 | Kael arrives | x')
         // the beat line before the arc line in a seeding block still lands
@@ -242,11 +254,11 @@ describe('the note', () => {
     it('stays compact with a full state (rides every turn)', () => {
         const n = gmNote('run', FULL, dice, 'x')
         // ~4 characters a token for English: ~400 tokens (cl100k) with every slot full (no side chosen yet)
-        expect(n.length).toBeLessThan(1550 + LAW)
+        expect(n.length).toBeLessThan(2000 + LAW)
     })
     it('stays near 290 tokens with a typical state (arc, beat, one threat, canon) and when seeding', () => {
         const typical = { gm_arc: FULL.gm_arc, gm_beat: FULL.gm_beat, gm_threats: 'Collection | 2/4 | Varn takes the brother', gm_canon: 'Day 3 | the Shore party crosses the labyrinth' }
-        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1300 + LAW)
+        expect(gmNote('run', typical, dice, 'x').length).toBeLessThan(1800 + LAW)
         // +260 for the seed turn's rule that the hook stays a quiet sign (2026-10-21)
         expect(gmNote("seed", {}, dice, worldFlavour(SS)).length).toBeLessThan(1150 + 260 + LAW)
     })

@@ -54,7 +54,7 @@ export function gameMasterRequest<T extends { role: string; content: unknown }>(
     // the pace clock is the app's: an advance rolled now is marked on the chat (sinceAdvance)
     const mark = phase === 'run' ? markAdvance(state, replies.length, dice) : null
     if (mark) { chat.scriptstate ??= {}; chat.scriptstate.$gm_adv_at = mark.gm_adv_at ?? ''; chat.scriptstate.$gm_adv_prev = mark.gm_adv_prev ?? '' }
-    const note = gmNote(phase, state, dice, worldFlavour(card))
+    const note = gmNote(phase, state, dice, worldFlavour(card), '', replies.length)
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
     return gmRequest(formated, note + (note ? guideNote(card, messages, lastUser, sinceAdvance(state, replies.length)) + companionNoteOf(card, messages) + npcVoiceNote(String(chat.scriptstate?.$led_npc ?? ''), replies.length + 1, card, messages) : '') + (held ? CARD_HELD : ''))
 }
@@ -103,7 +103,7 @@ export async function gameMasterRequestSolved<T extends { role: string; content:
         }
     }
     vars.$gm_mode = modeVar(vars, n, modeAfterDecision(mode, decision))
-    const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line)
+    const solved = gmNote(phase, state, dice, worldFlavour(card), decision.line, n)
     return gmRequest(formated, solved + (solved ? guideNote(card, messages, player, sinceAdvance(state, n)) + companionNoteOf(card, messages) + npcVoiceNote(String(vars.$led_npc ?? ''), n + 1, card, messages) : ''))
 }
 

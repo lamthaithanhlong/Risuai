@@ -16,7 +16,7 @@ import { noteScenePicture, scenePictureRequest } from "./scenePicturesPage";
 import { isOpening } from "./request/storyEffort";
 import { shapeRequest } from "./replyFormat";
 import { agencyRequest } from "./playerAgency";
-import { agencyHits, agencyNote } from "./agencyGate";
+import { agencyHits, agencyNote, scrubAgency } from "./agencyGate";
 import { settleReply, type NpcCheckOpts } from "./replyRegen";
 // @ts-ignore plain JS module (npcCheck.d.mts)
 import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs";
@@ -31,7 +31,8 @@ import { seedScene } from "./sceneMemory";
 import { statusSpec } from "./statusBook";
 import { hasCreationStep, yesAt } from "./gameMaster";
 import { lastTurnIsAsk } from "./adminAsk";
-import { continuityHits, continuityNote } from "./continuityGate";
+import { continuityHits, continuityNote, scrubKinship, scrubLead } from "./continuityGate";
+import { allowedCast, castHits, castNote, rosterNames, scrubCast } from "./castGate";
 import { fetchGmDecision } from "./gmSolver";
 import { fixLastReplyBlocks, tidyLastReply } from "./replyTidy";
 import { fetchStoryCheckLine, storyCheckRequest } from "./storyCheck";
@@ -73,6 +74,7 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
+import { gateAssetTags } from "./assetTagGate";
 import { brLog, brMem, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
@@ -2010,6 +2012,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             return abortSignal.aborted ? null : text
         }
         let draft = result
+        // settleReply stays off the opening turn (checkReply); hard gates below still run on opening —
+        // measured 2026-11-08 New Chat 2 first reply skipped agency because isOpening made checkReply false.
         if(checkReply && receivedStreamingResult && firstChunkKey0 !== undefined){
             draft = await settleReply(draft, previousReplies, redoFromNote, (m) => brLog(m), (rec) => {
                 // one record per regenerated reply, kept in the chat's script state so the acceptance run can count them (summary.md)
@@ -2020,7 +2024,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 log.push({ at: msgIndex, ...rec })
                 chat.scriptstate['$reply_regen'] = JSON.stringify(log)
             }, npcCheckOpts(DBState.db.characters[sel.char].chats[sel.chat], previousReplies.length + 1, getUserName(), lastUserText))
-            // Continuity gate (New Chat 2 / Yuuichi, 2026-11-08): invented kinship or viewpoint off the player → one more rewrite.
+        }
+        // Continuity / agency / asset tags: every finished character story reply (including the opening), not Admin asks.
+        if(!askTurn && receivedStreamingResult && firstChunkKey0 !== undefined && nowChatroom.type === 'character'){
             const cont = continuityHits(draft, lastUserText, previousReplies, getUserName())
             if(cont.length){
                 const contDraft = await redoFromNote(continuityNote(cont))
@@ -2028,8 +2034,21 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     brLog(`continuity gate: rewrote for ${cont.map((h) => h.rule).join(',')}`)
                     draft = contDraft
                 }
+                // Fail-close after continuity redo (success or failure), in rule order.
+                let contAfter = continuityHits(draft, lastUserText, previousReplies, getUserName())
+                const scrubbedKinship = contAfter.some((h) => h.rule === 'kinship')
+                if(scrubbedKinship){
+                    draft = scrubKinship(draft, lastUserText, previousReplies)
+                    contAfter = continuityHits(draft, lastUserText, previousReplies, getUserName())
+                }
+                const scrubbedLead = contAfter.some((h) => h.rule === 'lead')
+                if(scrubbedLead){
+                    draft = scrubLead(draft, lastUserText, previousReplies, getUserName())
+                }
+                if(scrubbedKinship || scrubbedLead){
+                    brLog(`continuity gate: scrubbed leftover kinship=${scrubbedKinship} lead=${scrubbedLead}`)
+                }
             }
-            // Observe-only agency gate: the player may look, but gets no invented speech or next move.
             const ag = agencyHits(draft, lastUserText, getUserName())
             if(ag.length){
                 const agDraft = await redoFromNote(agencyNote(ag))
@@ -2037,6 +2056,51 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     brLog(`agency gate: rewrote for ${ag.map((h) => h.rule).join(',')}`)
                     draft = agDraft
                 }
+            }
+            // Fail-close: scrub leftover agency after agency redo (success or failure)
+            const agAfter = agencyHits(draft, lastUserText, getUserName())
+            if(agAfter.length){
+                draft = scrubAgency(draft, lastUserText, getUserName())
+                brLog(`agency gate: scrubbed leftover agency`)
+            }
+            // Opening/prior cast: do not invent off-stage roster names (measured Sayaka on New Chat 2).
+            {
+                const castCard = DBState.db.characters[sel.char]
+                const firstMsg = currentChat.fmIndex === -1
+                    ? nowChatroom.firstMessage
+                    : (nowChatroom.alternateGreetings?.[currentChat.fmIndex] ?? nowChatroom.firstMessage)
+                const roster = rosterNames(castCard as never)
+                const allowed = allowedCast(String(firstMsg ?? ''), previousReplies, lastUserText, getUserName(), roster)
+                let cast = castHits(draft, allowed, roster)
+                if(cast.length){
+                    const castDraft = await redoFromNote(castNote(cast))
+                    if(castDraft && castDraft.trim()){
+                        brLog(`cast gate: rewrote for ${cast.map((h) => h.text).join(',')}`)
+                        draft = castDraft
+                    }
+                    cast = castHits(draft, allowed, roster)
+                    if(cast.length){
+                        draft = scrubCast(draft, cast)
+                        brLog(`cast gate: scrubbed leftover cast`)
+                    }
+                }
+            }
+            // Final fail-close gate: scrub kinship before reply ships (catches agency redo leftovers)
+            const finalCont = continuityHits(draft, lastUserText, previousReplies, getUserName())
+            const finalKinship = finalCont.filter((h) => h.rule === 'kinship')
+            if(finalKinship.length){
+                draft = scrubKinship(draft, lastUserText, previousReplies)
+                brLog(`continuity gate: scrubbed leftover kinship`)
+            }
+            const roomCard = DBState.db.characters[sel.char]
+            const assetNames = new Set([
+                ...((roomCard as { additionalAssets?: [string, string, string][] })?.additionalAssets ?? []).map(([name]) => name),
+                ...((roomCard as { emotionImages?: [string, string][] })?.emotionImages ?? []).map(([name]) => name),
+            ].filter((name): name is string => !!name))
+            const assetResult = gateAssetTags(draft, assetNames)
+            if(assetResult.fixed.length){
+                brLog(`asset tag gate: ${assetResult.fixed.map(({ from, to }) => `${from}→${to ?? 'removed'}`).join(', ')}`)
+                draft = assetResult.text
             }
         }
         // NPC voice fill runs for every finished character story reply (not only the settleReply branch; not Admin asks).

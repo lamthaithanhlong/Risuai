@@ -24,6 +24,7 @@ describe('the player\'s turn is carried out (measured: the stalactite plan 0/6 -
         expect(PLAYER_AGENCY).toContain('never invent a substitute male lead')
         expect(PLAYER_AGENCY).toContain('Do not invent romance or kinship labels')
         expect(PLAYER_AGENCY).toContain('bạn đời')
+        expect(PLAYER_AGENCY).toContain('mẹ/con gái')
     })
     it('is the text that was measured', () => {
         const f = '/private/tmp/claude-501/proseeval/agency1b.py'

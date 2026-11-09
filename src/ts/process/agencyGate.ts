@@ -11,7 +11,7 @@ export function observeOnly(playerText: string): boolean {
     return OBSERVE.test(text) && !STRONGER_ACT.test(text)
 }
 
-const SPEECH = /(?<![\p{L}\p{N}])(?:nói|đáp(?:\s*lại)?|hỏi|trả\s*lời|thì\s*thầm|said|answered|asked|replied|whispered)(?![\p{L}\p{N}])/iu
+const SPEECH = /(?<![\p{L}\p{N}])(?:nói|đáp(?:\s*lại)?|hỏi|trả\s*lời|thì\s*thầm|thầm\s*nghĩ|said|answered|asked|replied|whispered)(?![\p{L}\p{N}])/iu
 const ADVANCE = /(?<![\p{L}\p{N}])(?:vuốt|hôn|ôm|nắm\s*tay|kéo\s*(?:vào|lại|đi)|stroke|kiss|hug|hold\s*hands?|pull\s+(?:in|close)|whisper)(?![\p{L}\p{N}])/iu
 
 function escapeRegex(value: string): string {
@@ -28,11 +28,7 @@ function nameAlt(playerName: string): string {
 
 function findQuotes(text: string): { start: number; end: number; body: string }[] {
     const out: { start: number; end: number; body: string }[] = []
-    const pairs: [string, string][] = [
-        ['"', '"'],
-        ['\u201C', '\u201D'],
-        ['\u2018', '\u2019'],
-    ]
+    const pairs: [string, string][] = [ ['"', '"'], ['\u201C', '\u201D'], ['\u2018', '\u2019'] ]
     for (const [open, close] of pairs) {
         let i = 0
         while (i < text.length) {
@@ -59,8 +55,6 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
         const clean = snippet.replace(/\s+/g, ' ').trim().slice(0, 120)
         if (clean && !hits.some((hit) => hit.rule === rule && hit.text === clean)) hits.push({ rule, text: clean })
     }
-
-    // PC speech: name near a speech verb, usually next to a quote.
     for (const q of findQuotes(text)) {
         const before = text.slice(Math.max(0, q.start - 140), q.start)
         const after = text.slice(q.end, q.end + 140)
@@ -68,34 +62,52 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
             add('pc-speech', text.slice(Math.max(0, q.start - 80), Math.min(text.length, q.end + 80)))
         }
     }
-    // Also: "Kenji Park đáp lại" even if quote pairing failed
     const speechNearName = new RegExp(`(?:${alt})[^\\n.!?]{0,40}?${SPEECH.source}|${SPEECH.source}[^\\n.!?]{0,40}?(?:${alt})`, 'giu')
     for (const m of text.matchAll(speechNearName)) {
-        // Prefer when a quote is within 80 chars
         const i = m.index ?? 0
         const win = text.slice(Math.max(0, i - 80), i + m[0].length + 80)
-        if (/["\u201C\u201D]/.test(win) || /đáp\s*lại/i.test(m[0])) add('pc-speech', m[0])
+        if (/['"\u201C\u201D]/.test(win) || /đáp\s*lại/i.test(m[0])) add('pc-speech', m[0])
     }
-
-    // PC advance: named PC then advance verb
     const namedAdvance = new RegExp(`(?:${alt})[^\\n.!?]{0,100}?${ADVANCE.source}`, 'giu')
     for (const m of text.matchAll(namedAdvance)) add('pc-advance', m[0])
-
-    // Viewpoint "Anh đưa tay vuốt…" only after the player was already named in the reply
     if (nameRe.test(text)) {
         const anhAdvance = /(?<![\p{L}\p{N}])Anh\s+(?:đưa\s+tay\s+)?(?:vuốt|hôn|ôm|nắm\s*tay)(?![\p{L}\p{N}])/giu
         for (const m of text.matchAll(anhAdvance)) add('pc-advance', m[0])
     }
-
     return hits
 }
 
 export function agencyNote(hits: AgencyHit[]): string {
     if (!hits.length) return ''
     const parts = hits.map((hit) => `${hit.rule} ("${hit.text}")`)
-    return (
-        `\n\n[Rewrite (hidden, never named): the last draft had ${parts.join(' / ')}. ` +
-        'On this observe-only turn, the player only looked; do not invent PC speech, answers, or physical/social moves. ' +
-        'NPC-initiated actions toward the player may remain; describe what the player sees and stop before the PC speaks or chooses.]'
-    )
+    return `\n\n[Rewrite (hidden, never named): the last draft had ${parts.join(' / ')}. On this observe-only turn, the player only looked; do not invent PC speech, answers, or physical/social moves. NPC-initiated actions toward the player may remain; describe what the player sees and stop before the PC speaks or chooses.]`
 }
+
+export function scrubAgency(reply: string, playerText: string, playerName = ''): string {
+    if (!observeOnly(playerText)) return reply
+    let scrubbed = String(reply ?? '')
+    const hits = agencyHits(scrubbed, playerText, playerName)
+    for (const hit of hits) {
+        const escaped = hit.text.split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        const pattern = escaped.join('\\s+')
+        scrubbed = scrubbed.replace(new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, 'giu'), '')
+    }
+    // Remove any remaining quote attributed to the player (including thầm nghĩ).
+    const alt = nameAlt(playerName)
+    if (alt) {
+        const quotedAttribution = new RegExp(`(?:${alt})[^\\n.!?]{0,40}?${SPEECH.source}[^\\n.!?]{0,40}?[\"\\u201C][^\"\\u201D\\n]{1,240}[\"\\u201D]|[\"\\u201C][^\"\\u201D\\n]{1,240}[\"\\u201D][^\\n.!?]{0,40}?(?:${alt})[^\\n.!?]{0,40}?${SPEECH.source}`, 'giu')
+        scrubbed = scrubbed.replace(quotedAttribution, '')
+    }
+    // A hit snippet may omit the rest of its sentence; repeat removal until the gate is clear.
+    scrubbed = scrubbed.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    const remaining = agencyHits(scrubbed, playerText, playerName)
+    if (remaining.length) {
+        for (const hit of remaining) {
+            const escaped = hit.text.split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            scrubbed = scrubbed.replace(new RegExp(escaped.join('\\s+'), 'giu'), '')
+        }
+        scrubbed = scrubbed.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    }
+    return scrubbed
+}
+

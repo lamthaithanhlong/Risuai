@@ -17,7 +17,7 @@ export const PLAYER_AGENCY = '\n\n[Player\'s turn: carry out what the player wro
     // Measured 2026-11-08 (New Chat 2 / Ollama 9B): "Tui nhìn 3 người họ" → narrator swapped in "Yuuichi" as boyfriend lead and called Aki/Naru girlfriend/cousin.
     + ' Keep the player\'s character as the viewpoint: when they watch or approach people already in the scene, describe those people from the player\'s eyes;'
     + ' never invent a substitute male lead, rename the player, or recenter the scene on a new man. Do not invent romance or kinship labels'
-    + ' (girlfriend, boyfriend, bạn đời, em họ, vợ/chồng, crush) the player or the prior story did not already state.]'
+    + ' (girlfriend, boyfriend, bạn đời, em họ, vợ/chồng, crush, mẹ/con gái) the player or the prior story did not already state. When the player looks at people already shown in the opening scene, continue that cast and situation; do not invent a new named character or switch to a different beat.]'
 
 /** At the end of the player's message, where the model follows it (a system note alone is not read on this route). */
 export function agencyRequest<T extends { role: string; content: unknown }>(formated: T[], on: boolean): T[] {
