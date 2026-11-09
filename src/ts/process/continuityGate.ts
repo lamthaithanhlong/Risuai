@@ -63,6 +63,14 @@ export function leadHits(reply: string, playerText: string, playerName = '', _pr
         const name = after.match(new RegExp(String.raw`(?<![\p{L}\p{N}])(${proper})(?![\p{L}\p{N}])`, 'u'))?.[1]
         if (name && name.toLowerCase() !== player && name.toLowerCase() !== playerFirst) add(`${m[0]} ${name}`)
     }
+    for (const re of [
+        /(?<![\p{L}\p{N}])gắn\s+liền(?![\p{L}\p{N}])/giu,
+        /(?<![\p{L}\p{N}])kéo\s+gần(?![\p{L}\p{N}])/giu,
+        /(?<![\p{L}\p{N}])bị\s+vây\s+quanh(?![\p{L}\p{N}])/giu,
+        /(?<![\p{L}\p{N}])sợi\s+dây\s+liên\s+kết(?![\p{L}\p{N}])/giu,
+    ]) {
+        for (const m of text.matchAll(re)) add(m[0])
+    }
     return hits
 }
 
@@ -91,7 +99,11 @@ export function scrubLead(reply: string, playerText: string, previous: string[] 
             return `đứng cạnh ${name}`
         })
     }
-    
+    const keep = (full, phrase) => prior.includes(full.toLowerCase()) || prior.includes(phrase)
+    s = s.replace(/(?<![\p{L}\p{N}])(?:được\s+)?gắn\s+liền(?:\s+với)?(?![\p{L}\p{N}])/giu, (m) => keep(m, 'gắn liền') ? m : 'đứng cạnh')
+    s = s.replace(/(?<![\p{L}\p{N}])kéo\s+gần(?:\s+khoảng\s+cách)?(?![\p{L}\p{N}])/giu, (m) => keep(m, 'kéo gần') ? m : 'giữ khoảng cách')
+    s = s.replace(/(?<![\p{L}\p{N}])bị\s+vây\s+quanh(?![\p{L}\p{N}])/giu, (m) => keep(m, 'bị vây quanh') ? m : 'đứng giữa nhóm')
+    s = s.replace(/(?<![\p{L}\p{N}])sợi\s+dây\s+liên\s+kết(?:\s+vô\s+hình)?(?![\p{L}\p{N}])/giu, (m) => keep(m, 'sợi dây liên kết') ? m : 'khoảng cách')
     return s
 }
 
@@ -100,6 +112,6 @@ export function continuityHits(reply: string, playerText: string, previous: stri
 }
 export function continuityNote(hits: ContinuityHit[]): string {
     if (!hits.length) return ''
-    const parts = hits.map(h => { const t=h.text.toLowerCase(); if(h.rule==='kinship') return `invented kinship/romance label "${h.text}"`; if(h.rule==='lead'){ if(t.includes('người cũ')) return `invented "người cũ" framing "${h.text}"`; if(t.includes('siết')&&t.includes('áo của')) return `invented cling-grip framing "${h.text}"`; if(/(?:tay|vai)/u.test(t)) return `invented soft arm/shoulder contact "${h.text}"`; if(t.includes('đi cùng')&&t.includes('cô gái')) return `invented couple walk framing "${h.text}"`; if(t.includes('đội hình cố định')) return `invented fixed-lineup framing "${h.text}"`; return `invented romantic/emotional hub framing "${h.text}"` } return `viewpoint left the player ("${h.text.slice(0,80)}")` })
-    return `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. Player-authored text is the only continuity canon; AI-only leads and kinship wording are void and must not authorize repetition. Preserve player-stated labels such as bạn gái; do not invent other kinship labels or a substitute male lead; do not frame observed people as "người cũ", gripping clothing, walking as a couple, or a fixed lineup around a named hub; describe the people the player looked at from the player's view with neutral observation.]`
+    const parts = hits.map(h => { const t=h.text.toLowerCase(); if(h.rule==='kinship') return `invented kinship/romance label "${h.text}"`; if(h.rule==='lead'){ if(t.includes('người cũ')) return `invented "người cũ" framing "${h.text}"`; if(t.includes('siết')&&t.includes('áo của')) return `invented cling-grip framing "${h.text}"`; if(/(?:tay|vai)/u.test(t)) return `invented soft arm/shoulder contact "${h.text}"`; if(t.includes('đi cùng')&&t.includes('cô gái')) return `invented couple walk framing "${h.text}"`; if(t.includes('đội hình cố định')) return `invented fixed-lineup framing "${h.text}"`; if(t.includes('gắn liền')) return `soft-bond "${h.text}"`; if(t.includes('kéo gần')) return `closing-distance "${h.text}"`; if(t.includes('vây quanh')) return `surrounded-hub "${h.text}"`; if(t.includes('dây liên kết')) return `bond-thread "${h.text}"`; return `invented romantic/emotional hub framing "${h.text}"` } return `viewpoint left the player ("${h.text.slice(0,80)}")` })
+    return `\n\n[Rewrite (hidden, never named): the last draft had: ${parts.join(' / ')}. Player-authored text is the only continuity canon; AI-only leads and kinship wording are void and must not authorize repetition. Preserve player-stated labels such as bạn gái; do not invent other kinship labels or a substitute male lead; do not frame observed people as "người cũ", gripping clothing, walking as a couple, or a fixed lineup around a named hub; forbid gắn liền, kéo gần, bị vây quanh, sợi dây liên kết, and making one named character the emotional hub; describe the people the player looked at from the player's view with neutral observation.]`
 }

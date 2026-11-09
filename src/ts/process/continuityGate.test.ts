@@ -72,6 +72,22 @@ describe('continuityGate', () => {
         expect(note).toContain('Preserve player-stated labels such as bạn gái')
     })
 
+    test('detects, scrubs, and labels Vietnamese bond and closeness framing', () => {
+        const reply = 'Aki được gắn liền với cậu ấy, kéo gần khoảng cách. Yuuichi bị vây quanh. Kenji Park cảm nhận sợi dây liên kết vô hình giữa Aki, Naru và Yuuichi.'
+        const user = 'Tui nhìn 3 người họ'
+        const phrases = ['gắn liền', 'kéo gần', 'bị vây quanh', 'sợi dây liên kết']
+        const hits = leadHits(reply, user, 'Kenji Park')
+        expect(hits.map((hit) => hit.text.toLowerCase())).toEqual(expect.arrayContaining(phrases))
+        const scrubbed = scrubLead(reply, user, [], 'Kenji Park')
+        for (const phrase of phrases) expect(scrubbed.toLowerCase()).not.toContain(phrase)
+        for (const name of ['Aki', 'Yuuichi', 'Naru', 'Kenji Park']) expect(scrubbed).toContain(name)
+        expect(leadHits(scrubbed, user, 'Kenji Park')).toEqual([])
+        expect(leadHits(reply, 'Tui hỏi họ tên', 'Kenji Park')).toEqual([])
+        expect(leadHits(reply, `Tui nhìn 3 người họ: ${phrases.join(', ')}`, 'Kenji Park')).toEqual([])
+        const note = continuityNote(hits)
+        for (const label of ['soft-bond', 'closing-distance', 'surrounded-hub', 'bond-thread', 'emotional hub', 'neutral observation']) expect(note).toContain(label)
+    })
+
     // --- New soft-lead patterns ---
 
     test('lead detects "người cũ + ProperName" on observation turns', () => {
