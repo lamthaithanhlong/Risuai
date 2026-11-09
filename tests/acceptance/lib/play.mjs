@@ -188,7 +188,7 @@ export class Player {
             for (const el of document.querySelectorAll('.risu-chat[data-chat-index]')) {
                 const idx = Number(el.getAttribute('data-chat-index'))
                 const texts = [...el.querySelectorAll('.chattext')]
-                const panel = el.querySelector('details.x-risu-sp')
+                const panel = el.querySelector('details.sp') || el.querySelector('details.x-risu-sp')
                 const prose = texts.map((t) => {
                     const c = t.cloneNode(true)
                     c.querySelectorAll('details, style, script').forEach((n) => n.remove())
