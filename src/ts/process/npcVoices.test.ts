@@ -44,6 +44,11 @@ describe('npc voices', () => {
         expect(ask).not.toHaveBeenCalled()
     })
 
+    test('a single-bracket SAY in front of a quote is dropped and the quote is respelled', async () => {
+        const ask = async () => { throw new Error('unexpected model call') }
+        expect(await fillNpcVoices('[SAY|naru]\n"A! anh có sẵn sàng không?"', '', 1, ask, ['Naru'], 'các cậu cho tớ tham gia')).toBe('"A! cậu có sẵn sàng không?"')
+    })
+
     test('on stage is the same three-reply window', () => {
         expect(onstageNpcs(LEDGER, 13).map((c) => c.id)).toEqual(['aki', 'naru'])
         expect(onstageNpcs(LEDGER, 20)).toEqual([])

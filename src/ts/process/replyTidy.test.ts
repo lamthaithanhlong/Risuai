@@ -63,6 +63,11 @@ describe('a thought opened and never closed at the start of a finished reply', (
 })
 
 describe('stored and shown', () => {
+    it('removes malformed stat tags but keeps fourteen numbers', () => {
+        expect(tidyDisplay('[📊|57|0|65|0|0|0|10|0|0|0|0|0|0]\n]\n')).toBe('')
+        const tag = '[📊|0|0|0|0|0|0|0|0|0|0|0|0|0|0]'
+        expect(tidyDisplay(tag)).toBe(tag)
+    })
     it('the stored reply never keeps a growth tag, the card having a script or not (gate runs 2026-11-04)', () => {
         for (const tag of ['[[ACT|kiểm-tra-cửa|cam_nhan|normal|]]', '[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]', '[[ACT|nghe|cam_nhan|normal|']) {
             const chat = { message: [{ role: 'user', data: 'đi' }, { role: 'char', data: `${STORY1}\n[💡Kế hoạch| Không ] ${tag}` }] }

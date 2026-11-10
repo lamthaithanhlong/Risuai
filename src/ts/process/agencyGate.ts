@@ -44,11 +44,12 @@ function normalizeText(text: string): string {
     return text.toLocaleLowerCase().replace(/[\p{P}\p{S}]/gu, ' ').replace(/\s+/g, ' ').trim()
 }
 
-function hasEcho(quote: string, playerText: string): boolean {
+function hasEcho(quote: string, playerText: string, min = 18): boolean {
     const normalizedQuote = normalizeText(quote)
+    if (normalizedQuote.length < min) return false
     const normalizedPlayer = normalizeText(playerText)
-    for (let start = 0; start <= normalizedQuote.length - 18; start++) {
-        for (let end = normalizedQuote.length; end - start >= 18; end--) {
+    for (let start = 0; start <= normalizedQuote.length - min; start++) {
+        for (let end = normalizedQuote.length; end - start >= min; end--) {
             if (normalizedPlayer.includes(normalizedQuote.slice(start, end))) return true
         }
     }
@@ -132,6 +133,15 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
         for (const match of text.matchAll(sentencePattern)) {
             if (subject.test(match[0])) add('pc-replay', match[0])
         }
+        const playerSubject = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alt}|anh)(?![\\p{L}\\p{N}])`, 'iu')
+        for (const match of text.matchAll(sentencePattern)) {
+            if (/(?:đứng\s+ngang\s+hàng|lướt\s+trên)/iu.test(match[0]) && playerSubject.test(match[0])) add('pc-replay', match[0])
+        }
+    }
+    for (const match of text.matchAll(/[^.!?\n]+(?:[.!?]|$)/gu)) {
+        const start = match.index ?? 0
+        if (quotes.some((quote) => start >= quote.start && start + match[0].length <= quote.end)) continue
+        if (hasEcho(match[0], playerText, 24)) add('pc-echo', match[0])
     }
     if (/(?<![\p{L}\p{N}])nói(?![\p{L}\p{N}])/iu.test(playerText)) {
         const replaySpeech = /(?<![\p{L}\p{N}])anh(?![\p{L}\p{N}]).{0,160}?(?:gật\s+đầu|cất\s+tiếng|lên\s+tiếng)/iu

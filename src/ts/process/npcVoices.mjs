@@ -173,6 +173,7 @@ export async function rewireOnstageQuotes(text, cards, ask) {
 export async function fillNpcVoices(text, ledger, n, ask, extras = [], playerText = '') {
     const cards = onstageNpcs(ledger, n, extras)
     let out = String(text ?? '')
+    out = out.replace(/^[ \t]*\[\[?\s*SAY\s*\|[^\]\n]+\]\]?[ \t]*\n+(?=[ \t]*["“])/gimu, '')
     let filledSay = false
     if (SAY.test(out)) {
         let guard = 0

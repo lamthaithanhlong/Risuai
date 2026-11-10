@@ -109,6 +109,11 @@ describe('agencyGate', () => {
         expect(agencyHits('Aki gật đầu chào Kenji.', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
         expect(agencyHits('Đôi chân anh bước đi.', PLAYER, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
         expect(scrubAgency(`${replay} Aki quay lại.`, player, 'Kenji Park')).toBe('Aki quay lại.')
+        expect(agencyHits('Đôi chân anh bước đi.', 'Tui chạy theo họ', 'Kenji Park').map((h) => h.rule)).not.toContain('pc-replay')
+        const longPlayer = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
+        const caught = 'Đôi chân anh lướt trên mặt sàn và anh đã đứng ngang hàng với họ. hmm, cho tớ tham gia câu lạc bộ được không? “A! Tuyến bơi rộng.”'
+        expect(scrubAgency(caught, longPlayer, 'Kenji Park')).toBe('“A! Tuyến bơi rộng.”')
+        expect(agencyHits('tham gia câu lạc bộ.', longPlayer, 'Kenji Park').map((h) => h.rule)).not.toContain('pc-echo')
     })
 
     it('scrubs replayed speech lead-ins without flagging NPCs or unrelated movement', () => {
