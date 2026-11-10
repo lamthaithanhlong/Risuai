@@ -428,6 +428,38 @@ const JUNIOR_YOU = W('em')
 const EM_AS_SELF = /(?<!\p{L})(?:cho em(?: xin)?|(?:tôi|tớ|mình)?\s*em (?:xin|cần|chỉ)|em (?:xin|cần|đang|bị|sợ|đói|đau))(?!\p{L})/gu
 const TEACHER = W('thầy|cô giáo')
 /** [{rule, why}] when one quote mixes incompatible address forms toward the player. */
+export function agreedPair(cards) {
+    const people = [...(cards ?? [])].filter((c) => c && !c.isAdmin && c.id !== EVENTS_ID && c.self && c.toPlayer)
+    if (!people.length) return null
+    const self = people[0].self
+    const to = people[0].toPlayer
+    if (!people.every((c) => c.self === self && c.toPlayer === to)) return null
+    if (!(self === 'tớ' && to === 'cậu')) return null
+    return { self, to }
+}
+export function registerHits(line, cards) {
+    if (!agreedPair(cards)) return []
+    const text = String(line ?? '')
+    if (!/(?<!\p{L})(?:anh|chị)(?!\p{L})/iu.test(text) && !/(?<!\p{L})tôi(?!\p{L})/iu.test(text)) return []
+    return [{ rule: 'npc-register', why: 'anh/tôi trong lời tớ/cậu' }]
+}
+function swapPairWord(text, from, to) {
+    return text.replace(new RegExp('(?<!\\p{L})(' + from + ')(?!\\p{L})', 'giu'), (m) => (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to))
+}
+export function scrubRegister(reply, cards) {
+    if (!agreedPair(cards)) return String(reply ?? '')
+    return String(reply ?? '').replace(/“[^”]*”|"[^"\n]*"/gu, (quote) => {
+        const body = quote.slice(1, -1)
+        if (!registerHits(body, cards).length) return quote
+        const open = quote[0]
+        const close = open === '“' ? '”' : '"'
+        let inner = swapPairWord(body, 'anh', 'cậu')
+        inner = swapPairWord(inner, 'chị', 'cậu')
+        inner = swapPairWord(inner, 'tôi', 'tớ')
+        return open + inner + close
+    })
+}
+
 export function addressPairHits(line) {
     const raw = String(line ?? '')
     const stripped = raw.replace(EM_AS_SELF, ' ')
@@ -466,6 +498,7 @@ export function npcHits(reply, ctx = {}) {
         for (const l of g.lines) {
             for (const h of grammarHits(l)) out.push({ ...h, text: l, npc: name })
             for (const h of addressPairHits(l)) out.push({ ...h, text: l, npc: name })
+            for (const h of registerHits(l, [...cards.values()])) out.push({ ...h, text: l, npc: name })
         }
         void key
     }

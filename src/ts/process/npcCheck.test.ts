@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'vitest'
 import fs from 'fs'
 import path from 'path'
-import { accept, addressPairHits, appendNpcLines, parseInner, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, stepNpc } from './npcCheck.mjs'
+import { accept, addressPairHits, appendNpcLines, parseInner, cardLine, cutViolations, extractFacts, foldNpc, grammarHits, LOW_TRUST, npcCardsNote, npcHits, npcOpsOf, npcRewriteNote, scrubRegister, stepNpc } from './npcCheck.mjs'
 
 const fx = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../tests/acceptance/fixtures/owner-chats/npc-dialogue-704.json'), 'utf8'))
 // the balcony woman's ledger as the bookkeeper would write it up to the owner's turn 11 (painkillers pulled over, fever medicine needed)
@@ -17,6 +17,21 @@ const LEDGER = [
 ].join('\n')
 const P = { player: 'Kenji Park' }
 const rules = (hits: { rule: string; soft?: boolean }[]) => hits.filter((h) => !h.soft).map((h) => h.rule)
+
+describe('register scrubbing', () => {
+    test('uses the agreed peer register only inside quotes', () => {
+        const ledger = '12 | aki | meet Aki;tớ;cậu;\n12 | naru | meet Naru;tớ;cậu;'
+        const cards = [...foldNpc(ledger, 13).values()]
+        const reply = 'Đôi chân anh bước đi đầy dứt khoát.\n“Ồ, anh muốn tham gia sao? Tôi cũng thấy anh rất thú vị đấy.”\n“Tuyệt quá! Câu lạc bộ bơi lội đang cần thêm người năng động như anh để hỗ trợ mà!”\n“Chào anh, rất vui được gặp anh. Nếu anh thích bơi lội thì sẽ hợp với bọn tôi lắm đấy.”'
+        expect(scrubRegister(reply, cards)).toBe('Đôi chân anh bước đi đầy dứt khoát.\n“Ồ, cậu muốn tham gia sao? Tớ cũng thấy cậu rất thú vị đấy.”\n“Tuyệt quá! Câu lạc bộ bơi lội đang cần thêm người năng động như cậu để hỗ trợ mà!”\n“Chào cậu, rất vui được gặp cậu. Nếu cậu thích bơi lội thì sẽ hợp với bọn tớ lắm đấy.”')
+        expect(scrubRegister('“Anh và chị.”', cards)).toBe('“Cậu và cậu.”')
+        const clean = 'Aki nói: “Cậu quên hồ sơ à? Tớ thấy trên bàn.”'
+        expect(scrubRegister(clean, cards)).toBe(clean)
+        const stranger = '“Tôi chưa dám nhận đồ của người lạ, anh cứ giữ thuốc hạ sốt đi.”'
+        expect(scrubRegister(stranger, [...foldNpc(LEDGER, 13).values()])).toBe(stranger)
+        expect(rules(npcHits('Aki nói: “Anh muốn tham gia sao?”', { ledger, n: 13 }))).toContain('npc-register')
+    })
+})
 
 describe('ledger', () => {
     test('fold before turn 13: needs fever medicine and something to wash the wound, holds the painkillers she received, low trust', () => {

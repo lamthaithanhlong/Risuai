@@ -2,7 +2,7 @@
 // writing both). The narrator leaves [[SAY|id]]; each marker is one voice, and the next voice hears the lines already filled.
 // Ollama 9B often ignores the marker and writes the lines itself (New Chat 2, 2026-11-08, empty $led_npc): then we fall back to
 // portrait names on stage and rewrite attributed quotes with the same voice bots.
-import { blankNpc, cardLine, EVENTS_ID, foldNpc } from './npcCheck.mjs'
+import { blankNpc, cardLine, EVENTS_ID, foldNpc, scrubRegister } from './npcCheck.mjs'
 
 const slug = (s) => String(s ?? '').normalize('NFC').toLowerCase().trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 40)
 const esc = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -190,5 +190,5 @@ export async function fillNpcVoices(text, ledger, n, ask, extras = []) {
     if (!filledSay && cards.length && ask) {
         out = await rewireOnstageQuotes(out, cards, ask)
     }
-    return out.replace(/\n{3,}/g, '\n\n')
+    return scrubRegister(out.replace(/\n{3,}/g, '\n\n'), cards)
 }
