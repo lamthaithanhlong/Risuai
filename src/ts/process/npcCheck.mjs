@@ -460,6 +460,10 @@ export function scrubRegister(reply, cards, playerText = '') {
         inner = swapPairWord(inner, 'chị', 'cậu')
         inner = swapPairWord(inner, 'tôi', 'tớ')
         return open + inner + (closed ? closer : '')
+    }).replace(/^[^“"\r\n]*[”"]$/gmu, (line) => {
+        let inner = swapPairWord(line, 'anh', 'cậu')
+        inner = swapPairWord(inner, 'chị', 'cậu')
+        return swapPairWord(inner, 'tôi', 'tớ')
     })
 }
 

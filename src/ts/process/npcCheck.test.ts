@@ -25,6 +25,7 @@ describe('register scrubbing', () => {
         const reply = 'Đôi chân anh bước đi.\n"Ồ, anh là người mới muốn gia nhập à?"\n"Tuyệt quá! như anh đấy!"\n"Chào anh.'
         expect(scrubRegister(reply, cards, playerText)).toBe('Đôi chân anh bước đi.\n"Ồ, cậu là người mới muốn gia nhập à?"\n"Tuyệt quá! như cậu đấy!"\n"Chào cậu.')
         expect(scrubRegister('của anh. "Chị và bọn tôi."', cards, playerText)).toBe('của anh. "Cậu và bọn tớ."')
+        expect(scrubRegister('Tôi thấy anh có vẻ rất nhiệt huyết đấy.”\n“Đúng thế! Tụi mình luôn chào đón thành viên mới mà.”\nĐôi chân anh bước đi.', cards, playerText)).toBe('Tớ thấy cậu có vẻ rất nhiệt huyết đấy.”\n“Đúng thế! Tụi mình luôn chào đón thành viên mới mà.”\nĐôi chân anh bước đi.')
         expect(scrubRegister(reply, cards, 'cậung tớ')).toBe(reply)
         expect(scrubRegister(reply, [], playerText)).toBe(reply)
     })

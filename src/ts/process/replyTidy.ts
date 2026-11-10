@@ -70,7 +70,7 @@ export function stripStrayMarks(text: string): string {
         const opener = quote === '”' ? '“' : quote
         return opener && before.split(opener).length % 2 === 0 ? quote : ''
     })
-    t = t.replace(/\[📊(?:\|\d+)+\](?:\r?\n[ \t]*\][ \t]*(?=\r?\n|$))?/gu, (tag) => (tag.match(/\|\d+/g) ?? []).length === 14 ? tag : '')
+    t = t.replace(/(\[📊(?:\|\d+)+\])(?:\r?\n[ \t]*\][ \t]*(?=\r?\n|$))?/gu, (_all, tag: string) => (tag.match(/\|\d+/g) ?? []).length === 14 ? tag : '')
     if ((t.match(/\[\[/g) ?? []).length < (t.match(/\]\]/g) ?? []).length) t = t.replace(/[ \t]*\]\]\](?=[ \t]*(?:\n|$))/g, '')
     const opens = (t.match(/\[\[/g) ?? []).length
     let extra = (t.match(/\]\]/g) ?? []).length - opens

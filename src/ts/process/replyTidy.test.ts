@@ -65,6 +65,7 @@ describe('a thought opened and never closed at the start of a finished reply', (
 describe('stored and shown', () => {
     it('removes malformed stat tags but keeps fourteen numbers', () => {
         expect(tidyDisplay('[📊|57|0|65|0|0|0|10|0|0|0|0|0|0]\n]\n')).toBe('')
+        expect(tidyDisplay('[📊|57|0|65|0|0|0|10|0|0|0|0|0|0|0]\n]\n')).toBe('[📊|57|0|65|0|0|0|10|0|0|0|0|0|0|0]')
         const tag = '[📊|0|0|0|0|0|0|0|0|0|0|0|0|0|0]'
         expect(tidyDisplay(tag)).toBe(tag)
     })
