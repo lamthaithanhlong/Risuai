@@ -100,6 +100,19 @@ describe('agencyGate', () => {
         expect(scrubAgency(BAD_FALLBACK, 'Tui ôm Aki', 'Kenji Park')).toBe(BAD_FALLBACK)
     })
 
+    it('scrubs replayed speech lead-ins without flagging NPCs or unrelated movement', () => {
+        const player = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
+        const scrubbed = scrubAgency('Khi khoảng cách vừa đủ gần, anh khẽ gật đầu chào rồi cất tiếng. Yuuichi cười.', player, 'Kenji Park')
+        expect(scrubbed).not.toContain('cất tiếng')
+        expect(scrubbed).toContain('Yuuichi cười.')
+        expect(agencyHits('Aki gật đầu chào Kenji.', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(agencyHits('Đôi chân anh bước đi.', PLAYER, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(scrubAgency('Anh vươn nhẹ đôi tay ra, linh hoạt trong từng bước chạy ngắn trên hành lang gỗ. Aki quay lại.', player, 'Kenji Park')).toBe('Aki quay lại.')
+        const speech = scrubAgency('Dừng lại một nhịp, anh khẽ gật đầu với mỗi người rồi cất tiếng gọi đầy hào hứng. “Chào cậu.”', player, 'Kenji Park')
+        expect(speech).not.toMatch(/cất tiếng|gật đầu/)
+        expect(speech).toContain('“Chào cậu.”')
+    })
+
     it('leaves strong player acts unchanged', () => {
         const reply = BAD_FALLBACK
         // Strong act: player explicitly initiates intimate contact
