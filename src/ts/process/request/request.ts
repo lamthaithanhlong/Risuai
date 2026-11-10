@@ -23,6 +23,7 @@ import { ollamaNeedsProsePass } from './ollamaThink';
 import { requestGoogleCloudVertex } from './google';
 import { requestOpenAI, requestOpenAILegacyInstruct, requestOpenAIResponseAPI } from "./openAI/requests";
 import { applyAdditionalParameters, applyParameters, getAdditionalParameters, type ModelModeExtended } from './shared';
+import { OLLAMA_LOCAL_KEEP_ALIVE, responseFloorFor } from './ollamaLocal';
 
 export type ToolCall = {
     name: string;
@@ -1172,7 +1173,10 @@ async function requestOllama(arg:RequestDataArgumentExtended):Promise<requestDat
         messages: messages,
         stream: arg.useStreaming,
         think: ollamaThinkMode,
-        options: { num_predict: arg.maxTokens }
+        options: { num_predict: responseFloorFor(arg.aiModel, arg.maxTokens) }
+    }
+    if(!isCloud){
+        requestBody.keep_alive = OLLAMA_LOCAL_KEEP_ALIVE
     }
 
     requestBody = applyAdditionalParameters(requestBody, customHeaders, getAdditionalParameters(arg.aiModel))

@@ -77,6 +77,7 @@ import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
 import { gateAssetTags } from "./assetTagGate";
 import { brLog, brMem, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
+import { contextCapFor, rewriteBudgetFor, withRewriteBudget } from "./request/ollamaLocal";
 
 /** With RISU_ACCESS_LOG on the page reports where a reply's time went (prompt build, memory, request, post-processing). */
 function reportStageTimings(t: { stage1Duration: number, stage2Duration: number, stage3Duration: number, stage4Duration: number }) {
@@ -395,7 +396,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     nowChatroom.chats[sel.chat] = currentChat
     // a rerolled or deleted reply's panel writes go back before the prompt shows the panel (gameMasterPage.ts)
     settlePanel(currentChat)
-    let maxContextTokens = DBState.db.maxContext
+    let maxContextTokens = contextCapFor(DBState.db.aiModel, DBState.db.maxContext)
 
     chatProcessStage.set(1); brPhase('sendChat stage 1')
     stageTimings.stage1Start = Date.now()
@@ -1990,7 +1991,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         // The reply is complete: setup exposition, a sentence the last replies already had, or an unchanged 【ADMIN】 / 【HỆ THỐNG】 line gets ONE
         // more draft (replyCheck.mjs / replyRegen.ts). The second draft replaces the first and is kept even if it still has hits.
         const firstChunkKey0 = Object.keys(lastResponseChunk)[0]
-        const redoFromNote = async (note: string) => {
+        const redoFromNoteRaw = async (note: string) => {
             formated = gmRequest(formated, note)
             const req2 = await requestModelOnce()
             if(req2.type === 'success'){
@@ -2012,6 +2013,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             }
             return abortSignal.aborted ? null : text
         }
+        const redoFromNote = withRewriteBudget(redoFromNoteRaw, rewriteBudgetFor(DBState.db.aiModel), (m) => brLog(m))
         let draft = result
         // settleReply stays off the opening turn (checkReply); hard gates below still run on opening —
         // measured 2026-11-08 New Chat 2 first reply skipped agency because isOpening made checkReply false.
