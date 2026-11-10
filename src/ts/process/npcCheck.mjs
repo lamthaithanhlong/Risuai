@@ -446,17 +446,20 @@ export function registerHits(line, cards) {
 function swapPairWord(text, from, to) {
     return text.replace(new RegExp('(?<!\\p{L})(' + from + ')(?!\\p{L})', 'giu'), (m) => (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to))
 }
-export function scrubRegister(reply, cards) {
-    if (!agreedPair(cards)) return String(reply ?? '')
-    return String(reply ?? '').replace(/“[^”]*”|"[^"\n]*"/gu, (quote) => {
-        const body = quote.slice(1, -1)
-        if (!registerHits(body, cards).length) return quote
+export function scrubRegister(reply, cards, playerText = '') {
+    const people = [...(cards ?? [])]
+    const fallback = people.length > 0 && people.every((c) => c && c.self === 'tôi' && c.toPlayer === 'anh')
+        && W('tớ').test(playerText) && W('cậu').test(playerText)
+    if (!agreedPair(people) && !fallback) return String(reply ?? '')
+    return String(reply ?? '').replace(/“[^”\n]*(?:”|$)|"[^"\n]*(?:"|$)/gu, (quote) => {
         const open = quote[0]
-        const close = open === '“' ? '”' : '"'
+        const closer = open === '“' ? '”' : '"'
+        const closed = quote.length > 1 && quote.endsWith(closer)
+        const body = quote.slice(1, closed ? -1 : undefined)
         let inner = swapPairWord(body, 'anh', 'cậu')
         inner = swapPairWord(inner, 'chị', 'cậu')
         inner = swapPairWord(inner, 'tôi', 'tớ')
-        return open + inner + close
+        return open + inner + (closed ? closer : '')
     })
 }
 

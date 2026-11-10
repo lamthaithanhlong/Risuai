@@ -2134,7 +2134,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             }
             // Only people who speak in THIS reply — not every portrait named in the last six turns.
             const voiceExtras = speakingNamesIn(draft, voiceNames)
-            draft = await fillNpcVoices(draft, String(voiceChat.scriptstate?.['$led_npc'] ?? ''), previousReplies.length + 1, askSubmodel, voiceExtras)
+            draft = await fillNpcVoices(draft, String(voiceChat.scriptstate?.['$led_npc'] ?? ''), previousReplies.length + 1, askSubmodel, voiceExtras, lastUserText)
         }
         if(draft !== result && firstChunkKey0 !== undefined){
             result = draft

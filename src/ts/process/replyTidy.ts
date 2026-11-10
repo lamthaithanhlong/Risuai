@@ -65,6 +65,12 @@ export function stripGmTalk(text: string): string {
 const LEAKED_SYSTEM = /^[ \t]*【[^】\n]*】[ \t]*[—–-]+[ \t]*[A-Za-z][A-Za-z ,.'!?]{0,60}[ \t]*(?:\n|$)/gm
 export function stripStrayMarks(text: string): string {
     let t = text ?? ''
+    t = t.replace(/[ \t]*\bbeat:\s*\d+\s*\|[^\n]*\bthreat:\s*[^\n]*\n[ \t]*canon:\s*[^\n]*\]\]\]([”"']?)[ \t\r\n]*$/i, (_all, quote: string, offset: number, whole: string) => {
+        const before = whole.slice(0, offset)
+        const opener = quote === '”' ? '“' : quote
+        return opener && before.split(opener).length % 2 === 0 ? quote : ''
+    })
+    if ((t.match(/\[\[/g) ?? []).length < (t.match(/\]\]/g) ?? []).length) t = t.replace(/[ \t]*\]\]\](?=[ \t]*(?:\n|$))/g, '')
     const opens = (t.match(/\[\[/g) ?? []).length
     let extra = (t.match(/\]\]/g) ?? []).length - opens
     if (extra > 0) t = t.replace(/^[ \t]*\]\][ \t]*(?:\n|$)/gm, (all) => (extra-- > 0 ? '' : all))

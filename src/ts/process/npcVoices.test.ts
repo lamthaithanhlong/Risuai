@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { npcCardsNote } from './npcCheck.mjs'
+import { tidyDisplay } from './replyTidy'
 import { fillNpcVoices, hasAttributedSpeech, namesNamedIn, npcVoicePrompt, onstageNpcs, rewireOnstageQuotes, speakingNamesIn, takeOneQuote } from './npcVoices.mjs'
 
 const LEDGER = [
@@ -10,6 +11,15 @@ const LEDGER = [
 const SCENE = 'Hành lang im.\n[[SAY|aki]]\nNaru đứng cạnh cửa.\n[[SAY|naru]]\n'
 
 describe('npc voices', () => {
+    test('display hides a leaked GM tail and stray triple closer', () => {
+        const raw = '"Chào anh. beat: 1 | Kenji Park vừa đưa ra lời đề nghị gia nhập và nhận được phản ứng tích cực từ nhóm ba người. | Nhóm ba người sẽ quyết định xem Kenji có thực sự phù hợp với đội hình hiện tại hay không. threat: Aki | 0% | 100%\ncanon: Ngày 15 tháng 3 | Các câu lạc bộ khác bắt đầu chuẩn bị cho giải đấu giữa kỳ. ]]]\n'
+        expect(tidyDisplay(raw)).toBe('"Chào anh.')
+        expect(tidyDisplay('“Chào anh. beat: 1 | x | y threat: Aki | 0% | 100%\ncanon: ngày 15 | x ]]]”')).toBe('“Chào anh.”')
+        expect(tidyDisplay('[[normal]]]')).toBe('[[normal]]]')
+        expect(tidyDisplay('Chào anh. ]]]')).toBe('Chào anh.')
+        expect(tidyDisplay('Chữ [[bình thường]] còn nguyên.')).toBe('Chữ [[bình thường]] còn nguyên.')
+    })
+
     test('the narrator note names the marker and does not ask the narrator to write the line', () => {
         const note = npcCardsNote(LEDGER, 13, true)
         expect(note).toContain('[[SAY|aki]]')
@@ -23,6 +33,15 @@ describe('npc voices', () => {
         expect(note).toContain('[[SAY|aki]]')
         expect(note).toContain('[[SAY|naru]]')
         expect(onstageNpcs('', 1, ['Aki', 'Naru']).map((c) => c.id)).toEqual(['aki', 'naru'])
+    })
+
+    test('passes player register to blank-card scrubbing without a model call', async () => {
+        const ask = vi.fn(async () => { throw new Error('unexpected model call') })
+        expect(await fillNpcVoices('"Chào anh.', '', 1, ask, ['Aki'], 'các cậu cho tớ tham gia'))
+            .toBe('"Chào cậu.')
+        expect(await fillNpcVoices('"Tôi chưa dám nhận. Anh cứ giữ."', '1 | ban-cong | meet Người phụ nữ;tôi;anh;40', 3, ask, [], 'các cậu cho tớ tham gia'))
+            .toBe('"Tôi chưa dám nhận. Anh cứ giữ."')
+        expect(ask).not.toHaveBeenCalled()
     })
 
     test('on stage is the same three-reply window', () => {

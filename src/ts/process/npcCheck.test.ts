@@ -19,6 +19,15 @@ const P = { player: 'Kenji Park' }
 const rules = (hits: { rule: string; soft?: boolean }[]) => hits.filter((h) => !h.soft).map((h) => h.rule)
 
 describe('register scrubbing', () => {
+    test('uses player register for blank cards, including an unclosed quote', () => {
+        const cards = [...foldNpc('1 | aki | meet Aki\n1 | naru | meet Naru', 2).values()]
+        const playerText = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
+        const reply = 'Đôi chân anh bước đi.\n"Ồ, anh là người mới muốn gia nhập à?"\n"Tuyệt quá! như anh đấy!"\n"Chào anh.'
+        expect(scrubRegister(reply, cards, playerText)).toBe('Đôi chân anh bước đi.\n"Ồ, cậu là người mới muốn gia nhập à?"\n"Tuyệt quá! như cậu đấy!"\n"Chào cậu.')
+        expect(scrubRegister('của anh. "Chị và bọn tôi."', cards, playerText)).toBe('của anh. "Cậu và bọn tớ."')
+        expect(scrubRegister(reply, cards, 'cậung tớ')).toBe(reply)
+        expect(scrubRegister(reply, [], playerText)).toBe(reply)
+    })
     test('uses the agreed peer register only inside quotes', () => {
         const ledger = '12 | aki | meet Aki;tớ;cậu;\n12 | naru | meet Naru;tớ;cậu;'
         const cards = [...foldNpc(ledger, 13).values()]

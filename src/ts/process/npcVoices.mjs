@@ -170,7 +170,7 @@ export async function rewireOnstageQuotes(text, cards, ask) {
  * Replace each [[SAY|id]] in order. When the narrator skipped the markers but named people still speak,
  * rewrite their attributed quotes (Ollama path). `extras` seeds the cast when $led_npc is empty.
  */
-export async function fillNpcVoices(text, ledger, n, ask, extras = []) {
+export async function fillNpcVoices(text, ledger, n, ask, extras = [], playerText = '') {
     const cards = onstageNpcs(ledger, n, extras)
     let out = String(text ?? '')
     let filledSay = false
@@ -190,5 +190,6 @@ export async function fillNpcVoices(text, ledger, n, ask, extras = []) {
     if (!filledSay && cards.length && ask) {
         out = await rewireOnstageQuotes(out, cards, ask)
     }
-    return scrubRegister(out.replace(/\n{3,}/g, '\n\n'), cards)
+    const eligible = cards.every((c) => c.lastTurn === n && c.self === 'tôi' && c.toPlayer === 'anh')
+    return scrubRegister(out.replace(/\n{3,}/g, '\n\n'), cards, eligible ? playerText : '')
 }

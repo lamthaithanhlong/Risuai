@@ -127,11 +127,10 @@ export function agencyHits(reply: string, playerText: string, playerName = ''): 
         if (subject && nameRe.test(subject)) add('pc-speech', text.slice(i, Math.min(text.length, i + m[0].length + subject.length + 24)))
     }
     if (/(?<![\p{L}\p{N}])(?:chạy|đuổi|bước|đứng\s+dậy)(?![\p{L}\p{N}])/iu.test(playerText)) {
-        const replayPhrases = /(?:sải\s+bước|bắt\s+kịp|chạy\s+theo|đuổi\s+theo|bước\s+nhanh|bước\s+chạy|chạy\s+tới|chạy\s+đến)/iu
         const subject = new RegExp(`^\\s*(?:${alt}|Anh)(?![\\p{L}\\p{N}])`, 'iu')
         const sentencePattern = /[^.!?\n]+(?:[.!?]|$)/gu
         for (const match of text.matchAll(sentencePattern)) {
-            if (subject.test(match[0]) && replayPhrases.test(match[0])) add('pc-replay', match[0])
+            if (subject.test(match[0])) add('pc-replay', match[0])
         }
     }
     if (/(?<![\p{L}\p{N}])nói(?![\p{L}\p{N}])/iu.test(playerText)) {

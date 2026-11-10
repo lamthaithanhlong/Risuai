@@ -100,6 +100,17 @@ describe('agencyGate', () => {
         expect(scrubAgency(BAD_FALLBACK, 'Tui ôm Aki', 'Kenji Park')).toBe(BAD_FALLBACK)
     })
 
+    it('detects pc-replay sentences starting with the player after movement', () => {
+        const player = 'Tui chạy theo họ'
+        const replay = 'Anh vừa kịp bắt lấy nhịp điệu của họ khi tiếng gọi vang lên giữa hành lang.'
+        expect(agencyHits(replay, player, 'Kenji Park').map((hit) => hit.rule)).toContain('pc-replay')
+        expect(agencyHits('Kenji Park mỉm cười.', player, 'Kenji Park').map((hit) => hit.rule)).toContain('pc-replay')
+        expect(agencyHits('Aki nhìn anh.', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(agencyHits('Aki gật đầu chào Kenji.', player, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(agencyHits('Đôi chân anh bước đi.', PLAYER, 'Kenji Park').map((hit) => hit.rule)).not.toContain('pc-replay')
+        expect(scrubAgency(`${replay} Aki quay lại.`, player, 'Kenji Park')).toBe('Aki quay lại.')
+    })
+
     it('scrubs replayed speech lead-ins without flagging NPCs or unrelated movement', () => {
         const player = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
         const scrubbed = scrubAgency('Khi khoảng cách vừa đủ gần, anh khẽ gật đầu chào rồi cất tiếng. Yuuichi cười.', player, 'Kenji Park')
