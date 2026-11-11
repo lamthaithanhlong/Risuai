@@ -5,11 +5,11 @@ const slot = (id: string, model = CUSTOM_API, req = 'main'): ModelSlot => ({ id,
 const empty: SlotState = { slots: [], active: '', model: CUSTOM_API, req: 'main' }
 
 describe('model slots (specs/modelslots/ModelSlots.dfy, ModelSlots.als)', () => {
-    it('adds up to 5 slots, refuses the 6th, an empty id and a duplicate id', () => {
+    it('adds up to 6 slots, refuses the 7th, an empty id and a duplicate id', () => {
         let st = empty
-        for (const id of ['a', 'b', 'c', 'd', 'e']) st = addSlot(st, slot(id))
-        expect(st.slots.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd', 'e'])
-        expect(addSlot(st, slot('f'))).toBe(st)
+        for (const id of ['a', 'b', 'c', 'd', 'e', 'f']) st = addSlot(st, slot(id))
+        expect(st.slots.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
+        expect(addSlot(st, slot('g'))).toBe(st)
         expect(addSlot(empty, slot(''))).toBe(empty)
         expect(addSlot({ ...empty, slots: [slot('a')] }, slot('a', 'gpt4'))).toEqual({ ...empty, slots: [slot('a')] })
     })
@@ -67,10 +67,10 @@ describe('model slots (specs/modelslots/ModelSlots.dfy, ModelSlots.als)', () => 
 
     it('normalize turns damaged stored data into a valid state', () => {
         const dirty = normalizeSlots({
-            slots: [slot('a'), slot('a', 'x'), slot(''), null as any, { id: 7 } as any, slot('b'), slot('c'), slot('d'), slot('e'), slot('f'), slot('g')],
+            slots: [slot('a'), slot('a', 'x'), slot(''), null as any, { id: 7 } as any, slot('b'), slot('c'), slot('d'), slot('e'), slot('f'), slot('g'), slot('h')],
             active: 'ghost',
         }, { model: CUSTOM_API, req: 'main' })
-        expect(dirty.slots.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd', 'e'])
+        expect(dirty.slots.map((s) => s.id)).toEqual(['a', 'b', 'c', 'd', 'e', 'f'])
         expect(dirty.active).toBe('')
         expect(isValid(dirty)).toBe(true)
         expect(normalizeSlots(undefined, { model: 'm', req: 'r' })).toEqual({ slots: [], active: '', model: 'm', req: 'r' })

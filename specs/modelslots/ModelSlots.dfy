@@ -1,13 +1,13 @@
-// Model slots: up to 5 named model choices, one of them active, picked from the chat menu or set in the settings.
+// Model slots: up to 6 named model choices, one of them active, picked from the chat menu or set in the settings.
 // The app's request code keeps reading the two legacy fields (model, req); a slot is applied by writing them, so the request code does
-// not change. Proved here: every operation keeps the state Valid (at most 5 slots, unique ids, the active id names a slot, and the
+// not change. Proved here: every operation keeps the state Valid (at most 6 slots, unique ids, the active id names a slot, and the
 // legacy fields agree with the active slot), and Normalize turns ANY stored data, however damaged, into a Valid state.
 //   model = the aiModel id ("reverse_proxy" is the Custom API); req = the request model name, used only by reverse_proxy.
 
 datatype Slot = Slot(id: string, name: string, model: string, req: string)
 datatype St = St(slots: seq<Slot>, active: string, model: string, req: string)
 
-const MAX: int := 5
+const MAX: int := 6
 
 predicate IdsUnique(s: seq<Slot>) {
   forall i, j :: 0 <= i < j < |s| ==> s[i].id != s[j].id
