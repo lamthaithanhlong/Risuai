@@ -71,8 +71,8 @@ describe('mission points (owner 2026-11-13; tools/stats/formal/quest_z3.py + que
     })
 
     it('the events of the newest reply: EXP for a mission done, one penalty for the game over, nothing else', () => {
-        expect(questEvents([offer, u(), done], 1)).toEqual([{ kind: 'mission', idx: 'aq', level: 20, stats: {} }])
-        expect(questReward(4)).toBe(160)
+        expect(questEvents([offer, u(), done], 1)).toEqual([{ kind: 'mission', idx: 'aq', level: 10, stats: {} }])
+        expect(questReward(4)).toBe(80)
         expect(questEvents([offer, u(), fail], 1)).toEqual([])
         const over = [offer, u(), fail, u(), offer, u(), fail, u(), offer, u(), fail]
         expect(questEvents(over, 9)).toEqual([{ kind: 'penalty', idx: 'go', level: 30, stats: {} }])
@@ -80,14 +80,28 @@ describe('mission points (owner 2026-11-13; tools/stats/formal/quest_z3.py + que
         expect(questEvents([offer, u(), done, u(), c('Truyện.')], 1)).toEqual([])  // an older reply's close is not paid again
     })
 
+    it('the grade on the mission line sets the reward; a restated mission keeps its grade', () => {
+        const hard = c('Truyện. 【ADMIN: Nhiệm vụ (khó): qua cầu trước khi trời tối — cầu đang bị canh.】')
+        expect([questReward(1, 'dễ'), questReward(1, 'vừa'), questReward(1, 'khó'), questReward(1, 'rất khó'), questReward(1, 'bịa')]).toEqual([5, 10, 20, 35, 10])
+        expect([questReward(4, 'dễ'), questReward(4, 'khó'), questReward(4, 'rất khó')]).toEqual([40, 160, 280])
+        expect(questState([hard])).toMatchObject({ open: 'qua cầu trước khi trời tối — cầu đang bị canh.', tier: 'khó' })
+        expect(questEvents([hard, u(), done], 4)).toEqual([{ kind: 'mission', idx: 'aq', level: 160, stats: {} }])
+        expect(stampPoints([hard, u(), done], 4)).toContain('Thưởng (khó): +160 EXP.')
+        expect(questState([c('【ADMIN: Nhiệm vụ: (dễ) Mở phòng 307 cùng Mika — kiểm tra phòng tối.】')])).toMatchObject({ open: 'Mở phòng 307 cùng Mika — kiểm tra phòng tối.', tier: 'dễ' })
+        // Admin restating an open mission cannot raise its pay; a NEW mission after it is graded afresh
+        const again = c('【ADMIN: Nhiệm vụ đang mở (rất khó): qua cầu — còn một giờ.】')
+        expect(questEvents([offer, u(), again, u(), done], 4)[0].level).toBe(80)
+        expect(questEvents([hard, u(), done, u(), offer, u(), done], 4)[0].level).toBe(80)
+    })
+
     it("the app's own points line goes after the counted close, once, and a number the model wrote goes", () => {
         const out = stampPoints([offer, u(), done], 1)!
-        expect(out).toBe('Truyện. 【ADMIN: Nhiệm vụ hoàn thành: đã có chìa khóa.】\n【ADMIN: Điểm nhiệm vụ: 4/5 (+1). Thưởng: +20 EXP.】')
+        expect(out).toBe('Truyện. 【ADMIN: Nhiệm vụ hoàn thành: đã có chìa khóa.】\n【ADMIN: Điểm nhiệm vụ: 4/5 (+1). Thưởng (vừa): +10 EXP.】')
         expect(stampPoints([offer, u(), c(out)], 1)).toBeNull()                     // already there: unchanged
         expect(questState([offer, u(), c(out)]).points).toBe(4)                     // the line itself is not read as a mission
-        expect(stampPoints([offer, u(), c(fail.data + ' 【ADMIN: Điểm nhiệm vụ: 9/5.】')], 1)).toBe(fail.data + '\n【ADMIN: Điểm nhiệm vụ: 2/5 (−1). Hết điểm là GAME OVER, mất 30% EXP.】')
+        expect(stampPoints([offer, u(), c(fail.data + ' 【ADMIN: Điểm nhiệm vụ: 9/5.】')], 1)).toBe(fail.data + '\n【ADMIN: Điểm nhiệm vụ: 2/5 (−1). Hết điểm là GAME OVER, mất 30% tổng EXP.】')
         const over = [offer, u(), fail, u(), offer, u(), fail, u(), offer, u(), fail]
-        expect(stampPoints(over, 1)).toContain('【ADMIN: GAME OVER — hết điểm nhiệm vụ. Phạt: −30% EXP của cấp hiện tại. Điểm nhiệm vụ đặt lại 3/5.】')
+        expect(stampPoints(over, 1)).toContain('【ADMIN: GAME OVER — hết điểm nhiệm vụ. Phạt: −30% tổng EXP, cấp có thể tụt. Điểm nhiệm vụ đặt lại 3/5.】')
         expect(stampPoints([offer, u(), c('Truyện.')], 1)).toBeNull()
         expect(stampPoints([c('Truyện. 【ADMIN: GAME OVER.】')], 1)).toBe('Truyện.')  // invented: taken out
     })
