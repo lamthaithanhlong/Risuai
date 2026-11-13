@@ -9,7 +9,7 @@ import { join } from 'node:path'
 const req = createRequire(import.meta.url)
 const merge = req('../../../server/node/dbMerge.cjs')
 const { openDbSync } = req('../../../server/node/dbSync.cjs')
-const { importLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, toRisuLore } = req('../../../server/node/loreImport.cjs')
+const { importLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, cloneRemoteCard, toRisuLore } = req('../../../server/node/loreImport.cjs')
 // characters.ts updateLorebooks, copied (it needs a browser to import); the test below fails if the original changes
 const updateLorebooks = (book: any[]) => book.map((v) => {
     v.bookVersion ??= 1
@@ -122,6 +122,30 @@ describe.each(['files', 'sqlite'] as const)('lore import while a page is open (%
         const w = sync.onWrite('page', save({ ...old, chats: [{ id: 'k1', message: ['hi', 'more'] }] }), getKey(saveDir, FILE)); sync.close()
         expect(read(w.bytes).additionalAssets).toEqual([])
         expect(read(w.bytes).chats[0].message).toEqual(['hi', 'more'])
+    })
+
+    test('a remote card is cloned whole (assets, regex, CSS kept), overrides applied, chats emptied, the source untouched', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'loreimp-c-')); const saveDir = join(dir, 'save'); mkdirSync(saveDir)
+        const hex = (id: string) => Buffer.from(`remotes/${id}.local.bin`, 'utf-8').toString('hex')
+        const src = { chaId: 'kr-1', name: '검', firstMessage: '안녕', additionalAssets: [['a', 'assets/a.webp', 'webp']], customscript: [{ in: 'x', out: '상태' }],
+            backgroundHTML: '<style>.a{}</style>', globalLore: [{ comment: 'L', content: 'lore', key: 'k' }], chats: [{ id: 'c1', message: [{ data: 'old' }] }], chatPage: 0 }
+        const ptr = (id: string) => ({ type: 6, comp: 0, name: id, data: Buffer.from(JSON.stringify({ v: 1, type: 2, name: id })) })
+        putKey(saveDir, hex('kr-1'), Buffer.from(JSON.stringify(src)))
+        putKey(saveDir, FILE, merge.encodeSave([merge.serializeBlock(1, 0, 'root', { __directory: ['kr-1'], characterOrder: ['kr-1'] }), ptr('kr-1')]))
+        const [r] = cloneRemoteCard(saveDir, 'kr', { name: 'Kiếm (VI)', firstMessage: 'chào', customscript: [{ in: 'x', out: 'trạng thái' }] }, 'vi-1')
+        expect(r).toMatchObject({ chaId: 'vi-1', name: 'Kiếm (VI)', assets: 1 })
+        const v = JSON.parse(getKey(saveDir, hex('vi-1')).toString('utf8'))
+        expect(v).toMatchObject({ chaId: 'vi-1', name: 'Kiếm (VI)', firstMessage: 'chào', backgroundHTML: '<style>.a{}</style>', additionalAssets: src.additionalAssets, globalLore: src.globalLore })
+        expect(v.customscript[0].out).toBe('trạng thái')
+        expect(v.chats).toHaveLength(1); expect(v.chats[0].message).toEqual([]); expect(v.chats[0].id).not.toBe('c1')
+        expect(JSON.parse(getKey(saveDir, hex('kr-1')).toString('utf8'))).toEqual(src)
+        const after = merge.decodeSave(getKey(saveDir, FILE))
+        const p = after.find((b: any) => b.name === 'vi-1')
+        expect(p.type).toBe(6); expect(JSON.parse(p.data.toString('utf8'))).toEqual({ v: 1, type: 2, name: 'vi-1' })
+        const root = merge.parseBlock(after.find((b: any) => b.name === 'root'))
+        expect(root.__directory).toEqual(['kr-1', 'vi-1']); expect(root.characterOrder).toEqual(['kr-1', 'vi-1'])
+        expect(() => cloneRemoteCard(saveDir, 'kr', {}, 'vi-1')).toThrow(/already/)
+        expect(() => cloneRemoteCard(saveDir, 'kr', { chats: [] }, 'vi-2')).toThrow(/override/)
     })
 
     test('a new card is listed, shaped like its template, and survives the next write of a page that loaded the save without it', () => {

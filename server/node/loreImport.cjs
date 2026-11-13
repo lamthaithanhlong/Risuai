@@ -223,6 +223,44 @@ function newCard(saveDir, card, templatePrefix, chaId = require('crypto').random
     }, syncFile, 'card-new')
 }
 
+/**
+ * Clones a REMOTE card (enableRemoteSaving: a type-6 pointer in database.bin, the card itself in remotes/<chaId>.local.bin) whole:
+ * assets, regex scripts, background HTML, Lua and lore are kept, `overrides` replace top-level fields, the chats start empty. The
+ * remote file is written before the pointer that names it (the order the save queue keeps). Added 2026-11-12 for a translated
+ * copy of "검과 영혼의 노래": newCard() rebuilds from a Character Card V3 and drops the 792 assets, the status regex and the CSS.
+ */
+function cloneRemoteCard(saveDir, srcPrefix, overrides, chaId = require('crypto').randomUUID(), syncFile = saveDir + '.sync.sqlite') {
+    for (const k of ['chaId', 'chats', 'chatPage']) if (k in (overrides ?? {})) throw new Error(`the override may not set ${k}`)
+    const remoteKey = (id) => Buffer.from(`remotes/${id}.local.bin`, 'utf-8').toString('hex')
+    return withStore(saveDir, null, (store) => {
+        const blocks = decodeSave(store.read(DB_FILE))
+        if (blocks.some((b) => b.name === chaId)) throw new Error(`a card ${chaId} is already in the save`)
+        const src = blocks.filter((b) => b.type === 6 && b.name.startsWith(srcPrefix))
+        if (src.length !== 1) throw new Error(`${src.length} remote cards start with "${srcPrefix}"`)
+        const bytes = store.read(remoteKey(src[0].name))
+        if (!bytes || !bytes.length) throw new Error(`no remote file for ${src[0].name}`)
+        if (store.exists(remoteKey(chaId))) throw new Error(`a remote file for ${chaId} is already in the save`)
+        const v = Object.assign(JSON.parse(Buffer.from(bytes).toString('utf8')), structuredClone(overrides ?? {}), {
+            chaId, chats: [{ message: [], note: '', name: 'Chat 1', localLore: [], fmIndex: -1, id: require('crypto').randomUUID() }], chatPage: 0,
+            lastInteraction: Date.now(),
+        })
+        store.write(remoteKey(chaId), Buffer.from(JSON.stringify(v), 'utf8'))
+        return recordedWrite(saveDir, (current) => {
+            const bl = decodeSave(current)
+            const i = bl.findIndex((b) => b.name === src[0].name)
+            bl.splice(i + 1, 0, { type: 6, comp: 0, name: chaId, data: Buffer.from(JSON.stringify({ v: 1, type: 2, name: chaId }), 'utf8') })
+            const r = bl.findIndex((b) => b.name === 'root')
+            const root = parseBlock(bl[r])
+            if (Array.isArray(root.__directory) && !root.__directory.includes(chaId)) root.__directory.push(chaId)
+            root.characterOrder = [...(Array.isArray(root.characterOrder) ? root.characterOrder : []).filter((x) => x !== chaId), chaId]
+            bl[r] = serializeBlock(bl[r].type, bl[r].comp, 'root', root)
+            const out = encodeSave(bl)
+            validateSave(out)
+            return { out, report: [{ chaId, from: src[0].name, name: v.name, assets: (v.additionalAssets ?? []).length, lore: (v.globalLore ?? []).length }] }
+        }, syncFile, 'card-clone', store)
+    })
+}
+
 function pendingQueueRows(saveDir) {
     const file = path.resolve(saveDir) + '.queue.sqlite'
     if (!fs.existsSync(file)) return 0
@@ -269,6 +307,12 @@ if (require.main === module) {
             for (const r of setCardText(saveDir, prefixes, d.description, d.first_mes)) console.log(`${r.prefix} ${r.name}: description ${r.before[0]} -> ${r.after[0]}, first message ${r.before[1]} -> ${r.after[1]} chars`)
             return
         }
+        if (pairs[0] === '--clone-remote') {
+            // loreImport.cjs <save dir> --clone-remote <overrides.json> <source chaId prefix> [new chaId]
+            const [, file, src, id] = pairs
+            for (const r of cloneRemoteCard(saveDir, src, JSON.parse(fs.readFileSync(file, 'utf8')), id || undefined)) console.log(`${r.chaId} ${r.name}: cloned from ${r.from}, assets ${r.assets}, lore ${r.lore}`)
+            return
+        }
         if (pairs[0] === '--new') {
             // loreImport.cjs <save dir> --new <card.json> <template chaId prefix> [new chaId]
             const [, cardFile, template, id] = pairs
@@ -286,4 +330,4 @@ if (require.main === module) {
     })().catch((e) => { console.error(e.message); process.exit(1) })
 }
 
-module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, recordedWrite, toRisuLore, pendingQueueRows }
+module.exports = { importLore, withLore, setCardImage, setCardScript, setCardText, clearCardAssets, newCard, cloneRemoteCard, recordedWrite, toRisuLore, pendingQueueRows }
