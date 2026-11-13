@@ -314,6 +314,24 @@ const knownOf = (vars: Record<string, unknown> | undefined): string[] => {
     try { const a = JSON.parse(String(vars?.$find_known ?? '[]')); return Array.isArray(a) ? a.map(String) : [] } catch { return [] }
 }
 
+/** Is a find due in the reply this request asks for? Pure (no variable is written): Admin's section picker asks it before the find note is written. */
+function dueFor(card: Room | undefined, chat: Chat, turn: number): FindDue {
+    const vars = chat.scriptstate ?? {}
+    const messages = chat.message ?? []
+    const player = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
+    const lastReply = [...messages].reverse().find((m) => m.role === 'char')?.data ?? ''
+    return findDue({
+        turn, lastFindTurn: lastFindTurnOf(vars, turn), seed: chat.id ?? '', sceneKind: sceneKindOf(vars, player, lastReply), rank: rankOfLevel(levelOf(vars)),
+        known: [...knownOf(vars), ...knownProvider()],
+    })
+}
+
+/** True when a find (a pass or a miss) will be asked of the next reply, by the same rule findRequest uses, but without writing anything. */
+export function findDueNow(card: Room | undefined, chat: Chat | undefined): boolean {
+    if (!hasFindRule(card) || !chat || lastTurnIsAsk(chat.message)) return false
+    return dueFor(card, chat, storyTurns(card, chat.message ?? []) + 1).due
+}
+
 /** The note at the end of the player's message when a find is due (the chat's turn, scene and seed); else the request as it was. */
 export function findRequest<T extends { role: string; content: unknown }>(formated: T[], card: Room | undefined, chat: Chat | undefined): T[] {
     if (!hasFindRule(card) || !chat) return formated
@@ -324,12 +342,7 @@ export function findRequest<T extends { role: string; content: unknown }>(format
     if (lastTurnIsAsk(chat.message)) { vars.$find_roll = ''; return formated }
     const messages = chat.message ?? []
     const turn = storyTurns(card, messages) + 1
-    const player = [...messages].reverse().find((m) => m.role === 'user')?.data ?? ''
-    const lastReply = [...messages].reverse().find((m) => m.role === 'char')?.data ?? ''
-    const r = findDue({
-        turn, lastFindTurn: lastFindTurnOf(vars, turn), seed: chat.id ?? '', sceneKind: sceneKindOf(vars, player, lastReply), rank: rankOfLevel(levelOf(vars)),
-        known: [...knownOf(vars), ...knownProvider()],
-    })
+    const r = dueFor(card, chat, turn)
     if (!r.due) { vars.$find_roll = ''; return formated }
     const roll: FindRoll = { ...findRoll(r, turn, chat.id ?? '', vars), len: messages.length + 1 }   // len: the chat length once the reply is in (the card's Lua matches on it)
     vars.$find_roll = JSON.stringify(roll)

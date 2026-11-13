@@ -13,7 +13,7 @@ import { guideNameOf } from './guideDirective'
 const require = createRequire(import.meta.url)
 const { getAdmin } = require('../../../server/node/adminBridge.cjs')
 
-const ADMIN_BODY = 'Admin is the interface. {{user}} sees lines.\n\n## Connecting and standing duties\nConnect once.\n\n## Admin lines\nOne bracket line.\n\n## Scouting\nQUÉT within 10 m.'
+const ADMIN_BODY = 'Admin is the interface. {{user}} sees lines.\n\n## Connecting\nConnect once.\n\n## Standing duties\nTrack stats.\n\n## Admin lines\nOne bracket line.\n\n## Scouting\nQUÉT within 10 m.'
 const payload = (card = 'zombie', extra: Partial<AdminPayload> = {}): AdminPayload => ({
     card, enabled: true, guide: 'Admin', sha: 'abcdef0123',
     assets: [{ id: 'characters/admin', title: 'Admin', body: ADMIN_BODY }, { id: '_roles/guide/characters/admin', title: 'Story guide: Admin', body: '## Guide: hints\nOnly when asked.' }],
@@ -65,20 +65,21 @@ describe('adminRequest / adminBlock', () => {
 
 describe('fitBudget (deterministic)', () => {
     const assets = payload().assets
-    it('under budget: nothing cut, both blocks whole', () => {
-        const r = fitBudget(assets, 10_000)
+    const tokens = (cap: number, rec = '') => fitBudget(assets, { cap, record: rec }).tokens
+    it('under the cap: nothing cut or held back, both blocks whole', () => {
+        const r = fitBudget(assets)
         expect(r.cut).toEqual([])
+        expect(r.held).toEqual([])
         expect(r.text).toContain('[Story guide: Admin]\n## Guide: hints\nOnly when asked.')
     })
-    it('over budget: whole sections from the end, never the intro, Connecting or the guide block; same input = same output', () => {
-        const full = fitBudget(assets, 10_000).text
-        const r = fitBudget(assets, full.length - 10)
-        expect(r.cut).toEqual(['Scouting'])
-        const tight = fitBudget(assets, 50)
-        expect(tight.cut).toEqual(['Scouting', 'Admin lines'])
-        for (const keep of ['Admin is the interface', '## Connecting and standing duties', 'Connect once.', '[Story guide: Admin]', 'Only when asked.']) expect(tight.text).toContain(keep)
-        expect(fitBudget(assets, 50)).toEqual(tight)
-        expect(JSON.stringify(fitBudget(assets, 50))).toBe(JSON.stringify(tight))
+    it('over the cap: whole sections in the table\'s drop order, never the intro, Connecting, Standing duties or the guide; same input = same output', () => {
+        const full = tokens(100000)
+        const r = fitBudget(assets, { cap: full - 1 })
+        expect(r.cut).toEqual(['Guide: hints'])   // the hints are first in the drop order, then Scouting
+        const tight = fitBudget(assets, { cap: 10 })
+        expect(tight.cut).toEqual(['Guide: hints', 'Scouting', 'Admin lines'])
+        for (const keep of ['Admin is the interface', '## Connecting', 'Connect once.', '## Standing duties', 'Track stats.', '[Story guide: Admin]']) expect(tight.text).toContain(keep)
+        expect(fitBudget(assets, { cap: 10 })).toEqual(tight)
     })
 })
 
@@ -220,11 +221,11 @@ describe('built-in fallback (adminFallback.ts)', () => {
         expect(FALLBACK_BODY).toMatch(/never a person/)
         expect(FALLBACK_BODY).toMatch(/only what the records already show/)
         expect(FALLBACK_BODY).toMatch(/never invents a number/)
-        expect(FALLBACK_BODY).toMatch(/^## Connecting and standing duties$/m)
+        expect(FALLBACK_BODY).toMatch(/^## Connecting$/m)
         expect(FALLBACK_BODY).toMatch(/first reply/)
     })
     it('the built-in text survives any budget: intro and Connecting are never cut', () => {
-        const r = fitBudget(FALLBACK_PAYLOAD('x').assets, 10)
+        const r = fitBudget(FALLBACK_PAYLOAD('x').assets, { cap: 10 })
         expect(r.cut).toEqual([])
         expect(r.text).toContain(FALLBACK_BODY.trim())
     })
@@ -376,14 +377,12 @@ describe('persona record', () => {
         expect(await adminBeforeRequest(prompt(), { chaId: '22a987d8-4a13' }, [], 'K', { fetch: f as never, auth: () => 't' }, { id: 'kenji' })).toEqual(prompt())
         expect(calls.some((u) => u.includes('/api/assets/'))).toBe(false)
     })
-    it('cut order with the words block: sections first, then the record, never intro, Connecting or the Story guide', () => {
+    it('over the cap with the words block: sections go, the record block and the protected parts never do', () => {
         const assets = payload().assets
         const rec = personaRecordText(buildView(KENJI, undefined), 'K', 'words')
-        const full = fitBudget(assets, 100000, rec).text
-        const noRec = fitBudget(assets, 100000).text
-        expect(fitBudget(assets, full.length - 10, rec)).toMatchObject({ cut: ['Scouting'] })
-        const b = fitBudget(assets, noRec.length - 1, rec)
-        expect(b.cut).toEqual(['Scouting', 'Admin lines', 'Persona record'])
+        const b = fitBudget(assets, { cap: 10, record: rec })
+        expect(b.cut).toEqual(['Guide: hints', 'Scouting', 'Admin lines'])
+        expect(b.text).toContain(RECORD_TITLE)
         expect(b.text).toContain('Story guide: Admin')
     })
     it('offline: no store and no copy = no record block, one log line, the reply still gets Admin from its cache', async () => {
@@ -402,20 +401,17 @@ describe('persona record', () => {
         const v = await fetchRecord('kenji', { fetch: storeFetch(KENJI, { down: true }) as never, auth: () => 't', now: () => t, log: () => {} })
         expect(v?.stats.find((s) => s.key === 'the_luc')?.pct).toBe('10 (EXP 3/20)')
     })
-    it('cut order: sections first, then the record, never intro, Connecting or the Story guide', () => {
+    it('over the cap: sections go in the drop order, the record stays, and so do the intro, Connecting and the Story guide', () => {
         const assets = payload().assets
         const rec = `${RECORD_TITLE}\n` + 'x'.repeat(200)
-        const full = fitBudget(assets, 100000, rec).text
-        const noRec = fitBudget(assets, 100000).text
-        // budget fits everything but the last section: the section goes, the record stays
-        const a = fitBudget(assets, full.length - 10, rec)
-        expect(a.cut).toEqual(['Scouting'])
+        const full = fitBudget(assets, { cap: 100000, record: rec }).tokens
+        const a = fitBudget(assets, { cap: full - 1, record: rec })
+        expect(a.cut).toEqual(['Guide: hints'])
         expect(a.text).toContain(RECORD_TITLE)
-        // budget too small for the record even with all sections gone: the record goes, protected parts stay
-        const b = fitBudget(assets, noRec.length - 1, rec)
-        expect(b.cut).toEqual(['Scouting', 'Admin lines', 'Persona record'])
-        expect(b.text).not.toContain(RECORD_TITLE)
-        expect(b.text).toContain('Connecting and standing duties')
+        const b = fitBudget(assets, { cap: 10, record: rec })
+        expect(b.cut).toEqual(['Guide: hints', 'Scouting', 'Admin lines'])
+        expect(b.text).toContain(RECORD_TITLE)
+        expect(b.text).toContain('## Connecting')
         expect(b.text).toContain('Story guide: Admin')
         expect(b.text).toContain('Admin is the interface')
     })

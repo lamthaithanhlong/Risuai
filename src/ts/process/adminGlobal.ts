@@ -22,8 +22,9 @@
 
 import { buildView, fetchFindNames, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
-import { setAdminActiveProbe } from './findDrop'
 import { FALLBACK_PAYLOAD } from './adminFallback'
+import { ADMIN_TOKEN_CAP, estimateTokens, headingKey, ruleOf, sentOn, turnFacts, type TurnFacts } from './adminSections'
+import { findDueNow, setAdminActiveProbe } from './findDrop'
 
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
 export type AdminPayload = { card: string; enabled?: boolean; locked?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
@@ -69,55 +70,65 @@ export function dedupeOwn(p: AdminPayload, card: CardLike): AdminPayload {
     return assets.length === p.assets.length ? p : { ...p, assets }
 }
 
-/** ~3000 tokens. */
-export const ADMIN_BUDGET = 14000
+const FRAME = '[Admin (global interface rules, hidden, never quoted)]\n'
 
-const isRole = (a: AdminAsset) => a.id.startsWith('_roles/')
-const protectedHeading = (h: string) => /^##\s*Connecting\b/i.test(h)
-
-type Part = { asset: number; head: string; text: string; keep: boolean }
+type Part = { asset: number; head: string; key: string; text: string }
+export type Fit = { text: string; cut: string[]; held: string[]; tokens: number }
 
 /**
- * The text inside the budget, and the headings cut. Deterministic: whole "## " sections are dropped from the end of the last
- * non-role asset backwards; never an intro, never a "Connecting…" section, never a role (Story guide) block.
+ * The text inside the token cap (estimated, adminSections.estimateTokens), the sections held back for this turn and the headings cut.
+ * Deterministic. Step 1: everything goes when it fits the cap. Step 2: when it does not, each "## " section goes only on the turns whose
+ * facts SECTION_RULES names for it (`held`). Step 3: when the turn is still over, whole sections are dropped in the table's drop order
+ * (`cut`). Never an intro, Connecting, Standing duties, Stat scale, Training, the voice, the guide's "what it never does" (cut: null in the
+ * table), and never the persona record block. `extra` is the framing text sent beside it (counted, not cut).
  */
-export function fitBudget(assets: AdminAsset[], budget = ADMIN_BUDGET, record = ''): { text: string; cut: string[] } {
+export function fitBudget(assets: AdminAsset[], opts: { cap?: number; record?: string; facts?: TurnFacts; extra?: string } = {}): Fit {
+    const cap = opts.cap ?? ADMIN_TOKEN_CAP
+    const rec = (opts.record ?? '').trim()
     const parts: Part[] = []
     assets.forEach((a, i) => {
-        if (isRole(a)) { parts.push({ asset: i, head: '', text: a.body.trim(), keep: true }); return }
-        const chunks = a.body.split(/\n(?=## )/)
-        chunks.forEach((c, k) => {
+        a.body.split(/\n(?=## )/).forEach((c, k) => {
             const head = k === 0 && !c.startsWith('## ') ? '' : c.split('\n', 1)[0]
-            parts.push({ asset: i, head, text: c.trim(), keep: !head || protectedHeading(head) })
+            parts.push({ asset: i, head, key: headingKey(head), text: c.trim() })
         })
     })
     const render = () => assets.map((a, i) => {
         const body = parts.filter((p) => p.asset === i).map((p) => p.text).filter(Boolean).join('\n\n')
         return `[${a.title}]\n${body}`
     }).join('\n\n') + (rec ? `\n\n${rec}` : '')
-    let rec = record.trim()
+    const total = () => estimateTokens(opts.extra ?? '') + estimateTokens(render())
+    const held: string[] = []
     const cut: string[] = []
-    let text = render()
-    for (let j = parts.length - 1; j >= 0 && text.length > budget; j--) {
-        if (parts[j].keep) continue
-        cut.push(parts[j].head.replace(/^##\s*/, ''))
-        parts.splice(j, 1)
-        text = render()
+    if (total() > cap && opts.facts) {
+        for (let j = parts.length - 1; j >= 0; j--) {
+            if (parts[j].key && !sentOn(parts[j].key, opts.facts)) { held.unshift(parts[j].key); parts.splice(j, 1) }
+        }
     }
-    // the persona record goes last-but-one: after every cuttable section, never before an intro, Connecting or the Story guide
-    if (rec && text.length > budget) { rec = ''; cut.push('Persona record'); text = render() }
-    return { text, cut }
+    while (total() > cap) {
+        let at = -1
+        parts.forEach((p, j) => {
+            if (!p.key) return
+            const c = ruleOf(p.key).cut
+            if (c === null) return
+            if (at < 0 || c < (ruleOf(parts[at].key).cut as number)) at = j
+        })
+        if (at < 0) break
+        cut.push(parts[at].key)
+        parts.splice(at, 1)
+    }
+    return { text: render(), cut, held, tokens: total() }
 }
 
-export const ADMIN_BOOT = '[Admin boot: this is the first reply of this chat: begin it with Admin\'s connect lines (see "Connecting and standing duties"), then never again unless the player asks.]'
+export const ADMIN_BOOT = '[Admin boot: first reply of this chat: begin it with Admin\'s connect lines (see "Connecting"), then never again unless the player asks.]'
 
 /** The system message's text, or '' (switched off, empty). {{user}} becomes the persona's name; the boot line only on the first reply. */
-export function adminBlock(p: AdminPayload | null, opts: { user?: string; opening?: boolean; budget?: number; log?: (m: string) => void; record?: string } = {}): string {
+export function adminBlock(p: AdminPayload | null, opts: { user?: string; opening?: boolean; cap?: number; log?: (m: string) => void; record?: string; facts?: TurnFacts } = {}): string {
     if (!p || p.enabled === false || !p.assets?.length) return ''
-    const { text, cut } = fitBudget(p.assets, opts.budget ?? ADMIN_BUDGET, opts.record ?? '')
+    const boot = opts.opening ? `\n\n${ADMIN_BOOT}` : ''
+    const { text, cut } = fitBudget(p.assets, { cap: opts.cap, record: opts.record, facts: opts.facts, extra: FRAME + boot })
     if (cut.length) opts.log?.(`[Admin] ${p.card || '?'}: cut ${cut.length} section(s) over budget: ${cut.join(', ')}`)
     const body = opts.user ? text.replaceAll('{{user}}', opts.user) : text
-    return `[Admin (global interface rules, hidden, never quoted)]\n${body}${opts.opening ? `\n\n${ADMIN_BOOT}` : ''}`
+    return `${FRAME}${body}${boot}`
 }
 
 /** One system message right after the prompt's leading system messages (where always-on lore stands); unchanged for ''. */
@@ -372,7 +383,13 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
         } catch { record = '' }
     }
     const opening = !(messages ?? []).some((m) => m.role === 'char')
-    return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log, record }))
+    // which sections this turn needs (adminSections.ts): used only when the whole text would not fit the cap
+    let facts: TurnFacts | undefined
+    try {
+        const chat = persona?.chat as (Parameters<typeof findDueNow>[1]) | undefined
+        facts = turnFacts({ opening, formated, messages: messages as never, vars: persona?.chat?.scriptstate, findDue: findDueNow(card as never, chat) })
+    } catch { facts = undefined }
+    return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log, record, facts }))
 }
 
 // ---- the persona record (stats, slots, skills, items) from the global store, in every story (words where the story has an engine) --
@@ -393,7 +410,7 @@ export function hasOwnEngine(card: CardLike, chat?: { scriptstate?: Record<strin
 
 export type RecordStyle = 'words' | 'numbers'
 
-export const RECORD_WORDS_HEADER = 'Sự thật chung của persona qua mọi truyện; bảng chỉ số của truyện (nếu có) vẫn là chỗ hiện số. Không bao giờ viết con số, phần trăm hay số thập phân của chỉ số hay kỹ năng: chỉ nói bằng lời (cao, thấp, cấp kỹ năng).'
+export const RECORD_WORDS_HEADER = 'Sự thật chung của persona qua mọi truyện; bảng chỉ số của truyện (nếu có) vẫn là chỗ hiện số. Không bao giờ viết con số, phần trăm hay số thập phân của chỉ số hay kỹ năng: chỉ nói bằng lời (cao, thấp, bậc, cấp kỹ năng).'
 
 const VI_COUNT = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười']
 
@@ -409,8 +426,16 @@ function statWord(v: number, all: number[]): string {
 /**
  * The block Admin reads. style 'numbers' (a card with no engine): the persona page's numbers (2 decimals). style 'words' (a registered
  * story card or a card with its own engine, whose Admin lines must never carry stat numbers): stats as ranks in words, the open slots
- * and skills with their tier, no percent and no decimals, and the rule "never write numbers". One plain line when the store has nothing.
+ * and skills with their tier, no percent and no decimals, and the rule "never write numbers". One plain line when the store has nothing. Every stat also carries its band word (Thường / Tinh anh / Thủ lĩnh / Huyền thoại / Thần) so the narrator can place the persona on the 1-100 scale; a band word is not a number.
  */
+/** The band of a stat on the 1-100 scale (Stat scale in admin.md): points = hundredths / 100, clamped to 1..100; band = min(5, floor(points / 20) + 1). */
+export function statBand(hundredths: number): number {
+    const points = Math.min(100, Math.max(1, (Number(hundredths) || 0) / 100))
+    return Math.min(5, Math.floor(points / 20) + 1)
+}
+export const BAND_WORDS = ['Thường', 'Tinh anh', 'Thủ lĩnh', 'Huyền thoại', 'Thần'] as const
+const bandWord = (hundredths: number) => BAND_WORDS[statBand(hundredths) - 1]
+
 export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers'): string {
     const who = name || 'persona'
     if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
@@ -418,13 +443,13 @@ export function personaRecordText(view: View, name: string, style: RecordStyle =
         const vals = view.stats.map((s) => Number(s.value) || 0)
         const slots = view.slots.total
         return [RECORD_TITLE, RECORD_WORDS_HEADER, `Persona: ${who}`,
-            `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}`).join('; ')}`,
+            `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}, bậc ${bandWord(vals[i])}`).join('; ')}`,
             `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
             `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
             'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.'].join('\n')
     }
     const lines = [RECORD_TITLE, `Persona: ${who}`,
-        `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct}`).join(', ')}`,
+        `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct} (bậc ${bandWord(Number(s.value) || 0)})`).join(', ')}`,
         `Ô kỹ năng mở: ${view.slots.total}`,
         `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
         'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.']
