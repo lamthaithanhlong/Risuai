@@ -64,3 +64,15 @@ describe('the gate (docs/specs/ProseGate.tla): the opening reply of a card with 
         expect(wantsVietnameseProse([{ role: 'char', data: EN }, { role: 'user', data: 'I open the door.' }], EN, '')).toBe(false)
     })
 })
+
+// Owner 2026-11-13: "nhân vật nói chuyện máy móc quá". The notes said who speaks and how a line is attributed, nothing about how people talk.
+describe('the reminder ends on how people talk, with sample lines', () => {
+    it('says speech is talk, gives two sample lines, keeps the narration as translated-novel prose, and is the last thing in the note', () => {
+        const r = viProseReminder('Kenji Park')
+        expect(r).toContain('Lời thoại là lời nói, không phải văn bản đọc ra')
+        expect(r).toContain('lời đáp thường ngắn hơn câu hỏi')
+        expect(r).toMatch(/Ví dụ: “[^”]+” — “[^”]+”/)
+        expect(r.trimEnd().endsWith('Lời kể vẫn là văn dịch tiểu thuyết.]')).toBe(true)
+        expect(r.indexOf('Lời thoại là lời nói')).toBeGreaterThan(r.indexOf('không bịa thêm việc ngoài'))
+    })
+})

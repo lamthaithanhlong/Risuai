@@ -48,7 +48,14 @@ export function viProseReminder(player = 'nhân vật chính'): string {
         // Ollama 9B / weak local models (Mailman Naru 2026-11-08): keep the address pair already on stage, one beat from the player's last act.
         + "xưng hô giữa hai người đã nói với nhau thì giữ đúng cặp đã lập trong vài lượt gần (cậu/tớ với nhau thì không đột ngột gọi em hay hỏi thầy đang đợi em; "
         + "anh–em thì không nhảy sang mày–tao), trừ khi cảnh vừa đổi quan hệ rõ ràng; một lượt một mạch: làm đúng việc nhân vật chính vừa làm hoặc vừa nói, "
-        + "không bịa thêm việc ngoài (hồ sơ, thầy gọi, bạn đời, điện thoại…) nếu player không đưa vào và cảnh trước chưa có.]"
+        + "không bịa thêm việc ngoài (hồ sơ, thầy gọi, bạn đời, điện thoại…) nếu player không đưa vào và cảnh trước chưa có."
+        // Owner 2026-11-13 "nhân vật nói chuyện máy móc quá". Measured on Netoriya, two social turns, spoken lines counted by script:
+        // gcli/grok-4.7 (3 replies each): lines of 20+ words 26% -> 20%, lines of 4 words or less 8% -> 20%, median 11 -> 9 words;
+        // mvn/deepseek-v4.1-flash (5 replies each): 26% -> 14% and 14% -> 31%. Small samples: a lean, not a proof.
+        // Said last and with two sample lines, not as a list of prohibitions.
+        + " Lời thoại là lời nói, không phải văn bản đọc ra: mỗi người một giọng theo hồ sơ (người nhanh mồm thì cắt ngang, bỏ lửng, đệm “ơ”, “à”, “mà”, “thôi”, “nè”; "
+        + "người kiệm lời chỉ vài chữ); lời đáp thường ngắn hơn câu hỏi, nối thẳng vào điều vừa nghe, không nhắc lại lời người kia, không giải thích điều hai bên đã biết, "
+        + "không phải câu nào cũng đủ chủ vị. Ví dụ: “Ơ, còn nằm đó hả? Cô khóa cửa bây giờ.” — “Nóng chết đi được. Xuống đi.” Lời kể vẫn là văn dịch tiểu thuyết.]"
 }
 
 const VI_LETTERS = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỷỹỵ]/gi
