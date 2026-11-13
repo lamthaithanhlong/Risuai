@@ -554,3 +554,12 @@ describe('social acts for the NPC psychology (the bookkeeper line, $led_soc)', (
         expect(appendSocial({}, 1, [])).toBe(false)
     })
 })
+
+describe('the NPC line of the bookkeeper (2026-11-13: "meet chị;em" for a nameless clerk)', () => {
+    it('tells the helper the order of meet and that a person with no name takes their role, never a pronoun', () => {
+        const p = bookkeepPrompt({}, 'p', 'r', 'x', '', '', { npc: true })
+        expect(p).toContain('what the story calls them;their own word for themselves;their word for the player')
+        expect(p).toContain('meet chị phụ trách;chị;em')
+        expect(bookkeepPrompt({}, 'p', 'r', 'x')).not.toContain('meet chị phụ trách')
+    })
+})
