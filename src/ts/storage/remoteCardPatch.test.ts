@@ -62,6 +62,17 @@ describe('patchRemoteBytes', () => {
     })
 })
 
+describe('--fields: plain text fields of the card', () => {
+    it('sets only the named text fields, keeps chats and lore, refuses any other key', () => {
+        const { out } = patchRemoteBytes(bytes(), { fields: { replaceGlobalNote: 'viết tiếng Việt', name: 'VI' } })
+        const back = JSON.parse(out.toString('utf8'))
+        expect(back.replaceGlobalNote).toBe('viết tiếng Việt'); expect(back.name).toBe('VI')
+        expect(back.chats).toEqual(card().chats); expect(back.globalLore).toEqual(card().globalLore)
+        expect(() => patchRemoteBytes(bytes(), { fields: { chats: [] } })).toThrow(/may not set chats/)
+        expect(() => patchRemoteBytes(bytes(), { fields: { name: 3 } })).toThrow(/text/)
+    })
+})
+
 describe('patchRemoteCard on a real store', () => {
     const setup = () => {
         const dir = mkdtempSync(join(tmpdir(), 'remote-patch-'))

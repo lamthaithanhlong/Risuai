@@ -19,6 +19,7 @@
 //               scripts would otherwise run next to the new one). Repeat the flag for several.
 //     --default-vars  with --lua: also set the card's defaultVariables (top level of the remote file) to the built card's
 //               data.extensions.risuai.defaultVariables, so a variable the Lua reads (finds_by_lua=0) is explicit instead of absent. Opt-in.
+//     --fields  <file.json> set plain text fields (name, firstMessage, replaceGlobalNote, backgroundHTML, creatorNotes) from a JSON object
 //     --restart stop com.risu.server (launchd) first and start it after; without it the server must already be stopped
 //     --dry-run do everything except the write and the restart
 const fs = require('fs')
@@ -83,7 +84,15 @@ function patchRemoteBytes(current, change) {
     const before = JSON.parse(Buffer.from(current).toString('utf8'))
     if (!Array.isArray(before.globalLore)) throw new Error('the remote file has no globalLore')
     const next = structuredClone(before)
-    const strip = (c) => { const { globalLore, desc, triggerscript, defaultVariables, ...rest } = c; return JSON.stringify(rest) }
+    // --fields: plain text fields a translation or a note fix changes; never the chats, the lore or the Lua (they have their own switch)
+    const FIELDS = ['name', 'firstMessage', 'replaceGlobalNote', 'backgroundHTML', 'creatorNotes']
+    const fields = change.fields ?? {}
+    for (const [k, val] of Object.entries(fields)) {
+        if (!FIELDS.includes(k)) throw new Error(`--fields may not set ${k} (allowed: ${FIELDS.join(', ')})`)
+        if (typeof val !== 'string') throw new Error(`--fields: ${k} must be text`)
+        next[k] = val
+    }
+    const strip = (c) => { const { globalLore, desc, triggerscript, defaultVariables, ...rest } = c; for (const k of Object.keys(fields)) delete rest[k]; return JSON.stringify(rest) }
     if (typeof change.defaultVars === 'string') next.defaultVariables = change.defaultVars
     if (typeof change.desc === 'string') {
         if (!change.desc.trim()) throw new Error('the new description is empty')
@@ -97,7 +106,7 @@ function patchRemoteBytes(current, change) {
         const i = next.globalLore.findIndex((x) => x.comment === e.comment)
         if (i >= 0) next.globalLore[i] = e
         else next.globalLore.push(e)
-    } else if (typeof change.desc !== 'string' && !change.lua && typeof change.defaultVars !== 'string') {
+    } else if (typeof change.desc !== 'string' && !change.lua && typeof change.defaultVars !== 'string' && !Object.keys(fields).length) {
         throw new Error('nothing to change')
     }
     let lua = null
@@ -229,6 +238,7 @@ async function main(argv) {
         : opt('--entry')
             ? { entry: (() => { const [c, f] = opt('--entry').split('='); return { ...JSON.parse(fs.readFileSync(f, 'utf8')), comment: c } })() }
             : {}
+    if (opt('--fields')) change.fields = JSON.parse(fs.readFileSync(opt('--fields'), 'utf8'))
     if (opt('--desc')) change.desc = JSON.parse(fs.readFileSync(opt('--desc'), 'utf8')).data.description
     if (has('--default-vars')) {
         if (!opt('--lua')) throw new Error('--default-vars reads the built card of --lua')
