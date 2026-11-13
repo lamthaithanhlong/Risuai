@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
-import { adminBlock, BAND_WORDS, ADMIN_BOOT, fitBudget, personaRecordText, statBand, RECORD_TITLE, RECORD_SKILLS_MAX, type AdminPayload } from './adminGlobal'
+import { adminBlock, BAND_WORDS, ADMIN_BOOT, fitBudget, personaRecordText, statBand, RECORD_TITLE, RECORD_SKILLS_MAX, recordScope, withEquipped, type AdminPayload } from './adminGlobal'
 import { ADMIN_TOKEN_CAP, SECTION_RULES, TRIGGERS, estimateTokens, headingKey, turnFacts, type Trigger } from './adminSections'
 import { buildView } from './personaStats'
 
@@ -238,5 +238,48 @@ describe('the persona record is bounded, so the block stays inside the cap whate
             const r = fitBudget(payloadOf(c).assets, { record, facts, extra: '[Admin (global interface rules, hidden, never quoted)]\n' + (opening ? '\n\n' + ADMIN_BOOT : '') })
             expect(r.tokens, `${c} ${style} ${opening}`).toBeLessThanOrEqual(ADMIN_TOKEN_CAP)
         }
+    })
+})
+
+// Owner 2026-11-13: the slot rule already bounds what is in use, so a plain turn carries the skills in slots only; the learned-but-not-
+// equipped ones show when the player asks for the record, asks Admin, changes the loadout, and on the first reply.
+describe('the record on a plain turn lists the skills in slots only', () => {
+    const view = (eq: number) => {
+        const sk: Record<string, { m: number; eq?: number; name: string }> = {}
+        for (let i = 0; i < 20; i++) sk['s' + i] = { m: 300 + i * 10, name: 'Kỹ năng số ' + (i + 1), ...(i < eq ? { eq: 1 } : {}) }
+        return buildView({ stats: { y_chi: 9000 }, skills: {} } as never, { $skills: JSON.stringify(sk) } as never)
+    }
+    it('equipped scope: the equipped ones by name, the rest as one count with how to see them', () => {
+        for (const style of ['numbers', 'words'] as const) {
+            const line = personaRecordText(view(3), 'Kenji Park', style, 'equipped').split('\n').find((l) => l.startsWith('Kỹ năng'))!
+            expect(line, style).toContain('Kỹ năng số 1 (')
+            expect(line, style).toContain('Kỹ năng số 3 (')
+            expect(line, style).not.toContain('Kỹ năng số 20 (')
+            expect(line, style).toMatch(/đã học nhưng chưa gắn/)
+        }
+        expect(personaRecordText(view(3), 'Kenji Park', 'numbers', 'equipped')).toContain('17 kỹ năng đã học nhưng chưa gắn')
+        expect(personaRecordText(view(3), 'Kenji Park', 'numbers', 'all')).toContain('Kỹ năng số 20 (')
+        expect(personaRecordText(view(3), 'Kenji Park')).toContain('Kỹ năng số 20 (')            // the default stays the whole list
+    })
+    it('nothing equipped (a story with no slots of its own): the strongest six stand in', () => {
+        const line = personaRecordText(view(0), 'Kenji Park', 'numbers', 'equipped').split('\n').find((l) => l.startsWith('Kỹ năng'))!
+        expect(line).toContain('Kỹ năng số 20 (')
+        expect(line).not.toContain('Kỹ năng số 14 (')
+        expect(line).toContain('14 kỹ năng đã học nhưng chưa gắn')
+    })
+    it('recordScope: the whole list on the first reply, a record / ask / loadout turn and when the turn is unknown; slots only otherwise', () => {
+        expect(recordScope(undefined)).toBe('all')
+        for (const t of ['opening', 'record', 'ask', 'loadout'] as const) expect(recordScope(new Set([t])), t).toBe('all')
+        expect(recordScope(new Set())).toBe('equipped')
+        expect(recordScope(new Set(['fight', 'scout', 'help'] as const))).toBe('equipped')
+    })
+    it('withEquipped: the store view knows no slots; the open chat marks them, equipped first', () => {
+        const store = buildView({ stats: {}, skills: { a: 900, b: 500, c: 100 } } as never, undefined)
+        expect(store.skills.some((k) => k.equipped)).toBe(false)
+        const v = withEquipped(store, { $skills: JSON.stringify({ c: { m: 100, eq: 1 }, a: { m: 900 } }) })
+        expect(v.skills.map((k) => [k.id, k.equipped])).toEqual([['c', true], ['a', false], ['b', false]])
+        expect(v.slots.used).toBe(1)
+        expect(withEquipped(store, undefined)).toBe(store)
+        expect(store.skills.some((k) => k.equipped)).toBe(false)   // the cached view is not touched
     })
 })

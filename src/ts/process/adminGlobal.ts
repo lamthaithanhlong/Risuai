@@ -20,7 +20,7 @@
 // Nothing here ever blocks a reply for more than 1.5 s.
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-global-design.md
 
-import { buildView, fetchFindNames, type View } from './personaStats'
+import { buildView, fetchFindNames, MAX_SLOTS, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
 import { FALLBACK_PAYLOAD } from './adminFallback'
 import { ADMIN_TOKEN_CAP, estimateTokens, headingKey, ruleOf, sentOn, turnFacts, type TurnFacts } from './adminSections'
@@ -374,14 +374,6 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
     if (!p.assets.length) return formated   // the card carries every part word for word already: Admin is in the prompt once
     // the persona record is mandatory in every story Admin goes into (owner 2026-11-05: "mọi truyện admin phải dùng stat của persona,
     // bắt buộc"); a story with its own engine gets it in words (its gated lines never carry stat numbers), one with none gets the values
-    let record = ''
-    if (card?.type === 'group') deps.log?.(`[Admin] ${id}: group chat with no speaking member known, the request goes without the persona record`)
-    else if (persona) {
-        try {
-            const view = await fetchRecord(persona.id, deps)
-            if (view) record = personaRecordText(view, user, hasOwnEngine(card, persona.chat) ? 'words' : 'numbers')
-        } catch { record = '' }
-    }
     const opening = !(messages ?? []).some((m) => m.role === 'char')
     // which sections this turn needs (adminSections.ts): used only when the whole text would not fit the cap
     let facts: TurnFacts | undefined
@@ -389,6 +381,14 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
         const chat = persona?.chat as (Parameters<typeof findDueNow>[1]) | undefined
         facts = turnFacts({ opening, formated, messages: messages as never, vars: persona?.chat?.scriptstate, findDue: findDueNow(card as never, chat) })
     } catch { facts = undefined }
+    let record = ''
+    if (card?.type === 'group') deps.log?.(`[Admin] ${id}: group chat with no speaking member known, the request goes without the persona record`)
+    else if (persona) {
+        try {
+            const view = await fetchRecord(persona.id, deps)
+            if (view) record = personaRecordText(withEquipped(view, persona.chat?.scriptstate as never), user, hasOwnEngine(card, persona.chat) ? 'words' : 'numbers', recordScope(facts))
+        } catch { record = '' }
+    }
     return adminRequest(formated, adminBlock(p, { user, opening, log: deps.log, record, facts }))
 }
 
@@ -439,9 +439,35 @@ const bandWord = (hundredths: number) => BAND_WORDS[statBand(hundredths) - 1]
 /** The record block is never cut, so its skill list is bounded: the equipped and the strongest first (buildView's order), the rest as one count. */
 export const RECORD_SKILLS_MAX = 40
 
-export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers'): string {
-    const shown = view.skills.slice(0, RECORD_SKILLS_MAX)
+export type RecordScope = 'all' | 'equipped'
+
+/**
+ * How much of the skill list a turn carries (owner 2026-11-13: the slot rule already bounds what is in use): the whole list on the first
+ * reply, when the player talks about the record, asks Admin or changes the loadout, and when the turn is unknown; the slots only otherwise.
+ */
+export function recordScope(facts: TurnFacts | undefined): RecordScope {
+    if (!facts) return 'all'
+    return (['opening', 'record', 'ask', 'loadout'] as const).some((t) => facts.has(t)) ? 'all' : 'equipped'
+}
+
+/** The store's view knows no slots (it is cached per persona, for every chat); the open chat's `$skills` says which are equipped. A copy. */
+export function withEquipped(view: View, vars: Record<string, unknown> | undefined): View {
+    let ck: Record<string, { eq?: unknown }> = {}
+    try { const v = JSON.parse(String(vars?.$skills ?? '')); if (v && typeof v === 'object' && !Array.isArray(v)) ck = v } catch { ck = {} }
+    if (!Object.values(ck).some((c) => c?.eq === 1)) return view
+    const skills = view.skills.map((k, i) => ({ k: { ...k, equipped: ck[k.id]?.eq === 1 }, i }))
+        .sort((x, y) => Number(y.k.equipped) - Number(x.k.equipped) || x.i - y.i).map((x) => x.k)
+    return { ...view, skills, slots: { ...view.slots, used: skills.filter((k) => k.equipped).length } }
+}
+
+export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers', scope: RecordScope = 'all'): string {
+    // 'equipped': the skills in slots; a story with no slots of its own has none marked, then the strongest MAX_SLOTS stand in
+    const inSlots = view.skills.filter((k) => k.equipped)
+    const shown = scope === 'equipped' ? (inSlots.length ? inSlots : view.skills.slice(0, MAX_SLOTS)).slice(0, RECORD_SKILLS_MAX) : view.skills.slice(0, RECORD_SKILLS_MAX)
     const left = view.skills.length - shown.length
+    const restWords = scope === 'equipped' ? '; còn nhiều kỹ năng đã học nhưng chưa gắn (người chơi hỏi hồ sơ thì mới kể)' : '; và nhiều kỹ năng khác thấp hơn (không liệt kê)'
+    const restNumbers = scope === 'equipped' ? `; còn ${left} kỹ năng đã học nhưng chưa gắn (người chơi hỏi hồ sơ thì mới kể)` : `; và ${left} kỹ năng khác thấp hơn (không liệt kê)`
+    const label = scope === 'equipped' ? 'Kỹ năng đang dùng' : 'Kỹ năng'
     const who = name || 'persona'
     if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
     if (style === 'words') {
@@ -450,13 +476,13 @@ export function personaRecordText(view: View, name: string, style: RecordStyle =
         return [RECORD_TITLE, RECORD_WORDS_HEADER, `Persona: ${who}`,
             `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}, bậc ${bandWord(vals[i])}`).join('; ')}`,
             `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
-            `Kỹ năng: ${shown.length ? shown.map((k) => `${k.name} (${k.tier.vi})`).join('; ') + (left > 0 ? '; và nhiều kỹ năng khác thấp hơn (không liệt kê)' : '') : 'chưa ghi nhận'}`,
+            `${label}: ${shown.length ? shown.map((k) => `${k.name} (${k.tier.vi})`).join('; ') + (left > 0 ? restWords : '') : 'chưa ghi nhận'}`,
             'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.'].join('\n')
     }
     const lines = [RECORD_TITLE, `Persona: ${who}`,
         `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct} (bậc ${bandWord(Number(s.value) || 0)})`).join(', ')}`,
         `Ô kỹ năng mở: ${view.slots.total}`,
-        `Kỹ năng: ${shown.length ? shown.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') + (left > 0 ? `; và ${left} kỹ năng khác thấp hơn (không liệt kê)` : '') : 'chưa ghi nhận'}`,
+        `${label}: ${shown.length ? shown.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') + (left > 0 ? restNumbers : '') : 'chưa ghi nhận'}`,
         'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.']
     return lines.join('\n')
 }
