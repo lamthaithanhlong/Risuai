@@ -1135,10 +1135,10 @@
             <NumberInput size="sm" marginBottom bind:value={DBState.db.hypaAllocatedTokens} min={100} />
         {:else if DBState.db.hypaV3}
             <span class="max-w-full mb-6 text-sm text-wrap wrap-break-word text-textcolor2">{language.hypaV3Settings.descriptionLabel}</span>
-            <Check check={DBState.db.autoCompact !== false} onChange={(v) => { DBState.db.autoCompact = v }} name="Autocompact: tự nén chat của mọi thẻ khi đầy"/>
-            <span class="text-textcolor mt-2">Ngưỡng autocompact (token, 0 = theo Max Context)</span>
+            <Check check={DBState.db.autoCompact !== false} onChange={(v) => { DBState.db.autoCompact = v }} name="Autocompact: tự nén chat khi đạt 90% ngữ cảnh (thẻ tắt công tắc nhớ riêng)"/>
+            <span class="text-textcolor mt-2">Cửa sổ ngữ cảnh cho autocompact (token, 0 = theo Max Context)</span>
             <NumberInput size="sm" bind:value={DBState.db.autoCompactTokens} min={0} />
-            <span class="max-w-full mb-6 text-sm text-wrap wrap-break-word text-textcolor2">Gõ trong chat: /compact để nén ngay, /autocompact 20000 để đặt ngưỡng, /autocompact off để tắt.</span>
+            <span class="max-w-full mb-6 text-sm text-wrap wrap-break-word text-textcolor2">Gõ trong chat: /compact nén ngay, /compact status xem, /compact reset bỏ ký ức nén, /autocompact 20000 đặt cửa sổ, /autocompact off tắt.</span>
             <span class="text-textcolor">Preset</span>
             <select class={"border border-darkborderc focus:border-borderc rounded-md shadow-xs text-textcolor bg-transparent focus:ring-borderc focus:ring-2 focus:outline-hidden transition-colors duration-200 text-md px-4 py-2 mb-1"}
                 bind:value={DBState.db.hypaV3PresetId}

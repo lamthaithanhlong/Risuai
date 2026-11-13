@@ -1255,9 +1255,9 @@ export interface Database{
     banCharacterset:string[]
     showPromptComparison:boolean
     hypaV3:boolean
-    /** memory/compact.ts: the memory phase also runs for a card whose own switch is off, once the request is over the limit */
+    /** memory/compact.ts: fold old messages into a story memory at 90% of the window, for every card with its own memory switch off */
     autoCompact:boolean
-    /** the limit in tokens; 0 = the model context (maxContext) */
+    /** the window in tokens; 0 = the model context (maxContext) */
     autoCompactTokens:number
     hypaV3Settings: HypaV3Settings // legacy
     hypaV3Presets: HypaV3Preset[]
@@ -1991,6 +1991,8 @@ export interface Chat{
     bindedPersona?:string
     fmIndex?:number
     hypaV3Data?:SerializableHypaV3Data
+    /** memory/compact.ts: the story memory that stands in for this chat's folded messages */
+    ccCompact?:CcState
     folderId?:string
     lastDate?:number
     bookmarks?: string[];
@@ -2447,6 +2449,7 @@ import { DBState, selectedCharID } from '../stores.svelte';
 import { LLMFlags, LLMFormat, LLMTokenizer } from '../model/modellist';
 import type { HypaModel } from '../process/memory/hypamemory';
 import type { SerializableHypaV3Data } from '../process/memory/hypav3';
+import type { CcState } from '../process/memory/compact';
 import { defaultHotkeys, type Hotkey } from '../defaulthotkeys';
 import type { OpenAIChat } from '../process/index.svelte';
 import type { Loadout } from '../loadout';
