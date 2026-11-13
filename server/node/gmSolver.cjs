@@ -557,7 +557,28 @@ function lineOf(dec, ctx) {
     const second = [people.length ? `People in the scene: ${people.join('; ')}.` : '', need, already, beats, ctx.companionNote].filter(Boolean).join(' ')
     if (phase === 'seed') return second
     // the Subtext line (npcPsych.cjs subtextOf) goes last: the narrator reads the decision first, then what the people carry under it
-    return [first, second, ctx.subtext].filter(Boolean).join('\n')
+    return [first, second, roundOf(dec, ctx), ctx.subtext].filter(Boolean).join('\n')
+}
+
+/**
+ * The round (owner 2026-11-13: "tạo lượt cho game master và nhân vật roleplay"): who takes a beat in this reply and in what order,
+ * in the one narrator request. The Game Master first (the result of what the player did), then each person in the scene once (the one
+ * whose thread moves this turn first, then by ctx.rank, the NPC layer's importance order, then by name; a newcomer last), then the
+ * player. '' when nobody is in the scene.
+ */
+function roundOf(dec, ctx) {
+    const nm = (x) => (x && typeof x === 'object' ? x.name : x)
+    const shown = (p) => (p === 'newcomer' ? 'the newcomer' : q(ctx.names?.[p] ?? p))
+    const whos = [...new Set(dec.intents.map((i) => i.who))]
+    if (!whos.length) return ''
+    const lead = nm(dec.acts[0])
+    const rank = ctx.rank ?? []
+    const at = (w) => { const i = rank.indexOf(ctx.names?.[w] ?? w); return i < 0 ? rank.length : i }
+    const key = (w) => [w === 'newcomer' ? 1 : 0, w === lead ? 0 : 1, at(w)]
+    whos.sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.localeCompare(b) })
+    const quiet = new Set(dec.mayStay.map(nm))
+    const beats = whos.map((w, i) => `${i + 2}) ${shown(w)}${quiet.has(w) ? ' (may pass with a look or a gesture, no line)' : ''}`)
+    return `Round for this reply (one beat each, in this order, never out of turn and nobody twice): 1) the Game Master: what the player's action leads to, first; ${beats.join('; ')}; then it is the player's turn: the reply stops there, with no action, speech or choice written for the player. Each person's beat is its own paragraph, in that person's own voice and manner.`
 }
 
 /** The graph's ASP facts for a chat and each fact's text ({text, texts: Map fid -> {text, status}}), or null when it has none. */
@@ -692,7 +713,7 @@ async function decide(input, opts = {}) {
     const kindAtom = decision.turn?.name === 'new' ? decision.turn.args[0].name : null
     const kindText = kindAtom ? kindTextOf(world, kindAtom) : null
     const stance = decision.intents.some((i) => i.who === 'newcomer') && STANCE[lower(input.stance)] ? lower(input.stance) : null
-    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names, told: g?.texts ?? new Map(), subtext: outcome?.subtext ?? '', companionNote: companionNote(inp), established: ff.established, beats: ff.beats })
+    const line = lineOf(decision, { threads: ff.threads, kindText, stance, needs: decision.needs, prevNew: !!input.prevNew, plans, phase: inp.phase, vars: inp.vars ?? {}, names: ff.names, told: g?.texts ?? new Map(), subtext: outcome?.subtext ?? '', rank: (outcome?.actions ?? []).map((a) => a.who), companionNote: companionNote(inp), established: ff.established, beats: ff.beats })
     return { status: 'ok', world, decision, needs: decision.needs, present: decision.present, dead: decision.dead, plans, newEvent: isNewEvent(decision.turn), line, optimal: cr.optimal, ...(outcome ? { npc: outcome } : {}), ms: Date.now() - t0, facts: opts.withFacts ? facts : undefined }
 }
 
@@ -711,4 +732,4 @@ function warm() {
     return decide({ world: 'generic', phase: 'run', vars: {}, messages: [{ role: 'user', text: 'warm' }], dice: { pace: 'quiet' } }, { budgetMs: 5000 }).catch(() => null)
 }
 
-module.exports = { sanitizeCompanionLimits, decide, warm, featureFacts, companionNote, establishedStates, staleThreads, repeatedBeats, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }
+module.exports = { sanitizeCompanionLimits, decide, warm, roundOf, featureFacts, companionNote, establishedStates, staleThreads, repeatedBeats, movesIn, needsIn, aspFacts, runClingo, findClingo, parseTerm, decisionOf, lineOf, approachPlan, threadsOf, focusOf, whereOf, isNewEvent, graphFacts, BUDGET_MS, WORLD_LP, GM_DIR, GRAPH_LP, NPC_LP }

@@ -636,3 +636,34 @@ describe.skipIf(!HAS_CLINGO)('what is already true is not an event again, and a 
         expect(G.repeatedBeats([{ role: 'char', text: 'Mưa rơi.' }])).toEqual([])
     })
 })
+
+// ---- the round: the Game Master, then each person once, then the player (owner 2026-11-13) -------------------------------------------
+describe('the round line: who takes a beat in the reply, and in what order', () => {
+    const dec = (o: any = {}) => ({ acts: [], mayStay: [], intents: [], ...o })
+    const it = (who: string) => ({ who, what: 'watch' })
+    test('nobody in the scene: no round line', () => {
+        expect(G.roundOf(dec(), { names: {} })).toBe('')
+    })
+    test('the Game Master is beat 1, each person once, the player last and never written for', () => {
+        const line = G.roundOf(dec({ intents: [it('marek'), it('anya'), it('marek')] }), { names: { marek: 'Marek', anya: 'Anya' } })
+        expect(line).toMatch(/^Round for this reply/)
+        expect(line).toMatch(/1\) the Game Master: what the player's action leads to, first; 2\) “Anya”; 3\) “Marek”; then it is the player's turn/)
+        expect(line.match(/“Marek”/g)).toHaveLength(1)
+        expect(line).toMatch(/no action, speech or choice written for the player/)
+    })
+    test('the one whose thread moves goes first, then the NPC layer\'s order, a newcomer last, a silent one may pass', () => {
+        const d = dec({ acts: ['zed'], mayStay: ['anya'], intents: [it('newcomer'), it('anya'), it('marek'), it('zed')] })
+        const line = G.roundOf(d, { names: { marek: 'Marek', anya: 'Anya', zed: 'Zed' }, rank: ['Marek', 'Anya'] })
+        expect(line).toMatch(/2\) “Zed”; 3\) “Marek”; 4\) “Anya” \(may pass with a look or a gesture, no line\); 5\) the newcomer; then/)
+    })
+    test.skipIf(!HAS_CLINGO)('decide() carries it after the people and never in the seed phase', async () => {
+        const r = await G.decide(lure, { budgetMs: 3000 })
+        const lines = r.line.split('\n')
+        const at = lines.findIndex((l: string) => l.startsWith('Round for this reply'))
+        expect(at).toBeGreaterThan(0)
+        expect(lines[at - 1]).toMatch(/People in the scene/)
+        for (const i of r.decision.intents) expect(lines[at]).toContain(i.who === 'newcomer' ? 'the newcomer' : `“`)
+        const seed = await G.decide({ ...lure, phase: 'seed' }, { budgetMs: 3000 })
+        expect(seed.line).not.toMatch(/Round for this reply/)
+    })
+})
