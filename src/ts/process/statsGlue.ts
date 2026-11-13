@@ -226,3 +226,31 @@ export async function adminReportAfterReplyPage(card: { type?: string, chaId?: s
         await reportAfterReply(chat as never, adminCardOf(card as never))
     } catch { /* never blocks */ }
 }
+
+// ---- Admin's mission points on a card with no quest script (adminQuest.ts) ---------------------------------------------------------------
+
+/** After a reply: the app's points line goes into the stored reply (sync), then the reply's mission events (EXP for a mission done, the
+ *  game-over penalty) go to the persona's ledger as the events of (chat + '.q', turn = the chat's length): the mechanic owns that turn, so
+ *  a regenerated reply replaces what the earlier one paid or cost. Never throws; the post is not waited for. */
+export function questAfterReplyPage(card: { type?: string, chaId?: string } | undefined, chat: (TrainChat & { scriptstate?: Record<string, unknown> }) | undefined, post = true): void {
+    try {
+        const msgs = chat?.message
+        if (!card || card.type === 'group' || !Array.isArray(msgs) || !msgs.length) return
+        void (async () => {
+            try {
+                const { adminCardOf } = await import('./adminGlobal')
+                const q = await import('./adminQuest')
+                if (q.SCRIPTED_QUEST_CARDS.includes(adminCardOf(card as never))) return
+                if (!q.questState(msgs).marks) return   // Admin never spoke of a mission in this chat
+                let level = 1
+                try { const l = JSON.parse(String(chat!.scriptstate?.$lvl ?? ''))?.l; if (Number.isInteger(l) && l >= 1) level = l } catch { /* Level 1 */ }
+                const text = q.stampPoints(msgs, level)
+                if (text !== null) msgs[msgs.length - 1].data = text
+                const id = String(chat!.id ?? '')
+                if (!post || !/^[A-Za-z0-9_.-]{1,62}$/.test(id)) return
+                const d = await pageDeps()
+                await sendTurn({ persona: d.persona(), chat: id + '.q', turn: msgs.length, events: q.questEvents(msgs, level) as never })
+            } catch { /* never blocks */ }
+        })()
+    } catch { /* never blocks */ }
+}
