@@ -7,6 +7,7 @@ import { risuChatParser } from "../parser/parser.svelte";
 import { sendChat } from "./index.svelte";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { runTrigger } from "./triggers";
+import { autocompactCommand, compactNow } from "./memory/compactCommand";
 
 export async function processMultiCommand(command:string) {
     let pipe = ''
@@ -61,6 +62,15 @@ async function processCommand(command:string, pipe:string):Promise<false | strin
     }
 
     switch(commandName){
+        // memory/compact.ts: summarise the chat now, and the limit it is summarised at by itself
+        case 'compact':{
+            alertNormal(await compactNow())
+            return pipe
+        }
+        case 'autocompact':{
+            alertNormal(autocompactCommand(arg))
+            return pipe
+        }
         //STScript compatibility commands
         case 'input':{
             pipe = await alertInput(arg)

@@ -31,6 +31,7 @@ import { seedScene } from "./sceneMemory";
 import { statusSpec } from "./statusBook";
 import { hasCreationStep, yesAt } from "./gameMaster";
 import { lastTurnIsAsk } from "./adminAsk";
+import { compactLimit, memoryPhaseOn } from "./memory/compact";
 import { continuityHits, continuityNote, leadHits, scrubKinship, scrubLead } from "./continuityGate";
 import { stripMarkers } from "./replyMarkers";
 import { allowedCast, castHits, castNote, rosterNames, scrubCast } from "./castGate";
@@ -1151,7 +1152,14 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentTokens += await tokenizer.tokenizeChat(sceneChat)
     }
     
-    if(nowChatroom.supaMemory && (DBState.db.supaModelType !== 'none' || DBState.db.hanuraiEnable || DBState.db.hypav2 || DBState.db.hypaV3)){
+    // memory/compact.ts: autocompact. HypaV3 summarises at compactAt (the context, or the owner's lower /autocompact number), and
+    // a card with its own switch off still goes through the phase once it is over that or already has summaries.
+    const compactAt = DBState.db.hypaV3 ? compactLimit(maxContextTokens, DBState.db.autoCompact !== false, DBState.db.autoCompactTokens) : maxContextTokens
+    const memoryOn = !!nowChatroom.supaMemory || (!!DBState.db.hypaV3 && !DBState.db.hanuraiEnable && !DBState.db.hypav2 && memoryPhaseOn({
+        cardSwitch: false, autoCompact: DBState.db.autoCompact !== false, hasSummaries: (currentChat.hypaV3Data?.summaries?.length ?? 0) > 0,
+        currentTokens, limit: compactAt,
+    }))
+    if(memoryOn && (DBState.db.supaModelType !== 'none' || DBState.db.hanuraiEnable || DBState.db.hypav2 || DBState.db.hypaV3)){
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
         chatProcessStage.set(2); brPhase('sendChat stage 2')
         stageTimings.stage2Start = Date.now()
@@ -1189,7 +1197,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             console.log("Current chat's hypaV3 Data: ", currentChat.hypaV3Data)
             brMem('before memory phase')
             resetTokenizerStats()
-            const sp = await brTimed('hypaV3 memory', () => hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer), 0)
+            const sp = await brTimed('hypaV3 memory', () => hypaMemoryV3(chats, currentTokens, compactAt, currentChat, nowChatroom, tokenizer), 0)
             brLog(`tokenizer during memory: ${tokenizerStats.calls} calls (${tokenizerStats.hits} cached), ${tokenizerStats.chars} chars, ${tokenizerStats.ms.toFixed(0)}ms, caching ${DBState.db.useTokenizerCaching ? 'on' : 'off'}`)
             if(sp.error){
                 // Save new summary
@@ -1198,11 +1206,18 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     DBState.db.characters[sel.char].chats[sel.chat].hypaV3Data = currentChat.hypaV3Data
                 }
                 console.log(sp)
-                throwError(sp.error)
-                return false
+                // a limit below the context that could not be reached (too few messages to summarise) is not a failed turn: the
+                // request still fits the model, so it goes out uncompacted
+                if(!(compactAt < maxContextTokens && currentTokens <= maxContextTokens)){
+                    throwError(sp.error)
+                    return false
+                }
+                brLog(`autocompact: limit ${compactAt} not reached (${sp.error}); sending uncompacted, ${currentTokens} <= ${maxContextTokens}`)
             }
-            chats = sp.chats
-            currentTokens = sp.currentTokens
+            else{
+                chats = sp.chats
+                currentTokens = sp.currentTokens
+            }
             currentChat.hypaV3Data = sp.memory ?? currentChat.hypaV3Data
             DBState.db.characters[sel.char].chats[sel.chat].hypaV3Data = currentChat.hypaV3Data
     

@@ -618,6 +618,8 @@ export function setDatabase(data:Database){
         )
     }
     data.hypaV3PresetId ??= 0
+    data.autoCompact ??= true
+    data.autoCompactTokens ??= 0
     normalizeTranslatorPresetState(data)
     data.showDeprecatedTriggerV2 ??= false
     data.returnCSSError ??= true
@@ -1253,6 +1255,10 @@ export interface Database{
     banCharacterset:string[]
     showPromptComparison:boolean
     hypaV3:boolean
+    /** memory/compact.ts: the memory phase also runs for a card whose own switch is off, once the request is over the limit */
+    autoCompact:boolean
+    /** the limit in tokens; 0 = the model context (maxContext) */
+    autoCompactTokens:number
     hypaV3Settings: HypaV3Settings // legacy
     hypaV3Presets: HypaV3Preset[]
     hypaV3PresetId: number
