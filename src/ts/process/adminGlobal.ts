@@ -20,6 +20,8 @@
 // Nothing here ever blocks a reply for more than 1.5 s.
 // Design: nguoi-dua-thu-khung-bo/.pm-risu-5h/admin-global-design.md
 
+import { questRequest } from './adminQuest'
+import { lastTurnIsAsk } from './adminAsk'
 import { buildView, fetchFindNames, MAX_SLOTS, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
 import { FALLBACK_PAYLOAD } from './adminFallback'
@@ -375,6 +377,8 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
     // the persona record is mandatory in every story Admin goes into (owner 2026-11-05: "mọi truyện admin phải dùng stat của persona,
     // bắt buộc"); a story with its own engine gets it in words (its gated lines never carry stat numbers), one with none gets the values
     const opening = !(messages ?? []).some((m) => m.role === 'char')
+    // a story with no quest script: Admin keeps one mission open (adminQuest.ts); the note goes in before the turn's facts are read
+    if (p.enabled !== false) formated = questRequest(formated, id, messages as never, lastTurnIsAsk(messages as never))
     // which sections this turn needs (adminSections.ts): used only when the whole text would not fit the cap
     let facts: TurnFacts | undefined
     try {

@@ -152,6 +152,8 @@ export const SECTION_RULES: Record<string, Rule> = {
     'Loadout advice': { on: ['loadout'], cut: 2 },
     'Quests': { on: ['questEvent', 'questWords', 'ask'], off: [], cut: 12 },
     'Admin hands out quests on its own': { on: ['questEvent', 'questSkip'], cut: 11 },
+    'Missions in every story': { on: ['questEvent', 'questWords', 'mission', 'help'], off: STORY, cut: 11.5 },
+    "On the player's side": { on: 'always', off: ['opening', 'ask'], cut: 2.6 },
     'Scouting': { on: ['opening', 'scout'], cut: 3 },
     'Missions, stamps and points': { on: ['opening', 'mission'], cut: 6 },
     'No senses': { on: 'always', cut: null },
