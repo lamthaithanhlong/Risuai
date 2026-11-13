@@ -107,7 +107,9 @@ function cardFor(cards, rawId) {
 async function speak(card, scene, ask) {
     try {
         const line = takeOneQuote(await ask(npcVoicePrompt(card, scene)))
-        return line ? `${card.name} nói: “${line}”\n` : ''
+        // a person the ledger has no name for (name = id, "chi-phu-trach") gets no label: the narration around the marker says who speaks
+        const label = card.name && card.name !== card.id ? `${card.name} nói: ` : ''
+        return line ? `${label}“${line}”\n` : ''
     } catch {
         return ''
     }

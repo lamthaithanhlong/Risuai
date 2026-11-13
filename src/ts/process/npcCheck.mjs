@@ -107,6 +107,10 @@ const slug = (s) => String(s ?? '').normalize('NFC').toLowerCase().trim().replac
 /** a ledger item: an ITEM_LEX id as written, or the id of the Vietnamese words */
 const itemOf = (v) => { const t = String(v ?? '').trim(); if (LABEL[t]) return t; const i = itemsIn(t); return i[0] && i[0] !== 'unknown_item' ? i[0] : slug(t).replace(/-/g, '_') }
 
+/** words a Vietnamese speaker uses for self or the listener; alone they are never a person's name */
+const SELF_WORDS = new Set(['tôi', 'tớ', 'mình', 'ta', 'tao', 'mày', 'em', 'anh', 'chị', 'cô', 'chú', 'bác', 'dì', 'ông', 'bà', 'cháu', 'con', 'thầy', 'cậu', 'bạn'])
+const isAddress = (s) => SELF_WORDS.has(String(s ?? '').normalize('NFC').trim().toLowerCase())
+
 /** a new card: a stranger starts at low trust (owner's balcony woman) */
 export function blankNpc(id, name = id) {
     return { id, name, self: 'tôi', toPlayer: 'anh', age: '', isAdmin: false, needs: new Set(), has: new Map(), received: new Set(), knows: new Set(), want: '', trust: 30, promises: new Set(), why: new Set(), lastTurn: -1, forbidden: new Set(), maxWords: 0, tics: '', sample: '', events: new Map() }
@@ -116,7 +120,11 @@ export function blankNpc(id, name = id) {
 export function applyNpcOp(c, op, value, n) {
     const v = String(value ?? '').trim()
     switch (op) {
-        case 'meet': { const [name, self, to, age] = v.split(';').map((x) => x.trim()); if (name) c.name = name; if (self && !/[<>]/.test(self)) c.self = self; if (to && !/[<>]/.test(to)) c.toPlayer = to; if (age && !/[<>]/.test(age)) c.age = age; break }
+        case 'meet': {
+            let [name, self, to, age] = v.split(';').map((x) => x.trim())
+            // "meet chị;em": the helper had no name and wrote the two pronouns; they are how she speaks, not what she is called
+            if (isAddress(name) && isAddress(self) && !isAddress(to)) { age = age || to; to = self; self = name; name = '' }
+            if (name) c.name = name; if (self && !/[<>]/.test(self)) c.self = self; if (to && !/[<>]/.test(to)) c.toPlayer = to; if (age && !/[<>]/.test(age)) c.age = age; break }
         case 'need+': { const i = itemOf(v); if (c.received.has(i) || c.has.has(i)) return false; c.needs.add(i); break }
         case 'need-': c.needs.delete(itemOf(v)); break
         case 'has+': { const i = itemOf(v); c.has.set(i, (c.has.get(i) ?? 0) + 1); c.needs.delete(i); break }

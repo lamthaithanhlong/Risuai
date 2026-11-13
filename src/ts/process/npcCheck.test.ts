@@ -225,6 +225,14 @@ describe('the three techniques of 2026-11-05: inner line, voice card, presence',
         const hits = npcHits(reply, { ...P, ledger: L2, n: 13 })
         expect(cutViolations(reply, hits)).toEqual({ text: 'Cô nhìn sang. “Tay tôi đau lắm.”', cut: ['npc-unwitnessed'] })
     })
+    test('meet without a name: the pronouns are not the name (Admin chat 2026-11-13, "meet chị;em")', () => {
+        const c = foldNpc('9 | chi-phu-trach | meet chị;em').get('chi-phu-trach')!
+        expect([c.self, c.toPlayer, c.name]).toEqual(['chị', 'em', 'chi-phu-trach'])
+        const full = foldNpc('9 | co-van | meet Cô;tôi;em;45').get('co-van')!
+        expect([full.name, full.self, full.toPlayer, full.age]).toEqual(['Cô', 'tôi', 'em', '45'])
+        const named = foldNpc('2 | aki | meet Aki;tớ;cậu').get('aki')!
+        expect([named.name, named.self, named.toPlayer]).toEqual(['Aki', 'tớ', 'cậu'])
+    })
     test('the GM note always carries the inner-line rule; the cards follow when there are any', () => {
         expect(npcCardsNote('', 13)).toContain('[[NPC|<their id')
         expect(npcCardsNote(L2, 13)).toContain('NPC cards (hidden, never named)')

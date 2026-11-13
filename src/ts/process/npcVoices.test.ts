@@ -113,6 +113,14 @@ describe('npc voices', () => {
         expect(prompts).toHaveLength(2)
     })
 
+    test('a person with no name speaks without a "<id> nói:" label, in her own register', async () => {
+        const seen: string[] = []
+        const ask = async (p: string) => { seen.push(p); return '“Chị không biết thêm đâu. Em cứ ra cửa đó nhé.”' }
+        const out = await fillNpcVoices('Chị chỉ về phía cửa.\n\n[[SAY|chi-phu-trach]]\nNgoài hành lang vắng.', '9 | chi-phu-trach | meet chị;em', 10, ask, [], '')
+        expect(out).toContain('“Chị không biết thêm đâu. Em cứ ra cửa đó nhé.”')
+        expect(out).not.toMatch(/nói:/)
+        expect(seen[0]).toContain('xưng chị, gọi người chơi em')
+    })
     test('a failed voice or an unknown id drops the marker and keeps the scene', async () => {
         const dropped = await fillNpcVoices(SCENE, LEDGER, 13, async () => null)
         expect(dropped).toContain('Hành lang im.')
