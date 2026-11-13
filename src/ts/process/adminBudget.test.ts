@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
-import { adminBlock, BAND_WORDS, ADMIN_BOOT, fitBudget, personaRecordText, statBand, RECORD_TITLE, type AdminPayload } from './adminGlobal'
+import { adminBlock, BAND_WORDS, ADMIN_BOOT, fitBudget, personaRecordText, statBand, RECORD_TITLE, RECORD_SKILLS_MAX, type AdminPayload } from './adminGlobal'
 import { ADMIN_TOKEN_CAP, SECTION_RULES, TRIGGERS, estimateTokens, headingKey, turnFacts, type Trigger } from './adminSections'
 import { buildView } from './personaStats'
 
@@ -207,5 +207,36 @@ describe('the persona record shows each stat with its band', () => {
         expect(r.grownNumbers).toMatch(/Thể lực 16 \(EXP[^)]*\) \(bậc Thường\)/)
         expect(r.grownNumbers).toContain('(bậc Thần)')
         expect(r.none).not.toMatch(/bậc|\d/)
+    })
+})
+
+// Measured 2026-11-13 (Z3 + Alloy + the real fitBudget): the record is never cut and its skill list had no limit, so a persona with
+// 80 skills pushed the block past the cap on every card (shadow-slave: 79 skills = 3999, 80 = 4026), 300 skills = ~10000.
+describe('the persona record is bounded, so the block stays inside the cap whatever the store holds', () => {
+    const many = (k: number) => {
+        const skills: Record<string, number> = {}
+        const finds: Record<string, { vi: string }> = {}
+        for (let i = 0; i < k; i++) { skills['sk' + i] = 300 + i * 7; finds['sk' + i] = { vi: 'Kiếm thuật Hắc Ảnh bậc ' + (i + 1) } }
+        return buildView({ stats: { suc_manh: 420, y_chi: 900 }, skills } as never, undefined, finds)
+    }
+    it('lists at most RECORD_SKILLS_MAX skills (the equipped and the strongest first) and says how many are left out', () => {
+        for (const style of ['numbers', 'words'] as const) {
+            const t = personaRecordText(many(300), 'Kenji Park', style)
+            const line = t.split('\n').find((l) => l.startsWith('Kỹ năng:'))!
+            expect(line.split('; ').length, style).toBe(RECORD_SKILLS_MAX + 1)
+            expect(line, style).toContain('Kiếm thuật Hắc Ảnh bậc 300')        // the strongest stays
+            expect(line, style).not.toContain('Kiếm thuật Hắc Ảnh bậc 1 (')     // the weakest is left out
+            expect(line, style).toMatch(/kỹ năng khác thấp hơn/)
+        }
+        expect(personaRecordText(many(300), 'Kenji Park', 'numbers')).toContain(`và ${300 - RECORD_SKILLS_MAX} kỹ năng khác thấp hơn`)
+        expect(personaRecordText(many(RECORD_SKILLS_MAX), 'Kenji Park')).not.toMatch(/kỹ năng khác thấp hơn/)
+    })
+    it('300 skills: every card, first reply and plain turn, stays inside ADMIN_TOKEN_CAP', () => {
+        for (const c of CARDS) for (const style of ['numbers', 'words'] as const) for (const opening of [true, false]) {
+            const record = personaRecordText(many(300), 'Kenji Park', style)
+            const facts = new Set(opening ? ['opening'] : []) as never
+            const r = fitBudget(payloadOf(c).assets, { record, facts, extra: '[Admin (global interface rules, hidden, never quoted)]\n' + (opening ? '\n\n' + ADMIN_BOOT : '') })
+            expect(r.tokens, `${c} ${style} ${opening}`).toBeLessThanOrEqual(ADMIN_TOKEN_CAP)
+        }
     })
 })

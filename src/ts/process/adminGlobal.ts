@@ -436,7 +436,12 @@ export function statBand(hundredths: number): number {
 export const BAND_WORDS = ['Thường', 'Tinh anh', 'Thủ lĩnh', 'Huyền thoại', 'Thần'] as const
 const bandWord = (hundredths: number) => BAND_WORDS[statBand(hundredths) - 1]
 
+/** The record block is never cut, so its skill list is bounded: the equipped and the strongest first (buildView's order), the rest as one count. */
+export const RECORD_SKILLS_MAX = 40
+
 export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers'): string {
+    const shown = view.skills.slice(0, RECORD_SKILLS_MAX)
+    const left = view.skills.length - shown.length
     const who = name || 'persona'
     if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
     if (style === 'words') {
@@ -445,13 +450,13 @@ export function personaRecordText(view: View, name: string, style: RecordStyle =
         return [RECORD_TITLE, RECORD_WORDS_HEADER, `Persona: ${who}`,
             `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}, bậc ${bandWord(vals[i])}`).join('; ')}`,
             `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
-            `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
+            `Kỹ năng: ${shown.length ? shown.map((k) => `${k.name} (${k.tier.vi})`).join('; ') + (left > 0 ? '; và nhiều kỹ năng khác thấp hơn (không liệt kê)' : '') : 'chưa ghi nhận'}`,
             'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.'].join('\n')
     }
     const lines = [RECORD_TITLE, `Persona: ${who}`,
         `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct} (bậc ${bandWord(Number(s.value) || 0)})`).join(', ')}`,
         `Ô kỹ năng mở: ${view.slots.total}`,
-        `Kỹ năng: ${view.skills.length ? view.skills.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') : 'chưa ghi nhận'}`,
+        `Kỹ năng: ${shown.length ? shown.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') + (left > 0 ? `; và ${left} kỹ năng khác thấp hơn (không liệt kê)` : '') : 'chưa ghi nhận'}`,
         'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.']
     return lines.join('\n')
 }
