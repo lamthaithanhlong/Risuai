@@ -76,7 +76,7 @@ import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
-import { gateAssetTags } from "./assetTagGate";
+import { countImageTags, gateAssetTags, imageRequest, keepAssetTags } from "./assetTagGate";
 import { brLog, brMem, brPhase, brReportAcc, brSync, brTimed, brTimedAcc } from "../brLog";
 import { contextCapFor, rewriteBudgetFor, withRewriteBudget } from "./request/ollamaLocal";
 
@@ -1630,6 +1630,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(!isOpening(currentChat?.message)){
         formated = shapeRequest(formated, currentChat?.message)
     }
+    // the card's own character pictures, asked for where the model reads last (assetTagGate.ts)
+    if(!lastTurnIsAsk(currentChat?.message)){
+        formated = imageRequest(formated, DBState.db.characters[sel.char] ?? currentChar)
+    }
     // finds (skills / items by chance): the save hook is wired once and finds waiting from an earlier turn are sent again; never waited for
     if(isNodeServer){
         findsBeforeRequest(currentChat)
@@ -2141,6 +2145,13 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 brLog(`asset tag gate: ${assetResult.fixed.map(({ from, to }) => `${from}→${to ?? 'removed'}`).join(', ')}`)
                 draft = assetResult.text
             }
+            // a rewrite must not cost the reply its pictures
+            const keptTags = keepAssetTags(gateAssetTags(result, assetNames).text, draft)
+            if(keptTags.kept.length){
+                brLog(`asset tags: put back ${keptTags.kept.join(', ')}`)
+                draft = keptTags.text
+            }
+            brLog(`asset tags: first draft ${countImageTags(result)}, final ${countImageTags(draft)}`)
         }
         // NPC voice fill runs for every finished character story reply (not only the settleReply branch; not Admin asks).
         if(!askTurn && receivedStreamingResult && firstChunkKey0 !== undefined && nowChatroom.type === 'character' && DBState.db.npcVoiceBots !== false){
