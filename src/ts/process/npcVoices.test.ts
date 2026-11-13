@@ -41,6 +41,8 @@ describe('npc voices', () => {
             .toBe('"Chào cậu.')
         expect(await fillNpcVoices('"Tôi chưa dám nhận. Anh cứ giữ."', '1 | ban-cong | meet Người phụ nữ;tôi;anh;40', 3, ask, [], 'các cậu cho tớ tham gia'))
             .toBe('"Tôi chưa dám nhận. Anh cứ giữ."')
+        expect(await fillNpcVoices('"Chào anh, chúng ta tập."', '', 1, ask, [], 'các cậu cho tớ tham gia'))
+            .toBe('"Chào cậu, chúng ta tập."')
         expect(ask).not.toHaveBeenCalled()
     })
 

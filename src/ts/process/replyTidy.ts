@@ -63,13 +63,33 @@ export function stripGmTalk(text: string): string {
 // a block closer whose block is gone (the card's script cut the block, the closer was left), and the narrator's own aside to itself
 // written as a System line. Neither is story; a "]]" is taken out only when the reply has more closers than "[[" openers.
 const LEAKED_SYSTEM = /^[ \t]*【[^】\n]*】[ \t]*[—–-]+[ \t]*[A-Za-z][A-Za-z ,.'!?]{0,60}[ \t]*(?:\n|$)/gm
+function stripStatusTail(text: string): string {
+    const threatAt = text.search(/\bthreat\s*:/i)
+    const canonAt = text.search(/\bcanon\s*:/i)
+    if (threatAt < 0 || canonAt < threatAt) return text
+    let start = threatAt
+    const pipe = text.lastIndexOf('|', threatAt)
+    if (pipe >= 0 && threatAt - pipe < 500) {
+        const bound = Math.max(text.lastIndexOf('.', pipe), text.lastIndexOf('!', pipe), text.lastIndexOf('?', pipe), text.lastIndexOf('\n', pipe))
+        const between = text.slice(bound + 1, pipe)
+        const glue = /[ \t]\p{L}(?![\p{L}\p{N}])/u.exec(between)
+        start = glue ? bound + 1 + glue.index : (between.includes('|') || /\bbeat\s*:/i.test(between) ? bound + 1 : pipe)
+    }
+    let end = text.indexOf('\n', canonAt)
+    if (end < 0) end = text.length
+    const quote = /[\]\s]*([”"'])\s*$/u.exec(text.slice(canonAt, end))
+    return text.slice(0, start).replace(/[ \t]+$/u, '') + (quote ? quote[1] : '') + text.slice(end)
+}
+
 export function stripStrayMarks(text: string): string {
     let t = text ?? ''
+    t = stripStatusTail(t)
     t = t.replace(/[ \t]*\bbeat:\s*\d+\s*\|[^\n]*\bthreat:\s*[^\n]*\n[ \t]*canon:\s*[^\n]*\]\]\]([”"']?)[ \t\r\n]*$/i, (_all, quote: string, offset: number, whole: string) => {
         const before = whole.slice(0, offset)
         const opener = quote === '”' ? '“' : quote
         return opener && before.split(opener).length % 2 === 0 ? quote : ''
     })
+    t = t.replace(/[ \t]*\bbeat:\s*\d+\s*\|[^\n]*?([”"']?)[ \t\r\n]*$/i, '$1')
     t = t.replace(/(\[📊(?:\|\d+)+\])(?:\r?\n[ \t]*\][ \t]*(?=\r?\n|$))?/gu, (_all, tag: string) => (tag.match(/\|\d+/g) ?? []).length === 14 ? tag : '')
     if ((t.match(/\[\[/g) ?? []).length < (t.match(/\]\]/g) ?? []).length) t = t.replace(/[ \t]*\]\]\](?=[ \t]*(?:\n|$))/g, '')
     const opens = (t.match(/\[\[/g) ?? []).length

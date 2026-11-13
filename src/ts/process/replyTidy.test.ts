@@ -69,6 +69,12 @@ describe('stored and shown', () => {
         const tag = '[📊|0|0|0|0|0|0|0|0|0|0|0|0|0|0]'
         expect(tidyDisplay(tag)).toBe(tag)
     })
+    it('removes the turn 378 note tail without a beat or closer', () => {
+        expect(tidyDisplay('Yuuichi cũng dừng bước, cậu quay sang nhìn anh với vẻ mặt hiền hòa. Đôi mắt sụp xuống của cậu hơi cong lại khi nghe thấy giọng nói của Kenji Park, và cậu gật đầu nhẹ n bắt chuyện và bày tỏ mong muốn gia nhập | Nhóm ba người sẽ phản hồi lại ý định của anh. threat: Aki | 0% | Khi đạt 100%, cô sẽ trở thành "đối thủ" trực tiếp cạnh tranh vị trí trung tâm với anh. canon: Ngày thứ Hai, đầu tuần | Các câu lạc bộ khác đang bắt đầu buổi tập luyện đầu tiên.')).toBe('Yuuichi cũng dừng bước, cậu quay sang nhìn anh với vẻ mặt hiền hòa. Đôi mắt sụp xuống của cậu hơi cong lại khi nghe thấy giọng nói của Kenji Park, và cậu gật đầu nhẹ')
+        expect(tidyDisplay('Aki nhìn anh.')).toBe('Aki nhìn anh.')
+        expect(tidyDisplay('Aki nói threat: Aki | 0% | canon: ngày mai.')).toBe('Aki nói')
+        expect(tidyDisplay('“Aki nhìn anh. beat: 1 | x | threat: Aki\ncanon: ngày mai]]]”')).toBe('“Aki nhìn anh.”')
+    })
     it('the stored reply never keeps a growth tag, the card having a script or not (gate runs 2026-11-04)', () => {
         for (const tag of ['[[ACT|kiểm-tra-cửa|cam_nhan|normal|]]', '[[ACT leo-cầu-thang|the_luc+cam_nhan|normal|]]', '[[ACT|nghe|cam_nhan|normal|']) {
             const chat = { message: [{ role: 'user', data: 'đi' }, { role: 'char', data: `${STORY1}\n[💡Kế hoạch| Không ] ${tag}` }] }

@@ -19,6 +19,12 @@ const P = { player: 'Kenji Park' }
 const rules = (hits: { rule: string; soft?: boolean }[]) => hits.filter((h) => !h.soft).map((h) => h.rule)
 
 describe('register scrubbing', () => {
+    test('removes leaked meet placeholders regardless of register', () => {
+        const reply = '“<self> <what they call the player> <age> <name>”'
+        expect(scrubRegister(reply, [])).toBe('“   ”')
+        const cards = [...foldNpc('1 | aki | meet Aki;tớ;cậu;17').values()]
+        expect(scrubRegister(reply, cards)).toBe('“   ”')
+    })
     test('uses player register for blank cards, including an unclosed quote', () => {
         const cards = [...foldNpc('1 | aki | meet Aki\n1 | naru | meet Naru', 2).values()]
         const playerText = 'tui đứng dậy chạy theo họ nói này các cậu hmm cho tớ tham gia câu lạc bộ được ko'
@@ -27,7 +33,9 @@ describe('register scrubbing', () => {
         expect(scrubRegister('của anh. "Chị và bọn tôi."', cards, playerText)).toBe('của anh. "Cậu và bọn tớ."')
         expect(scrubRegister('Tôi thấy anh có vẻ rất nhiệt huyết đấy.”\n“Đúng thế! Tụi mình luôn chào đón thành viên mới mà.”\nĐôi chân anh bước đi.', cards, playerText)).toBe('Tớ thấy cậu có vẻ rất nhiệt huyết đấy.”\n“Đúng thế! Tụi mình luôn chào đón thành viên mới mà.”\nĐôi chân anh bước đi.')
         expect(scrubRegister(reply, cards, 'cậung tớ')).toBe(reply)
-        expect(scrubRegister(reply, [], playerText)).toBe(reply)
+        expect(scrubRegister(reply, [], playerText)).toBe('Đôi chân anh bước đi.\n"Ồ, cậu là người mới muốn gia nhập à?"\n"Tuyệt quá! như cậu đấy!"\n"Chào cậu.')
+        expect(scrubRegister('Tôi thấy anh.”', [], playerText)).toBe('Tớ thấy cậu.”')
+        expect(scrubRegister(reply, [], 'cậung tớ')).toBe(reply)
     })
     test('uses the agreed peer register only inside quotes', () => {
         const ledger = '12 | aki | meet Aki;tớ;cậu;\n12 | naru | meet Naru;tớ;cậu;'
@@ -44,6 +52,14 @@ describe('register scrubbing', () => {
 })
 
 describe('ledger', () => {
+    test('meet ignores placeholder fields while preserving valid values', () => {
+        const placeholder = foldNpc('2 | aki | meet Aki;<self>;<what they call the player>;<age>').get('aki')!
+        expect([placeholder.name, placeholder.self, placeholder.toPlayer, placeholder.age]).toEqual(['Aki', 'tôi', 'anh', ''])
+        const valid = foldNpc('2 | aki | meet Aki;tớ;cậu;17').get('aki')!
+        expect([valid.name, valid.self, valid.toPlayer, valid.age]).toEqual(['Aki', 'tớ', 'cậu', '17'])
+        const mixed = foldNpc('1 | aki | meet Aki;tớ;cậu;17\n2 | aki | meet Aki;bad<;bad>;bad<').get('aki')!
+        expect([mixed.self, mixed.toPlayer, mixed.age]).toEqual(['tớ', 'cậu', '17'])
+    })
     test('fold before turn 13: needs fever medicine and something to wash the wound, holds the painkillers she received, low trust', () => {
         const c = foldNpc(LEDGER, 13).get('ban-cong-704')!
         expect([...c.needs].sort()).toEqual(['do_rua_vet_thuong', 'thuoc_ha_sot'])
@@ -159,6 +175,8 @@ describe('the GM note and the fallback', () => {
         const c = foldNpc(LEDGER, 13).get('ban-cong-704')!
         const line = cardLine(c)
         expect(line.split(/\s+/).length).toBeLessThanOrEqual(160)
+        expect(line).not.toContain('chỉ nhắc việc mình có mặt hoặc được kể')
+        expect(npcCardsNote(LEDGER, 13)).toContain('chỉ nhắc việc mình có mặt hoặc được kể')
         for (const w of ['Người phụ nữ ban công 704', 'cần thuốc hạ sốt', 'đang giữ thuốc giảm đau', 'tin người chơi: thấp']) expect(line).toContain(w)
         const big = foldNpc(Array.from({ length: 300 }, (_, i) => `1 | x | knows+ fact number ${i} with several words`).join('\n')).get('x')!
         expect(cardLine(big).split(/\s+/).length).toBeLessThanOrEqual(161)

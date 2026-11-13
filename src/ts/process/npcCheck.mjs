@@ -116,7 +116,7 @@ export function blankNpc(id, name = id) {
 export function applyNpcOp(c, op, value, n) {
     const v = String(value ?? '').trim()
     switch (op) {
-        case 'meet': { const [name, self, to, age] = v.split(';').map((x) => x.trim()); if (name) c.name = name; if (self) c.self = self; if (to) c.toPlayer = to; if (age) c.age = age; break }
+        case 'meet': { const [name, self, to, age] = v.split(';').map((x) => x.trim()); if (name) c.name = name; if (self && !/[<>]/.test(self)) c.self = self; if (to && !/[<>]/.test(to)) c.toPlayer = to; if (age && !/[<>]/.test(age)) c.age = age; break }
         case 'need+': { const i = itemOf(v); if (c.received.has(i) || c.has.has(i)) return false; c.needs.add(i); break }
         case 'need-': c.needs.delete(itemOf(v)); break
         case 'has+': { const i = itemOf(v); c.has.set(i, (c.has.get(i) ?? 0) + 1); c.needs.delete(i); break }
@@ -213,7 +213,6 @@ export function cardLine(c) {
         c.maxWords || c.tics ? `giọng: ${[c.maxWords ? `câu tối đa ${c.maxWords} chữ` : '', c.tics].filter(Boolean).join(', ')}` : '',
         c.forbidden.size ? `không bao giờ nói: ${[...c.forbidden].join(', ')}` : '',
         c.sample ? `ví dụ: “${c.sample}”` : '',
-        'chỉ nhắc việc mình có mặt hoặc được kể',
     ].filter(Boolean)
     return capWords(parts.join('; ') + '.', 160)
 }
@@ -249,7 +248,7 @@ export function npcCardsNote(ledger, n, voices = false, extras = []) {
         const marks = cards.map((c) => `${c.name} → [[SAY|${c.id}]]`).join('; ')
         return `\n\n[NPC voices (hidden, never named): ${cards.map(cardLine).join(' ')} Do not write the spoken words of these people. Where one of them speaks, write exactly one marker on its own line and keep the scene around it: ${marks}. At most one marker per person. Never put their words inside “…” yourself — only the marker. Their words are filled in afterwards, each by their own voice, and each hears the ones who spoke before them in this reply.]`
     }
-    return NPC_INNER_RULE + `\n\n[NPC cards (hidden, never named): ${cards.map(cardLine).join(' ')} Each of them says one or two whole sentences built from this card, as a real person: what she needs, holds and knows, asked with the address term on the card; she never refuses what she needs unless she distrusts the player and says why, never asks for what she already holds, never hands out an errand, a place to go or an "if you do X I will Y" (tasks come only from Admin).]`
+    return NPC_INNER_RULE + `\n\n[NPC cards (hidden, never named): ${cards.map(cardLine).join(' ')} Each person must chỉ nhắc việc mình có mặt hoặc được kể. Each of them says one or two whole sentences built from this card, as a real person: what she needs, holds and knows, asked with the address term on the card; she never refuses what she needs unless she distrusts the player and says why, never asks for what she already holds, never hands out an errand, a place to go or an "if you do X I will Y" (tasks come only from Admin).]`
 }
 
 // ---- extraction: reply text -> per-speaker Facts --------------------------------------------------------------------------------
@@ -447,11 +446,12 @@ function swapPairWord(text, from, to) {
     return text.replace(new RegExp('(?<!\\p{L})(' + from + ')(?!\\p{L})', 'giu'), (m) => (m[0] === m[0].toUpperCase() ? to[0].toUpperCase() + to.slice(1) : to))
 }
 export function scrubRegister(reply, cards, playerText = '') {
+    const text = String(reply ?? '').replace(/<(?:self|what they call the player|age|name)>/giu, '')
     const people = [...(cards ?? [])]
-    const fallback = people.length > 0 && people.every((c) => c && c.self === 'tôi' && c.toPlayer === 'anh')
+    const fallback = people.every((c) => c && c.self === 'tôi' && c.toPlayer === 'anh')
         && W('tớ').test(playerText) && W('cậu').test(playerText)
-    if (!agreedPair(people) && !fallback) return String(reply ?? '')
-    return String(reply ?? '').replace(/“[^”\n]*(?:”|$)|"[^"\n]*(?:"|$)/gu, (quote) => {
+    if (!agreedPair(people) && !fallback) return text
+    return text.replace(/“[^”\n]*(?:”|$)|"[^"\n]*(?:"|$)/gu, (quote) => {
         const open = quote[0]
         const closer = open === '“' ? '”' : '"'
         const closed = quote.length > 1 && quote.endsWith(closer)
