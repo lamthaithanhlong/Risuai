@@ -39,7 +39,7 @@ describe('Admin missions in a story with no quest script', () => {
     })
 })
 
-import { POINTS_START, questEvents, questReward, stampPoints } from './adminQuest'
+import { moduleRunsQuests, POINTS_START, questEvents, questReward, stampPoints } from './adminQuest'
 
 describe('mission points (owner 2026-11-13; tools/stats/formal/quest_z3.py + quest.als in the Zombie repo)', () => {
     const c = (data: string) => ({ role: 'char', data })
@@ -86,7 +86,7 @@ describe('mission points (owner 2026-11-13; tools/stats/formal/quest_z3.py + que
         expect([questReward(4, 'dễ'), questReward(4, 'khó'), questReward(4, 'rất khó')]).toEqual([40, 160, 280])
         expect(questState([hard])).toMatchObject({ open: 'qua cầu trước khi trời tối — cầu đang bị canh.', tier: 'khó' })
         expect(questEvents([hard, u(), done], 4)).toEqual([{ kind: 'mission', idx: 'aq', level: 160, stats: {} }])
-        expect(stampPoints([hard, u(), done], 4)).toContain('Thưởng (khó): +160 EXP.')
+        expect(stampPoints([hard, u(), done], 4)).toContain('Thưởng (khó): Level +160 EXP.')
         expect(questState([c('【ADMIN: Nhiệm vụ: (dễ) Mở phòng 307 cùng Mika — kiểm tra phòng tối.】')])).toMatchObject({ open: 'Mở phòng 307 cùng Mika — kiểm tra phòng tối.', tier: 'dễ' })
         // Admin restating an open mission cannot raise its pay; a NEW mission after it is graded afresh
         const again = c('【ADMIN: Nhiệm vụ đang mở (rất khó): qua cầu — còn một giờ.】')
@@ -96,14 +96,40 @@ describe('mission points (owner 2026-11-13; tools/stats/formal/quest_z3.py + que
 
     it("the app's own points line goes after the counted close, once, and a number the model wrote goes", () => {
         const out = stampPoints([offer, u(), done], 1)!
-        expect(out).toBe('Truyện. 【ADMIN: Nhiệm vụ hoàn thành: đã có chìa khóa.】\n【ADMIN: Điểm nhiệm vụ: 4/5 (+1). Thưởng (vừa): +10 EXP.】')
+        expect(out).toBe('Truyện. 【ADMIN: Nhiệm vụ hoàn thành: đã có chìa khóa.】\n【ADMIN: Điểm nhiệm vụ: 4/5 (+1). Thưởng (vừa): Level +10 EXP.】')
         expect(stampPoints([offer, u(), c(out)], 1)).toBeNull()                     // already there: unchanged
         expect(questState([offer, u(), c(out)]).points).toBe(4)                     // the line itself is not read as a mission
-        expect(stampPoints([offer, u(), c(fail.data + ' 【ADMIN: Điểm nhiệm vụ: 9/5.】')], 1)).toBe(fail.data + '\n【ADMIN: Điểm nhiệm vụ: 2/5 (−1). Hết điểm là GAME OVER, mất 30% tổng EXP.】')
+        expect(stampPoints([offer, u(), c(fail.data + ' 【ADMIN: Điểm nhiệm vụ: 9/5.】')], 1)).toBe(fail.data + '\n【ADMIN: Điểm nhiệm vụ: 2/5 (−1, không có thưởng). Về 0 điểm là GAME OVER, mất 30% tổng EXP.】')
         const over = [offer, u(), fail, u(), offer, u(), fail, u(), offer, u(), fail]
         expect(stampPoints(over, 1)).toContain('【ADMIN: GAME OVER — hết điểm nhiệm vụ. Phạt: −30% tổng EXP, cấp có thể tụt. Điểm nhiệm vụ đặt lại 3/5.】')
         expect(stampPoints([offer, u(), c('Truyện.')], 1)).toBeNull()
         expect(stampPoints([c('Truyện. 【ADMIN: GAME OVER.】')], 1)).toBe('Truyện.')  // invented: taken out
+    })
+
+    it('a chat where the Admin module runs the missions: one system pays, the app keeps the points', () => {
+        // the module's own lines (quests.lua Q.system_line)
+        const mOffer = c('Truyện.\n【ADMIN: Nhiệm vụ — Phiếu phòng A: Lấy phiếu rồi nộp cho cô Naru. Xong khi: đủ 1/1. Thưởng: Level +50 EXP, Tinh thần +5 EXP. Hạn: 5 lượt.】')
+        const mDone = c('Truyện.\n【ADMIN: Nhiệm vụ hoàn thành — Phiếu phòng A. Thưởng đã nhận: Level +50 EXP, Tinh thần +5 EXP.】')
+        const mLate = c('Truyện.\n【ADMIN: Nhiệm vụ hết hạn — Phiếu phòng A. Không có thưởng.】')
+        expect(moduleRunsQuests({ $quest_seed: 'q-1' })).toBe(true)
+        expect(moduleRunsQuests({})).toBe(false)
+        expect(moduleRunsQuests(undefined)).toBe(false)
+        // no second reward: no EXP event from the app, and its line states no EXP number of its own
+        expect(questEvents([mOffer, u(), mDone], 2, true)).toEqual([])
+        expect(questEvents([mOffer, u(), mDone], 2, false)).toHaveLength(1)
+        const out = stampPoints([mOffer, u(), mDone], 2, true)!
+        expect(out.endsWith('\n【ADMIN: Điểm nhiệm vụ: 4/5 (+1, tối đa 5). Thất bại hoặc hết hạn: −1 điểm; về 0 là GAME OVER, mất 30% tổng EXP.】')).toBe(true)
+        expect(out.match(/\+\d+ EXP/g)).toHaveLength(2)   // only the module's own two numbers: the app adds none
+        // a mission that ran out is a mission failed: it costs a point and the line says so
+        expect(questState([mOffer, u(), mLate])).toMatchObject({ open: '', points: 2, last: 'fail' })
+        expect(stampPoints([mOffer, u(), mLate], 2, true)).toContain('【ADMIN: Điểm nhiệm vụ: 2/5 (−1, không có thưởng). Về 0 điểm là GAME OVER, mất 30% tổng EXP.】')
+        // the game over still costs its penalty
+        const over = [mOffer, u(), mLate, u(), mOffer, u(), mLate, u(), mOffer, u(), mLate]
+        expect(questEvents(over, 2, true)).toEqual([{ kind: 'penalty', idx: 'go', level: 30, stats: {} }])
+        // and the app's own note stays out of the request
+        const r = [{ role: 'user', content: 'tớ đi tiếp' }]
+        expect(questRequest(r, 'cha-x', [mOffer, u()], false, true)).toBe(r)
+        expect(String(questRequest(r, 'cha-x', [mOffer, u()], false, false)[0].content)).toContain('[Nhiệm vụ (ẩn)')
     })
 
     it('the note states the points and the stakes', () => {

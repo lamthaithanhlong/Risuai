@@ -15,7 +15,12 @@ const OFFER = /【ADMIN:\s*Nhiệm vụ(?: mới| đang mở)?(?:\s*\(\s*(dễ|v
 /** A mission's grade -> percent of what the Level needs, paid as Level EXP when it is done (owner 2026-11-13: one flat reward for every mission was
  *  too wide). No grade on the line = vừa. */
 export const QUEST_TIER_PCT: Record<string, number> = { 'dễ': 5, 'vừa': 10, 'khó': 20, 'rất khó': 35 }
-const CLOSE = /【ADMIN:\s*Nhiệm vụ (hoàn thành|thất bại|đã xong|đã hủy|đã huỷ)[^】]*】/gu
+// "hết hạn" is the Admin module's line for a mission whose deadline passed (quests.lua): a mission not done in time is a mission failed
+const CLOSE = /【ADMIN:\s*Nhiệm vụ (hoàn thành|thất bại|hết hạn|đã xong|đã hủy|đã huỷ)[^】]*】/gu
+/** Does the Admin module's own quest script run in this chat (it seeds $quest_seed on its first request)? Then ONE system hands out and pays
+ *  missions (owner 2026-11-13: "thưởng phạt ko rõ": two systems printed two different rewards for one mission and paid both): the module offers,
+ *  counts and pays the EXP its lines state; the app only keeps the points (and the game over) and says them. */
+export const moduleRunsQuests = (scriptstate: Record<string, unknown> | undefined): boolean => !!String(scriptstate?.$quest_seed ?? '')
 /** The app's own line after a counted close; a line of this shape the model wrote is taken out (Admin never invents a number). */
 const STAMP = /\n?[ \t]*【ADMIN:\s*(?:Điểm nhiệm vụ|GAME OVER)[^】]*】/gu
 
@@ -55,7 +60,7 @@ export function questState(messages: Msg[] | undefined): QuestState {
             if (!wasOpen || counted) continue
             counted = true; open = ''; at = replies; lastTier = tier
             if (/hủy|huỷ/u.test(k.close)) continue
-            if (k.close === 'thất bại') {
+            if (k.close === 'thất bại' || k.close === 'hết hạn') {
                 last = 'fail'
                 if (points <= 1) { over = true; points = POINTS_START } else points--
             } else { last = 'done'; points = Math.min(POINTS_TOP, points + 1) }
@@ -70,15 +75,15 @@ export const questReward = (level: number, tier = 'vừa') =>
 
 /** The newest reply's ledger events: a mission done pays Level EXP, a game over is one penalty event (the store takes 30% of all the EXP earned,
  *  at that place in the persona's history; the Level can drop). They are posted as the events of the reply's own turn, so a regenerated reply replaces them. */
-export function questEvents(messages: Msg[] | undefined, level: number): { kind: string; idx: string; level: number; stats: Record<string, number> }[] {
+export function questEvents(messages: Msg[] | undefined, level: number, scripted = false): { kind: string; idx: string; level: number; stats: Record<string, number> }[] {
     const s = questState(messages)
     if (messages?.[messages.length - 1]?.role !== 'char') return []
     if (s.over) return [{ kind: 'penalty', idx: 'go', level: PENALTY_PCT, stats: {} }]
-    return s.last === 'done' ? [{ kind: 'mission', idx: 'aq', level: questReward(level, s.lastTier), stats: {} }] : []
+    return s.last === 'done' && !scripted ? [{ kind: 'mission', idx: 'aq', level: questReward(level, s.lastTier), stats: {} }] : []
 }
 
 /** The newest reply with the app's points line after its counted close (and without any such line the model wrote). Unchanged when nothing counted. */
-export function stampPoints(messages: Msg[] | undefined, level: number): string | null {
+export function stampPoints(messages: Msg[] | undefined, level: number, scripted = false): string | null {
     const m = messages?.[messages.length - 1]
     if (!m || m.role !== 'char') return null
     const text = String(m.data ?? '')
@@ -87,8 +92,10 @@ export function stampPoints(messages: Msg[] | undefined, level: number): string 
     let out = clean
     if (s.last) {
         const line = s.over ? `【ADMIN: GAME OVER — hết điểm nhiệm vụ. Phạt: −${PENALTY_PCT}% tổng EXP, cấp có thể tụt. Điểm nhiệm vụ đặt lại ${s.points}/${POINTS_TOP}.】`
-            : s.last === 'done' ? `【ADMIN: Điểm nhiệm vụ: ${s.points}/${POINTS_TOP} (+1). Thưởng (${s.lastTier}): +${questReward(level, s.lastTier)} EXP.】`
-            : `【ADMIN: Điểm nhiệm vụ: ${s.points}/${POINTS_TOP} (−1). Hết điểm là GAME OVER, mất ${PENALTY_PCT}% tổng EXP.】`
+            // the module's own line above this one already states the EXP it paid: the app adds only the points, and what losing them means
+            : s.last === 'done' ? (scripted ? `【ADMIN: Điểm nhiệm vụ: ${s.points}/${POINTS_TOP} (+1, tối đa ${POINTS_TOP}). Thất bại hoặc hết hạn: −1 điểm; về 0 là GAME OVER, mất ${PENALTY_PCT}% tổng EXP.】`
+                : `【ADMIN: Điểm nhiệm vụ: ${s.points}/${POINTS_TOP} (+1). Thưởng (${s.lastTier}): Level +${questReward(level, s.lastTier)} EXP.】`)
+            : `【ADMIN: Điểm nhiệm vụ: ${s.points}/${POINTS_TOP} (−1, không có thưởng). Về 0 điểm là GAME OVER, mất ${PENALTY_PCT}% tổng EXP.】`
         const before = questState(messages!.slice(0, -1))
         let hit = -1, len = 0
         if (before.open) for (const x of clean.matchAll(CLOSE)) { hit = x.index ?? 0; len = x[0].length; break }   // the counted close is the first one
@@ -124,8 +131,8 @@ export function questNote(messages: Msg[] | undefined): string {
 }
 
 /** At the end of the player's message (where the model reads last); unchanged for a scripted card, an Admin ask or the opening. */
-export function questRequest<T extends { role: string; content: unknown }>(formated: T[], cardId: string, messages: Msg[] | undefined, ask: boolean): T[] {
-    if (ask || SCRIPTED_QUEST_CARDS.includes(cardId)) return formated
+export function questRequest<T extends { role: string; content: unknown }>(formated: T[], cardId: string, messages: Msg[] | undefined, ask: boolean, scripted = false): T[] {
+    if (ask || scripted || SCRIPTED_QUEST_CARDS.includes(cardId)) return formated
     const note = questNote(messages)
     const last = formated.map((m) => m.role).lastIndexOf('user')
     if (!note || last < 0 || typeof formated[last].content !== 'string') return formated

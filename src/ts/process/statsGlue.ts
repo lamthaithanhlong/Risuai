@@ -244,12 +244,13 @@ export function questAfterReplyPage(card: { type?: string, chaId?: string } | un
                 if (!q.questState(msgs).marks) return   // Admin never spoke of a mission in this chat
                 let level = 1
                 try { const l = JSON.parse(String(chat!.scriptstate?.$lvl ?? ''))?.l; if (Number.isInteger(l) && l >= 1) level = l } catch { /* Level 1 */ }
-                const text = q.stampPoints(msgs, level)
+                const scripted = q.moduleRunsQuests(chat!.scriptstate)   // the Admin module hands out and pays: the app keeps only the points
+                const text = q.stampPoints(msgs, level, scripted)
                 if (text !== null) msgs[msgs.length - 1].data = text
                 const id = String(chat!.id ?? '')
                 if (!post || !/^[A-Za-z0-9_.-]{1,62}$/.test(id)) return
                 const d = await pageDeps()
-                await sendTurn({ persona: d.persona(), chat: id + '.q', turn: msgs.length, events: q.questEvents(msgs, level) as never })
+                await sendTurn({ persona: d.persona(), chat: id + '.q', turn: msgs.length, events: q.questEvents(msgs, level, scripted) as never })
             } catch { /* never blocks */ }
         })()
     } catch { /* never blocks */ }
