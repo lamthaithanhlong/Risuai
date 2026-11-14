@@ -52,6 +52,31 @@ describe('register scrubbing', () => {
 })
 
 describe('ledger', () => {
+    // Trường nghề chat, 2026-11-13: the helper wrote a voice line three times (23 words, then 11, then 9, each measured on her last short question)
+    // and a second meet with the narrator's "cô"; Naru ended at questions of nine words and said "Cậu muốn cô kiểm tra lịch à?"
+    test('a voice is set once: later voice lines never shorten her sentences or replace her habits', () => {
+        const c = foldNpc([
+            '12 | naru | voice 23;;thân mật, giải thích rồi hỏi;Phiếu ở chỗ tớ, để tớ xem lại lịch rồi báo cậu nhé.',
+            '18 | naru | voice 11;;hỏi để làm rõ;Cậu hỏi về buổi chuẩn bị thứ Sáu à?',
+            '20 | naru | voice 9;chết tiệt;hỏi trực tiếp;Cậu đã xác nhận phòng cho thứ Sáu chưa?',
+        ].join('\n')).get('naru')!
+        expect([c.maxWords, c.tics, c.sample]).toEqual([23, 'thân mật, giải thích rồi hỏi', 'Phiếu ở chỗ tớ, để tớ xem lại lịch rồi báo cậu nhé.'])
+        expect([...c.forbidden]).toEqual(['chết tiệt'])
+        // a first voice measured on one short line is not a cap of nine words
+        expect(foldNpc('20 | naru | voice 9;;hỏi trực tiếp;Cậu xác nhận chưa?').get('naru')!.maxWords).toBe(12)
+        expect(foldNpc('20 | naru | voice 0;;;').get('naru')!.maxWords).toBe(0)
+    })
+    test("a later meet does not turn her own word for herself into the narrator's word for her", () => {
+        const c = foldNpc('12 | naru | meet Naru;tớ;cậu\n24 | naru | meet Naru;cô;cậu').get('naru')!
+        expect([c.self, c.toPlayer]).toEqual(['tớ', 'cậu'])
+        // a real change of register moves both words, and a first meet takes what it is given
+        const d = foldNpc('12 | lan | meet Lan;tôi;anh\n24 | lan | meet Lan;em;anh').get('lan')!
+        expect(d.self).toBe('em')
+        const e = foldNpc('12 | co-giao | meet cô Hoa;cô;em').get('co-giao')!
+        expect([e.self, e.toPlayer]).toEqual(['cô', 'em'])
+        const f = foldNpc('12 | co-giao | meet cô Hoa;tôi;em\n13 | co-giao | meet cô Hoa;cô;em').get('co-giao')!
+        expect(f.self).toBe('cô')
+    })
     test('meet ignores placeholder fields while preserving valid values', () => {
         const placeholder = foldNpc('2 | aki | meet Aki;<self>;<what they call the player>;<age>').get('aki')!
         expect([placeholder.name, placeholder.self, placeholder.toPlayer, placeholder.age]).toEqual(['Aki', 'tôi', 'anh', ''])

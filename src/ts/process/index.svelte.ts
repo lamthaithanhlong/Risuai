@@ -2164,7 +2164,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             }
             // Only people who speak in THIS reply — not every portrait named in the last six turns.
             const voiceExtras = speakingNamesIn(draft, voiceNames)
-            draft = await fillNpcVoices(draft, String(voiceChat.scriptstate?.['$led_npc'] ?? ''), previousReplies.length + 1, askSubmodel, voiceExtras, lastUserText)
+            draft = await fillNpcVoices(draft, String(voiceChat.scriptstate?.['$led_npc'] ?? ''), previousReplies.length + 1, askSubmodel, voiceExtras, lastUserText,
+                // what was said before this reply: without it a voice answers the scene, not the player (trường nghề chat, 2026-11-13)
+                voiceChat.message.slice(0, msgIndex).slice(-10))
         }
         if(draft !== result && firstChunkKey0 !== undefined){
             result = draft

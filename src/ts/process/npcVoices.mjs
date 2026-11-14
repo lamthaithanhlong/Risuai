@@ -86,16 +86,46 @@ export function takeOneQuote(raw) {
     return sents.join(' ').replace(/^["“]|["”]$/g, '').trim()
 }
 
-/** The prompt for one voice. `scene` is the reply so far, up to this marker, with earlier voices already filled. */
-export function npcVoicePrompt(card, scene) {
+const oneLine = (s, max) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max).trimEnd() + '…' : t }
+
+/**
+ * What was said in the last turns, for one voice: the player's messages and this person's own spoken lines, oldest first.
+ * `messages` are the chat messages before the reply being written; the player's newest message (`playerText`) is left out, the prompt carries it apart.
+ */
+export function recentTalk(messages, name, playerText = '') {
+    const list = [...(messages ?? [])]
+    const now = oneLine(playerText, 9999)
+    if (now && list.length && list[list.length - 1]?.role === 'user' && oneLine(list[list.length - 1].data, 9999) === now) list.pop()
+    const n = String(name ?? '').replace(/\s+/g, ' ').trim()
+    const names = [...new Set([n, n.split(/\s+/)[0]])].filter((w) => w.length >= 2).map(esc).join('|')
+    const said = names ? new RegExp(`(?:${names})[^“”"\\n]{0,48}${SPEECH}[^“”"\\n]{0,20}:?\\s*(?:"([^"\\n]+)"|“([^”\\n]+)”)`, 'giu') : null
+    const out = []
+    for (const m of list.slice(-8)) {
+        const data = String(m?.data ?? '')
+        if (m?.role === 'user') { const t = oneLine(data, 200); if (t) out.push(`Người chơi: “${t}”`) }
+        else if (said) for (const q of data.matchAll(said)) out.push(`${n}: “${oneLine(q[1] ?? q[2], 240)}”`)
+    }
+    return out.slice(-8).join('\n')
+}
+
+/**
+ * The prompt for one voice. `scene` is the reply so far, up to this marker, with earlier voices already filled. `talk` = { player, recent }: the
+ * player's message this turn and recentTalk(); without them she answered a scene, not a person (asked back her own old question, asked again for a
+ * form already handed in: trường nghề chat, 2026-11-13).
+ */
+export function npcVoicePrompt(card, scene, talk = {}) {
     const seen = String(scene ?? '').trim().slice(-1800)
+    const player = oneLine(talk?.player, 400)
+    const recent = String(talk?.recent ?? '').trim()
     return [
         `Bạn chỉ đóng ${card.name} trong truyện đang chạy. In đúng một hoặc hai câu thoại, nằm trong ngoặc kép “…” . Không kể cảnh, không đóng ai khác, không viết lời người chơi.`,
         `Thẻ của bạn: ${cardLine(card)}`,
+        recent ? `Mấy lượt vừa qua (đã nói rồi, đừng nói lại, đừng hỏi lại, đừng đòi lại thứ đã nhận hay việc đã xong):\n${recent}` : '',
         `Cảnh tới lúc bạn nói. Lời của người khác trong lượt này đã nằm trong cảnh; hãy đáp lại họ:`,
         seen || '(chưa có cảnh)',
+        player ? `Người chơi vừa nói: “${player}”\nNếu đó là một câu hỏi hay một thắc mắc với bạn, hãy trả lời thẳng điều được hỏi bằng điều bạn biết trước; chỉ hỏi lại khi thật sự thiếu một điều để trả lời, và không hỏi câu bạn đã hỏi ở trên.` : '',
         `Viết lời của ${card.name}.`,
-    ].join('\n\n')
+    ].filter(Boolean).join('\n\n')
 }
 
 function cardFor(cards, rawId) {
@@ -104,9 +134,9 @@ function cardFor(cards, rawId) {
     return cards.find((c) => c.id === id || slug(c.name) === id || c.name.toLowerCase() === raw)
 }
 
-async function speak(card, scene, ask) {
+async function speak(card, scene, ask, talk) {
     try {
-        const line = takeOneQuote(await ask(npcVoicePrompt(card, scene)))
+        const line = takeOneQuote(await ask(npcVoicePrompt(card, scene, talk ? { player: talk.player, recent: recentTalk(talk.history, card.name, talk.player) } : {})))
         // a person the ledger has no name for (name = id, "chi-phu-trach") gets no label: the narration around the marker says who speaks
         const label = card.name && card.name !== card.id ? `${card.name} nói: ` : ''
         return line ? `${label}“${line}”\n` : ''
@@ -119,7 +149,7 @@ async function speak(card, scene, ask) {
  * Weak narrators (Ollama 9B) write attributed quotes instead of [[SAY|aki]]. Replace each attributed quote once,
  * in order of appearance, so the next voice hears the line just rewritten.
  */
-export async function rewireOnstageQuotes(text, cards, ask) {
+export async function rewireOnstageQuotes(text, cards, ask, talk) {
     if (!cards?.length || !ask) return String(text ?? '')
     let out = String(text ?? '')
     // Only rewrite people who already have an attributed quote in this draft (skip cast that is merely named).
@@ -140,7 +170,7 @@ export async function rewireOnstageQuotes(text, cards, ask) {
         const post = postQuote.exec(out)
         if (post) {
             const scene = out.slice(0, post.index)
-            const spoken = await speak(card, scene, ask)
+            const spoken = await speak(card, scene, ask, talk)
             if (spoken) {
                 const inner = takeOneQuote(spoken)
                 const open = post[0][0]
@@ -156,7 +186,7 @@ export async function rewireOnstageQuotes(text, cards, ask) {
         const m = re.exec(out)
         if (!m) continue
         const scene = out.slice(0, m.index)
-        const spoken = await speak(card, scene, ask)
+        const spoken = await speak(card, scene, ask, talk)
         if (!spoken) continue
         // Keep the narrator's lead-in/attribution and only swap the quoted words.
         const inner = takeOneQuote(spoken)
@@ -172,7 +202,8 @@ export async function rewireOnstageQuotes(text, cards, ask) {
  * Replace each [[SAY|id]] in order. When the narrator skipped the markers but named people still speak,
  * rewrite their attributed quotes (Ollama path). `extras` seeds the cast when $led_npc is empty.
  */
-export async function fillNpcVoices(text, ledger, n, ask, extras = [], playerText = '') {
+export async function fillNpcVoices(text, ledger, n, ask, extras = [], playerText = '', history = []) {
+    const talk = { player: playerText, history }
     const cards = onstageNpcs(ledger, n, extras)
     let out = String(text ?? '')
     out = out.replace(/^[ \t]*\[\[?\s*SAY\s*\|[^\]\n]+\]\]?[ \t]*\n+(?=[ \t]*["“])/gimu, '')
@@ -185,13 +216,13 @@ export async function fillNpcVoices(text, ledger, n, ask, extras = [], playerTex
             filledSay = true
             const card = cardFor(cards, m[1])
             const scene = out.slice(0, m.index).replace(/\[\[\s*SAY\s*\|[^\]\n]*\]\]/giu, '').trim()
-            const spoken = card && ask ? await speak(card, scene, ask) : ''
+            const spoken = card && ask ? await speak(card, scene, ask, talk) : ''
             out = out.slice(0, m.index) + spoken + out.slice(m.index + m[0].length)
         }
         out = out.replace(/\[\[\s*SAY\s*\|[^\]\n]*\]\]/giu, '')
     }
     if (!filledSay && cards.length && ask) {
-        out = await rewireOnstageQuotes(out, cards, ask)
+        out = await rewireOnstageQuotes(out, cards, ask, talk)
     }
     const eligible = cards.every((c) => c.lastTurn === n && c.self === 'tôi' && c.toPlayer === 'anh')
     return scrubRegister(out.replace(/\n{3,}/g, '\n\n'), cards, eligible ? playerText : '')

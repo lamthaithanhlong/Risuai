@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { npcCardsNote } from './npcCheck.mjs'
 import { tidyDisplay } from './replyTidy'
-import { fillNpcVoices, hasAttributedSpeech, namesNamedIn, npcVoicePrompt, onstageNpcs, rewireOnstageQuotes, speakingNamesIn, takeOneQuote } from './npcVoices.mjs'
+import { fillNpcVoices, hasAttributedSpeech, namesNamedIn, npcVoicePrompt, onstageNpcs, recentTalk, rewireOnstageQuotes, speakingNamesIn, takeOneQuote } from './npcVoices.mjs'
 
 const LEDGER = [
     '12 | aki | meet Aki;tớ;cậu;',
@@ -85,6 +85,26 @@ describe('npc voices', () => {
         expect(prompts[1]).toContain('Aki nói: “Cậu quên hồ sơ à?”')
         expect(prompts[0]).not.toContain('Naru nói')
         expect(npcVoicePrompt(onstageNpcs(LEDGER, 13)[0], 'Hành lang im.')).toContain('Thẻ của bạn:')
+    })
+
+    // Trường nghề chat, 2026-11-13: the voice saw only the reply being written. Kenji asked "theo dõi kết quả gì á", Naru asked back the question she
+    // had asked two turns before, then asked for a form he had already handed in: she never read his words or her own earlier lines.
+    test('a voice hears what the player just said and what was said in the last turns', async () => {
+        const history = [
+            { role: 'user', data: 'Tớ nộp phiếu đăng ký nhé' },
+            { role: 'char', data: 'Naru nhận tờ giấy.\n\nNaru nói: “Tớ nhận phiếu rồi. Cậu đã xác nhận phòng cho thứ Sáu chưa?”\n\n[📊|0|0]' },
+            { role: 'user', data: 'Nhưng theo dõi kết quả gì á tớ không hiểu' },
+        ]
+        expect(recentTalk(history, 'Naru', 'Nhưng theo dõi kết quả gì á tớ không hiểu')).toBe(
+            'Người chơi: “Tớ nộp phiếu đăng ký nhé”\nNaru: “Tớ nhận phiếu rồi. Cậu đã xác nhận phòng cho thứ Sáu chưa?”')
+        const prompts: string[] = []
+        await fillNpcVoices('Naru ngẩng lên.\n[[SAY|naru]]\n', LEDGER, 13, async (p: string) => { prompts.push(p); return '“Là kết quả xếp phòng A.”' }, [],
+            'Nhưng theo dõi kết quả gì á tớ không hiểu', history)
+        expect(prompts[0]).toContain('Người chơi vừa nói: “Nhưng theo dõi kết quả gì á tớ không hiểu”')
+        expect(prompts[0]).toContain('Naru: “Tớ nhận phiếu rồi. Cậu đã xác nhận phòng cho thứ Sáu chưa?”')
+        expect(prompts[0]).toContain('trả lời thẳng')
+        // nothing to hear: the prompt is the old one, no empty headings
+        expect(npcVoicePrompt(onstageNpcs(LEDGER, 13)[0], 'Hành lang im.')).not.toContain('Người chơi vừa nói')
     })
 
     test('Ollama-style reply without markers: attributed quotes are rewritten by the voice bots', async () => {

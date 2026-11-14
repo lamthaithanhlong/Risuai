@@ -109,7 +109,13 @@ const itemOf = (v) => { const t = String(v ?? '').trim(); if (LABEL[t]) return t
 
 /** words a Vietnamese speaker uses for self or the listener; alone they are never a person's name */
 const SELF_WORDS = new Set(['tôi', 'tớ', 'mình', 'ta', 'tao', 'mày', 'em', 'anh', 'chị', 'cô', 'chú', 'bác', 'dì', 'ông', 'bà', 'cháu', 'con', 'thầy', 'cậu', 'bạn'])
-const isAddress = (s) => SELF_WORDS.has(String(s ?? '').normalize('NFC').trim().toLowerCase())
+const norm = (s) => String(s ?? '').normalize('NFC').trim().toLowerCase()
+const isAddress = (s) => SELF_WORDS.has(norm(s))
+/** kin words a narrator also uses for a person in the third person ("cô cúi xuống"), and the listeners they fit as a word for oneself */
+const KIN_SELF = new Set(['cô', 'anh', 'chị', 'ông', 'bà', 'chú', 'bác', 'dì', 'thầy'])
+const JUNIOR = new Set(['em', 'cháu', 'con'])
+/** a voice measured on one short line is not a cap: below this many words the longest-sentence rule would leave her only short questions */
+export const VOICE_MIN_WORDS = 12
 
 /** a new card: a stranger starts at low trust (owner's balcony woman) */
 export function blankNpc(id, name = id) {
@@ -124,7 +130,9 @@ export function applyNpcOp(c, op, value, n) {
             let [name, self, to, age] = v.split(';').map((x) => x.trim())
             // "meet chị;em": the helper had no name and wrote the two pronouns; they are how she speaks, not what she is called
             if (isAddress(name) && isAddress(self) && !isAddress(to)) { age = age || to; to = self; self = name; name = '' }
-            if (name) c.name = name; if (self && !/[<>]/.test(self)) c.self = self; if (to && !/[<>]/.test(to)) c.toPlayer = to; if (age && !/[<>]/.test(age)) c.age = age; break }
+            // a second meet with "cô;cậu" after "tớ;cậu": the helper copied the narrator's word for her. A kin word for oneself only fits a junior listener
+            const narrators = c.selfSet && KIN_SELF.has(norm(self)) && !JUNIOR.has(norm(to && !/[<>]/.test(to) ? to : c.toPlayer)) && norm(self) !== norm(c.self)
+            if (name) c.name = name; if (self && !/[<>]/.test(self) && !narrators) { c.self = self; c.selfSet = true } if (to && !/[<>]/.test(to)) c.toPlayer = to; if (age && !/[<>]/.test(age)) c.age = age; break }
         case 'need+': { const i = itemOf(v); if (c.received.has(i) || c.has.has(i)) return false; c.needs.add(i); break }
         case 'need-': c.needs.delete(itemOf(v)); break
         case 'has+': { const i = itemOf(v); c.has.set(i, (c.has.get(i) ?? 0) + 1); c.needs.delete(i); break }
@@ -137,7 +145,13 @@ export function applyNpcOp(c, op, value, n) {
         case 'promise-': c.promises.delete(slug(v)); break
         case 'why': c.why.add(itemOf(v)); break
         // voice <max words>;<forbidden, words>;<tics>;<a sample line>
-        case 'voice': { const [mw, forb, tics, sample] = v.split(';').map((x) => x.trim()); const m = Number(mw); if (Number.isFinite(m) && m >= 0) c.maxWords = m; if (forb) forb.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).forEach((x) => c.forbidden.add(x)); if (tics) c.tics = tics; if (sample) c.sample = sample; break }
+        case 'voice': { const [mw, forb, tics, sample] = v.split(';').map((x) => x.trim()); const m = Number(mw)
+            // the helper is told "once", and still wrote it again from her latest short line (23 words, 11, 9): a later line may only lengthen the cap and
+            // add forbidden words; her habits and sample stay the first ones
+            if (Number.isFinite(m) && m >= 0) c.maxWords = Math.max(c.voiceSet ? c.maxWords : 0, m > 0 ? Math.max(m, VOICE_MIN_WORDS) : 0)
+            if (forb) forb.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).forEach((x) => c.forbidden.add(x))
+            if (tics && !(c.voiceSet && c.tics)) c.tics = tics; if (sample && !(c.voiceSet && c.sample)) c.sample = sample
+            c.voiceSet = true; break }
         // presence (Talemate Learn): she was there when the event happened, or someone told her (both logged, never inferred from speech)
         case 'present': case 'learn': c.knows.add(slug(v)); break
         // the scene's event log (id "*"): slug and the words that name it
