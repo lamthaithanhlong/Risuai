@@ -6,7 +6,7 @@ vi.mock('../storage/database.svelte', () => ({ getDatabase: vi.fn(() => ({})) })
 
 import {
     FIND_DC, FIND_DROUGHT, FIND_FIRST_TURN, FIND_MIN_GAP, findDiceLine, findFailNote, findRoll, statTier, findDue, findNote, findFingerprint, findId, findRequest, hasFindRule, lastFindTurnOf, noteFind,
-    onFindParsed, parseFind, sceneKindOf, setFindKnownProvider, setFindParsedHandler, stripFind, type FindRecord, type SceneKind,
+    onFindParsed, parseFind, sceneKindOf, storyTurns, characterExists, grantOf, missionDropPending, findDueNow, setFindKnownProvider, setFindParsedHandler, stripFind, type FindRecord, type SceneKind,
 } from './findDrop'
 
 const BLOCK = '[[FIND|skill|Nghe tiếng bước chân|Muffled Footsteps|Nghe bước chân qua tường mỏng trong 10 m; phải im lặng.|silver|Cần yên tĩnh; mệt thêm sau mỗi lần dùng|yes]]'
@@ -467,5 +467,51 @@ describe('find events are Admin\'s, in every story (owner 2026-11-05)', () => {
         const seen = memStore(); seen.setItem('risu-admin-off-seen', JSON.stringify(['mailman']))
         expect(adminActive(mailman(), { storage: seen })).toBe(false)
         expect(adminActive({ type: 'character', desc: '' } as never)).toBe(false)   // no card id, no Admin
+    })
+})
+
+describe('a finished mission drops something, and finds work on a creation card whose yes was not a short one (owner 2026-11-13)', () => {
+    /** a creation card where the player answered the "Được chưa?" with a long sentence: the yes is never seen */
+    function longYes(n: number, scriptstate: Record<string, string> = {}) {
+        const message: M[] = [{ role: 'char', data: 'Mở đầu' }, { role: 'user', data: 'tạo' }, { role: 'char', data: 'Hồ sơ. Được chưa?' }, { role: 'user', data: 'Ừ thì cứ để vậy đi, tôi muốn bắt đầu ở trường nghề vào buổi sáng' }]
+        for (let i = 0; i < n; i++) { message.push({ role: 'char', data: `Cảnh ${i}` }); if (i < n - 1) message.push({ role: 'user', data: 'đi tiếp' }) }
+        return { id: 'chat-2', message, scriptstate } as never as { id: string; message: M[]; scriptstate: Record<string, string> }
+    }
+    test('the turn counts once the character exists; before that it stays 0', () => {
+        const none = longYes(20)
+        expect(storyTurns(card(), none.message as never, none.scriptstate)).toBe(0)
+        expect(asked(withPlayer(none, 'nhìn quanh'))).toBe('hi')
+        const made = longYes(20, { $st_name: 'Kenji Park' })
+        expect(characterExists(made.scriptstate)).toBe(true)
+        expect(characterExists({ $st_name: '—' })).toBe(false)
+        expect(storyTurns(card(), made.message as never, made.scriptstate)).toBeGreaterThanOrEqual(20)
+        expect(asked(withPlayer(made, 'nhìn quanh'))).toContain('[[FIND|')
+    })
+    test('the grant of the module lets the reply\'s find through with no roll, at the rarity the module fixed', () => {
+        const c = chatWith(6, { last: 'Anh nhận lấy nó.\n' + BLOCK, scriptstate: { $find_roll: '' } })
+        expect(noteFind(0, card(), c as never)).toBeNull()                                   // no roll, no grant: nothing
+        const g = chatWith(6, { last: 'Anh nhận lấy nó.\n' + BLOCK, scriptstate: { $find_roll: '' } })
+        g.scriptstate.$find_grant = JSON.stringify({ len: g.message.length, kind: 'skill', rarity: 'gold' })
+        expect(grantOf(g.scriptstate, g.message.length)?.rarity).toBe('gold')
+        const rec = noteFind(0, card(), g as never)
+        expect(rec?.id).toBe('muffled-footsteps')
+        expect(rec?.rarity).toBe('gold')                                                     // the narrator wrote silver
+        expect(g.scriptstate.$find_line).toBe('+ Skill mới: Nghe tiếng bước chân')
+        // a grant for another reply (an older one) is not this reply's
+        const old = chatWith(6, { last: 'Anh nhận lấy nó.\n' + BLOCK, scriptstate: { $find_roll: '' } })
+        old.scriptstate.$find_grant = JSON.stringify({ len: old.message.length - 2, kind: 'skill', rarity: 'gold' })
+        expect(noteFind(0, card(), old as never)).toBeNull()
+        expect(grantOf({ $find_grant: '{"len":3,"kind":"skill","rarity":"mythic"}' }, 3)).toBeNull()
+    })
+    test('the chance find waits while a mission will drop something or still owes it', () => {
+        const drop = JSON.stringify({ id: 'gm-4', reward: { drop: { kind: 'item', rarity: 'silver' } } })
+        expect(missionDropPending({ $quest: drop })).toBe(true)
+        expect(missionDropPending({ $quest_owed: '{"from":3}' })).toBe(true)
+        expect(missionDropPending({ $quest: JSON.stringify({ id: 'gm-4', reward: {} }) })).toBe(false)
+        expect(missionDropPending({})).toBe(false)
+        expect(findDueNow(card(), withPlayer(chatWith(20), 'nhìn quanh') as never)).toBe(true)
+        const open = withPlayer(chatWith(20, { scriptstate: { $quest: drop } }), 'nhìn quanh')
+        expect(findDueNow(card(), open as never)).toBe(false)
+        expect(asked(open)).toBe('hi')
     })
 })

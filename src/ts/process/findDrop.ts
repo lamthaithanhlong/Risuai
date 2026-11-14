@@ -273,12 +273,34 @@ let adminProbe: (card: Room) => boolean = () => false
 export function setAdminActiveProbe(fn: ((card: Room) => boolean) | null): void { adminProbe = fn ?? (() => false) }
 
 /** The number of story replies since the character was locked (all replies on a card with no creation step), `Initialization` included. */
-export function storyTurns(card: Room | undefined, messages: Msg[]): number {
+export function storyTurns(card: Room | undefined, messages: Msg[], vars?: Record<string, unknown>): number {
     const yes = yesAt(messages as never)
     const creation = hasCreationStep(card as never)
-    if (creation && yes < 0) return 0
+    // a creation card whose yes was not a short "được" (a long answer, another language): the character still exists once the panel has its name or the
+    // GM runs. Measured 2026-11-13 on a 60-message chat: yesAt -1 for ever, so the turn stayed 0 and no find was ever due
+    if (creation && yes < 0 && !characterExists(vars)) return 0
     // an answer to "@admin ..." is not a story turn (adminAsk.ts)
     return messages.reduce((n, m, i) => (i > yes && m.role === 'char' && !isAskAnswer(messages as never, i) ? n + 1 : n), 0)
+}
+
+const filled = (v: unknown): boolean => v !== undefined && v !== null && !['', 'null', 'undefined', '-', '—'].includes(String(v).trim())
+/** The chat's variables say the character is made: the panel has its name, or the GM machine has an arc or a past. */
+export function characterExists(vars: Record<string, unknown> | undefined): boolean {
+    return !!vars && (filled(vars.$st_name) || filled(vars.$gm_arc) || filled(vars.$gm_past))
+}
+
+// ---- a finished mission's drop (the Admin module's quests.lua decides its kind and rarity and writes $find_grant for the reply that may carry it) ----
+export type FindGrant = { len: number; kind: FindKind; rarity: FindRarity }
+export function grantOf(vars: Record<string, unknown> | undefined, len: number): FindGrant | null {
+    try {
+        const g = JSON.parse(String(vars?.$find_grant ?? ''))
+        return g && typeof g === 'object' && Number(g.len) === len && TIERS.includes(g.rarity) ? g as FindGrant : null
+    } catch { return null }
+}
+/** A mission that will drop something is open, or its drop is still owed: the chance find waits (two find notes in one request contradict each other). */
+export function missionDropPending(vars: Record<string, unknown> | undefined): boolean {
+    if (filled(vars?.$quest_owed)) return true
+    try { return !!JSON.parse(String(vars?.$quest ?? ''))?.reward?.drop } catch { return false }
 }
 
 const SCAVENGE = /(?<![\p{L}\p{N}])(lục|lục soát|lục lọi|tìm kiếm|tìm đồ|nhặt|thu gom|kiếm đồ|scavenge|search|loot|rummage)(?![\p{L}\p{N}])/iu
@@ -329,7 +351,8 @@ function dueFor(card: Room | undefined, chat: Chat, turn: number): FindDue {
 /** True when a find (a pass or a miss) will be asked of the next reply, by the same rule findRequest uses, but without writing anything. */
 export function findDueNow(card: Room | undefined, chat: Chat | undefined): boolean {
     if (!hasFindRule(card) || !chat || lastTurnIsAsk(chat.message)) return false
-    return dueFor(card, chat, storyTurns(card, chat.message ?? []) + 1).due
+    if (missionDropPending(chat.scriptstate)) return false
+    return dueFor(card, chat, storyTurns(card, chat.message ?? [], chat.scriptstate) + 1).due
 }
 
 /** The note at the end of the player's message when a find is due (the chat's turn, scene and seed); else the request as it was. */
@@ -341,7 +364,8 @@ export function findRequest<T extends { role: string; content: unknown }>(format
     // "@admin ..." is out of the story: no roll, no find due, nothing spent (adminAsk.ts)
     if (lastTurnIsAsk(chat.message)) { vars.$find_roll = ''; return formated }
     const messages = chat.message ?? []
-    const turn = storyTurns(card, messages) + 1
+    if (missionDropPending(vars)) { vars.$find_roll = ''; return formated }
+    const turn = storyTurns(card, messages, vars) + 1
     const r = dueFor(card, chat, turn)
     if (!r.due) { vars.$find_roll = ''; return formated }
     const roll: FindRoll = { ...findRoll(r, turn, chat.id ?? '', vars), len: messages.length + 1 }   // len: the chat length once the reply is in (the card's Lua matches on it)
@@ -369,11 +393,14 @@ export function noteFind(charIndex: number, card: Room | undefined, chat: Chat |
     if (isAskAnswer(chat.message, at)) return null   // Admin's answer to an ask gives no find
     if (!hasFindRule(card)) return null
     const vars = (chat.scriptstate ??= {})
-    const turn = storyTurns(card, chat.message)
+    const turn = storyTurns(card, chat.message, vars)
     const rec = parseFind(reply.data ?? '', { card: String((card as character).chaId ?? ''), chapter: '' })
     if (!rec || turn < 1) return null
+    // a finished mission's drop: the module granted this reply a find and fixed its rarity; the narrator only named it
+    const grant = grantOf(vars, chat.message.length)
+    if (grant) rec.rarity = grant.rarity
     // NoFreeGrant: only a reply whose turn rolled a pass may give something (when Lua decides the drop, $finds_by_lua=1, it owns the roll)
-    if (String(vars.$finds_by_lua ?? '') !== '1') {
+    if (!grant && String(vars.$finds_by_lua ?? '') !== '1') {
         const roll = parseRoll(vars.$find_roll)
         if (!roll || roll.turn !== turn || !roll.ok) return null
     }
