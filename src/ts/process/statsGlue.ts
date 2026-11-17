@@ -21,6 +21,17 @@ export function hasStatsRule(card: { desc?: string, type?: string } | undefined)
  *  and the persona's stored stats are merged in, exactly as for a card with a stats script of its own. */
 export function moduleCounts(chat: ChatLike): boolean { return String((chat?.scriptstate as Record<string, unknown> | undefined)?.$admin_module ?? '') === '1' }
 
+/** The comment of the Admin engine module's one trigger (apocalypse-tham-hoa-zombie tools/admin_module/build_module.py module_of). */
+export const ADMIN_ENGINE_TRIGGER = 'admin-engine'
+/** The global Admin engine module is enabled (its trigger is among the enabled modules' triggers). */
+export function adminEngineEnabled(triggers: { comment?: string }[] | undefined): boolean {
+    return Array.isArray(triggers) && triggers.some((t) => t?.comment === ADMIN_ENGINE_TRIGGER)
+}
+/** With the module enabled a chat is loaded from its FIRST request, before the module's Lua has marked it ($admin_module); never a chat with Admin off. */
+export function engineLoads(chat: ChatLike, engineOn: boolean): boolean {
+    return engineOn && String((chat?.scriptstate as Record<string, unknown> | undefined)?.$admin_off ?? '') !== '1'
+}
+
 /** A persona's id for the store: its own id, else its name without accents, else 'default'; only letters, digits, dot, dash, underscore. */
 export function personaIdOf(p: { id?: string, name?: string } | undefined | null): string {
     const clean = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
@@ -165,8 +176,8 @@ export async function syncStoreSlots(chat: ChatLike, persona: string, deps: Pers
 }
 
 /** index.svelte.ts calls these two; both do nothing for a card without the rule. */
-export async function statsBeforeRequestPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike): Promise<void> {
-    if (!hasStatsRule(card) && !moduleCounts(chat)) return
+export async function statsBeforeRequestPage(card: { desc?: string, type?: string } | undefined, chat: ChatLike, engineOn = false): Promise<void> {
+    if (!hasStatsRule(card) && !moduleCounts(chat) && !engineLoads(chat, engineOn)) return
     try {
         const d = await pageDeps()
         await statsBeforeRequest(chat, d)   // first: the merged stats can carry the Level the slots depend on

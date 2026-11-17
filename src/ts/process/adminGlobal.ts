@@ -26,7 +26,9 @@ import { buildView, fetchFindNames, MAX_SLOTS, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
 import { FALLBACK_PAYLOAD } from './adminFallback'
 import { ADMIN_TOKEN_CAP, estimateTokens, headingKey, ruleOf, sentOn, turnFacts, type TurnFacts } from './adminSections'
-import { findDueNow, setAdminActiveProbe } from './findDrop'
+import { findDueNow, levelOf, setAdminActiveProbe } from './findDrop'
+import { fetchPersona, itemSlotsOf, itemSlotsOpenOf, type PersonaData } from '../storage/personaStore'
+import { displayName, TIER_LABEL } from './personaView'
 
 export type AdminAsset = { id: string; title: string; keys?: string[]; body: string }
 export type AdminPayload = { card: string; enabled?: boolean; locked?: boolean; assets: AdminAsset[]; guide: string; text: string; sha?: string; stale?: boolean; cachedAt?: string }
@@ -389,7 +391,7 @@ export async function adminBeforeRequest<T extends { role: string; content: unkn
     if (card?.type === 'group') deps.log?.(`[Admin] ${id}: group chat with no speaking member known, the request goes without the persona record`)
     else if (persona) {
         try {
-            const view = await fetchRecord(persona.id, deps)
+            const view = await fetchRecord(persona.id, deps, levelOf(persona.chat?.scriptstate as never))
             if (view) record = personaRecordText(withEquipped(view, persona.chat?.scriptstate as never), user, hasOwnEngine(card, persona.chat) ? 'words' : 'numbers', recordScope(facts))
         } catch { record = '' }
     }
@@ -455,7 +457,7 @@ export function recordScope(facts: TurnFacts | undefined): RecordScope {
 }
 
 /** The store's view knows no slots (it is cached per persona, for every chat); the open chat's `$skills` says which are equipped. A copy. */
-export function withEquipped(view: View, vars: Record<string, unknown> | undefined): View {
+export function withEquipped<V extends View>(view: V, vars: Record<string, unknown> | undefined): V {
     let ck: Record<string, { eq?: unknown }> = {}
     try { const v = JSON.parse(String(vars?.$skills ?? '')); if (v && typeof v === 'object' && !Array.isArray(v)) ck = v } catch { ck = {} }
     if (!Object.values(ck).some((c) => c?.eq === 1)) return view
@@ -464,7 +466,67 @@ export function withEquipped(view: View, vars: Record<string, unknown> | undefin
     return { ...view, skills, slots: { ...view.slots, used: skills.filter((k) => k.equipped).length } }
 }
 
-export function personaRecordText(view: View, name: string, style: RecordStyle = 'numbers', scope: RecordScope = 'all'): string {
+/** One slotted or stored entry of the persona store, as the record names it. */
+export type LoadoutEntry = { id: string, name: string, tier: string }
+/**
+ * What the persona store (/api/persona, the Kho & Slot tab) holds: the open slots, what is in them, what is stored but not slotted.
+ * The record's slots, skills and items come from here (owner 2026-11-16: "khi admin vào thế giới ko nạp hết skill slot và vật phẩm"): the stats
+ * store knows masteries only, so the record named 1 skill of 3, counted the slots from Ý chí and always said "no item".
+ */
+export type Loadout = {
+    slotsOpen: number, skills: LoadoutEntry[], storedSkills: LoadoutEntry[],
+    itemSlotsOpen: number, items: LoadoutEntry[], storedItems: LoadoutEntry[],
+}
+export type RecordView = View & { loadout?: Loadout }
+
+/** The persona store's view as the record reads it: slotted first (slot order), the rest of the storage after. */
+export function loadoutOf(d: PersonaData): Loadout {
+    const entry = (e: { id: string, name?: string | null, tier?: string }): LoadoutEntry => ({ id: e.id, name: displayName(e), tier: TIER_LABEL[e.tier as keyof typeof TIER_LABEL] ?? '' })
+    const pick = <E extends { id: string }>(slots: (string | null)[], all: E[]) => {
+        const by = new Map(all.map((e) => [e.id, e]))
+        const ids = [...new Set(slots.filter((x): x is string => typeof x === 'string' && x !== '' && by.has(x)))]
+        const inSlot = new Set(ids)
+        return { slotted: ids.map((id) => entry(by.get(id) as never)), stored: all.filter((e) => !inSlot.has(e.id)).map((e) => entry(e as never)) }
+    }
+    const sk = pick(Array.isArray(d.slots) ? d.slots : [], Array.isArray(d.skills) ? d.skills : [])
+    const it = pick(itemSlotsOf(d), Array.isArray(d.items) ? d.items : [])
+    return {
+        slotsOpen: Math.max(0, Math.floor(Number(d.slots_open) || 0)), skills: sk.slotted, storedSkills: sk.stored,
+        itemSlotsOpen: itemSlotsOpenOf(d), items: it.slotted, storedItems: it.stored,
+    }
+}
+
+/** The slots / skills / items lines when the persona store answered. 'words' carries no digit (counts in Vietnamese words, tiers by name). */
+function loadoutLines(view: RecordView, lo: Loadout, style: RecordStyle, scope: RecordScope): string[] {
+    const words = style === 'words'
+    const num = (n: number) => (words ? (VI_COUNT[n] ?? 'nhiều') : String(n))
+    const pct = new Map(view.skills.map((k) => [k.id, k.pct]))
+    const one = (e: LoadoutEntry, skill: boolean) => {
+        const bits = [!words && skill && pct.has(e.id) ? `thành thạo ${pct.get(e.id)}` : '', e.tier].filter(Boolean)
+        return bits.length ? `${e.name} (${bits.join(', ')})` : e.name
+    }
+    const list = (es: LoadoutEntry[], skill: boolean) => es.map((e) => one(e, skill)).join('; ')
+    // stored but not slotted: named when the turn carries the whole record, else one count (the slot rule bounds what is in use)
+    const stored = (es: LoadoutEntry[], skill: boolean, what: string) => {
+        if (!es.length) return ''
+        if (scope !== 'all') return `${what} trong kho chưa gắn: ${num(es.length)} (không có tác dụng; người chơi hỏi hồ sơ thì mới kể)`
+        const shown = es.slice(0, RECORD_SKILLS_MAX), left = es.length - shown.length
+        return `${what} trong kho chưa gắn (không có tác dụng cho tới khi gắn): ${list(shown, skill)}${left > 0 ? `; và ${num(left)} thứ khác` : ''}`
+    }
+    return [
+        `Ô kỹ năng mở: ${num(lo.slotsOpen)}`,
+        `Kỹ năng đang gắn: ${lo.skills.length ? list(lo.skills, true) : 'chưa gắn kỹ năng nào'}`,
+        stored(lo.storedSkills, true, 'Kỹ năng'),
+        `Ô vật phẩm mở: ${num(lo.itemSlotsOpen)}`,
+        `Vật phẩm đang mang: ${lo.items.length ? list(lo.items, false) : 'chưa gắn vật phẩm nào'}`,
+        stored(lo.storedItems, false, 'Vật phẩm'),
+    ].filter(Boolean)
+}
+
+/** The persona store did not answer: nothing is claimed about the items (the old line said "none recorded", which was never checked). */
+export const RECORD_ITEMS_UNKNOWN = 'Vật phẩm: kho persona chưa đọc được.'
+
+export function personaRecordText(view: RecordView, name: string, style: RecordStyle = 'numbers', scope: RecordScope = 'all'): string {
     // 'equipped': the skills in slots; a story with no slots of its own has none marked, then the strongest MAX_SLOTS stand in
     const inSlots = view.skills.filter((k) => k.equipped)
     const shown = scope === 'equipped' ? (inSlots.length ? inSlots : view.skills.slice(0, MAX_SLOTS)).slice(0, RECORD_SKILLS_MAX) : view.skills.slice(0, RECORD_SKILLS_MAX)
@@ -473,41 +535,52 @@ export function personaRecordText(view: View, name: string, style: RecordStyle =
     const restNumbers = scope === 'equipped' ? `; còn ${left} kỹ năng đã học nhưng chưa gắn (người chơi hỏi hồ sơ thì mới kể)` : `; và ${left} kỹ năng khác thấp hơn (không liệt kê)`
     const label = scope === 'equipped' ? 'Kỹ năng đang dùng' : 'Kỹ năng'
     const who = name || 'persona'
-    if (view.source === 'none') return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
+    const lo = view.loadout
+    const loHas = !!lo && (lo.skills.length + lo.storedSkills.length + lo.items.length + lo.storedItems.length) > 0
+    if (view.source === 'none' && !loHas) return `${RECORD_TITLE}\nPersona: ${who}\nKho chung chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào của ${who}.`
     if (style === 'words') {
         const vals = view.stats.map((s) => Number(s.value) || 0)
         const slots = view.slots.total
         return [RECORD_TITLE, RECORD_WORDS_HEADER, `Persona: ${who}`,
             `Chỉ số: ${view.stats.map((s, i) => `${s.vi}: ${statWord(vals[i], vals)}, bậc ${bandWord(vals[i])}`).join('; ')}`,
-            `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
-            `${label}: ${shown.length ? shown.map((k) => `${k.name} (${k.tier.vi})`).join('; ') + (left > 0 ? restWords : '') : 'chưa ghi nhận'}`,
-            'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.'].join('\n')
+            ...(lo ? loadoutLines(view, lo, 'words', scope) : [
+                `Ô kỹ năng mở: ${VI_COUNT[slots] ?? 'nhiều'}`,
+                `${label}: ${shown.length ? shown.map((k) => `${k.name} (${k.tier.vi})`).join('; ') + (left > 0 ? restWords : '') : 'chưa ghi nhận'}`,
+                RECORD_ITEMS_UNKNOWN])].join('\n')
     }
     const lines = [RECORD_TITLE, `Persona: ${who}`,
         `Chỉ số: ${view.stats.map((s) => `${s.vi} ${s.pct} (bậc ${bandWord(Number(s.value) || 0)})`).join(', ')}`,
-        `Ô kỹ năng mở: ${view.slots.total}`,
-        `${label}: ${shown.length ? shown.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') + (left > 0 ? restNumbers : '') : 'chưa ghi nhận'}`,
-        'Vật phẩm: kho chung chưa ghi nhận vật phẩm nào theo persona.']
+        ...(lo ? loadoutLines(view, lo, 'numbers', scope) : [
+            `Ô kỹ năng mở: ${view.slots.total}`,
+            `${label}: ${shown.length ? shown.map((k) => `${k.name} (thành thạo ${k.pct}, ${k.tier.vi})`).join('; ') + (left > 0 ? restNumbers : '') : 'chưa ghi nhận'}`,
+            RECORD_ITEMS_UNKNOWN])]
     return lines.join('\n')
 }
 
-type RecCached = { at: number; view: View }
+type RecCached = { at: number; view: RecordView }
 const recCache = new Map<string, RecCached>()
 export function resetRecordCache(): void { recCache.clear() }
 
-/** The persona's view: fresh within the TTL, else asked (1.5 s at most), else the last good one, else null (one log line). */
-export async function fetchRecord(persona: string, deps: AdminDeps): Promise<View | null> {
+/**
+ * The persona's view: fresh within the TTL, else asked (1.5 s at most), else the last good one, else null (one log line).
+ * Two stores are asked together: the stats store (stats, masteries) and the persona store (/api/persona at `level`: the slots, what is in them,
+ * the items). The persona store failing leaves the record without a loadout (it then says so); it never drops the stats.
+ */
+export async function fetchRecord(persona: string, deps: AdminDeps, level = 1): Promise<RecordView | null> {
     const now = deps.now?.() ?? Date.now()
-    const hit = recCache.get(persona)
+    const key = `${persona}|${level}`
+    const hit = recCache.get(key)
     if (hit && now - hit.at < ADMIN_TTL_MS) return hit.view
     const io = { fetch: deps.fetch as typeof fetch, auth: async () => await deps.auth() }
     let timer: ReturnType<typeof setTimeout> | undefined
     const late = new Promise<null>((r) => { timer = setTimeout(() => r(null), deps.timeoutMs ?? ADMIN_TIMEOUT_MS) })
-    const got = await Promise.race([Promise.all([fetchCurrent(persona, io), fetchFindNames(io)]), late]).catch(() => null)
+    const got = await Promise.race([Promise.all([fetchCurrent(persona, io), fetchFindNames(io), fetchPersona(persona, level, io)]), late]).catch(() => null)
     clearTimeout(timer)
     if (got && got[0]) {
-        const view = buildView(got[0], undefined, got[1])
-        recCache.set(persona, { at: now, view })
+        const view: RecordView = buildView(got[0], undefined, got[1])
+        if (got[2]?.ok) view.loadout = loadoutOf(got[2].data)
+        else if (hit?.view.loadout) view.loadout = hit.view.loadout   // the last loadout the store gave is better than none
+        recCache.set(key, { at: now, view })
         return view
     }
     if (hit) { deps.log?.(`[Admin] persona ${persona}: the store did not answer, using the record from ${new Date(hit.at).toISOString()}`); return hit.view }

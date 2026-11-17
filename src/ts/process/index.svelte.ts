@@ -23,7 +23,7 @@ import { judgePrompt, npcHits, npcRewriteNote, parseJudge } from "./npcCheck.mjs
 import { gmRequest } from "./gameMaster";
 import { findsBeforeRequest } from "./findGlue";
 import { adminBeforeRequest } from "./adminGlobal";
-import { adminReportAfterReplyPage, lastReplyRaw, questAfterReplyPage, personaIdOf, statsAfterReplyPage, statsBeforeRequestPage, trainAfterReplyPage } from "./statsGlue";
+import { adminEngineEnabled, adminReportAfterReplyPage, lastReplyRaw, questAfterReplyPage, personaIdOf, statsAfterReplyPage, statsBeforeRequestPage, trainAfterReplyPage } from "./statsGlue";
 import { askSubmodel, creationRequest, gameMasterOn, gameMasterRequest, gameMasterRequestSolved, noteGameMaster, settlePanel, storyNotesRequest } from "./gameMasterPage";
 // @ts-ignore plain JS module (npcVoices.d.mts)
 import { fillNpcVoices, speakingNamesIn } from "./npcVoices.mjs";
@@ -73,7 +73,7 @@ import { hypaMemoryV2 } from "./memory/hypav2";
 import { runLuaEditTrigger } from "./scriptings";
 import { getModelInfo, LLMFlags } from "../model/modellist";
 import { hypaMemoryV3 } from "./memory/hypav3";
-import { getModuleAssets, getModuleToggles } from "./modules";
+import { getModuleAssets, getModuleToggles, getModuleTriggers } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { pluginV2 } from "../plugins/plugins.svelte";
 import { countImageTags, gateAssetTags, imageRequest, keepAssetTags } from "./assetTagGate";
@@ -1600,6 +1600,13 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         })
     }
 
+    // stats, skill mastery and the slots belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts;
+    // gives up after 1.5 s). BEFORE the Lua editRequest: the scripts put the slotted skills and items in THIS request (it ran after, so request 1 of a
+    // fresh chat had none). Written through the LIVE chat, not the copy a trigger handed back (currentChat can be that structuredClone, L961): Lua reads
+    // variables through DBState, and a key it has read once no longer shows a write made on the raw copy (measured 2026-11-16, svelte 5.56.8 proxy).
+    if(isNodeServer){
+        await statsBeforeRequestPage(currentChar, DBState.db.characters[sel.char]?.chats?.[sel.chat] ?? currentChat, adminEngineEnabled(getModuleTriggers()))
+    }
     formated = await brTimed('lua editRequest', () => runLuaEditTrigger(currentChar, 'editRequest', formated), 0)
     // Settings → Learning: what the learner typed in Việt-ji reaches the model as kana
     formated = learningRequest(formated, currentChat)
@@ -1646,10 +1653,6 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         const adminRoom = DBState.db.characters[sel.char]
         const adminCard = adminRoom?.type === 'group' ? (currentChar?.type === 'group' ? adminRoom : currentChar) : (adminRoom ?? currentChar)
         formated = await brTimed('admin', () => adminBeforeRequest(formated, adminCard, currentChat?.message, getUserName(), { fetch: (i, o) => fetch(i, o), auth: getNodeServerProxyAuth, log: (m) => console.log(m) }, { id: personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]), chat: currentChat }), 0)
-    }
-    // stats and skill mastery belong to the persona: retry the gains that waited, then start the chat from the global store's values (statsGlue.ts; gives up after 1.5 s)
-    if(isNodeServer){
-        await statsBeforeRequestPage(currentChar, currentChat)
     }
     // Settings → Game Master (on unless turned off): the player's own arc, the canon clock and this turn's GM dice, after the
     // character is confirmed; last, so its hidden block goes after any panel (gameMaster.ts)

@@ -417,6 +417,85 @@ describe('persona record', () => {
     })
 })
 
+// ---- the record's slots, skills and items come from the persona store (owner 2026-11-16: "khi admin vào thế giới ko nạp hết skill slot và vật phẩm") ----
+// Before: fetchRecord asked the stats store only, so the record named the skills that store knew (1 of 3 on the live persona), counted the open
+// slots from Ý chí (1 where the store had 2) and ended with a fixed "kho chung chưa ghi nhận vật phẩm nào" whatever the persona carried.
+import { loadoutOf, RECORD_ITEMS_UNKNOWN } from './adminGlobal'
+
+const SK4 = ['buoc-tro', 'nghe-rung-tuong', 'tach-nhip', 'mat-dem'], IT5 = ['dao-tro', 'kep-nhua', 'den-dau', 'day-thung', 'the-buu-ta']
+const PERSONA = {
+    persona: 'kenji', level: 12, rank: 2, slots_open: 4, max_storage: 140, stat_cap: 28, stat_caps: {}, skill_count: 5, item_count: 6,
+    skills: [...SK4, 'kho-ky-nang'].map((id, i) => ({ id, name: 'Kỹ năng ' + id, tier: i === 0 ? 'silver' : 'bronze', exp: 0 })),
+    items: [...IT5, 'kho-vat-pham'].map((id) => ({ id, name: 'Vật ' + id, tier: 'bronze', qty: 1 })),
+    slots: [...SK4, null, null], item_slots: [IT5[0], null, ...IT5.slice(1)], item_slots_open: 6,
+}
+const bothFetch = (persona: unknown, opts: { calls?: string[], personaDown?: boolean } = {}) => async (url: string) => {
+    opts.calls?.push(url)
+    if (url.startsWith('/api/admin')) return jsonRes(200, payload('cha-0a1b2c3d'))
+    if (url.startsWith('/api/assets/stats')) return jsonRes(200, KENJI)
+    if (url.startsWith('/api/assets/finds')) return jsonRes(200, FINDS)
+    if (url.startsWith('/api/persona')) return opts.personaDown ? jsonRes(502, {}) : jsonRes(200, persona)
+    return jsonRes(404, {})
+}
+const recordOf = (out: { content?: unknown }[]) => { const t = String(out.find((m) => String(m.content).includes(RECORD_TITLE))?.content ?? ''); return t.slice(t.indexOf(RECORD_TITLE)) }
+
+describe('persona record: slots, skills and items from the persona store', () => {
+    beforeEach(() => { resetAdminCache(); resetRecordCache() })
+    it('4 slotted skills + 5 slotted items: the record of request 1 names all nine, with the store\'s slot counts, in a fresh chat', async () => {
+        const calls: string[] = []
+        const out = await adminBeforeRequest(prompt(), plain, [], 'Kenji', { fetch: bothFetch(PERSONA, { calls }) as never, auth: () => 't' }, { id: 'kenji', chat: { scriptstate: { $lvl: '{"l":12,"e":0}' } } })
+        const rec = recordOf(out)
+        for (const id of SK4) expect(rec).toContain('Kỹ năng ' + id)
+        for (const id of IT5) expect(rec).toContain('Vật ' + id)
+        expect(rec).toContain('Ô kỹ năng mở: 4')
+        expect(rec).toContain('Ô vật phẩm mở: 6')
+        expect(rec).toContain('Kỹ năng buoc-tro (Bạc)')
+        expect(rec).not.toContain('chưa ghi nhận vật phẩm nào')
+        expect(rec.split('\n').find((l) => l.startsWith('Kỹ năng đang gắn:'))).not.toContain('kho-ky-nang')
+        expect(rec.split('\n').find((l) => l.startsWith('Vật phẩm đang mang:'))).not.toContain('kho-vat-pham')
+        // the persona store is asked at the chat's Level (the open slots follow the rank)
+        expect(calls.some((u) => u.startsWith('/api/persona?persona=kenji&level=12'))).toBe(true)
+    })
+    it('what is stored but not slotted is named apart on a whole-record turn and only counted on an ordinary one', () => {
+        const view = { ...buildView(KENJI, undefined), loadout: loadoutOf(PERSONA as never) }
+        const all = personaRecordText(view, 'K', 'numbers', 'all')
+        expect(all).toContain('Kỹ năng trong kho chưa gắn (không có tác dụng cho tới khi gắn): Kỹ năng kho-ky-nang')
+        expect(all).toContain('Vật phẩm trong kho chưa gắn (không có tác dụng cho tới khi gắn): Vật kho-vat-pham')
+        const eq = personaRecordText(view, 'K', 'numbers', 'equipped')
+        expect(eq).not.toContain('kho-ky-nang')
+        expect(eq).toContain('Kỹ năng trong kho chưa gắn: 1')
+        for (const id of [...SK4]) expect(eq).toContain('Kỹ năng ' + id)
+        for (const id of IT5) expect(eq).toContain('Vật ' + id)
+    })
+    it('words style (a card with its own engine): all nine by name, no digit anywhere in the slot lines', () => {
+        const t = personaRecordText({ ...buildView(KENJI, undefined), loadout: loadoutOf(PERSONA as never) }, 'K', 'words', 'equipped')
+        for (const id of SK4) expect(t).toContain('Kỹ năng ' + id)
+        for (const id of IT5) expect(t).toContain('Vật ' + id)
+        expect(t).toContain('Ô kỹ năng mở: bốn')
+        expect(t).toContain('Ô vật phẩm mở: sáu')
+        expect(t).not.toMatch(/\d/)
+    })
+    it('a slot naming an id the storage no longer has is not listed; nothing slotted is said plainly', () => {
+        const lo = loadoutOf({ ...PERSONA, slots: ['gone', SK4[0], SK4[0]], item_slots: [] } as never)
+        expect(lo.skills.map((s) => s.id)).toEqual([SK4[0]])
+        expect(lo.items).toEqual([])
+        const t = personaRecordText({ ...buildView(KENJI, undefined), loadout: lo }, 'K')
+        expect(t).toContain('Vật phẩm đang mang: chưa gắn vật phẩm nào')
+    })
+    it('the persona store down: the stats stay, the items are said to be unread, never "none"', async () => {
+        const out = await adminBeforeRequest(prompt(), plain, [], 'Kenji', { fetch: bothFetch(PERSONA, { personaDown: true }) as never, auth: () => 't' }, { id: 'kenji', chat: { scriptstate: {} } })
+        const rec = recordOf(out)
+        expect(rec).toContain('Thể lực 10 (EXP 3/20)')
+        expect(rec).toContain(RECORD_ITEMS_UNKNOWN)
+        expect(rec).not.toContain('chưa ghi nhận vật phẩm nào')
+    })
+    it('a persona with slots but no stat yet still gets its loadout', () => {
+        const t = personaRecordText({ ...buildView({ stats: {}, skills: {} }, undefined), loadout: loadoutOf(PERSONA as never) }, 'K')
+        expect(t).toContain('Vật dao-tro')
+        expect(t).not.toContain('chưa ghi nhận chỉ số, kỹ năng hay vật phẩm nào')
+    })
+})
+
 // ---- fail-closed for a card once seen off (owner 2026-11-05: "tắt" must survive restart, a store that is down and an empty cache) ----
 // The client keeps every card id it has ever seen as enabled:false in localStorage (OFF_SEEN_KEY). When the off state of such a card
 // cannot be determined (asset manager down, no memory copy, no server copy, global.json unreadable), it gets NO Admin and NO built-in

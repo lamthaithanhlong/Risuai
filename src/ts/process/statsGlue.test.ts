@@ -76,3 +76,40 @@ describe('syncStoreSlots', () => {
         }
     })
 })
+
+// ---- the first request of a fresh chat (owner 2026-11-16: "khi admin vào thế giới ko nạp hết skill slot và vật phẩm") ----
+// The gate was `$admin_module`, which the module's Lua wrote only after the first reply: request 1 was never loaded.
+import { adminEngineEnabled, engineLoads, ADMIN_ENGINE_TRIGGER } from './statsGlue'
+import { proxy } from 'svelte/internal/client'
+
+describe('the Admin engine module loads a chat from its first request', () => {
+    test('the module is found by its trigger among the enabled modules', () => {
+        expect(adminEngineEnabled([{ comment: 'other' }, { comment: ADMIN_ENGINE_TRIGGER }])).toBe(true)
+        expect(adminEngineEnabled([{ comment: 'other' }])).toBe(false)
+        expect(adminEngineEnabled(undefined)).toBe(false)
+    })
+    test('a fresh chat (no $admin_module yet) loads when the module is on; never with Admin off, never with the module off', () => {
+        expect(engineLoads({ scriptstate: {} }, true)).toBe(true)
+        expect(engineLoads({}, true)).toBe(true)
+        expect(engineLoads({ scriptstate: { $admin_off: '1' } }, true)).toBe(false)
+        expect(engineLoads({ scriptstate: {} }, false)).toBe(false)
+    })
+    // measured on svelte 5.56.8: the db is a $state proxy, a trigger hands back a structuredClone that setCurrentChat puts in the db, and the request
+    // code kept the raw clone. Once Lua has read a variable through the db, a write on the raw clone is not seen by the next read or by a save.
+    test('the slots written through the live chat are what Lua reads next; written on the trigger copy they are lost', async () => {
+        const f = fake(200, view(['a', 'b'])).f
+        const scene = () => {
+            const db = proxy({ chats: [{ scriptstate: { $stats: '{}' } as Record<string, string> }] })
+            const copy = structuredClone({ scriptstate: { $stats: '{}' } as Record<string, string> })
+            db.chats[0] = copy                              // setCurrentChat(triggerResult.chat)
+            void db.chats[0].scriptstate[STORE_SLOTS_KEY]    // Lua getChatVar('store_slots') in editInput / editRequest
+            return { db, copy }
+        }
+        const lost = scene()
+        await syncStoreSlots(lost.copy, 'k', { fetch: f, auth })
+        expect(lost.db.chats[0].scriptstate[STORE_SLOTS_KEY]).toBeUndefined()
+        const live = scene()
+        await syncStoreSlots(live.db.chats[0], 'k', { fetch: f, auth })
+        expect(live.db.chats[0].scriptstate[STORE_SLOTS_KEY]).toBe('["a","b"]')
+    })
+})

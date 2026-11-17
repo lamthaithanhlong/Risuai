@@ -13,7 +13,11 @@ describe('growth wiring', () => {
     })
     it('a request loads the persona\'s stats and a reply sends this turn\'s gains, in both reply paths (index.svelte.ts)', () => {
         const s = read('src/ts/process/index.svelte.ts')
-        expect(s).toMatch(/await statsBeforeRequestPage\(currentChar, currentChat\)/)
+        // through the LIVE chat (a trigger's copy loses the write once Lua has read the key) and with the Admin engine module's state, so request 1 loads too
+        expect(s).toMatch(/await statsBeforeRequestPage\(currentChar, DBState\.db\.characters\[sel\.char\]\?\.chats\?\.\[sel\.chat\] \?\? currentChat, adminEngineEnabled\(getModuleTriggers\(\)\)\)/)
+        // before the Lua editRequest: the scripts put the persona's slotted skills and items in the same request
+        expect(s.indexOf('await statsBeforeRequestPage(')).toBeGreaterThan(0)
+        expect(s.indexOf('await statsBeforeRequestPage(')).toBeLessThan(s.indexOf("runLuaEditTrigger(currentChar, 'editRequest', formated)"))
         expect(s.match(/void statsAfterReplyPage\(currentChar, currentChat\)/g)?.length).toBe(2)
     })
     it('the server mounts POST /api/stats (server.cjs)', () => {
