@@ -85,7 +85,29 @@ const obj = (text: unknown): Record<string, any> => {
  * `ledgerSkills` (GET /api/persona/state `skills`, L1 2026-11-06 item (e)): a skill's mastery from the persona's event ledger, used as it is (a regenerated
  * reply's mastery is taken back, so no max with the old store); a skill it does not name keeps the old rule.
  */
-export function buildView(store: StoreCurrent, vars: Record<string, unknown> | undefined, finds: FindNames = {}, ledgerSkills: Record<string, number> | null = null): View {
+/**
+ * What the persona store (/api/persona) says the persona holds now: the skill ids in its storage, their names, the open slots and what is
+ * in them. null = the store was not asked or did not answer (the page then shows every skill it knows a mastery for, as before).
+ */
+export type Held = { ids: string[], names: Record<string, string>, slotsOpen: number, slotted: string[] }
+export function heldOf(d: { skills?: { id: string, name?: string | null }[], slots?: (string | null)[], slots_open?: number }): Held {
+    const skills = Array.isArray(d.skills) ? d.skills.filter((e) => e && typeof e.id === 'string') : []
+    const ids = skills.map((e) => e.id)
+    const names: Record<string, string> = {}
+    for (const e of skills) if (typeof e.name === 'string' && e.name) names[e.id] = e.name
+    const has = new Set(ids)
+    return {
+        ids, names, slotsOpen: Math.max(0, Math.floor(Number(d.slots_open) || 0)),
+        slotted: [...new Set((Array.isArray(d.slots) ? d.slots : []).filter((x): x is string => typeof x === 'string' && has.has(x)))],
+    }
+}
+
+/**
+ * `held` (the persona store's answer): a mastery kept by the stats store or the ledger for a skill the persona no longer holds (deleted in
+ * "Kho & Slot") is not drawn; the open chat's own `$skills` stay, the chat may hold a skill the store has not been told of yet. The slot
+ * count and the equipped marks then follow the persona store, not the stat formula.
+ */
+export function buildView(store: StoreCurrent, vars: Record<string, unknown> | undefined, finds: FindNames = {}, ledgerSkills: Record<string, number> | null = null, held: Held | null = null): View {
     const cs = obj(vars?.$stats)
     const ck = obj(vars?.$skills)
     const stats: Record<string, number> = {}
@@ -96,17 +118,19 @@ export function buildView(store: StoreCurrent, vars: Record<string, unknown> | u
         if (a !== undefined || b !== undefined) any = true
         stats[r.key] = clamp(Math.max(a ?? START_VALUE, b ?? 0))
     }
-    const ids = new Set<string>([...Object.keys(ck), ...Object.keys(store?.skills ?? {}), ...Object.keys(ledgerSkills ?? {})])
+    const kept = held ? new Set<string>([...held.ids, ...Object.keys(ck)]) : null
+    const ids = new Set<string>([...Object.keys(ck), ...Object.keys(store?.skills ?? {}), ...Object.keys(ledgerSkills ?? {}), ...(held?.ids ?? [])].filter((id) => !kept || kept.has(id)))
+    const slotted = new Set(held?.slotted ?? [])
     if (ids.size) any = true
     const skills: SkillRow[] = [...ids].map((id) => {
         const c = ck[id] && typeof ck[id] === 'object' ? ck[id] : {}
         const chatM = isInt(c.m) ? (String(vars?.$skill_exp ?? '') === '1' ? masteryFromExp(c.m) : c.m) : 0   // a chat marked $skill_exp = 1 holds EXP; this page shows the 0..10000 scale
         const m = ledgerSkills && isInt(ledgerSkills[id]) ? masteryFromExp(ledgerSkills[id]) : clamp(Math.max(chatM, store && isInt(store.skills[id]) ? store.skills[id] : 0))
         const cap = skillCap(Array.isArray(c.link) ? c.link.filter((x: unknown) => typeof x === 'string') : undefined, stats)
-        const name = (typeof c.name === 'string' && c.name) || finds[id]?.vi || finds[id]?.en || id
-        return { id, name, m, pct: fmtPct(m), tier: tierOf(m), equipped: c.eq === 1, cap, capPct: fmtPct(cap), capped: m >= cap }
+        const name = (typeof c.name === 'string' && c.name) || held?.names[id] || finds[id]?.vi || finds[id]?.en || id
+        return { id, name, m, pct: fmtPct(m), tier: tierOf(m), equipped: c.eq === 1 || slotted.has(id), cap, capPct: fmtPct(cap), capped: m >= cap }
     }).sort((x, y) => Number(y.equipped) - Number(x.equipped) || y.m - x.m || x.name.localeCompare(y.name))
-    const total = slotsFor(stats.y_chi)
+    const total = held ? held.slotsOpen : slotsFor(stats.y_chi)
     return {
         source: !any ? 'none' : store && (Object.keys(store.stats).length || Object.keys(store.skills).length) ? 'store' : 'chat',
         stats: STAT_ROWS.map((r) => ({ key: r.key, vi: r.vi, en: r.en, value: stats[r.key], pct: fmtStat(stats[r.key]), bar: toNext(stats[r.key]) })),

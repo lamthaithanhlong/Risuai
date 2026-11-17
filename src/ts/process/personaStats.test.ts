@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The persona page's stats section (personaStats.ts): formatting, the bar, slots, tiers, the skill cap, and what the page shows.
 import { describe, expect, it } from 'vitest'
-import { buildView, fetchFindNames, fmtPct, fmtStat, skillCap, slotsFor, tierOf, toNext } from './personaStats'
+import { buildView, fetchFindNames, fmtPct, fmtStat, heldOf, skillCap, slotsFor, tierOf, toNext } from './personaStats'
 
 describe('fmtPct / toNext', () => {
     it('shows hundredths exactly, two decimals', () => {
@@ -131,5 +131,26 @@ describe('mastery from the persona event ledger (L1 2026-11-06 item (e))', () =>
     it('no ledger skills: the old rule', () => {
         const v = buildView({ stats: {}, skills: { axe: 5000 } }, { $skills: JSON.stringify({ axe: { m: 1300, eq: 1 } }) }, {}, null)
         expect(v.skills[0].m).toBe(5000)
+    })
+})
+
+describe('the persona store decides which skills are drawn (owner 2026-11-16: a deleted skill "này dư")', () => {
+    const STORE = { stats: { y_chi: 100 }, skills: { 'wall-vibration-listening': 4 } }
+    it('a mastery the stats store keeps for a skill the persona deleted is not drawn; without the persona store it still is', () => {
+        const empty = heldOf({ skills: [], slots: [null, null], slots_open: 2 })
+        expect(buildView(STORE, undefined, {}, null, empty).skills).toEqual([])
+        expect(buildView(STORE, undefined, {}, { 'wall-vibration-listening': 40 }, empty).skills).toEqual([])
+        expect(buildView(STORE, undefined, {}, null, null).skills.map((k) => k.id)).toEqual(['wall-vibration-listening'])
+    })
+    it('held skills are drawn with the store\'s name, slot count and equipped marks, even with no mastery yet', () => {
+        const held = heldOf({ skills: [{ id: 'iron-fist', name: 'Thiết quyền' }, { id: 'axe', name: 'Rìu' }], slots: ['iron-fist', null, 'gone'], slots_open: 3 })
+        const v = buildView(STORE, undefined, {}, null, held)
+        expect(v.skills.map((k) => [k.id, k.name, k.equipped])).toEqual([['iron-fist', 'Thiết quyền', true], ['axe', 'Rìu', false]])
+        expect(v.slots).toEqual({ used: 1, total: 3 })
+        expect(held.slotted).toEqual(['iron-fist'])
+    })
+    it('the open chat\'s own skill stays although the persona store does not name it', () => {
+        const v = buildView(STORE, { $skills: JSON.stringify({ dodge: { m: 900, name: 'Né' } }) }, {}, null, heldOf({ skills: [], slots: [], slots_open: 1 }))
+        expect(v.skills.map((k) => k.id)).toEqual(['dodge'])
     })
 })

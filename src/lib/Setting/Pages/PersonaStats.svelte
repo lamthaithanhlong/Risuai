@@ -5,7 +5,9 @@
     import { getCurrentChat } from 'src/ts/storage/database.svelte'
     import { fetchCurrent, fetchLedger, type Current } from 'src/ts/storage/statsSave'
     import { personaIdOf } from 'src/ts/process/statsGlue'
-    import { buildView, fetchFindNames, type FindNames } from 'src/ts/process/personaStats'
+    import { buildView, fetchFindNames, heldOf, type FindNames, type Held } from 'src/ts/process/personaStats'
+    import { fetchPersona } from 'src/ts/storage/personaStore'
+    import { levelOf } from 'src/ts/process/findDrop'
     import { checkPersonaBinded } from 'src/ts/util'
 
     const vi = $derived(DBState.db.language === 'vi')
@@ -16,6 +18,8 @@
     let current: Current | null = $state(null)
     let ledgerSkills: Record<string, number> | null = $state(null)   // the persona's event ledger's mastery (GET /api/persona/state), null when it has none
     let names: FindNames = $state({})
+    let held: Held | null = $state(null)   // what the persona store says the persona holds now; null = it did not answer (every known mastery is shown)
+    const askHeld = (id: string) => fetchPersona(id, levelOf(getCurrentChat()?.scriptstate as never)).then((r) => (r.ok ? heldOf(r.data) : null))
     let tick = $state(0)
 
     const persona = $derived(personaIdOf(checkPersonaBinded() ?? DBState.db.personas?.[DBState.db.selectedPersona]))
@@ -26,17 +30,18 @@
         fetchCurrent(id).then((c) => { if (live) current = c })
         fetchLedger(id).then((l) => { if (live) ledgerSkills = l && l.event_count > 0 ? l.skills ?? null : null })
         fetchFindNames().then((n) => { if (live) names = n })
+        askHeld(id).then((h) => { if (live) held = h })
         return () => { live = false }
     })
 
     // the chat's own values refresh when the page is shown again
-    const view = $derived.by(() => { tick; return buildView(current, getCurrentChat()?.scriptstate, names, ledgerSkills) })
+    const view = $derived.by(() => { tick; return buildView(current, getCurrentChat()?.scriptstate, names, ledgerSkills, held) })
 </script>
 
 <div class="mt-4 w-full max-w-full rounded-md border border-darkborderc p-4" data-risu-persona-stats>
     <div class="flex items-center justify-between flex-wrap gap-2">
         <h3 class="text-xl font-bold">{L.title}</h3>
-        <button class="text-xs text-textcolor2 hover:text-green-500" onclick={() => { tick++; fetchCurrent(persona).then((c) => { current = c }); fetchLedger(persona).then((l) => { ledgerSkills = l && l.event_count > 0 ? l.skills ?? null : null }) }}>↻</button>
+        <button class="text-xs text-textcolor2 hover:text-green-500" onclick={() => { tick++; fetchCurrent(persona).then((c) => { current = c }); fetchLedger(persona).then((l) => { ledgerSkills = l && l.event_count > 0 ? l.skills ?? null : null }); askHeld(persona).then((h) => { held = h }) }}>↻</button>
     </div>
     <p class="text-xs text-textcolor2 mb-2">{L.hint}{#if view.source !== 'none'} · {view.source === 'store' ? L.store : L.chat}{/if}</p>
 

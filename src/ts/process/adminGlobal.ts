@@ -22,7 +22,7 @@
 
 import { moduleRunsQuests, questRequest } from './adminQuest'
 import { lastTurnIsAsk } from './adminAsk'
-import { buildView, fetchFindNames, MAX_SLOTS, type View } from './personaStats'
+import { buildView, fetchFindNames, heldOf, MAX_SLOTS, type View } from './personaStats'
 import { fetchCurrent } from '../storage/statsSave'
 import { FALLBACK_PAYLOAD } from './adminFallback'
 import { ADMIN_TOKEN_CAP, estimateTokens, headingKey, ruleOf, sentOn, turnFacts, type TurnFacts } from './adminSections'
@@ -500,7 +500,7 @@ export function loadoutOf(d: PersonaData): Loadout {
 function loadoutLines(view: RecordView, lo: Loadout, style: RecordStyle, scope: RecordScope): string[] {
     const words = style === 'words'
     const num = (n: number) => (words ? (VI_COUNT[n] ?? 'nhiều') : String(n))
-    const pct = new Map(view.skills.map((k) => [k.id, k.pct]))
+    const pct = new Map(view.skills.filter((k) => k.m > 0).map((k) => [k.id, k.pct]))   // a held skill with no mastery yet is named without a 0.00%
     const one = (e: LoadoutEntry, skill: boolean) => {
         const bits = [!words && skill && pct.has(e.id) ? `thành thạo ${pct.get(e.id)}` : '', e.tier].filter(Boolean)
         return bits.length ? `${e.name} (${bits.join(', ')})` : e.name
@@ -577,7 +577,7 @@ export async function fetchRecord(persona: string, deps: AdminDeps, level = 1): 
     const got = await Promise.race([Promise.all([fetchCurrent(persona, io), fetchFindNames(io), fetchPersona(persona, level, io)]), late]).catch(() => null)
     clearTimeout(timer)
     if (got && got[0]) {
-        const view: RecordView = buildView(got[0], undefined, got[1])
+        const view: RecordView = buildView(got[0], undefined, got[1], null, got[2]?.ok ? heldOf(got[2].data) : null)
         if (got[2]?.ok) view.loadout = loadoutOf(got[2].data)
         else if (hit?.view.loadout) view.loadout = hit.view.loadout   // the last loadout the store gave is better than none
         recCache.set(key, { at: now, view })
