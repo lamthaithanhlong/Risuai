@@ -83,11 +83,24 @@ function createTurnWorker(opts) {
     // had saved (the server held it), and its result, taken by the phone, erased that reply.
     async function ensurePage() {
         await closeContext();
-        if (!browser || !browser.isConnected()) browser = await chromium.launch({
-            headless: true,
-            // timers of a hidden page are not throttled: the worker's page is never "in the background"
-            args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
-        });
+        if (!browser || !browser.isConnected()) {
+            const launchOpts = {
+                headless: true,
+                // timers of a hidden page are not throttled: the worker's page is never "in the background"
+                args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
+            };
+            // RISU_TURN_BROWSER_CHANNEL (e.g. "chrome") picks an installed browser. Without it Playwright's own Chromium is used, and
+            // when that download is gone (measured 11-14..11-16: ~/Library/Caches/ms-playwright was removed and every turn failed with
+            // "Executable doesn't exist") the installed Google Chrome takes over instead of failing the turn.
+            const channel = process.env.RISU_TURN_BROWSER_CHANNEL;
+            try {
+                browser = await chromium.launch(channel ? { ...launchOpts, channel } : launchOpts);
+            } catch (e) {
+                if (channel || !/Executable doesn't exist/.test(String(e && e.message))) throw e;
+                log('Playwright\'s Chromium is missing: using the installed Google Chrome (npx playwright install chromium brings it back)');
+                browser = await chromium.launch({ ...launchOpts, channel: 'chrome' });
+            }
+        }
         context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
         await context.addInitScript(() => {
             try { localStorage.setItem('tos4', 'true'); localStorage.setItem('dosync', 'avoid') } catch { /* private */ }
